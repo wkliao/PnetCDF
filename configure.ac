@@ -114,6 +114,7 @@ AH_TEMPLATE([PNC_MALLOC_TRACE],         [Define if to enable malloc tracing])
 AH_TEMPLATE([HAVE_FUNC_MACRO],          [Define if C++ macro __func__ is defined])
 AH_TEMPLATE([HAVE_FUNCTION_MACRO],      [Define if C++ macro __FUNCTION__ is defined])
 AH_TEMPLATE([RELAX_COORD_BOUND],        [Define if relaxed coordinate check is enabled])
+AH_TEMPLATE([BUILD_DRIVER_ADIOS],       [Define if to enable ADIOS BP read feature])
 AH_TEMPLATE([ENABLE_LARGE_REQ],         [Define if to enable single large MPI-IO request])
 AH_TEMPLATE([ENABLE_NULL_BYTE_HEADER_PADDING], [Define if to enable strict null-byte padding in file header])
 AH_TEMPLATE([BUILD_DRIVER_BB],          [Define if to enable burst buffer feature])
@@ -1442,6 +1443,62 @@ fi
 AC_SUBST(BUILD_DRIVER_BB)
 AM_CONDITIONAL(BUILD_DRIVER_BB, [test x$enable_bbdriver = xyes])
 
+AC_ARG_ENABLE([adios],
+   [AS_HELP_STRING([--enable-adios],
+                   [Enable ADIOS BP read support. @<:@default: disabled@:>@])],
+   [enable_adios=${enableval}], [enable_adios=no]
+)
+
+BUILD_DRIVER_ADIOS=0
+if test "x$enable_adios" = "xyes" ; then
+   AC_DEFINE(BUILD_DRIVER_ADIOS)
+   BUILD_DRIVER_ADIOS=1
+fi
+AC_SUBST(BUILD_DRIVER_ADIOS)
+AM_CONDITIONAL(BUILD_DRIVER_ADIOS, [test x$enable_adios = xyes])
+
+if test "x$enable_adios" = "xyes" ; then
+    ADIOS_INSTALL=""
+    AC_ARG_WITH(adios,
+        [AS_HELP_STRING([--with-adios=/path/to/implementation],
+                        [installation prefix for ADIOS implementation])],
+        if test "x${withval}" = xyes; then
+            AC_MSG_ERROR(--with-adios must be given a pathname)
+        else
+            ADIOS_INSTALL=${withval}
+        fi
+    )
+
+    if test "x${ADIOS_INSTALL}" != x ; then
+        CPPFLAGS+=" -I${ADIOS_INSTALL}/include"
+        LDFLAGS+=" -L${ADIOS_INSTALL}/lib"
+        LIBS+=" -ladiosread"
+    fi
+
+    LIBS+=" -lm -ldl"
+
+    have_adios=no
+    AC_MSG_CHECKING(ADIOS library)
+    AC_SEARCH_LIBS([adios_read_open_file], [adiosread], [have_adios=yes], [have_adios=no])
+    if test "x${have_adios}" = xyes; then
+        AC_CHECK_HEADERS([adios_read.h], [], [have_adios=no])
+    fi
+
+    if test "x${have_adios}" = xno; then
+        AC_MSG_ERROR([
+        ------------------------------------------------------------
+        The ADIOS library and header file are required to build
+        PnetCDF with ADIOS BP read support. Use option
+            --with-adios=/path/to/implementation
+        to specify the location of ADIOS build. In addition,
+        please make sure the MPI C compiler is compatible with the
+        one used to build ADIOS.
+        Stopping ...
+        Check 'config.log' for more information.
+        ------------------------------------------------------------])
+    fi
+fi
+
 AC_ARG_ENABLE([profiling],
    [AS_HELP_STRING([--enable-profiling],
                    [Enable time and memory profiling. @<:@default: disabled@:>@])],
@@ -1532,6 +1589,7 @@ AC_CONFIG_FILES(Makefile \
                 src/drivers/include/Makefile \
                 src/drivers/ncmpio/Makefile \
                 src/drivers/ncbbio/Makefile \
+                src/drivers/ncadio/Makefile \
                 src/drivers/ncfoo/Makefile \
                 src/binding/Makefile \
                 src/binding/cxx/Makefile \
@@ -1566,6 +1624,7 @@ AC_CONFIG_FILES(Makefile \
                 doc/pnetcdf-api/Makefile \
                 man/Makefile \
                 test/Makefile \
+                test/adios/Makefile \
                 test/common/Makefile \
                 test/C/Makefile \
                 test/fandc/Makefile \
@@ -1654,6 +1713,10 @@ fi
 if test "x${enable_bbdriver}" = xyes ; then
    echo "\
               Burst buffering                             - enabled"
+fi
+if test "x${enable_adios}" = xyes; then
+   echo "\
+              ADIOS BP read support                       - enabled"
 fi
 if test "x${enable_profiling}" = xyes ; then
    echo "\

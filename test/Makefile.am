@@ -16,7 +16,7 @@ C_SUBDIRS = common \
             nonblocking \
             largefile
 
-DIST_SUBDIRS = $(C_SUBDIRS) CXX nf_test nf90_test F90 subfile burst_buffer
+DIST_SUBDIRS = $(C_SUBDIRS) CXX nf_test nf90_test F90 subfile burst_buffer adios
 
 SUBDIRS = $(C_SUBDIRS)
 
@@ -37,6 +37,10 @@ endif
 
 if BUILD_DRIVER_BB
 SUBDIRS += burst_buffer
+endif
+
+if BUILD_DRIVER_ADIOS
+SUBDIRS += adios
 endif
 
 # below is the alternative when AM_EXTRA_RECURSIVE_TARGETS is not defined

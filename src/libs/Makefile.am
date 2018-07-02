@@ -23,6 +23,9 @@ endif
 if BUILD_DRIVER_BB
 libpnetcdf_la_LIBADD += ../drivers/ncbbio/libncbbio.la
 endif
+if BUILD_DRIVER_ADIOS
+libpnetcdf_la_LIBADD += ../drivers/ncadio/libncadio.la
+endif
 
 nodist_EXTRA_libpnetcdf_la_SOURCES = dummyc.c
 
