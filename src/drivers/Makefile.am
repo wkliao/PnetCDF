@@ -28,7 +28,7 @@ if ENABLE_ADIOS
    SUBDIRS += ncadios
 endif
 
-DIST_SUBDIRS = include common ncmpio ncfoo ncbbio nc4io ncadios
+DIST_SUBDIRS = include common ncmpio ncfoo ncbbio nc4io ncadios ncchunkio
 
 # For VPATH build (parallel build), try delete all sub-directories
 distclean-local:
