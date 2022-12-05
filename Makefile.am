@@ -26,6 +26,8 @@ EXTRA_DIST = COPYRIGHT \
              RELEASE_NOTES \
              SECURITY.md \
              m4/foreach.m4 \
+             m4/foreach_idx.m4 \
+             m4/list_len.m4 \
              m4/utils.m4
 
 if ! ENABLE_GIO
