@@ -94,7 +94,7 @@ ncmpii_create_imaptype(int ndims, const MPI_Offset *count,
                        MPI_Datatype *imaptype);
 
 extern int
-ncmpii_error_mpi2nc(int mpi_errorcode, char *msg);
+ncmpii_error_mpi2nc(int mpi_errorcode, const char *msg);
 
 extern int
 ncmpii_error_posix2nc(char *err_msg);
