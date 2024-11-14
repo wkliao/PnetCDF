@@ -2,14 +2,38 @@
  *  Copyright (C) 2025, Northwestern University
  *  See COPYRIGHT notice in top-level directory.
  */
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
-#include "string.h" /*strdup() */
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>   /* readlink(), pwrite() */
+#include <string.h>   /* strdup() */
+#include <assert.h>
+#include <sys/errno.h>
+#include <fcntl.h>    /* O_CREAT */
+
+#ifdef HAVE_LIMITS_H
+#include <limits.h>
+#endif
+#ifndef PATH_MAX
+#define PATH_MAX 65535
+#endif
+
+#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h> /* struct statfs */
+#endif
+#ifdef HAVE_SYS_MOUNT_H
+#include <sys/mount.h> /* struct statfs */
+#endif
+#ifdef HAVE_SYS_STAT_H
+#include <sys/stat.h> /* fstat(), lstat(), stat() */
+#endif
+
+#include <mpi.h>
+
 #include "pnc_lustre.h"
-
-#define ADIO_LUSTRE 163
-#define ADIOI_Strdup strdup
-#define ADIOI_Malloc NCI_Malloc
-#define ADIOI_Free NCI_Free
 
 /*
  ADIO_FileSysType_parentdir - determines a string pathname for the
@@ -103,7 +127,6 @@ static void ADIO_FileSysType_parentdir(const char *filename, char **dirnamep)
 
 static int romio_statfs(const char *filename, int64_t * file_id)
 {
-
     int err = 0;
 
 #ifdef HAVE_STRUCT_STATVFS_WITH_F_BASETYPE
@@ -139,7 +162,6 @@ static int romio_statfs(const char *filename, int64_t * file_id)
         *file_id = fsbuf.f_type;
 #endif
 
-
 #if defined(HAVE_STRUCT_STATFS_F_FSTYPENAME) || defined(HAVE_STRUCT_STAT_ST_FSTYPE)
     /* these stat routines store the file system type in a string */
     char *fstype;
@@ -150,20 +172,9 @@ static int romio_statfs(const char *filename, int64_t * file_id)
     err = stat(filename, &sbuf);
     fstype = sbuf.st_fstype;
 #endif
-    if (err == 0) {
-        int i = 0;
-        /* any file system type not explicitly in the fstype table (ffs, hfs)
-         * will be "unknown" which ROMIO will service with ADIO_UFS */
-        while (fstypes[i].fileops) {
-            /* '-1' to ignore the trailing colon */
-            if (!strncasecmp(fstypes[i].prefix, fstype, strlen(fstypes[i].prefix) - 1)) {
-                *file_id = fstypes[i].magic;
-            }
-            i++;
-        }
-    }
+    if (err == 0 && !strncasecmp(fstype, "lustre", 6))
+        *file_id = LL_SUPER_MAGIC;
 #endif
-
     return err;
 }
 
@@ -203,28 +214,24 @@ int PNC_Check_Lustre(MPI_Comm comm,
     return ((file_id == LL_SUPER_MAGIC));
 }
 
-/*
- *   1. root creates/opens the file
- *      a. root sets/obtains striping info
- *      b. root closes file
- *   2. root determines cb_nodes and ranklist
- *      a. all processes send root its proc_name
- *      b. root broadcasts cb_nodes and ranklist
- *   3. When deferred_open is true:
- *      then only aggregators open the file
- *      else only aggregators open the file
- *   4. all processes sync and set file striping info
- *      a. root bcasts striping info
- *      b. all processes set hints
+/*----< lustre_file_create() >-----------------------------------------------*/
+/*   1. root creates the file
+ *   2. root sets and obtains striping info
+ *   3. root broadcasts striping info
+ *   4. non-root processes receive striping info from root
+ *   5. non-root processes opens the fie
  */
 static int
-PNC_Lustre_file_create(ADIO_File fd,
-                       int       access_mode)
+lustre_file_create(PNC_File *fd,
+                   int       access_mode)
 {
-    int err=0, rank, amode, perm, old_mask;
-    int stripin_info[4];
+    int err=NC_NOERR, rank, amode, perm, old_mask;
+    int stripin_info[4] = {-1, -1, -1, -1};
 
     MPI_Comm_rank(fd->comm, &rank);
+
+    amode = O_CREAT;
+    if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
 
     old_mask = umask(022);
     umask(old_mask);
@@ -237,11 +244,11 @@ PNC_Lustre_file_create(ADIO_File fd,
      * in fd->hints->ranklist, no matter its is open or create mode.
      */
     if (rank == 0) {
+#ifndef MIMIC_LUSTRE
         char value[MPI_MAX_INFO_VAL+1];
         int lumlen, flag, set_layout = 0;
-#ifndef MIMIC_LUSTRE
         struct lov_user_md *lum = NULL;
-#endif
+
         ADIO_Offset str_factor = -1, str_unit = 0, start_iodev = -1;
 
         /* In LUSTRE_SetInfo, these hints have been validated to be consistent
@@ -249,25 +256,21 @@ PNC_Lustre_file_create(ADIO_File fd,
          */
         if (fd->info != MPI_INFO_NULL) {
             /* get striping information from user hints */
-            ADIOI_Info_get(fd->info, "striping_unit", MPI_MAX_INFO_VAL, value, &flag);
+            MPI_Info_get(fd->info, "striping_unit", MPI_MAX_INFO_VAL, value, &flag);
             if (flag)
                 str_unit = atoll(value);
 
-            ADIOI_Info_get(fd->info, "striping_factor", MPI_MAX_INFO_VAL, value, &flag);
+            MPI_Info_get(fd->info, "striping_factor", MPI_MAX_INFO_VAL, value, &flag);
             if (flag)
                 str_factor = atoll(value);
 
-            ADIOI_Info_get(fd->info, "start_iodevice", MPI_MAX_INFO_VAL, value, &flag);
+            MPI_Info_get(fd->info, "start_iodevice", MPI_MAX_INFO_VAL, value, &flag);
             if (flag)
                 start_iodev = atoll(value);
         }
         if ((str_factor > 0) || (str_unit > 0) || (start_iodev >= 0))
             set_layout = 1;
 
-        amode = O_CREAT;
-        if (access_mode & MPI_MODE_RDWR) amode |= O_RDWR;
-
-#ifndef MIMIC_LUSTRE
         /* if hints were set, we need to delay creation of any lustre objects.
          * However, if we open the file with O_LOV_DELAY_CREATE and don't call
          * the follow-up ioctl, subsequent writes will fail
@@ -279,7 +282,7 @@ PNC_Lustre_file_create(ADIO_File fd,
         if (fd->fd_sys == -1) {
             fprintf(stderr,"%s line %d: rank %d fails to create file %s (%s)\n",
                     __func__,__LINE__, rank, fd->filename, strerror(errno));
-            err = errno;
+            err = ncmpii_error_posix2nc("open");
             goto err_out;
         }
 
@@ -343,25 +346,19 @@ PNC_Lustre_file_create(ADIO_File fd,
             /* TODO: figure out the correct way to find the number of unique
              * OSTs. This is relevant only when Lustre over-striping is used.
              * For now, set it to same as fd->hints->striping_factor.
-             fd->hints->fs_hints.lustre.num_osts = num_uniq_osts(fd->filename);
+             stripin_info[3] = num_uniq_osts(fd->filename);
              */
             stripin_info[3] = fd->hints->striping_factor;
         }
         else {
             fprintf(stderr,"%s line %d: rank %d fails to get stripe info from file %s (%s)\n",
                     __func__,__LINE__,rank, fd->filename, strerror(errno));
-            err = errno;
+            err = ncmpii_error_posix2nc("ioctl");
         }
         ADIOI_Free(lum);
 #endif
     }
 err_out:
-    if (err != 0) {
-        stripin_info[0] = -1;
-        stripin_info[1] = -1;
-        stripin_info[2] = -1;
-        stripin_info[3] = -1;
-    }
     MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
     if (stripin_info[0] == -1) {
         fprintf(stderr, "%s line %d: failed to create file %s\n", __func__,
@@ -369,34 +366,33 @@ err_out:
         return err;
     }
 
-    fd->hints->striping_unit            = stripin_info[0];
-    fd->hints->striping_factor          = stripin_info[1];
-    fd->hints->start_iodevice           = stripin_info[2];
-    fd->hints->fs_hints.lustre.num_osts = stripin_info[3];
+    fd->hints->striping_unit   = stripin_info[0];
+    fd->hints->striping_factor = stripin_info[1];
+    fd->hints->start_iodevice  = stripin_info[2];
+    fd->hints->num_osts        = stripin_info[3];
 
     if (rank > 0) { /* non-root processes */
         fd->fd_sys = open(fd->filename, O_RDWR, perm);
         if (fd->fd_sys == -1) {
             fprintf(stderr,"%s line %d: rank %d failure to open file %s (%s)\n",
                     __func__,__LINE__, rank, fd->filename, strerror(errno));
-            return errno;
+            return ncmpii_error_posix2nc("ioctl");
         }
     }
-    return 0;
+    return err;
 }
 
+/*----< lustre_file_open() >-------------------------------------------------*/
+/*   1. all processes open the file.
+ *   2. root obtains striping info and broadcasts to all others
+ */
 static int
-PNC_Lustre_file_open(ADIO_File fd)
+lustre_file_open(PNC_File *fd)
 {
-    int err=0, rank, amode, perm, old_mask;
-    int stripin_info[4];
+    int err=NC_NOERR, rank, perm, old_mask;
+    int stripin_info[4] = {-1, -1, -1, -1};
 
     MPI_Comm_rank(fd->comm, &rank);
-
-    stripin_info[0] = -1;
-    stripin_info[1] = -1;
-    stripin_info[2] = -1;
-    stripin_info[3] = -1;
 
     old_mask = umask(022);
     umask(old_mask);
@@ -407,7 +403,7 @@ PNC_Lustre_file_open(ADIO_File fd)
     if (fd->fd_sys == -1) {
         fprintf(stderr, "%s line %d: rank %d failure to open file %s (%s)\n",
                 __func__,__LINE__, rank, fd->filename, strerror(errno));
-        err = errno;
+        err = ncmpii_error_posix2nc("open");
         goto err_out;
     }
 
@@ -426,17 +422,19 @@ PNC_Lustre_file_open(ADIO_File fd)
         /* get Lustre file stripning, even if setting it failed */
         lum->lmm_magic = LOV_USER_MAGIC;
         err = ioctl(fd->fd_sys, LL_IOC_LOV_GETSTRIPE, (void *) lum);
-        if (!err) {
+        if (err == 0) {
             stripin_info[0] = lum->lmm_stripe_size;
             stripin_info[1] = lum->lmm_stripe_count;
             stripin_info[2] = lum->lmm_stripe_offset;
             /* TODO: figure out the correct way to find the number of unique
              * OSTs. This is relevant only when Lustre over-striping is used.
              * For now, set it to same as fd->hints->striping_factor.
-             fd->hints->fs_hints.lustre.num_osts = num_uniq_osts(fd->filename);
+             stripin_info[3] = fd->hints->striping_factor;
              */
             stripin_info[3] = fd->hints->striping_factor;
         }
+        else
+            err =  ncmpii_error_posix2nc("ioctl");
         ADIOI_Free(lum);
 #else
 #define xstr(s) str(s)
@@ -452,259 +450,12 @@ PNC_Lustre_file_open(ADIO_File fd)
 
 err_out:
     MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
-    fd->hints->striping_unit            = stripin_info[0];
-    fd->hints->striping_factor          = stripin_info[1];
-    fd->hints->start_iodevice           = stripin_info[2];
-    fd->hints->fs_hints.lustre.num_osts = stripin_info[3];
+    fd->hints->striping_unit   = stripin_info[0];
+    fd->hints->striping_factor = stripin_info[1];
+    fd->hints->start_iodevice  = stripin_info[2];
+    fd->hints->num_osts        = stripin_info[3];
 
     return err;
-}
-
-int PNC_Lustre_open(MPI_Comm    comm,
-                    const char *filename,
-                    int         amode,
-                    MPI_Info    info,
-                    PNC_File   *fd)
-{
-    /* Before reaching to this subroutine, PNC_Check_Lustre() should have been
-     * called to verify filename is on Lustre.
-     */
-
-(MPI_Comm orig_comm,
-                  MPI_Comm comm, const char *filename, int file_system,
-                  ADIOI_Fns * ops,
-                  int access_mode, PNC_Offset disp, MPI_Datatype etype,
-                  MPI_Datatype filetype, MPI_Info info, int perm, int *error_code)
-{
-    MPI_File mpi_fh;
-    PNC_File fd;
-    int err, rank, procs;
-    int max_error_code;
-    MPI_Info dupinfo;
-    int syshints_processed, can_skip;
-    char *p;
-
-    fd->comm = comm;    /* dup'ed in MPI_File_open */
-    fd->filename = ADIOI_Strdup(filename);
-    fd->atomicity = 0;
-    fd->etype = MPI_BYTE;
-    fd->etype_size = 1;
-    fd->filetype = MPI_BYTE;
-    fd->file_system = ADIO_LUSTRE;
-
-    MPI_Comm_rank(comm, &rank);
-    MPI_Comm_size(comm, &procs);
-
-    /* create and initialize info object */
-    fd->hints = (PNC_Hints*) NCI_Calloc(1, sizeof(PNC_Hints));
-
-    fd->hints->initialized = 0;
-    fd->hints->cb_config_list = NULL;
-    fd->hints->ranklist = NULL;
-    fd->info = MPI_INFO_NULL;
-
-    /* collective buffer */
-    fd->io_buf = ADIOI_Malloc(fd->hints->cb_buffer_size);
-
-    /* For Lustre, determining the I/O aggregators and constructing ranklist
-     * requires file stripe count, which can only be obtained after file is
-     * opened.
-     *
-     * fd->is_agg and fd->my_cb_nodes_index are set in construct_aggr_list()
-     */
-
-    ADIOI_OpenColl(fd, rank, access_mode, error_code);
-
-    /* deferred open consideration: if an independent process lied about
-     * "no_indep_rw" and opens the file later (example: HDF5 uses independent
-     * i/o for metadata), that deferred open will use the access_mode provided
-     * by the user.  CREATE|EXCL only makes sense here -- exclusive access in
-     * the deferred open case is going to fail and surprise the user.  Turn off
-     * the excl amode bit. Save user's amode for MPI_FILE_GET_AMODE */
-    fd->orig_access_mode = access_mode;
-    if (fd->access_mode & PNC_EXCL)
-        fd->access_mode ^= PNC_EXCL;
-
-  fn_exit:
-    MPI_Allreduce(error_code, &max_error_code, 1, MPI_INT, MPI_MAX, comm);
-    if (max_error_code != MPI_SUCCESS) {
-
-        /* If the file was successfully opened, close it */
-        if (*error_code == MPI_SUCCESS) {
-
-            /* in the deferred open case, only those who have actually
-             * opened the file should close it */
-            if (fd->hints->deferred_open) {
-                if (fd->is_agg) {
-                    (*(fd->fns->ADIOI_xxx_Close)) (fd, error_code);
-                }
-            } else {
-                (*(fd->fns->ADIOI_xxx_Close)) (fd, error_code);
-            }
-        }
-        ADIOI_Free(fd->filename);
-        if (fd->hints->ranklist != NULL)
-            ADIOI_Free(fd->hints->ranklist);
-        if (fd->hints->cb_config_list != NULL)
-            ADIOI_Free(fd->hints->cb_config_list);
-        ADIOI_Free(fd->hints);
-        if (fd->info != MPI_INFO_NULL)
-            MPI_Info_free(&(fd->info));
-        ADIOI_Free(fd->io_buf);
-        ADIOI_Free(fd);
-        fd = PNC_FILE_NULL;
-        if (*error_code == MPI_SUCCESS) {
-            *error_code = MPIO_Err_create_code(MPI_SUCCESS,
-                                               MPIR_ERR_RECOVERABLE, myname,
-                                               __LINE__, MPI_ERR_IO, "**oremote_fail", 0);
-        }
-    }
-
-    return fd;
-}
-
-
-static int construct_aggr_list(ADIO_File fd, int root, int *error_code);
-
-            tmp_comm = fd->comm;
-            fd->comm = MPI_COMM_SELF;
-            (*(fd->fns->ADIOI_xxx_Open)) (fd, error_code);
-            fd->comm = tmp_comm;
-            MPI_Bcast(error_code, 1, MPI_INT, root, fd->comm);
-            /* if no error, close the file and reopen normally below */
-            if (*error_code == MPI_SUCCESS)
-                (*(fd->fns->ADIOI_xxx_Close)) (fd, error_code);
-
-            fd->access_mode = access_mode;      /* back to original */
-        } else
-            MPI_Bcast(error_code, 1, MPI_INT, root, fd->comm);
-
-        if (*error_code != MPI_SUCCESS) {
-            return;
-        } else {
-            /* turn off CREAT (and EXCL if set) for real multi-processor open */
-            access_mode ^= ADIO_CREATE;
-            if (access_mode & ADIO_EXCL)
-                access_mode ^= ADIO_EXCL;
-        }
-
-        if (fd->file_system == ADIO_LUSTRE) {
-            /* Use file striping count and number of unique OSTs to construct
-             * the I/O aggregator rank list, fd->hints->ranklist[].
-             */
-            construct_aggr_list(fd, root, error_code);
-            if (*error_code != MPI_SUCCESS)
-                return;
-        }
-    }
-
-    fd->blksize = 1024 * 1024 * 4;
-    /* this large default value should be good for most file systems. any ROMIO
-     * driver is free to stat the file and find an optimal value */
-
-    /* add to fd->info the hint "aggr_list", list of aggregators' rank IDs */
-    value[0] = '\0';
-    for (i = 0; i < fd->hints->cb_nodes; i++) {
-        char str[16];
-        if (i == 0)
-            snprintf(str, sizeof(str), "%d", fd->hints->ranklist[i]);
-        else
-            snprintf(str, sizeof(str), " %d", fd->hints->ranklist[i]);
-        if (strlen(value) + strlen(str) >= MPI_MAX_INFO_VAL-5) {
-            strcat(value, " ...");
-            break;
-        }
-        strcat(value, str);
-    }
-    ADIOI_Info_set(fd->info, "aggr_list", value);
-
-    /* if we are doing deferred open, non-aggregators should return now */
-    if (fd->hints->deferred_open) {
-        if (!(fd->is_agg)) {
-            /* we might have turned off EXCL for the aggregators.
-             * restore access_mode that non-aggregators get the right
-             * value from get_amode */
-            fd->access_mode = orig_amode_excl;
-
-            /* In file-system specific open, a driver might collect some
-             * information via stat().  Deferred open means not every process
-             * participates in fs-specific open, but they all participate in
-             * this open call.  Broadcast a bit of information in case
-             * lower-level file system driver (e.g. 'bluegene') collected it
-             * (not all do)*/
-            stats_type = make_stats_type(fd);
-            MPI_Bcast(MPI_BOTTOM, 1, stats_type, root, fd->comm);
-            ADIOI_Assert(fd->blksize > 0);
-
-            /* set file striping hints */
-            snprintf(value, sizeof(value), "%d", fd->hints->striping_unit);
-            ADIOI_Info_set(fd->info, "striping_unit", value);
-
-            snprintf(value, sizeof(value), "%d", fd->hints->striping_factor);
-            ADIOI_Info_set(fd->info, "striping_factor", value);
-
-            snprintf(value, sizeof(value), "%d", fd->hints->start_iodevice);
-            ADIOI_Info_set(fd->info, "start_iodevice", value);
-
-            *error_code = MPI_SUCCESS;
-            MPI_Type_free(&stats_type);
-            return;
-        }
-    }
-
-/* For writing with data sieving, a read-modify-write is needed. If
-   the file is opened for write_only, the read will fail. Therefore,
-   if write_only, open the file as read_write, but record it as write_only
-   in fd, so that get_amode returns the right answer. */
-
-    /* observation from David Knaak: file systems that do not support data
-     * sieving do not need to change the mode */
-
-    orig_amode_wronly = access_mode;
-    if ((access_mode & ADIO_WRONLY) && ADIO_Feature(fd, ADIO_DATA_SIEVING_WRITES)) {
-        access_mode = access_mode ^ ADIO_WRONLY;
-        access_mode = access_mode | ADIO_RDWR;
-    }
-    fd->access_mode = access_mode;
-
-    (*(fd->fns->ADIOI_xxx_Open)) (fd, error_code);
-
-    /* if error, may be it was due to the change in amode above.
-     * therefore, reopen with access mode provided by the user. */
-    fd->access_mode = orig_amode_wronly;
-    if (*error_code != MPI_SUCCESS)
-        (*(fd->fns->ADIOI_xxx_Open)) (fd, error_code);
-
-    /* if we turned off EXCL earlier, then we should turn it back on */
-    if (fd->access_mode != orig_amode_excl)
-        fd->access_mode = orig_amode_excl;
-
-    /* broadcast information to all processes in communicator, not just
-     * those who participated in open.
-     */
-    stats_type = make_stats_type(fd);
-    MPI_Bcast(MPI_BOTTOM, 1, stats_type, root, fd->comm);
-    MPI_Type_free(&stats_type);
-    /* file domain code will get terribly confused in a hard-to-debug way
-     * if gpfs blocksize not sensible */
-    ADIOI_Assert(fd->blksize > 0);
-
-    /* set file striping hints */
-    snprintf(value, sizeof(value), "%d", fd->hints->striping_unit);
-    ADIOI_Info_set(fd->info, "striping_unit", value);
-
-    snprintf(value, sizeof(value), "%d", fd->hints->striping_factor);
-    ADIOI_Info_set(fd->info, "striping_factor", value);
-
-    snprintf(value, sizeof(value), "%d", fd->hints->start_iodevice);
-    ADIOI_Info_set(fd->info, "start_iodevice", value);
-
-    /* for deferred open: this process has opened the file (because if we are
-     * not an aggregator and we are doing deferred open, we returned earlier)*/
-    fd->is_open = 1;
-
-    /* sync optimization: we can omit the fsync() call if we do no writes */
-    fd->dirty_write = 0;
 }
 
 /*----< construct_aggr_list() >----------------------------------------------*/
@@ -712,9 +463,9 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code);
  * Overwrite fd->hints->cb_nodes and set hint cb_nodes.
  * Set fd->is_agg, whether this rank is an I/O aggregator
  *     fd->hints->cb_nodes
- *     fd->hints->fs_hints.lustre.num_osts
+ *     fd->hints->num_osts
  */
-static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
+static int construct_aggr_list(PNC_File *fd, int root)
 {
     int i, j, k, rank, nprocs, num_aggr, my_procname_len, num_nodes;
     int msg[3], striping_factor;
@@ -722,7 +473,6 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
     int *nprocs_per_node, **ranks_per_node;
     char value[MPI_MAX_INFO_VAL + 1], my_procname[MPI_MAX_PROCESSOR_NAME];
     char **all_procnames = NULL;
-    static char myname[] = "ADIO_OPENCOLL construct_aggr_list";
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &rank);
@@ -741,7 +491,7 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
         node_id = (rank - np_per_node * (nprocs % 4)) / (nprocs / 4) + (nprocs % 4);
 
     sprintf(my_procname,"compute.node.%d", node_id);
-    my_procname_len = strlen(my_procname);
+    my_procname_len = (int)strlen(my_procname);
 #else
     MPI_Get_processor_name(my_procname, &my_procname_len);
 #endif
@@ -750,22 +500,13 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
     if (rank == root) {
         /* root collects all procnames */
         all_procnames = (char **) ADIOI_Malloc(nprocs * sizeof(char *));
-        if (all_procnames == NULL) {
-            *error_code = MPIO_Err_create_code(*error_code,
-                                               MPIR_ERR_RECOVERABLE, myname,
-                                               __LINE__, MPI_ERR_OTHER,
-                                               "**nomem2", 0);
-            return 0;
-        }
+        if (all_procnames == NULL)
+            return NC_ENOMEM;
 
         all_procname_lens = (int *) ADIOI_Malloc(nprocs * sizeof(int));
         if (all_procname_lens == NULL) {
             ADIOI_Free(all_procnames);
-            *error_code = MPIO_Err_create_code(*error_code,
-                                               MPIR_ERR_RECOVERABLE, myname,
-                                                __LINE__, MPI_ERR_OTHER,
-                                                "**nomem2", 0);
-            return 0;
+            return NC_ENOMEM;
         }
     }
     /* gather process name lengths from all processes first */
@@ -783,11 +524,7 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
         if (all_procnames[0] == NULL) {
             ADIOI_Free(all_procname_lens);
             ADIOI_Free(all_procnames);
-            *error_code = MPIO_Err_create_code(*error_code,
-                                               MPIR_ERR_RECOVERABLE, myname,
-                                               __LINE__, MPI_ERR_OTHER,
-                                               "**nomem2", 0);
-            return 0;
+            return NC_ENOMEM;
         }
 
         /* Construct displacement array for the MPI_Gatherv, as each process
@@ -917,7 +654,7 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
         else { /* striping_factor <= nprocs */
             /* Select striping_factor processes to be I/O aggregators */
 
-            if (fd->hints->cb_nodes == 0 || fd->access_mode & ADIO_RDONLY) {
+            if (fd->hints->cb_nodes == 0 || fd->access_mode & MPI_MODE_RDONLY) {
                 /* hint cb_nodes is not set by user and this file is opened for
                  * read only. Because collective read is using a different file
                  * domain partitioning strategy, for now we do not mess up
@@ -973,13 +710,8 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
          * ranklist[].
          */
         fd->hints->ranklist = (int *) ADIOI_Malloc(num_aggr * sizeof(int));
-        if (fd->hints->ranklist == NULL) {
-            *error_code = MPIO_Err_create_code(*error_code,
-                                               MPIR_ERR_RECOVERABLE, myname,
-                                               __LINE__, MPI_ERR_OTHER,
-                                               "**nomem2", 0);
-            return 0;
-        }
+        if (fd->hints->ranklist == NULL)
+            return NC_ENOMEM;
 
         if (striping_factor <= num_nodes) {
             /* When number of OSTs is less than number of compute nodes,
@@ -1049,7 +781,7 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
         ADIOI_Free(ranks_per_node);
 
         msg[0] = num_aggr;
-        msg[1] = fd->hints->fs_hints.lustre.num_osts;
+        msg[1] = fd->hints->num_osts;
         msg[2] = num_nodes;
     }
 
@@ -1068,11 +800,11 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
     /* set file striping hints */
     fd->hints->cb_nodes = num_aggr;
     sprintf(value, "%d", fd->hints->cb_nodes);
-    ADIOI_Info_set(fd->info, "cb_nodes", value);
+    MPI_Info_set(fd->info, "cb_nodes", value);
 
-    fd->hints->fs_hints.lustre.num_osts = msg[1];
-    sprintf(value, "%d", fd->hints->fs_hints.lustre.num_osts);
-    ADIOI_Info_set(fd->info, "lustre_num_osts", value);
+    fd->hints->num_osts = msg[1];
+    sprintf(value, "%d", fd->hints->num_osts);
+    MPI_Info_set(fd->info, "lustre_num_osts", value);
 
     /* save the number of unique compute nodes in communicator fd->comm */
     fd->num_nodes = msg[2];
@@ -1080,13 +812,8 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
     if (rank != root) {
         /* ranklist[] contains the MPI ranks of I/O aggregators */
         fd->hints->ranklist = (int *) ADIOI_Malloc(num_aggr * sizeof(int));
-        if (fd->hints->ranklist == NULL) {
-            *error_code = MPIO_Err_create_code(*error_code,
-                                               MPIR_ERR_RECOVERABLE, myname,
-                                               __LINE__, MPI_ERR_OTHER,
-                                               "**nomem2", 0);
-            return 0;
-        }
+        if (fd->hints->ranklist == NULL)
+            return NC_ENOMEM;
     }
 
     MPI_Bcast(fd->hints->ranklist, fd->hints->cb_nodes, MPI_INT, root, fd->comm);
@@ -1105,3 +832,125 @@ static int construct_aggr_list(ADIO_File fd, int root, int *error_code)
     return 0;
 }
 
+/*----< PNC_Lustre_open() >--------------------------------------------------*/
+int PNC_Lustre_open(MPI_Comm    comm,
+                    const char *filename,
+                    int         amode,
+                    MPI_Info    info,
+                    PNC_File   *fd)
+{
+    /* Before reaching to this subroutine, PNC_Check_Lustre() should have been
+     * called to verify filename is on Lustre.
+     */
+    char value[MPI_MAX_INFO_VAL + 1];
+    int i, err, min_err;
+
+    fd->comm        = comm;
+    fd->filename    = ADIOI_Strdup(filename);
+    fd->atomicity   = 0;
+    fd->etype       = MPI_BYTE;
+    fd->filetype    = MPI_BYTE;
+    fd->file_system = ADIO_LUSTRE;
+    fd->is_open     = 0;
+
+    /* create and initialize info object */
+    fd->hints = (PNC_Hints*) NCI_Calloc(1, sizeof(PNC_Hints));
+    if (info == MPI_INFO_NULL)
+        MPI_Info_create(&fd->info);
+    else
+        MPI_Info_dup(info, &fd->info);
+
+    /* collective buffer */
+    fd->io_buf = ADIOI_Malloc(fd->hints->cb_buffer_size);
+    if (fd->io_buf == NULL) {
+        err = NC_ENOMEM;
+        goto err_out;
+    }
+
+    /* For Lustre, determining the I/O aggregators and constructing ranklist
+     * requires file stripe count, which can only be obtained after file is
+     * opened.
+     *
+     */
+
+    if (amode & MPI_MODE_CREATE)
+        err = lustre_file_create(fd, amode);
+    else
+        err = lustre_file_open(fd);
+    if (err != NC_NOERR) goto err_out;
+
+    /* TODO: when no_indep_rw hint is enabled, only aggregators open the file */
+    fd->is_open = 1;
+
+    /* set file striping hints */
+    snprintf(value, sizeof(value), "%d", fd->hints->striping_unit);
+    MPI_Info_set(fd->info, "striping_unit", value);
+
+    snprintf(value, sizeof(value), "%d", fd->hints->striping_factor);
+    MPI_Info_set(fd->info, "striping_factor", value);
+
+    snprintf(value, sizeof(value), "%d", fd->hints->start_iodevice);
+    MPI_Info_set(fd->info, "start_iodevice", value);
+
+    /* Use file striping count and number of unique OSTs to construct
+     * the I/O aggregator rank list, fd->hints->ranklist[]. Also, set
+     * hint cb_nodes, fd->is_agg, and fd->my_cb_nodes_index.
+     */
+    err = construct_aggr_list(fd, 0);
+    if (err != NC_NOERR) goto err_out;
+
+    /* add to fd->info the hint "aggr_list", list of aggregators' rank IDs */
+    value[0] = '\0';
+    for (i = 0; i < fd->hints->cb_nodes; i++) {
+        char str[16];
+        if (i == 0)
+            snprintf(str, sizeof(str), "%d", fd->hints->ranklist[i]);
+        else
+            snprintf(str, sizeof(str), " %d", fd->hints->ranklist[i]);
+        if (strlen(value) + strlen(str) >= MPI_MAX_INFO_VAL-5) {
+            strcat(value, " ...");
+            break;
+        }
+        strcat(value, str);
+    }
+    MPI_Info_set(fd->info, "aggr_list", value);
+
+err_out:
+    MPI_Allreduce(&err, &min_err, 1, MPI_INT, MPI_MIN, comm);
+    /* All NC errors are < 0 */
+    if (min_err < 0) {
+        if (err == 0) /* close file if opened successfully */
+            close(fd->fd_sys);
+        ADIOI_Free(fd->filename);
+        if (fd->hints->ranklist != NULL)
+            ADIOI_Free(fd->hints->ranklist);
+        ADIOI_Free(fd->hints);
+        if (fd->info != MPI_INFO_NULL)
+            MPI_Info_free(&(fd->info));
+        ADIOI_Free(fd->io_buf);
+    }
+
+    return err;
+}
+
+/*----< PNC_Lustre_close() >-------------------------------------------------*/
+int PNC_Lustre_close(PNC_File *fd)
+{
+    int err = NC_NOERR;
+
+    err = close(fd->fd_sys);
+    if (err != 0)
+        err = ncmpii_error_posix2nc("close");
+
+    ADIOI_Free(fd->filename);
+    if (fd->hints->ranklist != NULL)
+        ADIOI_Free(fd->hints->ranklist);
+    if (fd->hints != NULL)
+        ADIOI_Free(fd->hints);
+    if (fd->info != MPI_INFO_NULL)
+        MPI_Info_free(&(fd->info));
+    if (fd->io_buf != NULL)
+        ADIOI_Free(fd->io_buf);
+
+    return err;
+}
