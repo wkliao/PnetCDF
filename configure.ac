@@ -1473,6 +1473,69 @@ dnl     UD_CHECK_MPI_DATATYPE(MPI_REAL8)		dnl first defined in MPI 1.0
 dnl     UD_CHECK_MPI_DATATYPE(MPI_DOUBLE_PRECISION)	dnl first defined in MPI 1.0
 dnl fi
 
+#
+# Check for statfs (many) and specifically f_fstypename field (BSD)
+#
+AC_CHECK_HEADERS(sys/vfs.h sys/param.h sys/mount.h sys/statvfs.h sys/stat.h sys/type.h unistd.h)
+
+AC_CHECK_FUNCS([statvfs statfs stat])
+
+AC_CHECK_MEMBERS([struct statvfs.f_basetype,
+                  struct statfs.f_fstypename,
+                  struct statfs.f_type,
+                  struct stat.st_fstype],[],[],
+             AC_INCLUDES_DEFAULT
+             [#ifdef HAVE_SYS_VFS_H
+              #include <sys/vfs.h>
+              #endif
+              #ifdef HAVE_SYS_PARAM_H
+              #include <sys/param.h>
+              #endif
+              #ifdef HAVE_SYS_MOUNT_H
+              #include <sys/mount.h>
+              #endif
+              #ifdef HAVE_SYS_STATFS_H
+              #include <sys/statfs.h>
+              #endif
+              #ifdef HAVE_SYS_STAT_H
+              #include <sys/stat.h>
+              #endif
+              #ifdef HAVE_SYS_TYPE_H
+              #include <sys/type.h>
+              #endif
+              #ifdef HAVE_UNISTD_H
+              #include <unistd.h>
+              #endif
+              ])
+
+AC_CHECK_TYPE([blksize_t],[],[AC_DEFINE_UNQUOTED([blksize_t],[__blksize_t],[Provide blksize_t if not available]) ], [[
+               #ifdef HAVE_SYS_TYPES_H
+               #include <sys/types.h>
+               #endif
+               #ifdef HAVE_SYS_STAT_H
+               #include <sys/stat.h>
+               #endif
+               #ifdef HAVE_UNISTD_H
+               #include <unistd.h>
+               #endif]] )
+
+AC_CHECK_DECLS([pwrite])
+
+#
+# Verify presence of lustre/lustre_user.h
+#
+if test "$MIMIC_LUSTRE" = yes ; then
+   AC_DEFINE(HAVE_LUSTRE, 1, [Define for LUSTRE])
+   AC_DEFINE(MIMIC_LUSTRE, 1, [Define for Hecking ROMIO to mimic LUSTRE])
+   file_system_lustre=
+fi
+if test -n "$file_system_lustre"; then
+    AC_CHECK_HEADERS([linux/lustre/lustre_user.h lustre/lustre_user.h], break)
+    if test x"$ac_cv_header_linux_lustre_lustre_user_h" = "xyes" -o x"$ac_cv_header_lustre_lustre_user_h" = "xyes" ; then
+        AC_DEFINE(HAVE_LUSTRE, 1, [Define for LUSTRE])
+    fi
+fi
+
 AC_C_CHAR_UNSIGNED
 AC_C_BIGENDIAN
 AM_CONDITIONAL(IS_BIGENDIAN, [test x$ac_cv_c_bigendian = xyes])
