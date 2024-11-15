@@ -17,7 +17,7 @@
 #include "ncmpio_NC.h"
 
 #define ADIO_LUSTRE 163
-#define ADIOI_Strdup strdup
+#define ADIOI_Strdup NCI_Strdup
 #define ADIOI_Malloc NCI_Malloc
 #define ADIOI_Calloc NCI_Calloc
 #define ADIOI_Free NCI_Free
