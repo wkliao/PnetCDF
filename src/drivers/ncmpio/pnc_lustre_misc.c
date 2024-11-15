@@ -28,8 +28,8 @@
 #include "pnc_lustre.h"
 
 
-/*----< PNC_Lustre_close() >--------------------------------------------------*/
-int PNC_Lustre_sync(PNC_File *fd)
+/*----< PNC_File_close() >---------------------------------------------------*/
+int PNC_File_sync(PNC_File *fd)
 {
     int err = NC_NOERR;
 
@@ -42,8 +42,8 @@ int PNC_Lustre_sync(PNC_File *fd)
     return err;
 }
 
-/*----< PNC_Lustre_delete() >------------------------------------------------*/
-int PNC_Lustre_delete(const char *filename)
+/*----< PNC_File_delete() >--------------------------------------------------*/
+int PNC_File_delete(const char *filename)
 {
     int err = NC_NOERR;
 
@@ -54,8 +54,8 @@ int PNC_Lustre_delete(const char *filename)
     return err;
 }
 
-/*----< PNC_Lustre_set_size() >----------------------------------------------*/
-int PNC_Lustre_set_size(PNC_File   *fd,
+/*----< PNC_File_set_size() >------------------------------------------------*/
+int PNC_File_set_size(PNC_File   *fd,
                         MPI_Offset  size)
 {
     int err = NC_NOERR, rank;
@@ -73,8 +73,8 @@ int PNC_Lustre_set_size(PNC_File   *fd,
     return err;
 }
 
-/*----< PNC_Lustre_get_size() >----------------------------------------------*/
-int PNC_Lustre_get_size(PNC_File   *fd,
+/*----< PNC_File_get_size() >------------------------------------------------*/
+int PNC_File_get_size(PNC_File   *fd,
                         MPI_Offset *size)
 {
     int err = NC_NOERR, rank;
@@ -97,8 +97,8 @@ int PNC_Lustre_get_size(PNC_File   *fd,
     return err;
 }
 
-/*----< PNC_Lustre_seek() >----------------------------------------------*/
-int PNC_Lustre_seek(PNC_File   *fd,
+/*----< PNC_File_seek() >----------------------------------------------------*/
+int PNC_File_seek(PNC_File   *fd,
                     MPI_Offset  offset,
                     int         whence)
 {
@@ -122,8 +122,8 @@ int PNC_Lustre_seek(PNC_File   *fd,
     return err;
 }
 
-/*----< PNC_Lustre_get_info() >----------------------------------------------*/
-int PNC_Lustre_get_info(PNC_File *fd,
+/*----< PNC_File_get_info() >------------------------------------------------*/
+int PNC_File_get_info(PNC_File *fd,
                         MPI_Info *info_used)
 {
     int err;
@@ -644,13 +644,13 @@ void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag)
      * in other cases as well. */
 }
 
-/*----< PNC_Lustre_set_view() >----------------------------------------------*/
-int PNC_Lustre_set_view(PNC_File     *fd,
-                        MPI_Offset    disp,
-                        MPI_Datatype  etype,
-                        MPI_Datatype  filetype,
-                        char         *datarep,
-                        MPI_Info      info)
+/*----< PNC_File_set_view() >------------------------------------------------*/
+int PNC_File_set_view(PNC_File     *fd,
+                      MPI_Offset    disp,
+                      MPI_Datatype  etype,
+                      MPI_Datatype  filetype,
+                      char         *datarep,
+                      MPI_Info      info)
 {
     int is_predef, i, err, filetype_is_contig;
     MPI_Datatype copy_filetype;
@@ -658,13 +658,13 @@ int PNC_Lustre_set_view(PNC_File     *fd,
 
     /* rudimentary checks for incorrect etype/filetype. */
     if (etype == MPI_DATATYPE_NULL)
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_Lustre_set_view, etype");
+        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, etype");
 
     if (filetype == MPI_DATATYPE_NULL)
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_Lustre_set_view, filetype");
+        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, filetype");
 
     if ((disp < 0) && (disp != MPI_DISPLACEMENT_CURRENT))
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_Lustre_set_view, disp");
+        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, disp");
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count filetype_size, etype_size;
@@ -677,7 +677,7 @@ int PNC_Lustre_set_view(PNC_File     *fd,
 #endif
 
     if (etype_size != 0 && filetype_size % etype_size != 0)
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_Lustre_set_view, type size");
+        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, type size");
 
     err = PNC_lustre_SetInfo(fd, info);
 

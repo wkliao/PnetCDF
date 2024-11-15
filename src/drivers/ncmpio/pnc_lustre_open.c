@@ -838,8 +838,8 @@ static int construct_aggr_list(PNC_File *fd, int root)
     return 0;
 }
 
-/*----< PNC_Lustre_open() >--------------------------------------------------*/
-int PNC_Lustre_open(MPI_Comm    comm,
+/*----< PNC_File_open() >----------------------------------------------------*/
+int PNC_File_open(MPI_Comm    comm,
                     const char *filename,
                     int         amode,
                     MPI_Info    info,
@@ -858,6 +858,8 @@ int PNC_Lustre_open(MPI_Comm    comm,
     fd->filetype    = MPI_BYTE;
     fd->file_system = ADIO_LUSTRE;
     fd->is_open     = 0;
+    fd->access_mode = amode;
+    fd->orig_access_mode = amode;
 
     /* create and initialize info object */
     fd->hints = (PNC_Hints*) NCI_Calloc(1, sizeof(PNC_Hints));
@@ -936,11 +938,27 @@ err_out:
         ADIOI_Free(fd->io_buf);
     }
 
+int rank; MPI_Comm_rank(comm, &rank);
+if (rank == 0) {
+    int  i, nkeys;
+    MPI_Info_get_nkeys(fd->info, &nkeys);
+    printf("MPI File Info: nkeys = %d\n",nkeys);
+    for (i=0; i<nkeys; i++) {
+        char key[MPI_MAX_INFO_KEY], value[MPI_MAX_INFO_VAL];
+        int  valuelen, flag;
+
+        MPI_Info_get_nthkey(fd->info, i, key);
+        MPI_Info_get_valuelen(fd->info, key, &valuelen, &flag);
+        MPI_Info_get(fd->info, key, valuelen+1, value, &flag);
+        printf("MPI File Info: [%2d] key = %25s, value = %s\n",i,key,value);
+    }
+}
+
     return err;
 }
 
-/*----< PNC_Lustre_close() >-------------------------------------------------*/
-int PNC_Lustre_close(PNC_File *fd)
+/*----< PNC_File_close() >---------------------------------------------------*/
+int PNC_File_close(PNC_File *fd)
 {
     int err = NC_NOERR;
 
@@ -957,6 +975,7 @@ int PNC_Lustre_close(PNC_File *fd)
         MPI_Info_free(&(fd->info));
     if (fd->io_buf != NULL)
         ADIOI_Free(fd->io_buf);
+    PNC_Type_dispose(&fd->filetype);
 
     return err;
 }
