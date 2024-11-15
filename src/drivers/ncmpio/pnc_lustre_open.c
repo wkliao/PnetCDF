@@ -21,6 +21,12 @@
 #define PATH_MAX 65535
 #endif
 
+#ifdef HAVE_SYS_VFS_H
+#include <sys/vfs.h>
+#endif
+#ifdef HAVE_SYS_STATVFS_H
+#include <sys/statvfs.h>
+#endif
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h> /* struct statfs */
 #endif
