@@ -123,17 +123,19 @@ typedef struct ADIOI_Fl_node {
 } ADIOI_Flatlist_node;
 
 
-int PNC_Lustre_open(MPI_Comm comm, const char *filename, int amode,
+int PNC_File_open(MPI_Comm comm, const char *filename, int amode,
                     MPI_Info info, PNC_File *fd);
 
-int PNC_Lustre_close(PNC_File *fd);
-int PNC_Lustre_sync(PNC_File *fd);
-int PNC_Lustre_delete(const char *filename);
-int PNC_Lustre_set_size(PNC_File *fd, MPI_Offset size);
-int PNC_Lustre_get_size(PNC_File *fd, MPI_Offset *size);
-int PNC_Lustre_seek(PNC_File *fd, MPI_Offset offset, int whence);
-int PNC_Lustre_get_info(PNC_File *fd, MPI_Info *info_used);
-int PNC_lustre_SetInfo(PNC_File *fd, MPI_Info  users_info);
+int PNC_File_close(PNC_File *fd);
+int PNC_File_set_view(PNC_File *fd, MPI_Offset disp, MPI_Datatype etype,
+                      MPI_Datatype filetype, char *datarep, MPI_Info info);
+int PNC_File_sync(PNC_File *fd);
+int PNC_File_delete(const char *filename);
+int PNC_File_set_size(PNC_File *fd, MPI_Offset size);
+int PNC_File_get_size(PNC_File *fd, MPI_Offset *size);
+int PNC_File_seek(PNC_File *fd, MPI_Offset offset, int whence);
+int PNC_File_get_info(PNC_File *fd, MPI_Info *info_used);
+int PNC_File_SetInfo(PNC_File *fd, MPI_Info  users_info);
 
 void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag);
 int PNC_Type_ispredef(MPI_Datatype datatype, int *flag);
