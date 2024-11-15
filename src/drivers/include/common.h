@@ -58,6 +58,10 @@ NCI_Malloc_fn(size_t size, const int lineno, const char *func,
               const char *filename);
 
 extern void *
+NCI_Strdup_fn(const char *src, const int lineno, const char *func,
+              const char *filename);
+
+extern void *
 NCI_Calloc_fn(size_t nelem, size_t elsize, const int lineno, const char *func,
               const char *filename);
 
@@ -70,6 +74,7 @@ NCI_Free_fn(void *ptr, const int lineno, const char *func,
             const char *filename);
 
 #define NCI_Malloc(a)    NCI_Malloc_fn(a,__LINE__,__func__,__FILE__)
+#define NCI_Strdup(a)    NCI_Strdup_fn(a,__LINE__,__func__,__FILE__)
 #define NCI_Calloc(a,b)  NCI_Calloc_fn(a,b,__LINE__,__func__,__FILE__)
 #define NCI_Realloc(a,b) NCI_Realloc_fn(a,b,__LINE__,__func__,__FILE__)
 #define NCI_Free(a)      NCI_Free_fn(a,__LINE__,__func__,__FILE__)
