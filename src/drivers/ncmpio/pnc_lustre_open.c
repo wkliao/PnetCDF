@@ -8,7 +8,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>   /* readlink(), pwrite() */
+#include <unistd.h>   /* readlink() */
 #include <string.h>   /* strdup() */
 #include <assert.h>
 #include <sys/errno.h>
@@ -228,8 +228,8 @@ int PNC_Check_Lustre(MPI_Comm comm,
  *   5. non-root processes opens the fie
  */
 static int
-lustre_file_create(PNC_File *fd,
-                   int       access_mode)
+lustre_file_create(PNC_File fd,
+                   int      access_mode)
 {
     int err=NC_NOERR, rank, amode, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
@@ -393,7 +393,7 @@ err_out:
  *   2. root obtains striping info and broadcasts to all others
  */
 static int
-lustre_file_open(PNC_File *fd)
+lustre_file_open(PNC_File fd)
 {
     int err=NC_NOERR, rank, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
@@ -471,7 +471,7 @@ err_out:
  *     fd->hints->cb_nodes
  *     fd->hints->num_osts
  */
-static int construct_aggr_list(PNC_File *fd, int root)
+static int construct_aggr_list(PNC_File fd, int root)
 {
     int i, j, k, rank, nprocs, num_aggr, my_procname_len, num_nodes;
     int msg[3], striping_factor;
@@ -840,22 +840,27 @@ static int construct_aggr_list(PNC_File *fd, int root)
 
 /*----< PNC_File_open() >----------------------------------------------------*/
 int PNC_File_open(MPI_Comm    comm,
-                    const char *filename,
-                    int         amode,
-                    MPI_Info    info,
-                    PNC_File   *fd)
+                  const char *filename,
+                  int         amode,
+                  MPI_Info    info,
+                  PNC_File   *fh)
 {
     /* Before reaching to this subroutine, PNC_Check_Lustre() should have been
      * called to verify filename is on Lustre.
      */
     char value[MPI_MAX_INFO_VAL + 1];
     int i, err, min_err;
+    PNC_File fd = (PNC_FileD*) NCI_Malloc(sizeof(PNC_FileD));
+
+    *fh = fd;
 
     fd->comm        = comm;
     fd->filename    = ADIOI_Strdup(filename);
     fd->atomicity   = 0;
     fd->etype       = MPI_BYTE;
-    fd->filetype    = MPI_BYTE;
+    fd->etype_size  = 1;
+    fd->ftype       = MPI_BYTE;
+    fd->ftype_size  = 1;
     fd->file_system = ADIO_LUSTRE;
     fd->is_open     = 0;
     fd->access_mode = amode;
@@ -875,12 +880,17 @@ int PNC_File_open(MPI_Comm    comm,
         goto err_out;
     }
 
+    err = PNC_File_SetInfo(fd, fd->info);
+    if (err != NC_NOERR)
+        return err;
+
+    if (1 == PNC_Check_Lustre(comm, filename))
+        MPI_Info_set(fd->info, "romio_filesystem_type", "LUSTRE:");
+
     /* For Lustre, determining the I/O aggregators and constructing ranklist
      * requires file stripe count, which can only be obtained after file is
      * opened.
-     *
      */
-
     if (amode & MPI_MODE_CREATE)
         err = lustre_file_create(fd, amode);
     else
@@ -889,6 +899,13 @@ int PNC_File_open(MPI_Comm    comm,
 
     /* TODO: when no_indep_rw hint is enabled, only aggregators open the file */
     fd->is_open = 1;
+
+    /* Use file striping count and number of unique OSTs to construct
+     * the I/O aggregator rank list, fd->hints->ranklist[]. Also, set
+     * hint cb_nodes, fd->is_agg, and fd->my_cb_nodes_index.
+     */
+    err = construct_aggr_list(fd, 0);
+    if (err != NC_NOERR) goto err_out;
 
     /* set file striping hints */
     snprintf(value, sizeof(value), "%d", fd->hints->striping_unit);
@@ -899,13 +916,6 @@ int PNC_File_open(MPI_Comm    comm,
 
     snprintf(value, sizeof(value), "%d", fd->hints->start_iodevice);
     MPI_Info_set(fd->info, "start_iodevice", value);
-
-    /* Use file striping count and number of unique OSTs to construct
-     * the I/O aggregator rank list, fd->hints->ranklist[]. Also, set
-     * hint cb_nodes, fd->is_agg, and fd->my_cb_nodes_index.
-     */
-    err = construct_aggr_list(fd, 0);
-    if (err != NC_NOERR) goto err_out;
 
     /* add to fd->info the hint "aggr_list", list of aggregators' rank IDs */
     value[0] = '\0';
@@ -958,24 +968,25 @@ if (rank == 0) {
 }
 
 /*----< PNC_File_close() >---------------------------------------------------*/
-int PNC_File_close(PNC_File *fd)
+int PNC_File_close(PNC_File *fh)
 {
     int err = NC_NOERR;
 
-    err = close(fd->fd_sys);
+    err = close((*fh)->fd_sys);
     if (err != 0)
         err = ncmpii_error_posix2nc("close");
 
-    ADIOI_Free(fd->filename);
-    if (fd->hints->ranklist != NULL)
-        ADIOI_Free(fd->hints->ranklist);
-    if (fd->hints != NULL)
-        ADIOI_Free(fd->hints);
-    if (fd->info != MPI_INFO_NULL)
-        MPI_Info_free(&(fd->info));
-    if (fd->io_buf != NULL)
-        ADIOI_Free(fd->io_buf);
-    PNC_Type_dispose(&fd->filetype);
+    ADIOI_Free((*fh)->filename);
+    if ((*fh)->hints->ranklist != NULL)
+        ADIOI_Free((*fh)->hints->ranklist);
+    if ((*fh)->hints != NULL)
+        ADIOI_Free((*fh)->hints);
+    if ((*fh)->info != MPI_INFO_NULL)
+        MPI_Info_free(&((*fh)->info));
+    if ((*fh)->io_buf != NULL)
+        ADIOI_Free((*fh)->io_buf);
+    PNC_Type_dispose(&(*fh)->ftype);
+    ADIOI_Free(*fh);
 
     return err;
 }

@@ -1172,6 +1172,8 @@ dnl AC_CHECK_FUNCS([memset setlocale sqrt strchr strrchr strtol])
 dnl AC_CHECK_LIB([m], [tanh])
 dnl UD_CHECK_LIB_MATH
 
+AC_CHECK_HEADERS([unistd.h fcntl.h malloc.h stddef.h sys/types.h limits.h time.h dirent.h])
+
 dnl When using gcc based compiler with -ansi flag, AC_CHECK_FUNCS can still
 dnl find strdup, but AC_CHECK_DECL cannot. So we check with AC_CHECK_DECL
 dnl first and then check AC_CHECK_FUNCS.
