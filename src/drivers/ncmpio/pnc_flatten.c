@@ -1,6 +1,6 @@
 /*
- * Copyright (C) by Argonne National Laboratory
- *     See COPYRIGHT in top-level directory
+ *  Copyright (C) 2025, Northwestern University
+ *  See COPYRIGHT notice in top-level directory.
  */
 
 #include <stdio.h>

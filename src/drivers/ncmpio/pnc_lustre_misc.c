@@ -2,6 +2,7 @@
  *  Copyright (C) 2025, Northwestern University
  *  See COPYRIGHT notice in top-level directory.
  */
+
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
@@ -13,10 +14,6 @@
 #include <sys/errno.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h> /* fsync(), unlink(), ftruncate(), lseek() */
-#endif
-
-#ifdef HAVE_LIMITS_H
-#include <limits.h>
 #endif
 
 #include <mpi.h>
@@ -690,16 +687,16 @@ int PNC_File_set_view(PNC_File      fd,
 
     PNC_Type_ispredef(filetype, &is_predef);
     if (is_predef) {
-        fd->ftype = filetype;
+        fd->filetype = filetype;
         filetype_is_contig = 1;
     } else {
         MPI_Type_dup(filetype, &copy_filetype);
         MPI_Type_commit(&copy_filetype);
-        fd->ftype = copy_filetype;
-        PNC_Datatype_iscontig(fd->ftype, &filetype_is_contig);
+        fd->filetype = copy_filetype;
+        PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
         /* check filetype only if it is not a predefined MPI datatype */
-        flat_file = PNC_Flatten_and_find(fd->ftype);
+        flat_file = PNC_Flatten_and_find(fd->filetype);
         err = check_type(flat_file, fd->orig_access_mode, "filetype");
         if (err != NC_NOERR)
             return err;

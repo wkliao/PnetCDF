@@ -2,6 +2,7 @@
  *  Copyright (C) 2025, Northwestern University
  *  See COPYRIGHT notice in top-level directory.
  */
+
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
@@ -109,7 +110,7 @@ int file_write(PNC_File      fd,
     if (bufType_size == 0) return NC_NOERR;
 
     PNC_Datatype_iscontig(bufType, &buftype_is_contig);
-    PNC_Datatype_iscontig(fd->ftype, &filetype_is_contig);
+    PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;

@@ -154,7 +154,7 @@ int PNC_WriteStrided(ADIO_File fd,
     }
 
     PNC_Datatype_iscontig(datatype, &buftype_is_contig);
-    PNC_Datatype_iscontig(fd->ftype, &filetype_is_contig);
+    PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     bufsize = buftype_size * count;
 
@@ -199,7 +199,7 @@ int PNC_WriteStrided(ADIO_File fd,
     }
     else {
         /* noncontiguous in file */
-        flat_file = PNC_Flatten_and_find(fd->ftype);
+        flat_file = PNC_Flatten_and_find(fd->filetype);
         disp = fd->disp;
 
         if (file_ptr_type == ADIO_INDIVIDUAL) {

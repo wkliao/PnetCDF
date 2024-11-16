@@ -2,6 +2,7 @@
  *  Copyright (C) 2025, Northwestern University
  *  See COPYRIGHT notice in top-level directory.
  */
+
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
@@ -859,7 +860,7 @@ int PNC_File_open(MPI_Comm    comm,
     fd->atomicity   = 0;
     fd->etype       = MPI_BYTE;
     fd->etype_size  = 1;
-    fd->ftype       = MPI_BYTE;
+    fd->filetype    = MPI_BYTE;
     fd->ftype_size  = 1;
     fd->file_system = ADIO_LUSTRE;
     fd->is_open     = 0;
@@ -985,7 +986,7 @@ int PNC_File_close(PNC_File *fh)
         MPI_Info_free(&((*fh)->info));
     if ((*fh)->io_buf != NULL)
         ADIOI_Free((*fh)->io_buf);
-    PNC_Type_dispose(&(*fh)->ftype);
+    PNC_Type_dispose(&(*fh)->filetype);
     ADIOI_Free(*fh);
 
     return err;

@@ -1,9 +1,4 @@
 /*
- * Copyright (C) by Argonne National Laboratory
- *     See COPYRIGHT in top-level directory
- */
-
-/*
  *  Copyright (C) 2025, Northwestern University
  *  See COPYRIGHT notice in top-level directory.
  */
@@ -17,9 +12,6 @@
 #include <string.h> /* memcpy() */
 #include <assert.h>
 #include <sys/errno.h>
-#ifdef HAVE_LIMITS_H
-#include <limits.h>
-#endif
 
 #include <mpi.h>
 
@@ -65,7 +57,7 @@ int PNC_GEN_WriteStrided_naive(ADIO_File fd,
     }
 
     PNC_Datatype_iscontig(buftype, &buftype_is_contig);
-    PNC_Datatype_iscontig(fd->ftype, &filetype_is_contig);
+    PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     bufsize = buftype_size * count;
 
@@ -123,7 +115,7 @@ int PNC_GEN_WriteStrided_naive(ADIO_File fd,
          *
          */
 
-        flat_file = PNC_Flatten_and_find(fd->ftype);
+        flat_file = PNC_Flatten_and_find(fd->filetype);
         disp = fd->disp;
 
         if (file_ptr_type == ADIO_INDIVIDUAL) {
