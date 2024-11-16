@@ -48,6 +48,7 @@
 #define ADIOI_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
 #define ADIOI_TYPE_NEGATIVE 0x00000004  /* if one of displacements is negative */
 
+#define ADIO_OFFSET MPI_OFFSET
 typedef MPI_Offset ADIO_Offset;
 
 enum {
@@ -135,6 +136,20 @@ typedef struct ADIOI_Fl_node {
     int flag;                   /* ADIOI_TYPE_XXX */
 } ADIOI_Flatlist_node;
 
+typedef struct {
+    ADIO_Offset *offsets;       /* array of offsets */
+    ADIO_Offset *lens;          /* array of lengths */
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Count *mem_ptrs;        /* array of pointers. used in the read/write
+                                 * phase to indicate where the data
+                                 * is stored in memory
+                                 * promoted to MPI_Count so we can construct types with _c versions */
+    MPI_Count count;            /* size of above arrays */
+#else
+    MPI_Aint *mem_ptrs;
+    size_t count;
+#endif
+} ADIOI_Access;
 
 int PNC_File_open(MPI_Comm comm, const char *filename, int amode,
                     MPI_Info info, PNC_File *fh);
@@ -182,5 +197,12 @@ int PNC_ReadContig(ADIO_File fd, void *buf, MPI_Aint count,
                     MPI_Datatype bufType, int file_ptr_type,
                     ADIO_Offset offset, ADIO_Status *status);
 
+
+int PNC_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
+                         MPI_Datatype buftype, int file_ptr_type,
+                         ADIO_Offset offset, ADIO_Status *status);
+int PNC_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
+                         MPI_Datatype buftype, int file_ptr_type,
+                         ADIO_Offset offset, ADIO_Status *status);
 
 #endif
