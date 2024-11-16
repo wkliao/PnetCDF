@@ -6,6 +6,8 @@
 #ifndef H_PNC_LUSTRE
 #define H_PNC_LUSTRE
 
+#include <stdbool.h>
+#include <string.h>     /* memcpy() */
 #include <stddef.h>     /* size_t */
 #include <sys/types.h>  /* off_t */
 #include <assert.h>
@@ -21,6 +23,12 @@
 
 #define MPL_MAX MAX
 #define MPL_MIN MIN
+#define MPL_UNREFERENCED_ARG(a)
+
+#define ADIO_Feature(a, b) 0
+#define ADIOI_WRITE_LOCK(a,b,c,d)
+#define ADIOI_UNLOCK(a,b,c,d)
+
 #define ADIO_LUSTRE 163
 #define ADIOI_Strdup NCI_Strdup
 #define ADIOI_Malloc NCI_Malloc
@@ -34,6 +42,7 @@
 #define ADIO_Status MPI_Status
 #define ADIO_EXPLICIT_OFFSET     100
 #define ADIO_INDIVIDUAL          101
+#define ADIOI_COLL_TAG(rank,iter) 0
 
 #define ADIOI_CB_BUFFER_SIZE_DFLT "16777216"
 #define ADIOI_IND_RD_BUFFER_SIZE_DFLT     "4194304"
@@ -83,6 +92,55 @@ typedef struct {
     char *cb_config_list;
     int *ranklist;
     int num_osts;
+
+    int cb_pfr;
+    int cb_fr_type;
+    int cb_fr_alignment;
+    int cb_alltoall;
+    int min_fdomain_size;
+    int synchronizing_flush;    /* "romio_synchronized_flush" hint */
+    int visibility_immediate;   /* "romio_visibility_immediate" hint */
+    union {
+        struct {
+            int chunk_size;
+            int obj_class;
+        } daos;
+        struct {
+            int listio_read;
+            int listio_write;
+        } pvfs;
+        struct {
+            int debugmask;
+            int posix_read;
+            int posix_write;
+            int listio_read;
+            int listio_write;
+            int dtype_read;
+            int dtype_write;
+        } pvfs2;
+        struct {
+            int num_osts;
+            int co_ratio;
+            int coll_threshold;
+            int lock_ahead_read;
+            int lock_ahead_write;
+            int lock_ahead_num_extents;
+            int lock_ahead_flags;
+            ADIO_Offset lock_ahead_start_extent;
+            ADIO_Offset lock_ahead_end_extent;
+        } lustre;
+        struct {
+            unsigned read_chunk_sz;     /* chunk size for direct reads */
+            unsigned write_chunk_sz;    /* chunk size for direct writes */
+        } xfs;
+        struct {
+            int *bridgelist;    /* list of all bride ranks */
+            int *bridgelistnum; /* each entry here is the number of aggregators
+                                 * associated with the bridge rank of the same
+                                 * index in bridgelist */
+            int numbridges;     /* total number of bridges */
+        } bg;
+    } fs_hints;
 } PNC_Hints;
 
 typedef struct {
@@ -147,7 +205,7 @@ typedef struct ADIOI_Fl_node {
 typedef struct {
     ADIO_Offset *offsets;       /* array of offsets */
     ADIO_Offset *lens;          /* array of lengths */
-#ifdef HAVE_MPI_LARGE_COUNT
+#if 1
     MPI_Count *mem_ptrs;        /* array of pointers. used in the read/write
                                  * phase to indicate where the data
                                  * is stored in memory
@@ -190,18 +248,36 @@ int PNC_File_write_all(PNC_File fh, const void *buf, int count,
 int PNC_File_write_at_all(PNC_File fh, MPI_Offset offset, const void *buf,
                    int count, MPI_Datatype  datatype, MPI_Status *status);
 
+int PNC_File_read(PNC_File fh, void *buf, int count,
+                  MPI_Datatype datatype, MPI_Status *status);
+int PNC_File_read_at(PNC_File fh, MPI_Offset offset, void *buf,
+                  int count, MPI_Datatype  datatype, MPI_Status *status);
+int PNC_File_read_all(PNC_File fh, void *buf, int count,
+                  MPI_Datatype datatype, MPI_Status *status);
+int PNC_File_read_at_all(PNC_File fh, MPI_Offset offset, void *buf,
+                  int count, MPI_Datatype  datatype, MPI_Status *status);
+
 #define ADIO_WriteStrided(a,b,c,d,e,f,g,x) \
     *x = PNC_WriteStrided(a,b,c,d,e,f,g);
 int PNC_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                      MPI_Datatype datatype, int file_ptr_type,
                      ADIO_Offset offset, ADIO_Status *status);
 
-#define PNC_WriteStridedColl(a,b,c,d,e,f,g,h,x) \
-    *x = ADIOI_LUSTRE_WriteStridedColl(a,b,c,d,e,f,g,h);
 void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
                      MPI_Aint count, MPI_Datatype buftype, int file_ptr_type,
                      ADIO_Offset offset, ADIO_Status *status, int *error_code);
 
+
+void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
+                                 MPI_Datatype buftype, int file_ptr_type,
+                                 ADIO_Offset offset, ADIO_Status * status, int
+                                 *error_code);
+
+#define ADIO_ReadStridedColl ADIOI_GEN_ReadStridedColl
+void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
+                               MPI_Datatype datatype, int file_ptr_type,
+                               ADIO_Offset offset, ADIO_Status * status, int
+                               *error_code);
 
 int PNC_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                                MPI_Datatype buftype, int file_ptr_type,
@@ -220,10 +296,11 @@ int PNC_ReadContig(ADIO_File fd, void *buf, MPI_Aint count,
                     ADIO_Offset offset, ADIO_Status *status);
 
 
-int PNC_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
-                         MPI_Datatype buftype, int file_ptr_type,
-                         ADIO_Offset offset, ADIO_Status *status);
-
+#define ADIO_ReadStrided ADIOI_GEN_ReadStrided
+void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
+                           MPI_Datatype datatype, int file_ptr_type,
+                           ADIO_Offset offset, ADIO_Status * status,
+                           int *error_code);
 
 int ADIOI_LUSTRE_Calc_aggregator(ADIO_File fd, ADIO_Offset off,
                                  ADIO_Offset *len);
@@ -234,8 +311,48 @@ void ADIOI_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount, MPI_Datatype
                            ** len_list_ptr, ADIO_Offset * start_offset_ptr,
                            ADIO_Offset * end_offset_ptr, MPI_Count * contig_access_count_ptr);
 
-#define ADIOI_LUSTRE_Docollect(a,b,c,d) 0
-#define MPIO_Err_create_code(err, b, c, d, e, f, g) err
+void ADIOI_Calc_file_domains(ADIO_Offset * st_offsets, ADIO_Offset
+                             * end_offsets, int nprocs, int nprocs_for_coll,
+                             ADIO_Offset * min_st_offset_ptr,
+                             ADIO_Offset ** fd_start_ptr, ADIO_Offset
+                             ** fd_end_ptr, int min_fd_size,
+                             ADIO_Offset * fd_size_ptr, int striping_unit);
+void ADIOI_Calc_my_req(ADIO_File fd, ADIO_Offset * offset_list, ADIO_Offset * len_list,
+                       MPI_Count contig_access_count,
+                       ADIO_Offset min_st_offset, ADIO_Offset * fd_start,
+                       ADIO_Offset * fd_end, ADIO_Offset fd_size,
+                       int nprocs,
+                       MPI_Count * count_my_req_procs_ptr,
+                       MPI_Count ** count_my_req_per_proc_ptr,
+                       ADIOI_Access ** my_req_ptr, MPI_Aint ** buf_idx_ptr);
+void ADIOI_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
+                           MPI_Count * count_my_req_per_proc,
+                           ADIOI_Access * my_req,
+                           int nprocs, int myrank,
+                           MPI_Count * count_others_req_procs_ptr,
+                           MPI_Count ** count_others_req_per_proc_ptr,
+                           ADIOI_Access ** others_req_ptr);
+void ADIOI_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
+                       ADIOI_Access * my_req, MPI_Aint * buf_idx);
+void ADIOI_Free_others_req(int nprocs, MPI_Count * count_others_req_per_proc,
+                           ADIOI_Access * others_req);
+int ADIOI_Type_create_hindexed_x(MPI_Count count,
+                                 const MPI_Count array_of_blocklengths[],
+                                 const MPI_Count array_of_displacements[],
+                                 MPI_Datatype oldtype, MPI_Datatype * newtype);
+int ADIOI_Calc_aggregator(ADIO_File fd,
+                          ADIO_Offset off,
+                          ADIO_Offset min_off,
+                          ADIO_Offset * len,
+                          ADIO_Offset fd_size, ADIO_Offset * fd_start, ADIO_Offset * fd_end);
+
+
+
+#define MPIO_Err_create_code(err, ...) err
 #define FPRINTF fprintf
+
+int ADIOI_LUSTRE_Docollect(ADIO_File fd, MPI_Count contig_access_count,
+                           ADIO_Offset * len_list, int nprocs);
+
 
 #endif

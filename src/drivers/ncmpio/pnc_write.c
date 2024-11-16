@@ -17,6 +17,7 @@
 
 #include "pnc_lustre.h"
 
+/*----< PNC_WriteContig() >--------------------------------------------------*/
 int PNC_WriteContig(ADIO_File     fd,
                     const void   *buf,
                     MPI_Aint      count,
@@ -87,7 +88,7 @@ ioerr:
     return NC_NOERR;
 }
 
-/*----< file_write() >---------------------------------------------------*/
+/*----< file_write() >-------------------------------------------------------*/
 /* This is an independent call. */
 static
 int file_write(PNC_File      fd,
@@ -192,16 +193,15 @@ int PNC_File_write_at_all(PNC_File      fh,
         err = NC_EPERM;
     if (st == NC_NOERR) st = err;
 
-/*
-    err = PNC_WriteStridedColl(fh, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
-                               offset, status);
-    if (st == NC_NOERR) st = err;
- */
+    ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
+                         offset, status, &err);
+    if (err != MPI_SUCCESS && st == NC_NOERR)
+        st = ncmpii_error_mpi2nc(err, "PNC_File_write_at_all");
 
     return st;
 }
 
-/*----< PNC_File_write_all() >---------------------------------------------------*/
+/*----< PNC_File_write_all() >-----------------------------------------------*/
 /* This is a collective call. */
 int PNC_File_write_all(PNC_File      fh,
                        const void   *buf,
@@ -217,11 +217,10 @@ int PNC_File_write_all(PNC_File      fh,
         err = NC_EPERM;
     if (st == NC_NOERR) st = err;
 
-/*
-    err = PNC_WriteStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
-                               0, status);
-    if (st == NC_NOERR) st = err;
-*/
+    ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
+                         0, status, &err);
+    if (err != MPI_SUCCESS && st == NC_NOERR)
+        st = ncmpii_error_mpi2nc(err, "PNC_File_write_all");
 
     return st;
 }
