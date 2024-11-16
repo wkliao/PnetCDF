@@ -29,7 +29,7 @@
 
 
 /*----< PNC_File_close() >---------------------------------------------------*/
-int PNC_File_sync(PNC_File *fd)
+int PNC_File_sync(PNC_File fd)
 {
     int err = NC_NOERR;
 
@@ -55,8 +55,8 @@ int PNC_File_delete(const char *filename)
 }
 
 /*----< PNC_File_set_size() >------------------------------------------------*/
-int PNC_File_set_size(PNC_File   *fd,
-                        MPI_Offset  size)
+int PNC_File_set_size(PNC_File   fd,
+                      MPI_Offset size)
 {
     int err = NC_NOERR, rank;
 
@@ -74,8 +74,8 @@ int PNC_File_set_size(PNC_File   *fd,
 }
 
 /*----< PNC_File_get_size() >------------------------------------------------*/
-int PNC_File_get_size(PNC_File   *fd,
-                        MPI_Offset *size)
+int PNC_File_get_size(PNC_File    fd,
+                      MPI_Offset *size)
 {
     int err = NC_NOERR, rank;
     MPI_Offset msg[2];
@@ -98,9 +98,9 @@ int PNC_File_get_size(PNC_File   *fd,
 }
 
 /*----< PNC_File_seek() >----------------------------------------------------*/
-int PNC_File_seek(PNC_File   *fd,
-                    MPI_Offset  offset,
-                    int         whence)
+int PNC_File_seek(PNC_File   fd,
+                  MPI_Offset offset,
+                  int        whence)
 {
     int err = NC_NOERR, rank, posix_whence;
     off_t file_off;
@@ -123,8 +123,8 @@ int PNC_File_seek(PNC_File   *fd,
 }
 
 /*----< PNC_File_get_info() >------------------------------------------------*/
-int PNC_File_get_info(PNC_File *fd,
-                        MPI_Info *info_used)
+int PNC_File_get_info(PNC_File  fd,
+                      MPI_Info *info_used)
 {
     int err;
 
@@ -307,8 +307,8 @@ fn_exit:
 }
 
 int
-PNC_lustre_SetInfo(PNC_File *fd,
-                   MPI_Info  users_info)
+PNC_File_SetInfo(PNC_File fd,
+                 MPI_Info users_info)
 {
     int flag, nprocs = 0, len, ok_to_override_cb_nodes = 0;
     char value[MPI_MAX_INFO_VAL + 1];
@@ -645,7 +645,7 @@ void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 }
 
 /*----< PNC_File_set_view() >------------------------------------------------*/
-int PNC_File_set_view(PNC_File     *fd,
+int PNC_File_set_view(PNC_File      fd,
                       MPI_Offset    disp,
                       MPI_Datatype  etype,
                       MPI_Datatype  filetype,
@@ -667,48 +667,59 @@ int PNC_File_set_view(PNC_File     *fd,
         return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, disp");
 
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count filetype_size, etype_size;
-    MPI_Type_size_c(filetype, &filetype_size);
-    MPI_Type_size_c(etype, &etype_size);
+    MPI_Count lb;
+    MPI_Type_size_c(filetype, &fd->ftype_size);
+    MPI_Type_size_c(etype, &fd->etype_size);
+    MPI_Type_get_extent_c(filetype, &lb, &fd->ftype_extent);
 #else
-    int filetype_size, etype_size;
-    MPI_Type_size(filetype, &filetype_size);
-    MPI_Type_size(etype, &etype_size);
+    MPI_Aint lb;
+    MPI_Type_size(filetype, &fd->ftype_size);
+    MPI_Type_size(etype, &fd->etype_size);
+    MPI_Type_get_extent(filetype, &lb, &fd->ftype_extent);
 #endif
 
-    if (etype_size != 0 && filetype_size % etype_size != 0)
+    if (fd->etype_size != 0 && fd->ftype_size % fd->etype_size != 0)
         return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, type size");
 
-    err = PNC_lustre_SetInfo(fd, info);
+    err = PNC_File_SetInfo(fd, info);
+    if (err != NC_NOERR)
+        return err;
 
     /* PnetCDF only uses etype = MPI_BYTE */
     fd->etype = etype;
 
     PNC_Type_ispredef(filetype, &is_predef);
     if (is_predef) {
-        fd->filetype = filetype;
+        fd->ftype = filetype;
         filetype_is_contig = 1;
     } else {
         MPI_Type_dup(filetype, &copy_filetype);
         MPI_Type_commit(&copy_filetype);
-        fd->filetype = copy_filetype;
-        PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        fd->ftype = copy_filetype;
+        PNC_Datatype_iscontig(fd->ftype, &filetype_is_contig);
 
         /* check filetype only if it is not a predefined MPI datatype */
-        flat_file = PNC_Flatten_and_find(fd->filetype);
+        flat_file = PNC_Flatten_and_find(fd->ftype);
         err = check_type(flat_file, fd->orig_access_mode, "filetype");
         if (err != NC_NOERR)
             return err;
     }
 
+    /* file displacement is an absolute byte position relative to the beginning
+     * of a file. The displacement defines the location where a view begins.
+     */
     fd->disp = disp;
 
     /* reset MPI-IO file pointer to point to the first byte that can
      * be accessed in this view. */
 
+printf("filetype_is_contig=%d\n",(filetype_is_contig!=0));
     if (filetype_is_contig)
         fd->fp_ind = disp;
     else {
+for (i = 0; i < flat_file->count; i++)
+printf("flat_file count=%lld [%d] indices=%lld blocklens=%lld\n",flat_file->count,i,flat_file->indices[i],flat_file->blocklens[i]);
+
         for (i = 0; i < flat_file->count; i++) {
             if (flat_file->blocklens[i]) {
                 fd->fp_ind = disp + flat_file->indices[i];
