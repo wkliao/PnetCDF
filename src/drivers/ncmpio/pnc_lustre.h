@@ -6,6 +6,15 @@
 #ifndef H_PNC_LUSTRE
 #define H_PNC_LUSTRE
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/errno.h>
+#include <unistd.h>   /* pwrite() */
+
 #include <stdbool.h>
 #include <string.h>     /* memcpy() */
 #include <stddef.h>     /* size_t */
@@ -14,6 +23,8 @@
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
 #endif
+
+#include <mpi.h>
 
 #include <dispatch.h>
 #include "ncmpio_driver.h"
@@ -43,6 +54,7 @@
 #define ADIO_EXPLICIT_OFFSET     100
 #define ADIO_INDIVIDUAL          101
 #define ADIOI_COLL_TAG(rank,iter) 0
+#define ADIOI_AINT_CAST_TO_OFFSET (MPI_Offset)
 
 #define ADIOI_CB_BUFFER_SIZE_DFLT "16777216"
 #define ADIOI_IND_RD_BUFFER_SIZE_DFLT     "4194304"
@@ -176,6 +188,11 @@ typedef struct {
 double lustre_write_metrics[3];
 int romio_write_aggmethod;
 int fp_sys_posn;
+unsigned d_miniosz;
+unsigned d_mem;
+int fd_direct;
+int direct_read;
+int direct_write;
 } PNC_FileD;
 
 typedef PNC_FileD *PNC_File;
@@ -217,6 +234,8 @@ typedef struct {
 #endif
 } ADIOI_Access;
 
+/*---- APIs -----------------------------------------------------------------*/
+int PNC_Check_Lustre(const char *filename);
 int PNC_File_open(MPI_Comm comm, const char *filename, int amode,
                     MPI_Info info, PNC_File *fh);
 
@@ -231,13 +250,21 @@ int PNC_File_seek(PNC_File fh, MPI_Offset offset, int whence);
 int PNC_File_get_info(PNC_File fh, MPI_Info *info_used);
 int PNC_File_SetInfo(PNC_File fh, MPI_Info  users_info);
 
-#define ADIOI_Datatype_iscontig PNC_Datatype_iscontig
-void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag);
-int PNC_Type_ispredef(MPI_Datatype datatype, int *flag);
-int PNC_Type_dispose(MPI_Datatype *datatype);
+void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag);
+#define PNC_Datatype_iscontig ADIOI_Datatype_iscontig
+// void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag);
 
-#define ADIOI_Flatten_and_find PNC_Flatten_and_find
-ADIOI_Flatlist_node *PNC_Flatten_and_find(MPI_Datatype datatype);
+int ADIOI_Type_ispredef(MPI_Datatype datatype, int *flag);
+#define PNC_Type_ispredef ADIOI_Type_ispredef
+// int PNC_Type_ispredef(MPI_Datatype datatype, int *flag);
+
+int ADIOI_Type_dispose(MPI_Datatype * datatype);
+#define PNC_Type_dispose ADIOI_Type_dispose
+// int PNC_Type_dispose(MPI_Datatype *datatype);
+
+ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype);
+#define PNC_Flatten_and_find ADIOI_Flatten_and_find
+// ADIOI_Flatlist_node *PNC_Flatten_and_find(MPI_Datatype datatype);
 
 int PNC_File_write(PNC_File fh, const void *buf, int count,
                    MPI_Datatype datatype, MPI_Status *status);
@@ -257,11 +284,16 @@ int PNC_File_read_all(PNC_File fh, void *buf, int count,
 int PNC_File_read_at_all(PNC_File fh, MPI_Offset offset, void *buf,
                   int count, MPI_Datatype  datatype, MPI_Status *status);
 
-#define ADIO_WriteStrided(a,b,c,d,e,f,g,x) \
-    *x = PNC_WriteStrided(a,b,c,d,e,f,g);
+void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
+                               MPI_Datatype datatype, int file_ptr_type,
+                               ADIO_Offset offset, ADIO_Status * status, int *error_code);
+#define ADIO_WriteStrided ADIOI_LUSTRE_WriteStrided
+
+/*
 int PNC_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                      MPI_Datatype datatype, int file_ptr_type,
                      ADIO_Offset offset, ADIO_Status *status);
+*/
 
 void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
                      MPI_Aint count, MPI_Datatype buftype, int file_ptr_type,
@@ -279,6 +311,10 @@ void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
                                ADIO_Offset offset, ADIO_Status * status, int
                                *error_code);
 
+void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
+                                  MPI_Datatype buftype, int file_ptr_type,
+                                  ADIO_Offset offset, ADIO_Status * status, int
+                                  *error_code);
 int PNC_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                                MPI_Datatype buftype, int file_ptr_type,
                                ADIO_Offset offset, ADIO_Status *status);
@@ -336,10 +372,12 @@ void ADIOI_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
                        ADIOI_Access * my_req, MPI_Aint * buf_idx);
 void ADIOI_Free_others_req(int nprocs, MPI_Count * count_others_req_per_proc,
                            ADIOI_Access * others_req);
+
 int ADIOI_Type_create_hindexed_x(MPI_Count count,
                                  const MPI_Count array_of_blocklengths[],
                                  const MPI_Count array_of_displacements[],
                                  MPI_Datatype oldtype, MPI_Datatype * newtype);
+
 int ADIOI_Calc_aggregator(ADIO_File fd,
                           ADIO_Offset off,
                           ADIO_Offset min_off,
@@ -350,9 +388,23 @@ int ADIOI_Calc_aggregator(ADIO_File fd,
 
 #define MPIO_Err_create_code(err, ...) err
 #define FPRINTF fprintf
+#define DBG_FPRINTF fprintf
 
 int ADIOI_LUSTRE_Docollect(ADIO_File fd, MPI_Count contig_access_count,
                            ADIO_Offset * len_list, int nprocs);
 
+
+int ADIO_Type_create_subarray(int ndims,
+                              const int *array_of_sizes,
+                              const int *array_of_subsizes,
+                              const int *array_of_starts,
+                              int order, MPI_Datatype oldtype, MPI_Datatype * newtype);
+int ADIO_Type_create_darray(int size, int rank, int ndims,
+                            const int *array_of_gsizes, const int *array_of_distribs,
+                            const int *array_of_dargs, const int *array_of_psizes,
+                            int order, MPI_Datatype oldtype, MPI_Datatype * newtype);
+int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner);
+
+ADIO_Offset ADIOI_GEN_SeekIndividual(ADIO_File fd, ADIO_Offset offset, int whence, int *error_code);
 
 #endif

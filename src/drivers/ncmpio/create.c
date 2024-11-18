@@ -6,7 +6,7 @@
 
 #define ERR { \
     if (err != NC_NOERR) \
-        printf("%d: line %d: error\n", rank, __LINE__); \
+        printf("%d: line %d: error (%s)\n", rank, __LINE__, ncmpi_strerrno(err)); \
 }
 
 int main(int argc, char *argv[])
@@ -49,30 +49,46 @@ int main(int argc, char *argv[])
 
     err = MPI_Info_set(info, "romio_no_indep_rw", "true"); ERR
 
-    err = PNC_File_delete(filename); ERR
+    if (rank == 0) {
+        err = PNC_File_delete(filename); ERR
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    int is_lustre = PNC_Check_Lustre(filename);
+    printf("File %s is Lustre? %s\n",filename,(is_lustre)?"yes":"no");
 
     /* create a new file collectively */
     err = PNC_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDWR | MPI_MODE_CREATE,
                         info, &fh); ERR
 
     /* set the file view */
-    err = PNC_File_set_view(fh, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
-    ERR
+    err = PNC_File_set_view(fh, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL); ERR
     err = MPI_Type_free(&ftype); ERR
     err = MPI_Info_free(&info); ERR
 
-    err = PNC_File_seek(fh, 0, MPI_SEEK_CUR); ERR
+    for (i=0; i<100; i++) buf[i] = 'A'+i%52;
 
-    for (i=0; i<100; i++) buf[i] = 'a'+i;
-    err = PNC_File_write(fh, buf, 10, MPI_CHAR, &status); ERR
+    err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
 
     err = PNC_File_write_all(fh, buf, 10, MPI_CHAR, &status); ERR
 
+    err = PNC_File_seek(fh, 0, MPI_SEEK_CUR); ERR
+
+    err = PNC_File_write(fh, buf, 10, MPI_CHAR, &status); ERR
+
+    err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
+
     err = PNC_File_write_at_all(fh, 0, buf, 10, MPI_CHAR, &status); ERR
+
+    err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
 
     err = PNC_File_read(fh, buf, 10, MPI_CHAR, &status); ERR
 
+    err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
+
     err = PNC_File_read_all(fh, buf, 10, MPI_CHAR, &status); ERR
+
+    err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
 
     err = PNC_File_read_at_all(fh, 0, buf, 10, MPI_CHAR, &status); ERR
 
@@ -82,9 +98,10 @@ int main(int argc, char *argv[])
     err = PNC_File_get_size(fh, &file_size); ERR
     printf("file size = %lld\n", file_size);
 
-    err = PNC_File_set_size(fh, 100); ERR
+    MPI_Offset new_file_size = 10;
+    err = PNC_File_set_size(fh, new_file_size); ERR
     err = PNC_File_get_size(fh, &file_size); ERR
-    printf("After setting file size to 10 file size = %lld\n", file_size);
+    printf("After setting file size to %lld file size = %lld\n", new_file_size, file_size);
 
     err = PNC_File_close(&fh); ERR
 

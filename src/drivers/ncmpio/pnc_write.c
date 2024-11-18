@@ -115,12 +115,24 @@ int file_write(PNC_File      fd,
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;
+/*
         err = PNC_WriteContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
                               offset, status);
+*/
+        ADIO_WriteContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
+                              offset, status, &err);
     }
     else
+/*
         err = PNC_WriteStrided(fd, buf, count, bufType, file_ptr_type,
                                offset, status);
+*/
+        ADIO_WriteStrided(fd, buf, count, bufType, file_ptr_type,
+                               offset, status, &err);
+    if (err != MPI_SUCCESS)
+        err = ncmpii_error_mpi2nc(err, __func__);
+    else
+        err = NC_NOERR;
     return err;
 }
 
@@ -137,6 +149,8 @@ int PNC_File_write_at(PNC_File      fh,
                       MPI_Status   *status)
 {
     int err = NC_NOERR;
+
+printf("%s line %d: fh->fp_ind=%lld\n",__func__,__LINE__,fh->fp_ind);
 
     if (count == 0) return NC_NOERR;
 
@@ -160,6 +174,8 @@ int PNC_File_write(PNC_File      fh,
                    MPI_Status   *status)
 {
     int err = NC_NOERR;
+
+printf("%s line %d: fh->fp_ind=%lld\n",__func__,__LINE__,fh->fp_ind);
 
     if (count == 0) return NC_NOERR;
 
@@ -187,11 +203,12 @@ int PNC_File_write_at_all(PNC_File      fh,
 {
     int err, st=NC_NOERR;
 
+printf("%s line %d: fh->fp_ind=%lld\n",__func__,__LINE__,fh->fp_ind);
+
     if (count < 0) st = NC_ENEGATIVECNT;
 
-    if (fh->access_mode & MPI_MODE_RDONLY)
-        err = NC_EPERM;
-    if (st == NC_NOERR) st = err;
+    if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
+        st = NC_EPERM;
 
     ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
                          offset, status, &err);
@@ -211,11 +228,12 @@ int PNC_File_write_all(PNC_File      fh,
 {
     int err, st=NC_NOERR;
 
+printf("%s line %d: fh->fp_ind=%lld\n",__func__,__LINE__,fh->fp_ind);
+
     if (count < 0) st = NC_ENEGATIVECNT;
 
-    if (fh->access_mode & MPI_MODE_RDONLY)
-        err = NC_EPERM;
-    if (st == NC_NOERR) st = err;
+    if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
+        st = NC_EPERM;
 
     ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
                          0, status, &err);

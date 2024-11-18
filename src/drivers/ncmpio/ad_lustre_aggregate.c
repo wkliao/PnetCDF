@@ -1,24 +1,12 @@
-
 /*
- *  Copyright (C) 2025, Northwestern University
- *  See COPYRIGHT notice in top-level directory.
+ * Copyright (C) by Argonne National Laboratory
+ *     See COPYRIGHT in top-level directory
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#include "ad_lustre.h"
+#include "adio_extern.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>  /* memcpy() */
-#include <assert.h>
-#include <sys/errno.h>
-#include <unistd.h>   /* pwrite() */
-
-#include <mpi.h>
-
-#include "pnc_lustre.h"
-
+#undef AGG_DEBUG
 
 void ADIOI_LUSTRE_Get_striping_info(ADIO_File fd, int *striping_info, int mode)
 {

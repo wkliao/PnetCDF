@@ -177,9 +177,8 @@ int PNC_File_read_at_all(PNC_File      fh,
 
     if (count < 0) st = NC_ENEGATIVECNT;
 
-    if (fh->access_mode & MPI_MODE_RDONLY)
-        err = NC_EPERM;
-    if (st == NC_NOERR) st = err;
+    if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
+        st = NC_EPERM;
 
     ADIO_ReadStridedColl(fh, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
                          offset, status, &err);
@@ -201,9 +200,8 @@ int PNC_File_read_all(PNC_File      fh,
 
     if (count < 0) st = NC_ENEGATIVECNT;
 
-    if (fh->access_mode & MPI_MODE_RDONLY)
-        err = NC_EPERM;
-    if (st == NC_NOERR) st = err;
+    if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
+        st = NC_EPERM;
 
     ADIO_ReadStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
                          0, status, &err);

@@ -1,22 +1,19 @@
 /*
- *  Copyright (C) 2025, Northwestern University
- *  See COPYRIGHT notice in top-level directory.
+ * Copyright (C) by Argonne National Laboratory
+ *     See COPYRIGHT in top-level directory
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
+#include "adio.h"
+#include "adio_extern.h"
+
+#include <stdbool.h> /* type bool */
+
+#ifdef MPL_USE_DBG_LOGGING
+#define RDCOLL_DEBUG 1
 #endif
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>  /* memcpy() */
-#include <assert.h>
-#include <sys/errno.h>
-#include <unistd.h>   /* pwrite() */
-
-#include <mpi.h>
-
-#include "pnc_lustre.h"
+#ifdef AGGREGATION_PROFILE
+#include "mpe.h"
+#endif
 
 /* prototypes of functions used for collective reads only. */
 static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype

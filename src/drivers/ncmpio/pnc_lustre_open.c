@@ -188,8 +188,7 @@ static int romio_statfs(const char *filename, int64_t * file_id)
 /* Check if file system is Lustre from file name, using a system-dependent
  * function call. This is a collective call.
  */
-int PNC_Check_Lustre(MPI_Comm comm,
-                     const char *filename)
+int PNC_Check_Lustre(const char *filename)
 {
     int err, retry_cnt;
     int64_t file_id=UNKNOWN_SUPER_MAGIC;
@@ -851,7 +850,7 @@ int PNC_File_open(MPI_Comm    comm,
      */
     char value[MPI_MAX_INFO_VAL + 1];
     int i, err, min_err;
-    PNC_File fd = (PNC_FileD*) NCI_Malloc(sizeof(PNC_FileD));
+    PNC_File fd = (PNC_FileD*) NCI_Calloc(1,sizeof(PNC_FileD));
 
     *fh = fd;
 
@@ -874,18 +873,18 @@ int PNC_File_open(MPI_Comm    comm,
     else
         MPI_Info_dup(info, &fd->info);
 
+    err = PNC_File_SetInfo(fd, fd->info);
+    if (err != NC_NOERR)
+        return err;
+
     /* collective buffer */
-    fd->io_buf = ADIOI_Malloc(fd->hints->cb_buffer_size);
+    fd->io_buf = ADIOI_Calloc(1, fd->hints->cb_buffer_size);
     if (fd->io_buf == NULL) {
         err = NC_ENOMEM;
         goto err_out;
     }
 
-    err = PNC_File_SetInfo(fd, fd->info);
-    if (err != NC_NOERR)
-        return err;
-
-    if (1 == PNC_Check_Lustre(comm, filename))
+    if (PNC_Check_Lustre(filename))
         MPI_Info_set(fd->info, "romio_filesystem_type", "LUSTRE:");
 
     /* For Lustre, determining the I/O aggregators and constructing ranklist
@@ -953,7 +952,7 @@ int rank; MPI_Comm_rank(comm, &rank);
 if (rank == 0) {
     int  i, nkeys;
     MPI_Info_get_nkeys(fd->info, &nkeys);
-    printf("MPI File Info: nkeys = %d\n",nkeys);
+    printf("%s line %d: MPI File Info: nkeys = %d\n",__func__,__LINE__,nkeys);
     for (i=0; i<nkeys; i++) {
         char key[MPI_MAX_INFO_KEY], value[MPI_MAX_INFO_VAL];
         int  valuelen, flag;

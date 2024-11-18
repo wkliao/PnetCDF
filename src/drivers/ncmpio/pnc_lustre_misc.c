@@ -102,6 +102,8 @@ int PNC_File_seek(PNC_File   fd,
     int err = NC_NOERR, rank, posix_whence;
     off_t file_off;
 
+file_off = ADIOI_GEN_SeekIndividual(fd, offset, whence, &err);
+/*
     switch (whence) {
         case MPI_SEEK_SET: posix_whence = SEEK_SET; break;
         case MPI_SEEK_CUR: posix_whence = SEEK_CUR; break;
@@ -113,6 +115,7 @@ int PNC_File_seek(PNC_File   fd,
             return NC_EINVAL;
     }
     file_off = lseek(fd->fd_sys, (off_t)offset, posix_whence);
+*/
     if (file_off == -1)
         err = ncmpii_error_posix2nc("lseek");
 
@@ -135,7 +138,7 @@ int PNC_File_get_info(PNC_File  fd,
 }
 
 static
-int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner)
+int PNC_Type_get_combiner(MPI_Datatype datatype, int *combiner)
 {
     int ret;
 #if MPI_VERSION >= 4
@@ -148,10 +151,11 @@ int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner)
     return ret;
 }
 
+#if 0
 int PNC_Type_ispredef(MPI_Datatype datatype, int *flag)
 {
     int ret, combiner;
-    ret = ADIOI_Type_get_combiner(datatype, &combiner);
+    ret = PNC_Type_get_combiner(datatype, &combiner);
     switch (combiner) {
         case MPI_COMBINER_NAMED:
         case MPI_COMBINER_F90_INTEGER:
@@ -180,6 +184,7 @@ int PNC_Type_dispose(MPI_Datatype * datatype)
     *datatype = MPI_DATATYPE_NULL;
     return ret;
 }
+#endif
 
 int ADIOI_Info_check_and_install_int(ADIO_File fd, MPI_Info info, const char *key,
                                      int *local_cache)
@@ -446,8 +451,8 @@ PNC_File_SetInfo(PNC_File fd,
              * then we have to do collective  */
             ADIOI_Info_set(info, "romio_cb_write", "enable");
             ADIOI_Info_set(info, "romio_cb_read", "enable");
-            fd->hints->cb_read = 1;
-            fd->hints->cb_write = 1;
+            fd->hints->cb_read = ADIOI_HINT_ENABLE;
+            fd->hints->cb_write = ADIOI_HINT_ENABLE;
         }
         /* new hints for enabling/disabling data sieving on
          * reads/writes
@@ -582,11 +587,12 @@ err_check:
     return ncmpii_error_mpi2nc(MPI_ERR_IO, err_msg);
 }
 
+#if 0
 void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 {
     int combiner;
 
-    ADIOI_Type_get_combiner(datatype, &combiner);
+    PNC_Type_get_combiner(datatype, &combiner);
 
     switch (combiner) {
         case MPI_COMBINER_NAMED:
@@ -640,6 +646,7 @@ void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag)
     /* This function needs more work. It should check for contiguity
      * in other cases as well. */
 }
+#endif
 
 /*----< PNC_File_set_view() >------------------------------------------------*/
 int PNC_File_set_view(PNC_File      fd,
@@ -696,7 +703,7 @@ int PNC_File_set_view(PNC_File      fd,
         PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
         /* check filetype only if it is not a predefined MPI datatype */
-        flat_file = PNC_Flatten_and_find(fd->filetype);
+        flat_file = ADIOI_Flatten_and_find(fd->filetype);
         err = check_type(flat_file, fd->orig_access_mode, "filetype");
         if (err != NC_NOERR)
             return err;
@@ -710,12 +717,11 @@ int PNC_File_set_view(PNC_File      fd,
     /* reset MPI-IO file pointer to point to the first byte that can
      * be accessed in this view. */
 
-printf("filetype_is_contig=%d\n",(filetype_is_contig!=0));
+printf("%s line %d: filetype_is_contig=%d\n",__func__,__LINE__,(filetype_is_contig!=0));
     if (filetype_is_contig)
         fd->fp_ind = disp;
     else {
-for (i = 0; i < flat_file->count; i++)
-printf("flat_file count=%lld [%d] indices=%lld blocklens=%lld\n",flat_file->count,i,flat_file->indices[i],flat_file->blocklens[i]);
+// for (i = 0; i < flat_file->count; i++) printf("%s line %d: flat_file count=%lld [%d] indices=%lld blocklens=%lld\n",__func__,__LINE__,flat_file->count,i,flat_file->indices[i],flat_file->blocklens[i]);
 
         for (i = 0; i < flat_file->count; i++) {
             if (flat_file->blocklens[i]) {
