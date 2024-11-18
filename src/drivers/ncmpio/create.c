@@ -11,10 +11,10 @@
 
 int main(int argc, char *argv[])
 {
-    char *filename="dummy", buf[100];
+    char *filename="dummy", *buf;
     int i, err, rank, nprocs;
-    int len, psizes[2]={0,0}, gsizes[2], sizes[2], starts[2];
-    MPI_Datatype ftype;
+    int len, ghost, psizes[2]={0,0}, gsizes[2], sizes[2], starts[2];
+    MPI_Datatype ftype, btype;
     MPI_Info info;
     MPI_Status status;
     PNC_File fh;
@@ -25,6 +25,7 @@ int main(int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
     len = 10;
+    ghost = 2;
 
     err = MPI_Dims_create(nprocs, 2, psizes);
     ERR
@@ -40,13 +41,26 @@ int main(int argc, char *argv[])
            gsizes[0],gsizes[1],sizes[0],sizes[1],starts[0],starts[1]);
 
     /* create file type: 2D subarray */
-    err = MPI_Type_create_subarray(2, gsizes, sizes, starts, MPI_ORDER_C, MPI_BYTE, &ftype);
-    ERR
-    err = MPI_Type_commit(&ftype);
-    ERR
+    err = MPI_Type_create_subarray(2, gsizes, sizes, starts, MPI_ORDER_C, MPI_CHAR, &ftype); ERR
+    err = MPI_Type_commit(&ftype); ERR
+
+    /* create buffer type: 2D subarray */
+    starts[0] = ghost;           starts[1] = ghost;
+    gsizes[0] = len + ghost * 2; gsizes[1] = len + ghost * 2;
+    sizes[0]  = len;             sizes[1]  = len;
+    err = MPI_Type_create_subarray(2, gsizes, sizes, starts, MPI_ORDER_C, MPI_CHAR, &btype); ERR
+    err = MPI_Type_commit(&btype); ERR
+    int btype_size; MPI_Aint lb; MPI_Aint extent;
+    MPI_Type_size(btype, &btype_size);
+    MPI_Type_get_extent(btype, &lb, &extent);
+    printf("btype_size=%d lb=%ld extent=%ld\n",btype_size,lb, extent);
+
+    int buf_len = gsizes[0] * gsizes[1];
+    buf = (char*) malloc(buf_len);
+    for (i=0; i<buf_len; i++) buf[i] = 'A'+i%52;
+    buf[buf_len-1] = '\0';
 
     err = MPI_Info_create(&info); ERR
-
     err = MPI_Info_set(info, "romio_no_indep_rw", "true"); ERR
 
     if (rank == 0) {
@@ -66,31 +80,29 @@ int main(int argc, char *argv[])
     err = MPI_Type_free(&ftype); ERR
     err = MPI_Info_free(&info); ERR
 
-    for (i=0; i<100; i++) buf[i] = 'A'+i%52;
-
     err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
 
-    err = PNC_File_write_all(fh, buf, 10, MPI_CHAR, &status); ERR
+    err = PNC_File_write_all(fh, buf, 1, btype, &status); ERR
 
     err = PNC_File_seek(fh, 0, MPI_SEEK_CUR); ERR
 
-    err = PNC_File_write(fh, buf, 10, MPI_CHAR, &status); ERR
+    err = PNC_File_write(fh, buf, 1, btype, &status); ERR
 
     err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
 
-    err = PNC_File_write_at_all(fh, 0, buf, 10, MPI_CHAR, &status); ERR
+    err = PNC_File_write_at_all(fh, 0, buf, 1, btype, &status); ERR
 
     err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
 
-    err = PNC_File_read(fh, buf, 10, MPI_CHAR, &status); ERR
+    err = PNC_File_read(fh, buf, 1, btype, &status); ERR
 
     err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
 
-    err = PNC_File_read_all(fh, buf, 10, MPI_CHAR, &status); ERR
+    err = PNC_File_read_all(fh, buf, 1, btype, &status); ERR
 
     err = PNC_File_seek(fh, 0, MPI_SEEK_SET); ERR
 
-    err = PNC_File_read_at_all(fh, 0, buf, 10, MPI_CHAR, &status); ERR
+    err = PNC_File_read_at_all(fh, 0, buf, 1, btype, &status); ERR
 
     err = PNC_File_sync(fh); ERR
 
@@ -98,12 +110,14 @@ int main(int argc, char *argv[])
     err = PNC_File_get_size(fh, &file_size); ERR
     printf("file size = %lld\n", file_size);
 
-    MPI_Offset new_file_size = 10;
+    MPI_Offset new_file_size = 50;
     err = PNC_File_set_size(fh, new_file_size); ERR
     err = PNC_File_get_size(fh, &file_size); ERR
     printf("After setting file size to %lld file size = %lld\n", new_file_size, file_size);
 
+    err = MPI_Type_free(&btype); ERR
     err = PNC_File_close(&fh); ERR
+    free(buf);
 
     MPI_Finalize();
     return 0;
