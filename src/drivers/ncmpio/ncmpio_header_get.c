@@ -361,18 +361,37 @@ hdr_fetch(bufferinfo *gbp) {
         /* fileview is already entire file visible and MPI_File_read_at does
            not change the file pointer */
         if (gbp->coll_mode == 1) { /* collective read */
-            TRACE_IO(MPI_File_read_at_all, (gbp->collective_fh, gbp->offset, readBuf,
+            if (gbp->is_lustre) {
+                err = PNC_File_read_at_all(gbp->pnc_fh, gbp->offset, readBuf,
+                                           readLen, MPI_BYTE, &mpistatus);
+            }
+            else {
+                TRACE_IO(MPI_File_read_at_all, (gbp->collective_fh, gbp->offset, readBuf,
+                                                readLen, MPI_BYTE, &mpistatus));
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+                    if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(err, NC_EREAD)
+                }
+                else err = NC_NOERR;
+            }
+        }
+        else {
+            if (gbp->is_lustre) {
+                err = PNC_File_read_at(gbp->pnc_fh, gbp->offset, readBuf,
+                                       readLen, MPI_BYTE, &mpistatus);
+            }
+            else {
+                TRACE_IO(MPI_File_read_at, (gbp->collective_fh, gbp->offset, readBuf,
                                             readLen, MPI_BYTE, &mpistatus));
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+                    if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(err, NC_EREAD)
+                }
+                else err = NC_NOERR;
+            }
         }
-        else {
-            TRACE_IO(MPI_File_read_at, (gbp->collective_fh, gbp->offset, readBuf,
-                                        readLen, MPI_BYTE, &mpistatus));
-        }
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(err, NC_EREAD)
-        }
-        else {
+
+        if (err == NC_NOERR) {
             /* Obtain the actual read amount. It may be smaller than readLen,
              * when the remaining file size is smaller than read chunk size.
              * Because each MPI File_read reads amount of readLen bytes, and
@@ -397,11 +416,18 @@ hdr_fetch(bufferinfo *gbp) {
     }
     else if (gbp->coll_mode == 1) { /* collective read */
         /* other processes participate the collective call */
-        TRACE_IO(MPI_File_read_at_all, (gbp->collective_fh, 0, NULL,
-                                        0, MPI_BYTE, &mpistatus));
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(err, NC_EREAD)
+        if (gbp->is_lustre) {
+            err = PNC_File_read_at_all(gbp->pnc_fh,  0, NULL,
+                                       0, MPI_BYTE, &mpistatus);
+        }
+        else {
+            TRACE_IO(MPI_File_read_at_all, (gbp->collective_fh, 0, NULL,
+                                            0, MPI_BYTE, &mpistatus));
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+                if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(err, NC_EREAD)
+            }
+            else err = NC_NOERR;
         }
     }
 
@@ -1341,6 +1367,8 @@ ncmpio_hdr_get_NC(NC *ncp)
     /* Initialize the get buffer that stores the header read from the file */
     getbuf.comm          = ncp->comm;
     getbuf.collective_fh = ncp->collective_fh;
+    getbuf.pnc_fh        = ncp->pnc_fh;
+    getbuf.is_lustre     = ncp->is_lustre;
     getbuf.get_size      = 0;
     getbuf.offset        = 0;   /* read from start of the file */
     getbuf.safe_mode     = ncp->safe_mode;
