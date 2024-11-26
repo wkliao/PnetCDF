@@ -69,8 +69,19 @@ move_file_block(NC         *ncp,
     if (buf == NULL) DEBUG_RETURN_ERROR(NC_ENOMEM)
 
     /* make fileview entire file visible */
-    TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, MPI_BYTE, "native",
+    if (ncp->is_lustre) {
+        err = PNC_File_set_view(ncp->pnc_fh, 0, MPI_BYTE, MPI_BYTE, "native",
                                 MPI_INFO_NULL);
+        if (err != NC_NOERR && status == NC_NOERR) status = err;
+    }
+    else {
+        TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, MPI_BYTE, "native",
+                                    MPI_INFO_NULL);
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+            if (status == NC_NOERR) status = err;
+        }
+    }
 
     /* move the variable starting from its tail toward its beginning */
     while (nbytes > 0) {
@@ -102,14 +113,28 @@ move_file_block(NC         *ncp,
         memset(&mpistatus, 0, sizeof(MPI_Status));
 
         /* read the original data @ from+nbytes+rank*chunk_size */
-        TRACE_IO(MPI_File_read_at_all)(fh, from+nbytes+rank*chunk_size,
+        if (ncp->is_lustre) {
+            err = PNC_File_read_at_all(ncp->pnc_fh, from+nbytes+rank*chunk_size,
                                        buf, bufcount, MPI_BYTE, &mpistatus);
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_read_at_all");
-            if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EREAD)
-            get_size = bufcount;
+            if (err != NC_NOERR) {
+                if (status == NC_NOERR)
+                    status = err;
+                get_size = bufcount;
+            }
         }
         else {
+            TRACE_IO(MPI_File_read_at_all)(fh, from+nbytes+rank*chunk_size,
+                                           buf, bufcount, MPI_BYTE, &mpistatus);
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_read_at_all");
+                if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EREAD)
+                get_size = bufcount;
+            }
+            else
+                err = NC_NOERR;
+        }
+
+        if (err == NC_NOERR) {
             /* for zero-length read, MPI_Get_count may report incorrect result
              * for some MPICH version, due to the uninitialized MPI_Status
              * object passed to MPI-IO calls. Thus we initialize it above to
@@ -163,19 +188,42 @@ move_file_block(NC         *ncp,
          */
         memset(&mpistatus, 0, sizeof(MPI_Status));
 
-        if (ncp->nprocs > 1)
-            TRACE_IO(MPI_File_write_at_all)(fh, to+nbytes+rank*chunk_size,
+        if (ncp->nprocs > 1) {
+            if (ncp->is_lustre) {
+                err = PNC_File_write_at_all(ncp->pnc_fh, to+nbytes+rank*chunk_size,
                                             buf, get_size /* NOT bufcount */,
                                             MPI_BYTE, &mpistatus);
-        else
-            TRACE_IO(MPI_File_write_at)(fh, to+nbytes+rank*chunk_size,
-                                        buf, get_size /* NOT bufcount */,
-                                        MPI_BYTE, &mpistatus);
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
-            if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
+                if (err != NC_NOERR && status == NC_NOERR) status = err;
+            }
+            else {
+                TRACE_IO(MPI_File_write_at_all)(fh, to+nbytes+rank*chunk_size,
+                                                buf, get_size /* NOT bufcount */,
+                                                MPI_BYTE, &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
+                    if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
+                }
+            }
         }
         else {
+            if (ncp->is_lustre) {
+                err = PNC_File_write_at(ncp->pnc_fh, to+nbytes+rank*chunk_size,
+                                        buf, get_size /* NOT bufcount */,
+                                        MPI_BYTE, &mpistatus);
+                if (err != NC_NOERR && status == NC_NOERR) status = err;
+            }
+            else {
+                TRACE_IO(MPI_File_write_at)(fh, to+nbytes+rank*chunk_size,
+                                            buf, get_size /* NOT bufcount */,
+                                            MPI_BYTE, &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
+                    if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
+                }
+            }
+        }
+
+        if (err == NC_NOERR) {
             /* update the number of bytes written since file open.
              * Because each rank reads and writes no more than one chunk_size
              * at a time and chunk_size is < NC_MAX_INT, it is OK to call
@@ -571,18 +619,43 @@ write_NC(NC *ncp)
         buf_ptr = buf;
         for (i=0; i<ntimes; i++) {
             int bufCount = (int) MIN(remain, NC_MAX_INT);
-            if (is_coll)
-                TRACE_IO(MPI_File_write_at_all)(fh, offset, buf_ptr, bufCount,
+            if (is_coll) {
+                if (ncp->is_lustre) {
+                    err = PNC_File_write_at_all(ncp->pnc_fh, offset, buf_ptr, bufCount,
                                                 MPI_BYTE, &mpistatus);
-            else
-                TRACE_IO(MPI_File_write_at)(fh, offset, buf_ptr, bufCount,
-                                            MPI_BYTE, &mpistatus);
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
-                /* write has failed, which is more serious than inconsistency */
-                if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
+                    if (err != NC_NOERR && status == NC_NOERR) status = err;
+                }
+                else {
+                    TRACE_IO(MPI_File_write_at_all)(fh, offset, buf_ptr, bufCount,
+                                                    MPI_BYTE, &mpistatus);
+                    if (mpireturn != MPI_SUCCESS) {
+                        err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
+                        /* write has failed, which is more serious than inconsistency */
+                        if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
+                    }
+                    else
+                        err = NC_NOERR;
+                }
             }
             else {
+                if (ncp->is_lustre) {
+                    err = PNC_File_write_at(ncp->pnc_fh, offset, buf_ptr, bufCount,
+                                            MPI_BYTE, &mpistatus);
+                    if (err != NC_NOERR && status == NC_NOERR) status = err;
+                }
+                else {
+                    TRACE_IO(MPI_File_write_at)(fh, offset, buf_ptr, bufCount,
+                                                MPI_BYTE, &mpistatus);
+                    if (mpireturn != MPI_SUCCESS) {
+                        err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
+                        /* write has failed, which is more serious than inconsistency */
+                        if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
+                    }
+                    else
+                        err = NC_NOERR;
+                }
+            }
+            if (err == NC_NOERR) {
                 /* Update the number of bytes read since file open.
                  * Because each rank writes no more than NC_MAX_INT at a time,
                  * it is OK to call MPI_Get_count, instead of MPI_Get_count_c.
@@ -602,9 +675,21 @@ write_NC(NC *ncp)
     }
     else if (fIsSet(ncp->flags, NC_HCOLL)) {
         /* other processes participate the collective call */
-        for (i=0; i<ntimes; i++)
-            TRACE_IO(MPI_File_write_at_all)(fh, 0, NULL, 0, MPI_BYTE,
+        for (i=0; i<ntimes; i++) {
+            if (ncp->is_lustre) {
+                err = PNC_File_write_at_all(ncp->pnc_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);
+                if (err != NC_NOERR && status == NC_NOERR) status = err;
+            }
+            else {
+                TRACE_IO(MPI_File_write_at_all)(fh, 0, NULL, 0, MPI_BYTE,
+                                                &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
+                    if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
+                }
+            }
+        }
     }
 
 fn_exit:
