@@ -15,7 +15,7 @@
 
 #include <mpi.h>
 
-#include "pnc_lustre.h"
+#include "ncmpio_NC.h"
 
 /*----< PNC_WriteContig() >--------------------------------------------------*/
 int PNC_WriteContig(ADIO_File     fd,
@@ -43,9 +43,11 @@ int PNC_WriteContig(ADIO_File     fd,
     if (file_ptr_type == ADIO_INDIVIDUAL)
         off = fd->fp_ind; /* offset is ignored */
     else /* ADIO_EXPLICIT_OFFSET */
-        off = fd->disp + fd->etype_size * offset;
+        // off = fd->disp + fd->etype_size * offset;
+        off = offset;
 
 #ifdef WKL_DEBUG
+printf("%s line %d: %s disp=%lld etype_size=%lld offset=%lld off=%lld count=%ld bufType_size=%d len=%lld\n",__func__,__LINE__,(file_ptr_type == ADIO_INDIVIDUAL)?"ADIO_INDIVIDUAL":"ADIO_EXPLICIT_OFFSET",fd->disp,fd->etype_size,offset,off,count,bufType_size,len);
 {
 int rank; MPI_Comm_rank(MPI_COMM_WORLD,&rank);
 static int first_stripe_id=-1;
@@ -74,6 +76,8 @@ double tt = MPI_Wtime();
     }
 fd->lustre_write_metrics[1] += MPI_Wtime() - tt;
 
+    fd->fp_sys_posn = offset + bytes_xfered;
+
     if (file_ptr_type == ADIO_INDIVIDUAL)
         fd->fp_ind += bytes_xfered;
     /* if ADIO_EXPLICIT_OFFSET, do not update file pointer */
@@ -83,7 +87,11 @@ ioerr:
         return ncmpii_error_posix2nc("pwrite");
 
     if (status)
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+        MPI_Status_set_elements_x(status, MPI_BYTE, bytes_xfered);
+#else
         MPI_Status_set_elements(status, MPI_BYTE, bytes_xfered);
+#endif
 
     return NC_NOERR;
 }
@@ -150,8 +158,6 @@ int PNC_File_write_at(PNC_File      fh,
 {
     int err = NC_NOERR;
 
-printf("%s line %d: fh->fp_ind=%lld\n",__func__,__LINE__,fh->fp_ind);
-
     if (count == 0) return NC_NOERR;
 
     if (count < 0) return NC_ENEGATIVECNT;
@@ -174,8 +180,6 @@ int PNC_File_write(PNC_File      fh,
                    MPI_Status   *status)
 {
     int err = NC_NOERR;
-
-printf("%s line %d: fh->fp_ind=%lld\n",__func__,__LINE__,fh->fp_ind);
 
     if (count == 0) return NC_NOERR;
 
@@ -203,15 +207,13 @@ int PNC_File_write_at_all(PNC_File      fh,
 {
     int err, st=NC_NOERR;
 
-printf("%s line %d: fh->fp_ind=%lld\n",__func__,__LINE__,fh->fp_ind);
-
     if (count < 0) st = NC_ENEGATIVECNT;
 
     if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
         st = NC_EPERM;
 
     ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
-                         offset, status, &err);
+                                  offset, status, &err);
     if (err != MPI_SUCCESS && st == NC_NOERR)
         st = ncmpii_error_mpi2nc(err, "PNC_File_write_at_all");
 
@@ -227,8 +229,6 @@ int PNC_File_write_all(PNC_File      fh,
                        MPI_Status   *status)
 {
     int err, st=NC_NOERR;
-
-printf("%s line %d: fh->fp_ind=%lld\n",__func__,__LINE__,fh->fp_ind);
 
     if (count < 0) st = NC_ENEGATIVECNT;
 
