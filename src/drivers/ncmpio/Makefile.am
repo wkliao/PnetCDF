@@ -50,7 +50,7 @@ PNC_SRC = pnc_lustre_open.c \
   ad_lustre_wrcoll.c \
   ad_lustre_wrstr.c \
   iscontig.c \
-  flatten.c \
+  ad_flatten.c \
   ad_lock.c
 
 C_SRCS = ncmpio_driver.c \
