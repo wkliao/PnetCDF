@@ -562,21 +562,48 @@ int ncmpio_write_header(NC *ncp)
              */
             memset(&mpistatus, 0, sizeof(MPI_Status));
 
-            if (fIsSet(ncp->flags, NC_HCOLL)) /* header collective write */
-                TRACE_IO(MPI_File_write_at_all)(fh, offset, buf_ptr, writeLen,
+            if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
+                if (ncp->is_lustre) {
+                    err = PNC_File_write_at_all(ncp->pnc_fh, offset, buf_ptr, writeLen,
                                                 MPI_BYTE, &mpistatus);
-            else /* header independent write */
-                TRACE_IO(MPI_File_write_at)(fh, offset, buf_ptr, writeLen,
-                                            MPI_BYTE, &mpistatus);
-
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
-                if (status == NC_NOERR) {
-                    err = (err == NC_EFILE) ? NC_EWRITE : err;
-                    DEBUG_ASSIGN_ERROR(status, err)
+                    if (err != NC_NOERR && status == NC_NOERR) status = err;
+                }
+                else {
+                    TRACE_IO(MPI_File_write_at_all)(fh, offset, buf_ptr, writeLen,
+                                                    MPI_BYTE, &mpistatus);
+                    if (mpireturn != MPI_SUCCESS) {
+                        err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
+                        if (status == NC_NOERR) {
+                            err = (err == NC_EFILE) ? NC_EWRITE : err;
+                            DEBUG_ASSIGN_ERROR(status, err)
+                        }
+                    }
+                    else
+                        err = NC_NOERR;
                 }
             }
-            else {
+            else { /* header independent write */
+                if (ncp->is_lustre) {
+                    err = PNC_File_write_at(ncp->pnc_fh, offset, buf_ptr, writeLen,
+                                            MPI_BYTE, &mpistatus);
+                    if (err != NC_NOERR && status == NC_NOERR) status = err;
+                }
+                else {
+                    TRACE_IO(MPI_File_write_at)(fh, offset, buf_ptr, writeLen,
+                                                MPI_BYTE, &mpistatus);
+                    if (mpireturn != MPI_SUCCESS) {
+                        err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
+                        if (status == NC_NOERR) {
+                            err = (err == NC_EFILE) ? NC_EWRITE : err;
+                            DEBUG_ASSIGN_ERROR(status, err)
+                        }
+                    }
+                    else
+                        err = NC_NOERR;
+                }
+            }
+
+            if (err == NC_NOERR) {
                 /* update the number of bytes written since file open.
                  * Because each MPI write writes no more than NC_MAX_INT,
                  * calling MPI_Get_count() is sufficient. No need to call
@@ -597,8 +624,25 @@ int ncmpio_write_header(NC *ncp)
     }
     else if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
         /* collective write: other processes participate the collective call */
-        for (i=0; i<ntimes; i++)
-            TRACE_IO(MPI_File_write_at_all)(fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
+        if (ncp->is_lustre) {
+            for (i=0; i<ntimes; i++) {
+                err = PNC_File_write_at_all(ncp->pnc_fh, 0, NULL, 0, MPI_BYTE,
+                                            &mpistatus);
+                if (err != NC_NOERR && status == NC_NOERR) status = err;
+            }
+        }
+        else {
+            for (i=0; i<ntimes; i++) {
+                TRACE_IO(MPI_File_write_at_all)(fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
+                    if (status == NC_NOERR) {
+                        err = (err == NC_EFILE) ? NC_EWRITE : err;
+                        DEBUG_ASSIGN_ERROR(status, err)
+                    }
+                }
+            }
+        }
     }
 
     if (ncp->safe_mode == 1) {

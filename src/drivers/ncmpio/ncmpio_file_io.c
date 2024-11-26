@@ -141,25 +141,39 @@ ncmpio_read_write(NC           *ncp,
         }
 
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
-            TRACE_IO(MPI_File_read_at_all)(fh, offset, xbuf, xlen, xbuf_type,
+            if (ncp->is_lustre) {
+                err = PNC_File_read_at_all(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
                                            &mpistatus);
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_read_at_all");
-                /* return the first encountered error if there is any */
-                if (status == NC_NOERR) {
-                    err = (err == NC_EFILE) ? NC_EREAD : err;
-                    DEBUG_ASSIGN_ERROR(status, err)
+                if (status == NC_NOERR) status = err;
+            }
+            else {
+                TRACE_IO(MPI_File_read_at_all)(fh, offset, xbuf, xlen, xbuf_type,
+                                               &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_read_at_all");
+                    /* return the first encountered error if there is any */
+                    if (status == NC_NOERR) {
+                        err = (err == NC_EFILE) ? NC_EREAD : err;
+                        DEBUG_ASSIGN_ERROR(status, err)
+                    }
                 }
             }
         } else {
-            TRACE_IO(MPI_File_read_at)(fh, offset, xbuf, xlen, xbuf_type,
+            if (ncp->is_lustre) {
+                err = PNC_File_read_at(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
                                        &mpistatus);
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_read_at");
-                /* return the first encountered error if there is any */
-                if (status == NC_NOERR) {
-                    err = (err == NC_EFILE) ? NC_EREAD : err;
-                    DEBUG_RETURN_ERROR(err)
+                if (status == NC_NOERR) status = err;
+            }
+            else {
+                TRACE_IO(MPI_File_read_at)(fh, offset, xbuf, xlen, xbuf_type,
+                                           &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_read_at");
+                    /* return the first encountered error if there is any */
+                    if (status == NC_NOERR) {
+                        err = (err == NC_EFILE) ? NC_EREAD : err;
+                        DEBUG_RETURN_ERROR(err)
+                    }
                 }
             }
         }
@@ -296,25 +310,39 @@ ncmpio_read_write(NC           *ncp,
         }
 
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
-            TRACE_IO(MPI_File_write_at_all)(fh, offset, xbuf, xlen, xbuf_type,
+            if (ncp->is_lustre) {
+                err = PNC_File_write_at_all(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
                                             &mpistatus);
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
-                /* return the first encountered error if there is any */
-                if (status == NC_NOERR) {
-                    err = (err == NC_EFILE) ? NC_EWRITE : err;
-                    DEBUG_ASSIGN_ERROR(status, err)
+                if (status == NC_NOERR) status = err;
+            }
+            else {
+                TRACE_IO(MPI_File_write_at_all)(fh, offset, xbuf, xlen, xbuf_type,
+                                                &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
+                    /* return the first encountered error if there is any */
+                    if (status == NC_NOERR) {
+                        err = (err == NC_EFILE) ? NC_EWRITE : err;
+                        DEBUG_ASSIGN_ERROR(status, err)
+                    }
                 }
             }
         } else {
-            TRACE_IO(MPI_File_write_at)(fh, offset, xbuf, xlen, xbuf_type,
+            if (ncp->is_lustre) {
+                err = PNC_File_write_at(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
                                         &mpistatus);
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
-                /* return the first encountered error if there is any */
-                if (status == NC_NOERR) {
-                    err = (err == NC_EFILE) ? NC_EWRITE : err;
-                    DEBUG_RETURN_ERROR(err)
+                if (status == NC_NOERR) status = err;
+            }
+            else {
+                TRACE_IO(MPI_File_write_at)(fh, offset, xbuf, xlen, xbuf_type,
+                                            &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
+                    /* return the first encountered error if there is any */
+                    if (status == NC_NOERR) {
+                        err = (err == NC_EFILE) ? NC_EWRITE : err;
+                        DEBUG_ASSIGN_ERROR(status, err)
+                    }
                 }
             }
         }
