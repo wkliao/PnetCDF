@@ -1335,8 +1335,11 @@ AC_CHECK_FUNCS([MPI_Type_create_subarray_c \
                 MPI_Type_get_true_extent_c \
                 MPI_Type_get_envelope_c \
                 MPI_Type_get_contents_c \
+                MPI_Status_set_elements_x \
                 MPI_Bcast_c \
                 MPI_Get_count_c \
+                MPI_Isend_c \
+                MPI_Irecv_c \
                 MPI_Pack_c \
                 MPI_Unpack_c], [], [have_mpi_large_count_apis=no])
 # If one of the above APIs is not available, have_mpi_large_count_apis will be
@@ -1526,17 +1529,21 @@ AC_CHECK_DECLS([pwrite])
 #
 # Verify presence of lustre/lustre_user.h
 #
+has_lustre=no
 if test "$MIMIC_LUSTRE" = yes ; then
    AC_DEFINE(HAVE_LUSTRE, 1, [Define for LUSTRE])
    AC_DEFINE(MIMIC_LUSTRE, 1, [Define for Hecking ROMIO to mimic LUSTRE])
    file_system_lustre=
+   has_lustre=yes
 fi
 if test -n "$file_system_lustre"; then
     AC_CHECK_HEADERS([linux/lustre/lustre_user.h lustre/lustre_user.h], break)
     if test x"$ac_cv_header_linux_lustre_lustre_user_h" = "xyes" -o x"$ac_cv_header_lustre_lustre_user_h" = "xyes" ; then
         AC_DEFINE(HAVE_LUSTRE, 1, [Define for LUSTRE])
+        has_lustre=yes
     fi
 fi
+AM_CONDITIONAL(HAVE_LUSTRE, [test x$has_lustre = xyes])
 
 AC_C_CHAR_UNSIGNED
 AC_C_BIGENDIAN
