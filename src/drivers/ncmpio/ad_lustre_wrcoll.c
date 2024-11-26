@@ -6,25 +6,6 @@
 #include "ad_lustre.h"
 #include "adio_extern.h"
 
-#ifdef HAVE_LUSTRE_LOCKAHEAD
-/* in ad_lustre_lock.c */
-void ADIOI_LUSTRE_lock_ahead_ioctl(ADIO_File fd,
-                                   int cb_nodes, ADIO_Offset next_offset, int *error_code);
-
-/* Handle lock ahead.  If this write is outside our locked region, lock it now */
-#define ADIOI_LUSTRE_WR_LOCK_AHEAD(fd,cb_nodes,offset,error_code)           \
-if (fd->hints->fs_hints.lustre.lock_ahead_write) {                          \
-    if (offset > fd->hints->fs_hints.lustre.lock_ahead_end_extent) {        \
-        ADIOI_LUSTRE_lock_ahead_ioctl(fd, cb_nodes, offset, error_code);    \
-    }                                                                       \
-    else if (offset < fd->hints->fs_hints.lustre.lock_ahead_start_extent) { \
-        ADIOI_LUSTRE_lock_ahead_ioctl(fd, cb_nodes, offset, error_code);    \
-    }                                                                       \
-}
-#else
-#define ADIOI_LUSTRE_WR_LOCK_AHEAD(fd,cb_nodes,offset,error_code)
-#endif
-
 #define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
     int _k;                                                      \
     char *_ptr = (inbuf);                                        \
@@ -1531,11 +1512,6 @@ s_time = e_time;
                 range_off = off_list[batch_idx + j];
                 range_size = MPL_MIN(striping_unit - range_off % striping_unit,
                                      end_loc - range_off + 1);
-
-                /* lock ahead the file starting from range_off */
-                ADIOI_LUSTRE_WR_LOCK_AHEAD(fd, cb_nodes, range_off, error_code);
-                if (*error_code != MPI_SUCCESS)
-                    goto over;
 
                 /* When srt_off_len[j].num == 1, either there is no hole in the
                  * write buffer or the file domain has been read into write
