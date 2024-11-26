@@ -624,9 +624,15 @@ ncmpio_file_set_view(const NC     *ncp,
 
     if (filetype == MPI_BYTE) {
         /* filetype is a contiguous space, make the whole file visible */
-        TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, MPI_BYTE,
-                                    "native", MPI_INFO_NULL);
-        return NC_NOERR;
+        if (ncp->is_lustre) {
+            return PNC_File_set_view(ncp->pnc_fh, 0, MPI_BYTE, MPI_BYTE,
+                                     "native", MPI_INFO_NULL);
+        }
+        else {
+            TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, MPI_BYTE,
+                                        "native", MPI_INFO_NULL);
+            return NC_NOERR;
+        }
     }
 
     if (ncp->rank == 0) {
@@ -685,8 +691,19 @@ ncmpio_file_set_view(const NC     *ncp,
 #ifndef HAVE_MPI_LARGE_COUNT
 err_out:
 #endif
-        TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, root_filetype, "native",
+        if (ncp->is_lustre) {
+            err = PNC_File_set_view(ncp->pnc_fh, 0, MPI_BYTE, root_filetype, "native",
                                     MPI_INFO_NULL);
+            if (status == NC_NOERR) status = err;
+        }
+        else {
+            TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, root_filetype, "native",
+                                        MPI_INFO_NULL);
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+                if (status == NC_NOERR) status = err;
+            }
+        }
         if (root_filetype != MPI_BYTE)
             MPI_Type_free(&root_filetype);
 
@@ -694,14 +711,21 @@ err_out:
         *offset = ncp->begin_var;
     }
     else {
-        TRACE_IO(MPI_File_set_view)(fh, *offset, MPI_BYTE, filetype, "native",
+        if (ncp->is_lustre) {
+            err = PNC_File_set_view(ncp->pnc_fh, *offset, MPI_BYTE, filetype, "native",
                                     MPI_INFO_NULL);
+            if (status == NC_NOERR) status = err;
+        }
+        else {
+            TRACE_IO(MPI_File_set_view)(fh, *offset, MPI_BYTE, filetype, "native",
+                                        MPI_INFO_NULL);
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+                if (status == NC_NOERR) status = err;
+            }
+        }
         /* the explicit offset is already set in fileview */
         *offset = 0;
-    }
-    if (mpireturn != MPI_SUCCESS) {
-        err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
-        if (status == NC_NOERR) status = err;
     }
 
     return status;

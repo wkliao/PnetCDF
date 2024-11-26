@@ -40,10 +40,11 @@ ncmpio_open(MPI_Comm     comm,
             void       **ncpp)
 {
     char *env_str;
-    int i, mpiomode, err, status=NC_NOERR, mpireturn;
+    int i, mpiomode, err, status=NC_NOERR, mpireturn, is_lustre;
     MPI_File fh;
     MPI_Info info_used;
     NC *ncp=NULL;
+    PNC_File pnc_fh;
 
     *ncpp = NULL;
 
@@ -57,6 +58,11 @@ ncmpio_open(MPI_Comm     comm,
 
     /* NC_MMAP is not supported yet */
     if (omode & NC_MMAP) DEBUG_RETURN_ERROR(NC_EINVAL_OMODE)
+
+    /* check if path is on Lustre */
+    is_lustre = PNC_Check_Lustre(path);
+// printf("%s line %d: is_lustre=%d\n",__func__,__LINE__,is_lustre);
+
 
 #if 0 && defined(HAVE_ACCESS)
     if (mpiomode == MPI_MODE_RDONLY) { /* file should already exit */
@@ -74,14 +80,26 @@ ncmpio_open(MPI_Comm     comm,
     /* open file collectively ---------------------------------------------- */
     mpiomode = fIsSet(omode, NC_WRITE) ? MPI_MODE_RDWR : MPI_MODE_RDONLY;
 
-    TRACE_IO(MPI_File_open)(comm, (char *)path, mpiomode, user_info, &fh);
-    if (mpireturn != MPI_SUCCESS)
-        return ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
+    if (is_lustre) {
+        err = PNC_File_open(comm, (char *)path, mpiomode, user_info, &pnc_fh);
+        if (err != NC_NOERR) return err;
+    }
+    else {
+        TRACE_IO(MPI_File_open)(comm, (char *)path, mpiomode, user_info, &fh);
+        if (mpireturn != MPI_SUCCESS)
+            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
+    }
 
     /* get the file info used/modified by MPI-IO */
-    mpireturn = MPI_File_get_info(fh, &info_used);
-    if (mpireturn != MPI_SUCCESS)
-        return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
+    if (is_lustre) {
+        err = PNC_File_get_info(pnc_fh, &info_used);
+        if (err != NC_NOERR) return err;
+    }
+    else {
+        mpireturn = MPI_File_get_info(fh, &info_used);
+        if (mpireturn != MPI_SUCCESS)
+            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
+    }
 
     /* Now the file has been successfully opened, allocate/set NC object */
 
@@ -121,6 +139,9 @@ ncmpio_open(MPI_Comm     comm,
     ncp->independent_fh = (ncp->nprocs > 1) ? MPI_FILE_NULL : fh;
     ncp->path = (char*) NCI_Malloc(strlen(path) + 1);
     strcpy(ncp->path, path);
+
+    ncp->is_lustre      = is_lustre;
+    ncp->pnc_fh         = pnc_fh;
 
 #ifdef PNETCDF_DEBUG
     /* PNETCDF_DEBUG is set at configure time, which will be overwritten by

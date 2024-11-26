@@ -192,8 +192,19 @@ fill_var_rec(NC         *ncp,
     fh = ncp->collective_fh;
 
     /* make the entire file visible */
-    TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, MPI_BYTE, "native",
+    if (ncp->is_lustre) {
+        err = PNC_File_set_view(ncp->pnc_fh, 0, MPI_BYTE, MPI_BYTE, "native",
                                 MPI_INFO_NULL);
+        if (err != NC_NOERR && status == NC_NOERR) status = err;
+    }
+    else {
+        TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, MPI_BYTE, "native",
+                                    MPI_INFO_NULL);
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+            if (status == NC_NOERR) status = err;
+        }
+    }
 
     count *= varp->xsz;
 
@@ -219,18 +230,40 @@ fill_var_rec(NC         *ncp,
     }
 
     /* write to variable collectively */
-    if (ncp->nprocs > 1)
-        TRACE_IO(MPI_File_write_at_all)(fh, offset, buf, (int)count, bufType,
+    if (ncp->nprocs > 1) {
+        if (ncp->is_lustre) {
+            err = PNC_File_write_at_all(ncp->pnc_fh, offset, buf, (int)count, bufType,
                                         &mpistatus);
-    else
-        TRACE_IO(MPI_File_write_at)(fh, offset, buf, (int)count, bufType,
+            if (err != NC_NOERR && status == NC_NOERR) status = err;
+        }
+        else {
+            TRACE_IO(MPI_File_write_at_all)(fh, offset, buf, (int)count, bufType,
+                                            &mpistatus);
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
+                /* return the first encountered error if there is any */
+                if (status == NC_NOERR) status = err;
+            }
+        }
+    }
+    else {
+        if (ncp->is_lustre) {
+            err = PNC_File_write_at(ncp->pnc_fh, offset, buf, (int)count, bufType,
                                     &mpistatus);
+            if (err != NC_NOERR && status == NC_NOERR) status = err;
+        }
+        else {
+            TRACE_IO(MPI_File_write_at)(fh, offset, buf, (int)count, bufType,
+                                        &mpistatus);
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
+                /* return the first encountered error if there is any */
+                if (status == NC_NOERR) status = err;
+            }
+        }
+    }
     NCI_Free(buf);
     if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
-    if (mpireturn != MPI_SUCCESS) {
-        err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
-        if (status == NC_NOERR) status = err;
-    }
 
     if (status != NC_NOERR) return status;
 
@@ -620,8 +653,19 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     /* when nprocs == 1, we keep I/O mode in independent mode at all time */
     fh = ncp->collective_fh;
 
-    TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, filetype, "native",
+    if (ncp->is_lustre) {
+        err = PNC_File_set_view(ncp->pnc_fh, 0, MPI_BYTE, filetype, "native",
                                 MPI_INFO_NULL);
+        if (err != NC_NOERR && status == NC_NOERR) status = err;
+    }
+    else {
+        TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, filetype, "native",
+                                    MPI_INFO_NULL);
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+            if (status == NC_NOERR) status = err;
+        }
+    }
     if (k > 0) MPI_Type_free(&filetype);
 
     bufType = MPI_BYTE;
@@ -648,19 +692,53 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     }
 
     /* write to variable collectively */
-    if (ncp->nprocs > 1)
-        TRACE_IO(MPI_File_write_at_all)(fh, 0, buf, (int)buf_len, bufType, &mpistatus);
-    else
-        TRACE_IO(MPI_File_write_at)(fh, 0, buf, (int)buf_len, bufType, &mpistatus);
+    if (ncp->nprocs > 1) {
+        if (ncp->is_lustre) {
+            err = PNC_File_write_at_all(ncp->pnc_fh, 0, buf, (int)buf_len, bufType,
+                                        &mpistatus);
+            if (err != NC_NOERR && status == NC_NOERR) status = err;
+        }
+        else {
+            TRACE_IO(MPI_File_write_at_all)(fh, 0, buf, (int)buf_len, bufType, &mpistatus);
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
+                /* return the first encountered error if there is any */
+                if (status == NC_NOERR) status = err;
+            }
+        }
+    }
+    else {
+        if (ncp->is_lustre) {
+            err = PNC_File_write_at(ncp->pnc_fh, 0, buf, (int)buf_len, bufType,
+                                    &mpistatus);
+            if (err != NC_NOERR && status == NC_NOERR) status = err;
+        }
+        else {
+            TRACE_IO(MPI_File_write_at)(fh, 0, buf, (int)buf_len, bufType, &mpistatus);
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
+                /* return the first encountered error if there is any */
+                if (status == NC_NOERR) status = err;
+            }
+        }
+    }
 
     NCI_Free(buf);
     if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
 
-    TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, MPI_BYTE, "native",
+    if (ncp->is_lustre) {
+        err = PNC_File_set_view(ncp->pnc_fh, 0, MPI_BYTE, MPI_BYTE, "native",
                                 MPI_INFO_NULL);
-    if (mpireturn != MPI_SUCCESS)
-        if (status == NC_NOERR)
-            status = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+        if (err != NC_NOERR && status == NC_NOERR) status = err;
+    }
+    else {
+        TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, MPI_BYTE, "native",
+                                    MPI_INFO_NULL);
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+            if (status == NC_NOERR) status = err;
+        }
+    }
 
     return status;
 }

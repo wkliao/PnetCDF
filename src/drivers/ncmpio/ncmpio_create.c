@@ -44,10 +44,11 @@ ncmpio_create(MPI_Comm     comm,
 {
     char *env_str, *filename;
     int rank, nprocs, mpiomode, err, mpireturn, default_format, file_exist=1;
-    int use_trunc=1;
+    int use_trunc=1, is_lustre;
     MPI_File fh;
     MPI_Info info_used;
     NC *ncp=NULL;
+    PNC_File pnc_fh;
 
     *ncpp = NULL;
 
@@ -113,6 +114,10 @@ ncmpio_create(MPI_Comm     comm,
     }
 #endif
 
+    /* check if path is on Lustre */
+    is_lustre = PNC_Check_Lustre(path);
+// printf("%s line %d: is_lustre=%d\n",__func__,__LINE__,is_lustre);
+
     if (fIsSet(cmode, NC_NOCLOBBER)) {
         /* check if file exists: NC_EEXIST is returned if the file already
          * exists and NC_NOCLOBBER mode is used in ncmpi_create */
@@ -144,12 +149,17 @@ ncmpio_create(MPI_Comm     comm,
                     err = NC_NOERR;
 #else
                 err = NC_NOERR;
-                TRACE_IO(MPI_File_delete)((char *)path, MPI_INFO_NULL);
-                if (mpireturn != MPI_SUCCESS) {
-                    int errorclass;
-                    MPI_Error_class(mpireturn, &errorclass);
-                    if (errorclass != MPI_ERR_NO_SUCH_FILE) /* ignore file not exist */
-                        err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_delete");
+                if (is_lustre) {
+                    err = PNC_File_delete((char *)path);
+                }
+                else {
+                    TRACE_IO(MPI_File_delete)((char *)path, MPI_INFO_NULL);
+                    if (mpireturn != MPI_SUCCESS) {
+                        int errorclass;
+                        MPI_Error_class(mpireturn, &errorclass);
+                        if (errorclass != MPI_ERR_NO_SUCH_FILE) /* ignore file not exist */
+                            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_delete");
+                    }
                 }
 #endif
             }
@@ -174,26 +184,35 @@ ncmpio_create(MPI_Comm     comm,
                  * be expensive.
                  */
                 err = NC_NOERR;
-                TRACE_IO(MPI_File_open)(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR,
-                                        MPI_INFO_NULL, &fh);
-                if (mpireturn != MPI_SUCCESS) {
-                    int errorclass;
-                    MPI_Error_class(mpireturn, &errorclass);
-                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
+                if (is_lustre) {
+                    err = PNC_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, &pnc_fh);
+                    if (err == NC_NOERR)
+                        PNC_File_set_size(pnc_fh, 0); /* can be expensive */
+                    else
+                        PNC_File_close(&pnc_fh);
                 }
                 else {
-                    TRACE_IO(MPI_File_set_size)(fh, 0); /* can be expensive */
+                    TRACE_IO(MPI_File_open)(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR,
+                                            MPI_INFO_NULL, &fh);
                     if (mpireturn != MPI_SUCCESS) {
                         int errorclass;
                         MPI_Error_class(mpireturn, &errorclass);
-                        err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_size");
+                        err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
                     }
                     else {
-                        TRACE_IO(MPI_File_close)(&fh);
+                        TRACE_IO(MPI_File_set_size)(fh, 0); /* can be expensive */
                         if (mpireturn != MPI_SUCCESS) {
                             int errorclass;
                             MPI_Error_class(mpireturn, &errorclass);
-                            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_close");
+                            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_size");
+                        }
+                        else {
+                            TRACE_IO(MPI_File_close)(&fh);
+                            if (mpireturn != MPI_SUCCESS) {
+                                int errorclass;
+                                MPI_Error_class(mpireturn, &errorclass);
+                                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_close");
+                            }
                         }
                     }
                 }
@@ -208,39 +227,52 @@ ncmpio_create(MPI_Comm     comm,
     }
 
     /* create file collectively -------------------------------------------- */
-    TRACE_IO(MPI_File_open)(comm, (char *)path, mpiomode, user_info, &fh);
-    if (mpireturn != MPI_SUCCESS) {
-#ifndef HAVE_ACCESS
-        if (fIsSet(cmode, NC_NOCLOBBER)) {
-            /* This is the case when NC_NOCLOBBER is used in file creation and
-             * function access() is not available. MPI_MODE_EXCL is set in open
-             * mode. When MPI_MODE_EXCL is used and the file already exists,
-             * MPI-IO should return error class MPI_ERR_FILE_EXISTS. But, some
-             * MPI-IO implementations (older ROMIO) do not correctly return
-             * this error class. In this case, we can do the followings: check
-             * errno to see if it set to EEXIST. Note usually rank 0 makes the
-             * file open call and can be the only one having errno set.
-             */
-            if (nprocs > 1)
-                TRACE_COMM(MPI_Bcast)(&errno, 1, MPI_INT, 0, comm);
-            if (errno == EEXIST) DEBUG_RETURN_ERROR(NC_EEXIST)
-        }
-#endif
-        return ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
-        /* for NC_NOCLOBBER, MPI_MODE_EXCL was added to mpiomode. If the file
-         * already exists, MPI-IO should return error class MPI_ERR_FILE_EXISTS
-         * which PnetCDF will return error code NC_EEXIST. This is checked
-         * inside of ncmpii_error_mpi2nc()
-         */
+    if (is_lustre) {
+        err = PNC_File_open(comm, (char *)path, mpiomode, user_info, &pnc_fh);
+        if (err != NC_NOERR)
+            return err;
     }
-    else
-        /* reset errno, as MPI_File_open may change it, even for MPI_SUCCESS */
-        errno = 0;
+    else {
+        TRACE_IO(MPI_File_open)(comm, (char *)path, mpiomode, user_info, &fh);
+        if (mpireturn != MPI_SUCCESS) {
+#ifndef HAVE_ACCESS
+            if (fIsSet(cmode, NC_NOCLOBBER)) {
+                /* This is the case when NC_NOCLOBBER is used in file creation and
+                 * function access() is not available. MPI_MODE_EXCL is set in open
+                 * mode. When MPI_MODE_EXCL is used and the file already exists,
+                 * MPI-IO should return error class MPI_ERR_FILE_EXISTS. But, some
+                 * MPI-IO implementations (older ROMIO) do not correctly return
+                 * this error class. In this case, we can do the followings: check
+                 * errno to see if it set to EEXIST. Note usually rank 0 makes the
+                 * file open call and can be the only one having errno set.
+                 */
+                if (nprocs > 1)
+                    TRACE_COMM(MPI_Bcast)(&errno, 1, MPI_INT, 0, comm);
+                if (errno == EEXIST) DEBUG_RETURN_ERROR(NC_EEXIST)
+            }
+#endif
+            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
+            /* for NC_NOCLOBBER, MPI_MODE_EXCL was added to mpiomode. If the file
+             * already exists, MPI-IO should return error class MPI_ERR_FILE_EXISTS
+             * which PnetCDF will return error code NC_EEXIST. This is checked
+             * inside of ncmpii_error_mpi2nc()
+             */
+        }
+        else
+            /* reset errno, as MPI_File_open may change it, even for MPI_SUCCESS */
+            errno = 0;
+    }
 
     /* get the I/O hints used/modified by MPI-IO */
-    mpireturn = MPI_File_get_info(fh, &info_used);
-    if (mpireturn != MPI_SUCCESS)
-        return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
+    if (is_lustre) {
+        err = PNC_File_get_info(pnc_fh,  &info_used);
+        if (err != NC_NOERR) return err;
+    }
+    else {
+        mpireturn = MPI_File_get_info(fh, &info_used);
+        if (mpireturn != MPI_SUCCESS)
+            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
+    }
 
     /* Now the file has been successfully created, allocate/set NC object */
 
@@ -299,6 +331,9 @@ ncmpio_create(MPI_Comm     comm,
     ncp->independent_fh = (nprocs > 1) ? MPI_FILE_NULL : fh;
     ncp->path = (char*) NCI_Malloc(strlen(path) + 1);
     strcpy(ncp->path, path);
+
+    ncp->is_lustre      = is_lustre;
+    ncp->pnc_fh         = pnc_fh;
 
 #ifdef PNETCDF_DEBUG
     /* PNETCDF_DEBUG is set at configure time, which will be overwritten by

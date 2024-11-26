@@ -35,6 +35,9 @@ int
 ncmpio_file_sync(NC *ncp) {
     int mpireturn;
 
+    if (ncp->is_lustre)
+        return PNC_File_sync(ncp->pnc_fh);
+
     if (ncp->independent_fh != MPI_FILE_NULL) {
         TRACE_IO(MPI_File_sync)(ncp->independent_fh);
         if (mpireturn != MPI_SUCCESS)
@@ -85,7 +88,10 @@ ncmpio_write_numrecs(NC         *ncp,
 
     if (ncp->rank > 0 && fIsSet(ncp->flags, NC_HCOLL)) {
         /* other processes participate the collective call */
-        TRACE_IO(MPI_File_write_at_all)(fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
+        if (ncp->is_lustre)
+            PNC_File_write_at_all(ncp->pnc_fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
+        else
+            TRACE_IO(MPI_File_write_at_all)(fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
         return NC_NOERR;
     }
 
@@ -118,17 +124,40 @@ ncmpio_write_numrecs(NC         *ncp,
         memset(&mpistatus, 0, sizeof(MPI_Status));
 
         /* root's file view always includes the entire file header */
-        if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1)
-            TRACE_IO(MPI_File_write_at_all)(fh, NC_NUMRECS_OFFSET, (void*)pos,
+        if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1) {
+            if (ncp->is_lustre) {
+                err = PNC_File_write_at_all(ncp->pnc_fh, NC_NUMRECS_OFFSET, (void*)pos,
                                             len, MPI_BYTE, &mpistatus);
-        else
-            TRACE_IO(MPI_File_write_at)(fh, NC_NUMRECS_OFFSET, (void*)pos,
-                                        len, MPI_BYTE, &mpistatus);
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
-            if (err == NC_EFILE) DEBUG_RETURN_ERROR(NC_EWRITE)
+                if (err != NC_NOERR) return err;
+            }
+            else {
+                TRACE_IO(MPI_File_write_at_all)(fh, NC_NUMRECS_OFFSET, (void*)pos,
+                                                len, MPI_BYTE, &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at_all");
+                    if (err == NC_EFILE) DEBUG_RETURN_ERROR(NC_EWRITE)
+                }
+            }
         }
         else {
+            if (ncp->is_lustre) {
+                err = PNC_File_write_at(ncp->pnc_fh, NC_NUMRECS_OFFSET, (void*)pos,
+                                        len, MPI_BYTE, &mpistatus);
+                if (err != NC_NOERR) return err;
+            }
+            else {
+                TRACE_IO(MPI_File_write_at)(fh, NC_NUMRECS_OFFSET, (void*)pos,
+                                            len, MPI_BYTE, &mpistatus);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_write_at");
+                    if (err == NC_EFILE) DEBUG_RETURN_ERROR(NC_EWRITE)
+                }
+                else
+                    err = NC_NOERR;
+            }
+        }
+
+        if (err == NC_NOERR) {
             /* update the number of bytes written since file open.
              * Because the above MPI write writes either 4 or 8 bytes,
              * calling MPI_Get_count() is sufficient. No need to call
