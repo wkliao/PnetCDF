@@ -393,7 +393,7 @@ timing = MPI_Wtime();
 #ifdef USE_ALLTOALLV_
     MPI_Offset *r_buf=NULL, *s_buf=NULL;
 
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *sendCounts, *recvCounts;
     MPI_Aint *sdispls, *rdispls;
     sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Count));
@@ -435,7 +435,7 @@ timing = MPI_Wtime();
         }
     }
 
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
     MPI_Alltoallv_c(s_buf, sendCounts, sdispls, MPI_OFFSET,
                     r_buf, recvCounts, rdispls, MPI_OFFSET, fd->comm);
 #else
@@ -527,7 +527,7 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count
      * http://www.mcs.anl.gov/home/thakur/ext2ph.ps
      */
 
-    int i, nprocs, nonzero_nprocs, myrank, old_error, tmp_error;
+    int i, j, nprocs, nonzero_nprocs, myrank, old_error, tmp_error;
     int do_collect = 0;
     ADIO_Offset orig_fp, start_offset, end_offset;
     ADIO_Offset min_st_loc = -1, max_end_loc = -1;
@@ -680,6 +680,7 @@ fd->lustre_write_metrics[0] = MPI_Wtime();
             if (st_end_all[i+1] - st_end_all[i] < striping_range)
                 large_indv_req = 0;
             nonzero_nprocs = 1;
+            j = i; /* j is the rank of making first non-zero request */
             i += 2;
             break;
         }
@@ -688,7 +689,7 @@ fd->lustre_write_metrics[0] = MPI_Wtime();
                 /* process rank (i/2) has no data to write */
                 continue;
             }
-            if (st_end_all[i] < st_end_all[i - 1]) {
+            if (st_end_all[i] < st_end_all[j+1]) {
                 /* start offset of process rank (i/2) is less than the end
                  * offset of process rank (i/2-1)
                  */
@@ -699,6 +700,7 @@ fd->lustre_write_metrics[0] = MPI_Wtime();
             nonzero_nprocs++;
             if (st_end_all[i+1] - st_end_all[i] < striping_range)
                 large_indv_req = 0;
+            j = i;
         }
         ADIOI_Free(st_end_all);
 
@@ -738,18 +740,22 @@ if (do_collect == 0) printf("%s --- SWITCH to independent write !!!\n",__func__)
             /* both buffer and fileview are contiguous */
             ADIO_Offset off = 0;
             if (file_ptr_type == ADIO_EXPLICIT_OFFSET)
-                off = fd->disp + flat_fview.off[0];
-                /* (offset * fd->etype_size) has been counted into
-                 * flat_fview.off[] in ADIOI_Calc_my_off_len()
+                off = flat_fview.off[0];
+                /* In ADIOI_Calc_my_off_len(), (offset * fd->etype_size) has
+                 * been counted into flat_fview.off[]. Similarly, fd->disp has
+                 * been counted into flat_fview.off[].
                  */
+
+            if (flat_fview.off != NULL) ADIOI_Free(flat_fview.off);
+
+static int wkl=0; if (wkl==0 && fd->disp>0) { printf("%s %d: --- SWITCH to independent write ADIO_WriteContig fd->disp=%lld off=%lld !!!\n",__func__,__LINE__,fd->disp,off); wkl++; }
 
             ADIO_WriteContig(fd, buf, count, buftype, file_ptr_type, off, status, error_code);
         } else {
+            if (flat_fview.off != NULL) ADIOI_Free(flat_fview.off);
+
             ADIO_WriteStrided(fd, buf, count, buftype, file_ptr_type, offset, status, error_code);
         }
-
-        if (flat_fview.off != NULL)
-            ADIOI_Free(flat_fview.off);
 
         return;
     }
@@ -879,25 +885,23 @@ if (do_collect == 0) printf("%s --- SWITCH to independent write !!!\n",__func__)
     if ((old_error != MPI_SUCCESS) && (old_error != MPI_ERR_IO))
         *error_code = old_error;
 
-#ifdef HAVE_STATUS_SET_BYTES
-    if (status) {
-        MPI_Count bufsize, size;
-        /* Don't set status if it isn't needed */
-        MPI_Type_size_x(buftype, &size);
-        bufsize = size * count;
-        MPIR_Status_set_bytes(status, buftype, bufsize);
-    }
-    /* This is a temporary way of filling in status. The right way is to
-     * keep track of how much data was actually written during collective I/O.
-     */
+    if (status)
+        /* This is a temporary way of filling in status. The right way is to
+         * keep track of how much data was actually written during collective I/O.
+         */
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+        MPI_Status_set_elements_x(status, buftype, count);
+#else
+        MPI_Status_set_elements(status, buftype, count);
 #endif
 
     fd->fp_sys_posn = -1;       /* set it to null. */
 
+#ifdef WKL_DEBUG
 fd->lustre_write_metrics[0] = MPI_Wtime() - fd->lustre_write_metrics[0];
 double max_t[3]; MPI_Reduce(fd->lustre_write_metrics, max_t, 3, MPI_DOUBLE, MPI_MAX, 0, fd->comm);
 if (myrank == 0) printf("%s line %d: MAX lustre time write=%.4f pwrite=%.4f all-to-many senders=%ld (nprocs=%d)\n", __func__, __LINE__, max_t[0], max_t[1], (long)max_t[2], nprocs);
-
+#endif
 }
 
 #define CAST_INT32(count, bklen, disp, dType, newType) {                     \
@@ -949,7 +953,7 @@ void commit_comm_phase(ADIO_File      fd,
     for (i=0; i<nprocs; i++)
         sendTypes[i] = recvTypes[i] = MPI_BYTE;
 
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *sendCounts, *recvCounts;
     MPI_Aint *sdispls, *rdispls;
     sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Count));
@@ -970,7 +974,7 @@ void commit_comm_phase(ADIO_File      fd,
             recvCounts[i] = 1;
 
             /* combine reqs using new datatype */
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
             MPI_Type_create_hindexed_c(recv_list[i].count, recv_list[i].len,
                                        recv_list[i].disp, MPI_BYTE,
                                        &recvTypes[i]);
@@ -991,7 +995,7 @@ void commit_comm_phase(ADIO_File      fd,
         sendCounts[dest] = 1;
 
         /* combine reqs using new datatype */
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
         MPI_Type_create_hindexed_c(send_list[i].count, send_list[i].len,
                                    send_list[i].disp, MPI_BYTE,
                                    &sendTypes[dest]);
@@ -1003,7 +1007,7 @@ void commit_comm_phase(ADIO_File      fd,
         MPI_Type_commit(&sendTypes[dest]);
     }
 
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
     MPI_Alltoallw_c(MPI_BOTTOM, sendCounts, sdispls, sendTypes,
                     MPI_BOTTOM, recvCounts, rdispls, recvTypes, fd->comm);
 #else
@@ -1038,7 +1042,7 @@ int nrecvs = 0;
         for (i = 0; i < nprocs; i++) {
             if (recv_list[i].count > 0) {
                 /* combine reqs using new datatype */
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Type_create_hindexed_c(recv_list[i].count, recv_list[i].len,
                                            recv_list[i].disp, MPI_BYTE,
                                            &recvType);
@@ -1064,7 +1068,7 @@ nrecvs++;
     for (i = 0; i < fd->hints->cb_nodes; i++) {
         if (send_list[i].count > 0) {
             /* combine reqs using new datatype */
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
             MPI_Type_create_hindexed_c(send_list[i].count, send_list[i].len,
                                        send_list[i].disp, MPI_BYTE, &sendType);
 #else
