@@ -6,10 +6,6 @@
 #ifndef H_PNC_LUSTRE
 #define H_PNC_LUSTRE
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/errno.h>
@@ -23,29 +19,39 @@
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
 #endif
+#ifdef HAVE_FCNTL_H
+#include <fcntl.h>
+#endif
+#define FDTYPE int
 
-#include <mpi.h>
-
-#include <dispatch.h>
-#include "ncmpio_driver.h"
 #include <pnc_debug.h>
 #include <common.h>
-#include "ncmpio_NC.h"
 
 #define MPL_MAX MAX
 #define MPL_MIN MIN
 #define MPL_UNREFERENCED_ARG(a)
 
 #define ADIO_Feature(a, b) 0
-#define ADIOI_WRITE_LOCK(a,b,c,d)
-#define ADIOI_UNLOCK(a,b,c,d)
+
+#if defined(F_SETLKW64)
+#define ADIOI_UNLOCK(fd, offset, whence, len) \
+        ADIOI_GEN_SetLock64(fd, F_SETLK, F_UNLCK, offset, whence, len)
+#define ADIOI_WRITE_LOCK(fd, offset, whence, len) \
+        ADIOI_GEN_SetLock64(fd, F_SETLKW, F_WRLCK, offset, whence, len)
+#else
+#define ADIOI_UNLOCK(fd, offset, whence, len) \
+        ADIOI_GEN_SetLock(fd, F_SETLK, F_UNLCK, offset, whence, len)
+#define ADIOI_WRITE_LOCK(fd, offset, whence, len) \
+        ADIOI_GEN_SetLock(fd, F_SETLKW, F_WRLCK, offset, whence, len)
+#endif
+
 
 #define ADIO_LUSTRE 163
-#define ADIOI_Strdup NCI_Strdup
-#define ADIOI_Malloc NCI_Malloc
-#define ADIOI_Calloc NCI_Calloc
-#define ADIOI_Realloc NCI_Realloc
-#define ADIOI_Free NCI_Free
+#define ADIOI_Strdup strdup
+#define ADIOI_Malloc malloc
+#define ADIOI_Calloc calloc
+#define ADIOI_Realloc realloc
+#define ADIOI_Free free
 #define ADIOI_Strncpy strncpy
 #define ADIOI_Info_get MPI_Info_get
 #define ADIOI_Info_set MPI_Info_set
@@ -187,7 +193,7 @@ typedef struct {
     PNC_Hints *hints;         /* structure containing fs-indep. info values */
 double lustre_write_metrics[3];
 int romio_write_aggmethod;
-int fp_sys_posn;
+ADIO_Offset fp_sys_posn;
 unsigned d_miniosz;
 unsigned d_mem;
 int fd_direct;
@@ -406,5 +412,10 @@ int ADIO_Type_create_darray(int size, int rank, int ndims,
 int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner);
 
 ADIO_Offset ADIOI_GEN_SeekIndividual(ADIO_File fd, ADIO_Offset offset, int whence, int *error_code);
+
+int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int whence,
+                      ADIO_Offset len);
+int ADIOI_GEN_SetLock64(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int whence,
+                        ADIO_Offset len);
 
 #endif
