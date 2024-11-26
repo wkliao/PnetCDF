@@ -49,7 +49,7 @@
 #define ADIO_LUSTRE 163
 #define ADIOI_Strdup strdup
 #define ADIOI_Malloc malloc
-#define ADIOI_Calloc calloc
+#define ADIOI_Calloc(a,b) calloc((size_t)a,b)
 #define ADIOI_Realloc realloc
 #define ADIOI_Free free
 #define ADIOI_Strncpy strncpy

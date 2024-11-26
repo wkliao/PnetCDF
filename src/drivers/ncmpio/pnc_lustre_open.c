@@ -38,6 +38,14 @@
 #include <sys/stat.h> /* fstat(), lstat(), stat() */
 #endif
 
+#ifndef MIMIC_LUSTRE
+#include <lustre/lustreapi.h>
+
+/* what is the basis for this define?
+ * what happens if there are more than 1k UUIDs? */
+#define MAX_LOV_UUID_COUNT      1000
+#endif
+
 #include <mpi.h>
 
 #include "ncmpio_NC.h"
@@ -430,8 +438,8 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         ADIO_Offset str_factor = -1, str_unit = 0, start_iodev = -1;
         struct lov_user_md *lum = NULL;
 
-        lumlen = sizeof(struct lov_user_md)
-               + MAX_LOV_UUID_COUNT * sizeof(struct lov_user_ost_data);
+        int lumlen = sizeof(struct lov_user_md)
+                   + MAX_LOV_UUID_COUNT * sizeof(struct lov_user_ost_data);
         lum = (struct lov_user_md *) ADIOI_Calloc(1, lumlen);
 
         /* get Lustre file stripning, even if setting it failed */
