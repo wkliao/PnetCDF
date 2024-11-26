@@ -40,7 +40,7 @@
 
 #include <mpi.h>
 
-#include "pnc_lustre.h"
+#include "ncmpio_NC.h"
 
 /*
  ADIO_FileSysType_parentdir - determines a string pathname for the
@@ -190,6 +190,9 @@ static int romio_statfs(const char *filename, int64_t * file_id)
  */
 int PNC_Check_Lustre(const char *filename)
 {
+#ifdef MIMIC_LUSTRE
+    return 1;
+#endif
     int err, retry_cnt;
     int64_t file_id=UNKNOWN_SUPER_MAGIC;
 
@@ -236,6 +239,8 @@ lustre_file_create(PNC_File fd,
 
     MPI_Comm_rank(fd->comm, &rank);
 
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\n%s line %d: ---------%s\n",__func__,__LINE__,fd->filename); wkl++; }
+
     amode = O_CREAT;
     if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
 
@@ -277,12 +282,14 @@ lustre_file_create(PNC_File fd,
         if ((str_factor > 0) || (str_unit > 0) || (start_iodev >= 0))
             set_layout = 1;
 
+#ifdef HAVE_LUSTRE
         /* if hints were set, we need to delay creation of any lustre objects.
          * However, if we open the file with O_LOV_DELAY_CREATE and don't call
          * the follow-up ioctl, subsequent writes will fail
          */
         if (set_layout)
             amode = O_CREAT | O_LOV_DELAY_CREATE;
+#endif
 #endif
         fd->fd_sys = open(fd->filename, amode, perm);
         if (fd->fd_sys == -1) {
@@ -399,6 +406,8 @@ lustre_file_open(PNC_File fd)
     int stripin_info[4] = {-1, -1, -1, -1};
 
     MPI_Comm_rank(fd->comm, &rank);
+
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\n%s line %d: ---------%s\n",__func__,__LINE__,fd->filename); wkl++; }
 
     old_mask = umask(022);
     umask(old_mask);
@@ -948,6 +957,7 @@ err_out:
         ADIOI_Free(fd->io_buf);
     }
 
+/*
 int rank; MPI_Comm_rank(comm, &rank);
 if (rank == 0) {
     int  i, nkeys;
@@ -963,6 +973,7 @@ if (rank == 0) {
         printf("MPI File Info: [%2d] key = %25s, value = %s\n",i,key,value);
     }
 }
+*/
 
     return err;
 }
@@ -979,14 +990,17 @@ int PNC_File_close(PNC_File *fh)
     ADIOI_Free((*fh)->filename);
     if ((*fh)->hints->ranklist != NULL)
         ADIOI_Free((*fh)->hints->ranklist);
+    if ((*fh)->hints->cb_config_list != NULL)
+        ADIOI_Free((*fh)->hints->cb_config_list);
     if ((*fh)->hints != NULL)
-        ADIOI_Free((*fh)->hints);
+        NCI_Free((*fh)->hints);
     if ((*fh)->info != MPI_INFO_NULL)
         MPI_Info_free(&((*fh)->info));
     if ((*fh)->io_buf != NULL)
         ADIOI_Free((*fh)->io_buf);
-    PNC_Type_dispose(&(*fh)->filetype);
-    ADIOI_Free(*fh);
+    if ((*fh)->filetype != MPI_BYTE)
+        PNC_Type_dispose(&(*fh)->filetype);
+    NCI_Free(*fh);
 
     return err;
 }
