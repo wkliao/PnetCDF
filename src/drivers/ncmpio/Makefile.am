@@ -49,7 +49,6 @@ PNC_SRC = pnc_lustre_open.c \
   ad_utils.c \
   iscontig.c \
   flatten.c \
-  ad_lustre_aggregate.c \
   ad_lustre_wrcoll.c \
   ad_lustre_wrstr.c \
   lock.c \
