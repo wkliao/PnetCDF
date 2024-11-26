@@ -1,10 +1,14 @@
 /*
- * Copyright (C) by Argonne National Laboratory
- *     See COPYRIGHT in top-level directory
+ *  Copyright (C) 2025, Northwestern University
+ *  See COPYRIGHT notice in top-level directory.
  */
 
-#include "adio.h"
-#include "adio_extern.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#include <ncmpio_NC.h>
+
 
 static int MPIOI_Type_block(const int *array_of_gsizes, int dim, int ndims, int nprocs,
                             int rank, int darg, int order, MPI_Aint orig_extent,
