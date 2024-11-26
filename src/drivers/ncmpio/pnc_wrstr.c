@@ -291,7 +291,11 @@ int PNC_WriteStrided(ADIO_File fd,
                                + n_filetypes * fd->ftype_extent;
                 }
             }
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+            MPI_Status_set_elements_x(status, datatype, bufsize);
+#else
             MPI_Status_set_elements(status, datatype, bufsize);
+#endif
             ADIOI_Free(writebuf);
             return NC_NOERR;
         }
@@ -444,7 +448,11 @@ int PNC_WriteStrided(ADIO_File fd,
      * keep track of how much data was actually written by
      * ADIOI_BUFFERED_WRITE.
      */
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+    MPI_Status_set_elements_x(status, datatype, bufsize);
+#else
     MPI_Status_set_elements(status, datatype, bufsize);
+#endif
 
     return NC_NOERR;
 }
