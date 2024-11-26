@@ -32,7 +32,28 @@ M4_SRCS   = ncmpio_getput.m4 \
 
 H_SRCS = ncmpio_driver.h \
          ncmpio_NC.h \
-         ncmpio_subfile.h
+         ncmpio_subfile.h \
+	 adio_extern.h  adio.h  ad_lustre.h  pnc_lustre.h lock_internal.h
+
+PNC_SRC = pnc_lustre_open.c \
+          pnc_lustre_misc.c \
+          pnc_read.c \
+          pnc_write.c \
+  ad_aggregate.c \
+  ad_read_str.c \
+  ad_read_coll.c \
+  ad_read_str_naive.c \
+  ad_write_str_naive.c \
+  ad_subarray.c \
+  ad_darray.c \
+  ad_utils.c \
+  iscontig.c \
+  flatten.c \
+  ad_lustre_aggregate.c \
+  ad_lustre_wrcoll.c \
+  ad_lustre_wrstr.c \
+  lock.c \
+  lock_internal.c
 
 C_SRCS = ncmpio_driver.c \
          ncmpio_create.c \
@@ -54,6 +75,10 @@ C_SRCS = ncmpio_driver.c \
          ncmpio_hash_func.c \
          ncmpio_file_io.c \
          ncmpio_intra_node.c
+
+if HAVE_LUSTRE
+   C_SRCS += $(PNC_SRC)
+endif
 
 $(M4_SRCS:.m4=.c): Makefile
 
