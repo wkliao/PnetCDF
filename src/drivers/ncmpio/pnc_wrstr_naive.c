@@ -321,7 +321,11 @@ int PNC_GEN_WriteStrided_naive(ADIO_File fd,
     /* This is a temporary way of filling in status. The right way is to
      * keep track of how much data was actually written and placed in buf
      */
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+    MPI_Status_set_elements_x(status, buftype, bufsize);
+#else
     MPI_Status_set_elements(status, buftype, bufsize);
+#endif
 
     return NC_NOERR;
 }
