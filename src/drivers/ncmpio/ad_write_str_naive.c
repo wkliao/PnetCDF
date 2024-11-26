@@ -1,10 +1,13 @@
 /*
- * Copyright (C) by Argonne National Laboratory
- *     See COPYRIGHT in top-level directory
+ *  Copyright (C) 2025, Northwestern University
+ *  See COPYRIGHT notice in top-level directory.
  */
 
-#include "adio.h"
-#include "adio_extern.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#include <ncmpio_NC.h>
 
 void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                                   MPI_Datatype buftype, int file_ptr_type,

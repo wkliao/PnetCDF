@@ -1,10 +1,15 @@
 /*
- * Copyright (C) by Argonne National Laboratory
- *     See COPYRIGHT in top-level directory
+ *  Copyright (C) 2025, Northwestern University
+ *  See COPYRIGHT notice in top-level directory.
  */
 
-#include <adio.h>
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include <limits.h>
+
+#include <ncmpio_NC.h>
 
 /* utility function to query a datatype for its combiner,
  * convenience wrapper around MPI_Type_get_envelope[_c] */
