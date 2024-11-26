@@ -277,24 +277,12 @@ assert(aggr >= 0 && aggr <= cb_nodes);
     }
     ADIOI_Free(aggr_ranks);
     ADIOI_Free(avail_lens);
-
-#ifdef AGG_DEBUG
-    for (i = 0; i < cb_nodes; i++) {
-        if (my_req[i].count > 0) {
-            FPRINTF(stdout, "data needed from %d (count = %d):\n", i, my_req[i].count);
-            for (l = 0; l < my_req[i].count; l++) {
-                FPRINTF(stdout, "   off[%d] = %lld, len[%d] = %d\n",
-                        l, (long long) my_req[i].offsets[l], l, (long long) my_req[i].lens[l]);
-            }
-        }
-    }
-#endif
 }
 
 /* ADIOI_LUSTRE_Calc_others_req() calculates what requests of other processes
  * lie in this aggregator's file domain.
- *   IN: my_req[cb_nodes]: offset-length pairs of this rank's requests fall into
- *       each aggregator
+ *   IN: my_req[cb_nodes]: offset-length pairs of this rank's requests fall
+ *       into each aggregator
  *   OUT: count_others_req_per_proc[i]: number of noncontiguous requests of
  *        rank i that falls in this rank's file domain.
  *   OUT: others_req_ptr[nprocs]: requests of all other ranks fall into this
@@ -312,10 +300,7 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
     ADIO_Offset *ptr;
     MPI_Count *mem_ptrs;
 
-/* first find out how much to send/recv and from/to whom */
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5026, 0, NULL);
-#endif
+    /* first find out how much to send/recv and from/to whom */
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
@@ -492,10 +477,6 @@ else recv_amnt += 2 * others_req[i].count;
     ADIOI_Free(requests);
 #endif
 
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5027, 0, NULL);
-#endif
-
 #ifdef WKL_DEBUG
 timing = MPI_Wtime() - timing;
 MPI_Offset max_recv_amnt=0;
@@ -517,7 +498,7 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count
      * http://www.mcs.anl.gov/home/thakur/ext2ph.ps
      */
 
-    int i, j, nprocs, nonzero_nprocs, myrank, old_error, tmp_error;
+    int i, j, nprocs, myrank, old_error, tmp_error;
     int do_collect = 0;
     ADIO_Offset orig_fp, start_offset, end_offset;
     ADIO_Offset min_st_loc = -1, max_end_loc = -1;
@@ -659,7 +640,6 @@ fd->lustre_write_metrics[0] = MPI_Wtime();
          * moment.
          */
         is_interleaved = 0;
-        nonzero_nprocs = 0;
         for (i = 0; i < nprocs * 2; i += 2) {
             if (st_end_all[i] > st_end_all[i + 1]) {
                 /* process rank (i/2) has no data to write */
@@ -669,7 +649,6 @@ fd->lustre_write_metrics[0] = MPI_Wtime();
             max_end_loc = st_end_all[i + 1];
             if (st_end_all[i+1] - st_end_all[i] < striping_range)
                 large_indv_req = 0;
-            nonzero_nprocs = 1;
             j = i; /* j is the rank of making first non-zero request */
             i += 2;
             break;
@@ -685,9 +664,8 @@ fd->lustre_write_metrics[0] = MPI_Wtime();
                  */
                 is_interleaved = 1;
             }
-            min_st_loc = MPL_MIN(st_end_all[i], min_st_loc);
-            max_end_loc = MPL_MAX(st_end_all[i + 1], max_end_loc);
-            nonzero_nprocs++;
+            min_st_loc = MIN(st_end_all[i], min_st_loc);
+            max_end_loc = MAX(st_end_all[i + 1], max_end_loc);
             if (st_end_all[i+1] - st_end_all[i] < striping_range)
                 large_indv_req = 0;
             j = i;
@@ -840,18 +818,12 @@ static int wkl=0; if (wkl==0 && fd->disp>0) { printf("%s %d: --- SWITCH to indep
 
     /* optimization: if only one process performing I/O, we can perform
      * a less-expensive Bcast. */
-#ifdef ADIOI_MPE_LOGGING
-    MPE_Log_event(ADIOI_MPE_postwrite_a, 0, NULL);
-#endif
     if (fd->hints->cb_nodes == 1)
         MPI_Bcast(error_code, 1, MPI_INT, fd->hints->ranklist[0], fd->comm);
     else {
         tmp_error = *error_code;
         MPI_Allreduce(&tmp_error, error_code, 1, MPI_INT, MPI_MAX, fd->comm);
     }
-#ifdef ADIOI_MPE_LOGGING
-    MPE_Log_event(ADIOI_MPE_postwrite_b, 0, NULL);
-#endif
 
     if ((old_error != MPI_SUCCESS) && (old_error != MPI_ERR_IO))
         *error_code = old_error;
@@ -1163,8 +1135,8 @@ timing[0] = s_time = MPI_Wtime();
         for (j = 0; j < others_req[i].count; j++) {
             req_off = others_req[i].offsets[j];
             m = (int) ((req_off - min_st_loc) / step_size);
-            off_list[m] = MPL_MIN(off_list[m], req_off);
-            end_loc = MPL_MAX(end_loc, (others_req[i].offsets[j] + others_req[i].lens[j] - 1));
+            off_list[m] = MIN(off_list[m], req_off);
+            end_loc = MAX(end_loc, (others_req[i].offsets[j] + others_req[i].lens[j] - 1));
         }
     }
 
@@ -1175,7 +1147,7 @@ timing[0] = s_time = MPI_Wtime();
      */
     nbufs = fd->hints->cb_buffer_size / striping_unit / 2;
     if (fd->hints->cb_buffer_size % striping_unit) nbufs++;
-    nbufs = (nbufs > ntimes) ? ntimes : nbufs;
+    nbufs = (ntimes < nbufs) ? (int)ntimes : nbufs;
     if (nbufs == 0) nbufs = 1; /* must at least 1 */
 
     /* Allocate displacement-length pair arrays, describing the send buffer.
@@ -1299,7 +1271,7 @@ e_time = MPI_Wtime();
 timing[3] += e_time - s_time;
 #endif
     for (m = 0; m < ntimes; m++) {
-        int range_size;
+        MPI_Count range_size;
         ADIO_Offset range_off;
 
 #ifdef WKL_DEBUG
@@ -1367,8 +1339,8 @@ s_time = MPI_Wtime();
          * for this round (whose size is always <= striping_unit).
          */
         range_off = off_list[m];
-        range_size = (int) MPL_MIN(striping_unit - range_off % striping_unit,
-                                   end_loc - range_off + 1);
+        range_size = MIN(striping_unit - range_off % striping_unit,
+                         end_loc - range_off + 1);
 
         /* Calculate the amount to be received from each process for this round
          * of m, by going through others_req.
@@ -1502,8 +1474,8 @@ s_time = e_time;
                  *            this round, <= striping_unit
                  */
                 range_off = off_list[batch_idx + j];
-                range_size = MPL_MIN(striping_unit - range_off % striping_unit,
-                                     end_loc - range_off + 1);
+                range_size = MIN(striping_unit - range_off % striping_unit,
+                                 end_loc - range_off + 1);
 
                 /* When srt_off_len[j].num == 1, either there is no hole in the
                  * write buffer or the file domain has been read into write
@@ -1750,7 +1722,6 @@ static void ADIOI_LUSTRE_W_Exchange_data(
     int hole, check_hole, cb_nodes, striping_unit;
     MPI_Count sum_recv;
     MPI_Status status;
-    static char myname[] = "ADIOI_LUSTRE_W_EXCHANGE_DATA";
 
     *send_buf_ptr = NULL;
 
@@ -2035,7 +2006,7 @@ int num_memcpy=0;
             size = len;
 
             while (size) {
-                MPI_Count size_in_buf = MPL_MIN(size, flat_bview->rem);
+                MPI_Count size_in_buf = MIN(size, flat_bview->rem);
                 copy_size += size_in_buf;
                 user_buf_idx += size_in_buf;
                 send_size_rem -= size_in_buf;
