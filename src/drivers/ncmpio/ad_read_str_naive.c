@@ -34,9 +34,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
 
     MPI_Type_size_x(fd->filetype, &filetype_size);
     if (!filetype_size) {
-#ifdef HAVE_STATUS_SET_BYTES
-        MPIR_Status_set_bytes(status, buftype, 0);
-#endif
+        MPI_Status_set_elements(status, MPI_BYTE, 0);
         *error_code = MPI_SUCCESS;
         return;
     }
@@ -352,11 +350,12 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
 
     fd->fp_sys_posn = -1;       /* mark it as invalid. */
 
-#ifdef HAVE_STATUS_SET_BYTES
-    MPIR_Status_set_bytes(status, buftype, bufsize);
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+    MPI_Status_set_elements_x(status, buftype, count);
+#else
+    MPI_Status_set_elements(status, buftype, count);
+#endif
     /* This is a temporary way of filling in status. The right way is to
      * keep track of how much data was actually read and placed in buf
      */
-#endif
-
 }
