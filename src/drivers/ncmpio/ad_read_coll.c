@@ -1,12 +1,15 @@
 /*
- * Copyright (C) by Argonne National Laboratory
- *     See COPYRIGHT in top-level directory
+ *  Copyright (C) 2025, Northwestern University
+ *  See COPYRIGHT notice in top-level directory.
  */
 
-#include "adio.h"
-#include "adio_extern.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
 #include <stdbool.h> /* type bool */
+
+#include <ncmpio_NC.h>
 
 #ifdef MPL_USE_DBG_LOGGING
 #define RDCOLL_DEBUG 1
@@ -49,27 +52,6 @@ void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, ADIOI_Flatlist_node
                             ADIO_Offset min_st_offset,
                             ADIO_Offset fd_size, ADIO_Offset * fd_start,
                             ADIO_Offset * fd_end, MPI_Aint buftype_extent);
-
-#ifdef LUSTRE_RD_LOCK_AHEAD
-/* There is no ad_lustre_rdcoll.c, so stub in some basic common code here
-   If it's called for over non-lustre file systems, it will turn itself off
-   when the ioctl fails. */
-void ADIOI_LUSTRE_lock_ahead_ioctl(ADIO_File fd, int avail_cb_nodes, ADIO_Offset next_offset, int *error_code); /* ad_lustre_lock.c */
-/* Handle lock ahead.  If this read is outside our locked region, lock it now */
-/* The generic collective read code isn't reading the stripes quite how this lustre code (ad_lustre_lock.c) expects it. */
-/* There are some comments in the debug code in ad_lustre_lock.c. */
-#define ADIOI_LUSTRE_RD_LOCK_AHEAD(fd,cb_nodes,offset,error_code)                             \
-if ((fd->file_system == ADIO_LUSTRE) && (fd->hints->fs_hints.lustre.lock_ahead_read)) {        \
-    if (offset > fd->hints->fs_hints.lustre.lock_ahead_end_extent) {                          \
-        ADIOI_LUSTRE_lock_ahead_ioctl(fd,cb_nodes,offset,error_code);                         \
-    }                                                                                         \
-    else if (offset < fd->hints->fs_hints.lustre.lock_ahead_start_extent) {                   \
-        ADIOI_LUSTRE_lock_ahead_ioctl(fd,cb_nodes,offset,error_code);                         \
-    }                                                                                         \
-}
-#else
-#define ADIOI_LUSTRE_RD_LOCK_AHEAD(fd,cb_nodes,offset,error_code)
-#endif
 
 void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
                                MPI_Datatype datatype, int file_ptr_type,
@@ -640,7 +622,6 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
         if (flag) {
             MPI_Status read_status;
             ADIOI_Assert(size == (int) size);
-            ADIOI_LUSTRE_RD_LOCK_AHEAD(fd, fd->hints->cb_nodes, off, error_code);
             ADIO_ReadContig(fd, read_buf + for_curr_iter, (int) size, MPI_BYTE,
                             ADIO_EXPLICIT_OFFSET, off, &read_status, error_code);
             if (*error_code != MPI_SUCCESS) {
