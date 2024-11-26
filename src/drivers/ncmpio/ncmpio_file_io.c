@@ -142,24 +142,48 @@ ncmpio_read_write(NC           *ncp,
         }
 
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
-#ifdef HAVE_MPI_LARGE_COUNT
-            TRACE_IO(MPI_File_read_at_all_c, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
-#else
-            TRACE_IO(MPI_File_read_at_all, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
-#endif
         } else {
+            if (ncp->is_lustre) {
+                err = PNC_File_read_at_all(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
+                                           &mpistatus);
+                if (status == NC_NOERR) status = err;
+            }
+            else {
 #ifdef HAVE_MPI_LARGE_COUNT
-            TRACE_IO(MPI_File_read_at_c, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
+                TRACE_IO(MPI_File_read_at_all_c, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
 #else
-            TRACE_IO(MPI_File_read_at, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
+                TRACE_IO(MPI_File_read_at_all, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
 #endif
-        }
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            /* return the first encountered error if there is any */
-            if (status == NC_NOERR) {
-                err = (err == NC_EFILE) ? NC_EREAD : err;
-                DEBUG_ASSIGN_ERROR(status, err)
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+                    /* return the first encountered error if there is any */
+                    if (status == NC_NOERR) {
+                        err = (err == NC_EFILE) ? NC_EREAD : err;
+                        DEBUG_ASSIGN_ERROR(status, err)
+                    }
+                }
+            }
+        } else {
+            if (ncp->is_lustre) {
+                err = PNC_File_read_at(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
+                                       &mpistatus);
+                if (status == NC_NOERR) status = err;
+            }
+            else {
+#ifdef HAVE_MPI_LARGE_COUNT
+                TRACE_IO(MPI_File_read_at_c, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
+#else
+                TRACE_IO(MPI_File_read_at, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
+#endif
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+                    /* return the first encountered error if there is any */
+                    if (status == NC_NOERR) {
+                        err = (err == NC_EFILE) ? NC_EREAD : err;
+                        DEBUG_RETURN_ERROR(err)
+                    }
+                }
+>>>>>>> 8b74bd18 (check and use Lustre subroutines)
             }
         }
         else {
@@ -274,24 +298,46 @@ ncmpio_read_write(NC           *ncp,
         }
 
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
+            if (ncp->is_lustre) {
+                err = PNC_File_write_at_all(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
+                                            &mpistatus);
+                if (status == NC_NOERR) status = err;
+            }
+            else {
 #ifdef HAVE_MPI_LARGE_COUNT
-            TRACE_IO(MPI_File_write_at_all_c, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
+                TRACE_IO(MPI_File_write_at_all_c, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
 #else
-            TRACE_IO(MPI_File_write_at_all, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
+                TRACE_IO(MPI_File_write_at_all, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
 #endif
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+                    /* return the first encountered error if there is any */
+                    if (status == NC_NOERR) {
+                        err = (err == NC_EFILE) ? NC_EWRITE : err;
+                        DEBUG_ASSIGN_ERROR(status, err)
+                    }
+                }
+            }
         } else {
+            if (ncp->is_lustre) {
+                err = PNC_File_write_at(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
+                                        &mpistatus);
+                if (status == NC_NOERR) status = err;
+            }
+            else {
 #ifdef HAVE_MPI_LARGE_COUNT
-            TRACE_IO(MPI_File_write_at_c, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
+                TRACE_IO(MPI_File_write_at_c, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
 #else
-            TRACE_IO(MPI_File_write_at, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
+                TRACE_IO(MPI_File_write_at, (fh, offset, xbuf, xlen, xbuf_type, &mpistatus));
 #endif
-        }
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            /* return the first encountered error if there is any */
-            if (status == NC_NOERR) {
-                err = (err == NC_EFILE) ? NC_EWRITE : err;
-                DEBUG_ASSIGN_ERROR(status, err)
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+                    /* return the first encountered error if there is any */
+                    if (status == NC_NOERR) {
+                        err = (err == NC_EFILE) ? NC_EWRITE : err;
+                        DEBUG_ASSIGN_ERROR(status, err)
+                    }
+                }
             }
         }
         else {
