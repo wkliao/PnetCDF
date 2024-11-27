@@ -9,7 +9,7 @@
 
 #include <fcntl.h>
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 static
 const char *ADIOI_GEN_flock_cmd_to_string(int cmd)

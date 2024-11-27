@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 #define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
     int _k;                                                      \

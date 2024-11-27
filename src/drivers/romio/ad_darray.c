@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 
 static int MPIOI_Type_block(const int *array_of_gsizes, int dim, int ndims, int nprocs,
