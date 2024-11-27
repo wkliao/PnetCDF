@@ -15,7 +15,7 @@ if PNETCDF_DEBUG
    AM_CPPFLAGS += -DPNETCDF_DEBUG
 endif
 
-noinst_LTLIBRARIES = libadio.la
+noinst_LTLIBRARIES = libromio.la
 
 H_SRCS = adio.h
 
@@ -37,7 +37,7 @@ C_SRCS = pnc_lustre_open.c \
          ad_flatten.c \
          ad_lock.c
 
-libadio_la_SOURCES = $(C_SRCS) $(H_SRCS)
+libromio_la_SOURCES = $(C_SRCS) $(H_SRCS)
 
 CLEANFILES = core core.* *.gcda *.gcno *.gcov gmon.out
 
