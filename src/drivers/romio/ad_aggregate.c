@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 /* This file contains four functions:
  *

@@ -15,7 +15,7 @@
 
 #include <mpi.h>
 
-#include "ncmpio_NC.h"
+#include "adio.h"
 
 /*----< PNC_ReadContig() >---------------------------------------------------*/
 int PNC_ReadContig(ADIO_File     fd,
@@ -81,7 +81,7 @@ ioerr:
 /*----< file_read() >--------------------------------------------------------*/
 /* This is an independent call. */
 static
-int file_read(PNC_File      fd,
+int file_read(ADIO_File     fd,
               MPI_Offset    offset,
               void         *buf,
               int           count,
@@ -124,7 +124,7 @@ int file_read(PNC_File      fd,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNC_File_read_at(PNC_File      fh,
+int PNC_File_read_at(ADIO_File     fh,
                      MPI_Offset    offset,
                      void         *buf,
                      int           count,
@@ -148,7 +148,7 @@ int PNC_File_read_at(PNC_File      fh,
 
 /*----< PNC_File_read() >----------------------------------------------------*/
 /* This is an independent call. */
-int PNC_File_read(PNC_File      fh,
+int PNC_File_read(ADIO_File     fh,
                   void         *buf,
                   int           count,
                   MPI_Datatype  bufType,
@@ -173,7 +173,7 @@ int PNC_File_read(PNC_File      fh,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNC_File_read_at_all(PNC_File      fh,
+int PNC_File_read_at_all(ADIO_File     fh,
                          MPI_Offset    offset,
                          void         *buf,
                          int           count,
@@ -197,7 +197,7 @@ int PNC_File_read_at_all(PNC_File      fh,
 
 /*----< PNC_File_read_all() >-----------------------------------------------*/
 /* This is a collective call. */
-int PNC_File_read_all(PNC_File      fh,
+int PNC_File_read_all(ADIO_File     fh,
                       void         *buf,
                       int           count,
                       MPI_Datatype  bufType,

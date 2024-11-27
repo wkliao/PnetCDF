@@ -20,12 +20,12 @@
 
 #include <pnc_debug.h>
 #include <common.h>
-#include "ncmpio_NC.h"
+#include "adio.h"
 
 
 
 /*----< PNC_File_sync() >----------------------------------------------------*/
-int PNC_File_sync(PNC_File fd)
+int PNC_File_sync(ADIO_File fd)
 {
     int err = NC_NOERR;
 
@@ -51,7 +51,7 @@ int PNC_File_delete(const char *filename)
 }
 
 /*----< PNC_File_set_size() >------------------------------------------------*/
-int PNC_File_set_size(PNC_File   fd,
+int PNC_File_set_size(ADIO_File  fd,
                       MPI_Offset size)
 {
     int err = NC_NOERR, rank;
@@ -70,7 +70,7 @@ int PNC_File_set_size(PNC_File   fd,
 }
 
 /*----< PNC_File_get_size() >------------------------------------------------*/
-int PNC_File_get_size(PNC_File    fd,
+int PNC_File_get_size(ADIO_File   fd,
                       MPI_Offset *size)
 {
     int err = NC_NOERR, rank;
@@ -97,7 +97,7 @@ int PNC_File_get_size(PNC_File    fd,
 File seek is not used in PnetCDF !
 
 /*----< PNC_File_seek() >----------------------------------------------------*/
-int PNC_File_seek(PNC_File   fd,
+int PNC_File_seek(ADIO_File   fd,
                   MPI_Offset offset,
                   int        whence)
 {
@@ -126,7 +126,7 @@ file_off = ADIOI_GEN_SeekIndividual(fd, offset, whence, &err);
 #endif
 
 /*----< PNC_File_get_info() >------------------------------------------------*/
-int PNC_File_get_info(PNC_File  fd,
+int PNC_File_get_info(ADIO_File fd,
                       MPI_Info *info_used)
 {
     int err;
@@ -312,7 +312,7 @@ fn_exit:
 }
 
 int
-PNC_File_SetInfo(PNC_File fd,
+PNC_File_SetInfo(ADIO_File fd,
                  MPI_Info users_info)
 {
     int flag, nprocs = 0, len, ok_to_override_cb_nodes = 0;
@@ -652,7 +652,7 @@ void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 #endif
 
 /*----< PNC_File_set_view() >------------------------------------------------*/
-int PNC_File_set_view(PNC_File      fd,
+int PNC_File_set_view(ADIO_File      fd,
                       MPI_Offset    disp,
                       MPI_Datatype  etype,
                       MPI_Datatype  filetype,

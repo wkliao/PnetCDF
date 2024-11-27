@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                                  MPI_Datatype buftype, int file_ptr_type,

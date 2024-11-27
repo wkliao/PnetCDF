@@ -9,7 +9,7 @@
 
 #include <stdbool.h> /* type bool */
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 #ifdef MPL_USE_DBG_LOGGING
 #define RDCOLL_DEBUG 1

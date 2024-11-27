@@ -48,7 +48,7 @@
 
 #include <mpi.h>
 
-#include "ncmpio_NC.h"
+#include "adio.h"
 
 /*
  ADIO_FileSysType_parentdir - determines a string pathname for the
@@ -239,8 +239,8 @@ int PNC_Check_Lustre(const char *filename)
  *   5. non-root processes opens the fie
  */
 static int
-lustre_file_create(PNC_File fd,
-                   int      access_mode)
+lustre_file_create(ADIO_File fd,
+                   int       access_mode)
 {
     int err=NC_NOERR, rank, amode, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
@@ -408,7 +408,7 @@ err_out:
  *   2. root obtains striping info and broadcasts to all others
  */
 static int
-lustre_file_open(PNC_File fd)
+lustre_file_open(ADIO_File fd)
 {
     int err=NC_NOERR, rank, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
@@ -488,7 +488,7 @@ err_out:
  *     fd->hints->cb_nodes
  *     fd->hints->num_osts
  */
-static int construct_aggr_list(PNC_File fd, int root)
+static int construct_aggr_list(ADIO_File fd, int root)
 {
     int i, j, k, rank, nprocs, num_aggr, my_procname_len, num_nodes;
     int msg[3], striping_factor;
@@ -860,14 +860,14 @@ int PNC_File_open(MPI_Comm    comm,
                   const char *filename,
                   int         amode,
                   MPI_Info    info,
-                  PNC_File   *fh)
+                  ADIO_File  *fh)
 {
     /* Before reaching to this subroutine, PNC_Check_Lustre() should have been
      * called to verify filename is on Lustre.
      */
     char value[MPI_MAX_INFO_VAL + 1];
     int i, err, min_err;
-    PNC_File fd = (PNC_FileD*) NCI_Calloc(1,sizeof(PNC_FileD));
+    ADIO_File fd = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
 
     *fh = fd;
 
@@ -884,7 +884,7 @@ int PNC_File_open(MPI_Comm    comm,
     fd->orig_access_mode = amode;
 
     /* create and initialize info object */
-    fd->hints = (PNC_Hints*) NCI_Calloc(1, sizeof(PNC_Hints));
+    fd->hints = (ADIOI_Hints*) NCI_Calloc(1, sizeof(ADIOI_Hints));
     if (info == MPI_INFO_NULL)
         MPI_Info_create(&fd->info);
     else
@@ -987,7 +987,7 @@ if (rank == 0) {
 }
 
 /*----< PNC_File_close() >---------------------------------------------------*/
-int PNC_File_close(PNC_File *fh)
+int PNC_File_close(ADIO_File *fh)
 {
     int err = NC_NOERR;
 

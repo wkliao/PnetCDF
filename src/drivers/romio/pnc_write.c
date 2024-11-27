@@ -15,7 +15,7 @@
 
 #include <mpi.h>
 
-#include "ncmpio_NC.h"
+#include "adio.h"
 
 /*----< PNC_WriteContig() >--------------------------------------------------*/
 int PNC_WriteContig(ADIO_File     fd,
@@ -99,7 +99,7 @@ ioerr:
 /*----< file_write() >-------------------------------------------------------*/
 /* This is an independent call. */
 static
-int file_write(PNC_File      fd,
+int file_write(ADIO_File     fd,
                MPI_Offset    offset,
                const void   *buf,
                int           count,
@@ -149,7 +149,7 @@ int file_write(PNC_File      fd,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNC_File_write_at(PNC_File      fh,
+int PNC_File_write_at(ADIO_File     fh,
                       MPI_Offset    offset,
                       const void   *buf,
                       int           count,
@@ -173,7 +173,7 @@ int PNC_File_write_at(PNC_File      fh,
 
 /*----< PNC_File_write() >---------------------------------------------------*/
 /* This is an independent call. */
-int PNC_File_write(PNC_File      fh,
+int PNC_File_write(ADIO_File     fh,
                    const void   *buf,
                    int           count,
                    MPI_Datatype  bufType,
@@ -198,7 +198,7 @@ int PNC_File_write(PNC_File      fh,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNC_File_write_at_all(PNC_File      fh,
+int PNC_File_write_at_all(ADIO_File     fh,
                           MPI_Offset    offset,
                           const void   *buf,
                           int           count,
@@ -222,7 +222,7 @@ int PNC_File_write_at_all(PNC_File      fh,
 
 /*----< PNC_File_write_all() >-----------------------------------------------*/
 /* This is a collective call. */
-int PNC_File_write_all(PNC_File      fh,
+int PNC_File_write_all(ADIO_File     fh,
                        const void   *buf,
                        int           count,
                        MPI_Datatype  bufType,

@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 int ADIOI_Flattened_type_keyval = MPI_KEYVAL_INVALID;
 

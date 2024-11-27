@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 int ADIO_Type_create_subarray(int ndims,
                               const int *array_of_sizes,
