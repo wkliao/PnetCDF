@@ -88,7 +88,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
          * in define mode, the file is deleted */
         if (ncp->rank == 0) {
             if (ncp->fstype == ADIO_LUSTRE) {
-                err = PNC_File_delete((char *)ncp->path);
+                err = ADIO_File_delete((char *)ncp->path);
                 if (err != NC_NOERR) return err;
             }
             else {

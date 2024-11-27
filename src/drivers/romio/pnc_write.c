@@ -118,8 +118,8 @@ int file_write(ADIO_File     fd,
 #endif
     if (bufType_size == 0) return NC_NOERR;
 
-    PNC_Datatype_iscontig(bufType, &buftype_is_contig);
-    PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+    ADIOI_Datatype_iscontig(bufType, &buftype_is_contig);
+    ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;
@@ -144,12 +144,12 @@ int file_write(ADIO_File     fd,
     return err;
 }
 
-/*----< PNC_File_write_at() >------------------------------------------------*/
+/*----< ADIO_File_write_at() >-----------------------------------------------*/
 /* This is an independent call.
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNC_File_write_at(ADIO_File     fh,
+int ADIO_File_write_at(ADIO_File     fh,
                       MPI_Offset    offset,
                       const void   *buf,
                       int           count,
@@ -171,9 +171,9 @@ int PNC_File_write_at(ADIO_File     fh,
     return err;
 }
 
-/*----< PNC_File_write() >---------------------------------------------------*/
+/*----< ADIO_File_write() >--------------------------------------------------*/
 /* This is an independent call. */
-int PNC_File_write(ADIO_File     fh,
+int ADIO_File_write(ADIO_File     fh,
                    const void   *buf,
                    int           count,
                    MPI_Datatype  bufType,
@@ -193,12 +193,12 @@ int PNC_File_write(ADIO_File     fh,
     return err;
 }
 
-/*----< PNC_File_write_at_all() >--------------------------------------------*/
+/*----< ADIO_File_write_at_all() >-------------------------------------------*/
 /* This is a collective call.
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNC_File_write_at_all(ADIO_File     fh,
+int ADIO_File_write_at_all(ADIO_File     fh,
                           MPI_Offset    offset,
                           const void   *buf,
                           int           count,
@@ -215,14 +215,14 @@ int PNC_File_write_at_all(ADIO_File     fh,
     ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
                                   offset, status, &err);
     if (err != MPI_SUCCESS && st == NC_NOERR)
-        st = ncmpii_error_mpi2nc(err, "PNC_File_write_at_all");
+        st = ncmpii_error_mpi2nc(err, "ADIO_File_write_at_all");
 
     return st;
 }
 
-/*----< PNC_File_write_all() >-----------------------------------------------*/
+/*----< ADIO_File_write_all() >----------------------------------------------*/
 /* This is a collective call. */
-int PNC_File_write_all(ADIO_File     fh,
+int ADIO_File_write_all(ADIO_File     fh,
                        const void   *buf,
                        int           count,
                        MPI_Datatype  bufType,
@@ -238,7 +238,7 @@ int PNC_File_write_all(ADIO_File     fh,
     ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
                          0, status, &err);
     if (err != MPI_SUCCESS && st == NC_NOERR)
-        st = ncmpii_error_mpi2nc(err, "PNC_File_write_all");
+        st = ncmpii_error_mpi2nc(err, "ADIO_File_write_all");
 
     return st;
 }
