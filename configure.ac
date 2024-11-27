@@ -2792,6 +2792,7 @@ AC_CONFIG_FILES(Makefile \
                 src/drivers/common/Makefile \
                 src/drivers/include/Makefile \
                 src/drivers/ncmpio/Makefile \
+                src/drivers/romio/Makefile \
                 src/drivers/nc4io/Makefile \
                 src/drivers/ncadios/Makefile \
                 src/drivers/ncbbio/Makefile \
