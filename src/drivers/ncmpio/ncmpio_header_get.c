@@ -360,8 +360,8 @@ hdr_fetch(bufferinfo *gbp) {
         /* fileview is already entire file visible and MPI_File_read_at does
            not change the file pointer */
         if (gbp->coll_mode == 1) { /* collective read */
-            if (gbp->is_lustre) {
-                err = PNC_File_read_at_all(gbp->pnc_fh, gbp->offset, readBuf,
+            if (gbp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_read_at_all(gbp->adio_fh, gbp->offset, readBuf,
                                            readLen, MPI_BYTE, &mpistatus);
             }
             else {
@@ -375,8 +375,8 @@ hdr_fetch(bufferinfo *gbp) {
             }
         }
         else {
-            if (gbp->is_lustre) {
-                err = PNC_File_read_at(gbp->pnc_fh, gbp->offset, readBuf,
+            if (gbp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_read_at(gbp->adio_fh, gbp->offset, readBuf,
                                        readLen, MPI_BYTE, &mpistatus);
             }
             else {
@@ -415,8 +415,8 @@ hdr_fetch(bufferinfo *gbp) {
     }
     else if (gbp->coll_mode == 1) { /* collective read */
         /* other processes participate the collective call */
-        if (gbp->is_lustre) {
-            err = PNC_File_read_at_all(gbp->pnc_fh,  0, NULL,
+        if (gbp->fstype == ADIO_LUSTRE) {
+            err = PNC_File_read_at_all(gbp->adio_fh,  0, NULL,
                                        0, MPI_BYTE, &mpistatus);
         }
         else {
@@ -1366,8 +1366,8 @@ ncmpio_hdr_get_NC(NC *ncp)
     /* Initialize the get buffer that stores the header read from the file */
     getbuf.comm          = ncp->comm;
     getbuf.collective_fh = ncp->collective_fh;
-    getbuf.pnc_fh        = ncp->pnc_fh;
-    getbuf.is_lustre     = ncp->is_lustre;
+    getbuf.adio_fh       = ncp->adio_fh;
+    getbuf.fstype        = ncp->fstype;
     getbuf.get_size      = 0;
     getbuf.offset        = 0;   /* read from start of the file */
     getbuf.safe_mode     = ncp->safe_mode;

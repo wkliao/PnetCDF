@@ -64,9 +64,9 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
 
     assert(ncp != NULL); /* this should never occur */
 
-    if (ncp->is_lustre) {
-        err = PNC_File_close(&ncp->pnc_fh);
-        ncp->pnc_fh = NULL;
+    if (ncp->fstype == ADIO_LUSTRE) {
+        err = PNC_File_close(&ncp->adio_fh);
+        ncp->adio_fh = NULL;
         if (err != NC_NOERR) return err;
     }
     else {
@@ -87,7 +87,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
         /* called from ncmpi_abort, if the file is being created and is still
          * in define mode, the file is deleted */
         if (ncp->rank == 0) {
-            if (ncp->is_lustre) {
+            if (ncp->fstype == ADIO_LUSTRE) {
                 err = PNC_File_delete((char *)ncp->path);
                 if (err != NC_NOERR) return err;
             }

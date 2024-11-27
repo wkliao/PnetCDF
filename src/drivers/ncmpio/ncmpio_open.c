@@ -40,11 +40,11 @@ ncmpio_open(MPI_Comm     comm,
             void       **ncpp)
 {
     char *env_str;
-    int i, mpiomode, err, status=NC_NOERR, mpireturn, is_lustre;
+    int i, mpiomode, err, status=NC_NOERR, mpireturn, fstype;
     MPI_File fh;
     MPI_Info info_used;
     NC *ncp=NULL;
-    PNC_File pnc_fh;
+    ADIO_File adio_fh;
 
     *ncpp = NULL;
 
@@ -60,8 +60,8 @@ ncmpio_open(MPI_Comm     comm,
     if (omode & NC_MMAP) DEBUG_RETURN_ERROR(NC_EINVAL_OMODE)
 
     /* check if path is on Lustre */
-    is_lustre = PNC_Check_Lustre(path);
-// printf("%s line %d: is_lustre=%d\n",__func__,__LINE__,is_lustre);
+    fstype = PNC_Check_Lustre(path);
+// printf("%s line %d: fstype=%d\n",__func__,__LINE__,fstype);
 
 
 #if 0 && defined(HAVE_ACCESS)
@@ -80,8 +80,8 @@ ncmpio_open(MPI_Comm     comm,
     /* open file collectively ---------------------------------------------- */
     mpiomode = fIsSet(omode, NC_WRITE) ? MPI_MODE_RDWR : MPI_MODE_RDONLY;
 
-    if (is_lustre) {
-        err = PNC_File_open(comm, (char *)path, mpiomode, user_info, &pnc_fh);
+    if (fstype == ADIO_LUSTRE) {
+        err = PNC_File_open(comm, (char *)path, mpiomode, user_info, &adio_fh);
         if (err != NC_NOERR) return err;
     }
     else {
@@ -91,8 +91,8 @@ ncmpio_open(MPI_Comm     comm,
     }
 
     /* get the file info used/modified by MPI-IO */
-    if (is_lustre) {
-        err = PNC_File_get_info(pnc_fh, &info_used);
+    if (fstype == ADIO_LUSTRE) {
+        err = PNC_File_get_info(adio_fh, &info_used);
         if (err != NC_NOERR) return err;
     }
     else {
@@ -140,8 +140,8 @@ ncmpio_open(MPI_Comm     comm,
     ncp->path = (char*) NCI_Malloc(strlen(path) + 1);
     strcpy(ncp->path, path);
 
-    ncp->is_lustre      = is_lustre;
-    ncp->pnc_fh         = pnc_fh;
+    ncp->fstype         = fstype;
+    ncp->adio_fh        = adio_fh;
 
 #ifdef PNETCDF_DEBUG
     /* PNETCDF_DEBUG is set at configure time, which will be overwritten by
