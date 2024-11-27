@@ -65,7 +65,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
     assert(ncp != NULL); /* this should never occur */
 
     if (ncp->fstype == ADIO_LUSTRE) {
-        err = PNC_File_close(&ncp->adio_fh);
+        err = ADIO_File_close(&ncp->adio_fh);
         ncp->adio_fh = NULL;
         if (err != NC_NOERR) return err;
     }

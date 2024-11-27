@@ -184,11 +184,11 @@ ncmpio_create(MPI_Comm     comm,
                  */
                 err = NC_NOERR;
                 if (fstype == ADIO_LUSTRE) {
-                    err = PNC_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, &adio_fh);
+                    err = ADIO_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, &adio_fh);
                     if (err == NC_NOERR)
                         PNC_File_set_size(adio_fh, 0); /* can be expensive */
                     else
-                        PNC_File_close(&adio_fh);
+                        ADIO_File_close(&adio_fh);
                 }
                 else {
                     TRACE_IO(MPI_File_open)(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR,
@@ -227,7 +227,7 @@ ncmpio_create(MPI_Comm     comm,
 
     /* create file collectively -------------------------------------------- */
     if (fstype == ADIO_LUSTRE) {
-        err = PNC_File_open(comm, (char *)path, mpiomode, user_info, &adio_fh);
+        err = ADIO_File_open(comm, (char *)path, mpiomode, user_info, &adio_fh);
         if (err != NC_NOERR)
             return err;
         adio_fh->file_system = fstype;
