@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 {

@@ -9,7 +9,7 @@
 
 #include <limits.h>
 
-#include <ncmpio_NC.h>
+#include <adio.h>
 
 /* utility function to query a datatype for its combiner,
  * convenience wrapper around MPI_Type_get_envelope[_c] */
