@@ -149,7 +149,7 @@ ncmpio_create(MPI_Comm     comm,
 #else
                 err = NC_NOERR;
                 if (fstype == ADIO_LUSTRE) {
-                    err = PNC_File_delete((char *)path);
+                    err = ADIO_File_delete((char *)path);
                 }
                 else {
                     TRACE_IO(MPI_File_delete)((char *)path, MPI_INFO_NULL);
@@ -186,7 +186,7 @@ ncmpio_create(MPI_Comm     comm,
                 if (fstype == ADIO_LUSTRE) {
                     err = ADIO_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, &adio_fh);
                     if (err == NC_NOERR)
-                        PNC_File_set_size(adio_fh, 0); /* can be expensive */
+                        ADIO_File_set_size(adio_fh, 0); /* can be expensive */
                     else
                         ADIO_File_close(&adio_fh);
                 }
@@ -265,7 +265,7 @@ ncmpio_create(MPI_Comm     comm,
 
     /* get the I/O hints used/modified by MPI-IO */
     if (fstype == ADIO_LUSTRE) {
-        err = PNC_File_get_info(adio_fh,  &info_used);
+        err = ADIO_File_get_info(adio_fh,  &info_used);
         if (err != NC_NOERR) return err;
     }
     else {

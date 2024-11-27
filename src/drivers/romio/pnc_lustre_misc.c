@@ -24,8 +24,8 @@
 
 
 
-/*----< PNC_File_sync() >----------------------------------------------------*/
-int PNC_File_sync(ADIO_File fd)
+/*----< ADIO_File_sync() >---------------------------------------------------*/
+int ADIO_File_sync(ADIO_File fd)
 {
     int err = NC_NOERR;
 
@@ -38,8 +38,8 @@ int PNC_File_sync(ADIO_File fd)
     return err;
 }
 
-/*----< PNC_File_delete() >--------------------------------------------------*/
-int PNC_File_delete(const char *filename)
+/*----< ADIO_File_delete() >-------------------------------------------------*/
+int ADIO_File_delete(const char *filename)
 {
     int err = NC_NOERR;
 
@@ -50,8 +50,8 @@ int PNC_File_delete(const char *filename)
     return err;
 }
 
-/*----< PNC_File_set_size() >------------------------------------------------*/
-int PNC_File_set_size(ADIO_File  fd,
+/*----< ADIO_File_set_size() >-----------------------------------------------*/
+int ADIO_File_set_size(ADIO_File  fd,
                       MPI_Offset size)
 {
     int err = NC_NOERR, rank;
@@ -69,8 +69,8 @@ int PNC_File_set_size(ADIO_File  fd,
     return err;
 }
 
-/*----< PNC_File_get_size() >------------------------------------------------*/
-int PNC_File_get_size(ADIO_File   fd,
+/*----< ADIO_File_get_size() >-----------------------------------------------*/
+int ADIO_File_get_size(ADIO_File   fd,
                       MPI_Offset *size)
 {
     int err = NC_NOERR, rank;
@@ -93,8 +93,8 @@ int PNC_File_get_size(ADIO_File   fd,
     return err;
 }
 
-/*----< PNC_File_get_info() >------------------------------------------------*/
-int PNC_File_get_info(ADIO_File fd,
+/*----< ADIO_File_get_info() >-----------------------------------------------*/
+int ADIO_File_get_info(ADIO_File fd,
                       MPI_Info *info_used)
 {
     int err;
@@ -230,6 +230,7 @@ fn_exit:
     return ret;
 }
 
+/*----< ADIO_File_SetInfo() >------------------------------------------------*/
 int
 ADIO_File_SetInfo(ADIO_File fd,
                   MPI_Info users_info)
@@ -509,8 +510,8 @@ err_check:
     return ncmpii_error_mpi2nc(MPI_ERR_IO, err_msg);
 }
 
-/*----< PNC_File_set_view() >------------------------------------------------*/
-int PNC_File_set_view(ADIO_File      fd,
+/*----< ADIO_File_set_view() >-----------------------------------------------*/
+int ADIO_File_set_view(ADIO_File      fd,
                       MPI_Offset    disp,
                       MPI_Datatype  etype,
                       MPI_Datatype  filetype,
@@ -523,13 +524,13 @@ int PNC_File_set_view(ADIO_File      fd,
 
     /* rudimentary checks for incorrect etype/filetype. */
     if (etype == MPI_DATATYPE_NULL)
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, etype");
+        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, etype");
 
     if (filetype == MPI_DATATYPE_NULL)
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, filetype");
+        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, filetype");
 
     if ((disp < 0) && (disp != MPI_DISPLACEMENT_CURRENT))
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, disp");
+        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, disp");
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count lb;
@@ -544,7 +545,7 @@ int PNC_File_set_view(ADIO_File      fd,
 #endif
 
     if (fd->etype_size != 0 && fd->ftype_size % fd->etype_size != 0)
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, type size");
+        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, type size");
 
     err = ADIO_File_SetInfo(fd, info);
     if (err != NC_NOERR)
@@ -563,7 +564,7 @@ int PNC_File_set_view(ADIO_File      fd,
         MPI_Type_commit(&copy_filetype);
 
         fd->filetype = copy_filetype;
-        PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
         /* check filetype only if it is not a predefined MPI datatype */
         flat_file = ADIOI_Flatten_and_find(fd->filetype);

@@ -564,7 +564,7 @@ int ncmpio_write_header(NC *ncp)
 
             if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
                 if (ncp->fstype == ADIO_LUSTRE) {
-                    err = PNC_File_write_at_all(ncp->adio_fh, offset, buf_ptr, writeLen,
+                    err = ADIO_File_write_at_all(ncp->adio_fh, offset, buf_ptr, writeLen,
                                                 MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
                 }
@@ -584,7 +584,7 @@ int ncmpio_write_header(NC *ncp)
             }
             else { /* header independent write */
                 if (ncp->fstype == ADIO_LUSTRE) {
-                    err = PNC_File_write_at(ncp->adio_fh, offset, buf_ptr, writeLen,
+                    err = ADIO_File_write_at(ncp->adio_fh, offset, buf_ptr, writeLen,
                                             MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
                 }
@@ -626,7 +626,7 @@ int ncmpio_write_header(NC *ncp)
         /* collective write: other processes participate the collective call */
         if (ncp->fstype == ADIO_LUSTRE) {
             for (i=0; i<ntimes; i++) {
-                err = PNC_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
+                err = ADIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
             }
