@@ -93,6 +93,9 @@ int PNC_File_get_size(PNC_File    fd,
     return err;
 }
 
+#if 0
+File seek is not used in PnetCDF !
+
 /*----< PNC_File_seek() >----------------------------------------------------*/
 int PNC_File_seek(PNC_File   fd,
                   MPI_Offset offset,
@@ -120,6 +123,7 @@ file_off = ADIOI_GEN_SeekIndividual(fd, offset, whence, &err);
 
     return err;
 }
+#endif
 
 /*----< PNC_File_get_info() >------------------------------------------------*/
 int PNC_File_get_info(PNC_File  fd,
@@ -136,6 +140,7 @@ int PNC_File_get_info(PNC_File  fd,
     return err;
 }
 
+#if 0
 static
 int PNC_Type_get_combiner(MPI_Datatype datatype, int *combiner)
 {
@@ -150,7 +155,6 @@ int PNC_Type_get_combiner(MPI_Datatype datatype, int *combiner)
     return ret;
 }
 
-#if 0
 int PNC_Type_ispredef(MPI_Datatype datatype, int *flag)
 {
     int ret, combiner;
