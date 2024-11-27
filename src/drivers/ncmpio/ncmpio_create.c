@@ -117,6 +117,11 @@ ncmpio_create(MPI_Comm     comm,
     /* check if path is on Lustre */
     fstype = ADIO_FileSysType(path);
 
+    if (fstype == ADIO_LUSTRE) {
+        adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
+        adio_fh->file_system = fstype;
+    }
+
     if (fIsSet(cmode, NC_NOCLOBBER)) {
         /* check if file exists: NC_EEXIST is returned if the file already
          * exists and NC_NOCLOBBER mode is used in ncmpi_create */
@@ -187,7 +192,7 @@ ncmpio_create(MPI_Comm     comm,
                  */
                 err = NC_NOERR;
                 if (fstype == ADIO_LUSTRE) {
-                    err = ADIO_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, &adio_fh);
+                    err = ADIO_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, adio_fh);
                     if (err == NC_NOERR)
                         ADIO_File_set_size(adio_fh, 0); /* can be expensive */
                     else
@@ -229,10 +234,9 @@ ncmpio_create(MPI_Comm     comm,
 
     /* create file collectively -------------------------------------------- */
     if (fstype == ADIO_LUSTRE) {
-        err = ADIO_File_open(comm, (char *)path, mpiomode, user_info, &adio_fh);
+        err = ADIO_File_open(comm, (char *)path, mpiomode, user_info, adio_fh);
         if (err != NC_NOERR)
             return err;
-        adio_fh->file_system = fstype;
     }
     else {
         TRACE_IO(MPI_File_open, (comm, (char *)path, mpiomode, user_info, &fh));
