@@ -17,19 +17,22 @@
 
 #include "adio.h"
 
-/*----< PNC_WriteContig() >--------------------------------------------------*/
-int PNC_WriteContig(ADIO_File     fd,
-                    const void   *buf,
-                    MPI_Aint      count,
-                    MPI_Datatype  bufType,
-                    int           file_ptr_type,
-                    ADIO_Offset   offset,
-                    ADIO_Status  *status)
+/*----< ADIO_WriteContig() >-------------------------------------------------*/
+int ADIO_WriteContig(ADIO_File     fd,
+                     const void   *buf,
+                     MPI_Aint      count,
+                     MPI_Datatype  bufType,
+                     int           file_ptr_type,
+                     ADIO_Offset   offset,
+                     ADIO_Status  *status,
+                     int          *error_code)
 {
     ssize_t err = 0;
     size_t w_count;
     ADIO_Offset off, len, bytes_xfered = 0;
     char *p;
+
+    if (error_code != NULL) *error_code = MPI_SUCCESS;
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count bufType_size;
@@ -83,8 +86,10 @@ fd->lustre_write_metrics[1] += MPI_Wtime() - tt;
     /* if ADIO_EXPLICIT_OFFSET, do not update file pointer */
 
 ioerr:
-    if (err == -1)
+    if (err == -1) {
+        if (error_code != NULL) *error_code = MPI_ERR_IO;
         return ncmpii_error_posix2nc("pwrite");
+    }
 
     if (status)
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
@@ -123,18 +128,10 @@ int file_write(ADIO_File     fd,
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;
-/*
-        err = PNC_WriteContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
-                              offset, status);
-*/
-        ADIO_WriteContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
-                              offset, status, &err);
+        err = ADIO_WriteContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
+                               offset, status, NULL);
     }
     else
-/*
-        err = PNC_WriteStrided(fd, buf, count, bufType, file_ptr_type,
-                               offset, status);
-*/
         ADIO_WriteStrided(fd, buf, count, bufType, file_ptr_type,
                                offset, status, &err);
     if (err != MPI_SUCCESS)
