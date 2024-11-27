@@ -253,12 +253,6 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                                ADIO_Offset offset, ADIO_Status * status, int *error_code);
 #define ADIO_WriteStrided ADIOI_LUSTRE_WriteStrided
 
-/*
-int PNC_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
-                     MPI_Datatype datatype, int file_ptr_type,
-                     ADIO_Offset offset, ADIO_Status *status);
-*/
-
 void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
                      MPI_Aint count, MPI_Datatype buftype, int file_ptr_type,
                      ADIO_Offset offset, ADIO_Status *status, int *error_code);
@@ -279,21 +273,14 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                                   MPI_Datatype buftype, int file_ptr_type,
                                   ADIO_Offset offset, ADIO_Status * status, int
                                   *error_code);
-int PNC_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
-                               MPI_Datatype buftype, int file_ptr_type,
-                               ADIO_Offset offset, ADIO_Status *status);
 
-#define ADIO_WriteContig(a,b,c,d,e,f,g,x) \
-    *x = PNC_WriteContig(a,b,c,d,e,f,g);
-int PNC_WriteContig(ADIO_File fd, const void *buf, MPI_Aint count,
+int ADIO_WriteContig(ADIO_File fd, const void *buf, MPI_Aint count,
                     MPI_Datatype bufType, int file_ptr_type,
-                    ADIO_Offset offset, ADIO_Status *status);
+                    ADIO_Offset offset, ADIO_Status *status, int *error_code);
 
-#define ADIO_ReadContig(a,b,c,d,e,f,g,x) \
-    *x = PNC_ReadContig(a,b,c,d,e,f,g);
-int PNC_ReadContig(ADIO_File fd, void *buf, MPI_Aint count,
+int ADIO_ReadContig(ADIO_File fd, void *buf, MPI_Aint count,
                     MPI_Datatype bufType, int file_ptr_type,
-                    ADIO_Offset offset, ADIO_Status *status);
+                    ADIO_Offset offset, ADIO_Status *status, int *error_code);
 
 
 #define ADIO_ReadStrided ADIOI_GEN_ReadStrided
