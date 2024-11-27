@@ -656,6 +656,7 @@ by the desired type. */
 #define NC_EBADLOG			(-238) /**< Unrecognized log file format */
 #define NC_EFLUSHED			(-239) /**< Nonblocking request has already been flushed. It is too late to cancel */
 #define NC_EADIOS			(-240) /**< unknown ADIOS error */
+#define NC_EFSTYPE			(-241) /**< Invalid file system type */
 /* add new error here */
 
 /* header inconsistency errors start from -250 */
