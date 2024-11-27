@@ -63,6 +63,11 @@ ncmpio_open(MPI_Comm     comm,
     /* check if path is on Lustre */
     fstype = ADIO_FileSysType(path);
 
+    if (fstype == ADIO_LUSTRE) {
+        adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
+        adio_fh->file_system = fstype;
+    }
+
 #if 0 && defined(HAVE_ACCESS)
     if (mpiomode == MPI_MODE_RDONLY) { /* file should already exit */
         int rank, file_exist;
@@ -80,9 +85,8 @@ ncmpio_open(MPI_Comm     comm,
     mpiomode = fIsSet(omode, NC_WRITE) ? MPI_MODE_RDWR : MPI_MODE_RDONLY;
 
     if (fstype == ADIO_LUSTRE) {
-        err = ADIO_File_open(comm, (char *)path, mpiomode, user_info, &adio_fh);
+        err = ADIO_File_open(comm, (char *)path, mpiomode, user_info, adio_fh);
         if (err != NC_NOERR) return err;
-        adio_fh->file_system = ADIO_LUSTRE;
     }
     else {
         TRACE_IO(MPI_File_open, (comm, (char *)path, mpiomode, user_info, &fh));

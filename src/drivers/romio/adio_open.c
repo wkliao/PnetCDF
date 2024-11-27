@@ -863,16 +863,13 @@ int ADIO_File_open(MPI_Comm    comm,
                    const char *filename,
                    int         amode,
                    MPI_Info    info,
-                   ADIO_File  *fh)
+                   ADIO_File   fd)
 {
     /* Before reaching to this subroutine, ADIO_FileSysType() should have been
      * called to verify filename is on Lustre.
      */
     char value[MPI_MAX_INFO_VAL + 1];
     int i, err, min_err;
-    ADIO_File fd = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
-
-    *fh = fd;
 
     fd->comm        = comm;
     fd->filename    = ADIOI_Strdup(filename);
