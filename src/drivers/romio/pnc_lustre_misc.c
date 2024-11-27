@@ -93,38 +93,6 @@ int PNC_File_get_size(ADIO_File   fd,
     return err;
 }
 
-#if 0
-File seek is not used in PnetCDF !
-
-/*----< PNC_File_seek() >----------------------------------------------------*/
-int PNC_File_seek(ADIO_File   fd,
-                  MPI_Offset offset,
-                  int        whence)
-{
-    int err = NC_NOERR, rank, posix_whence;
-    off_t file_off;
-
-file_off = ADIOI_GEN_SeekIndividual(fd, offset, whence, &err);
-/*
-    switch (whence) {
-        case MPI_SEEK_SET: posix_whence = SEEK_SET; break;
-        case MPI_SEEK_CUR: posix_whence = SEEK_CUR; break;
-        case MPI_SEEK_END: posix_whence = SEEK_END; break;
-        default:
-            MPI_Comm_rank(fd->comm, &rank);
-            fprintf(stderr, "%s line %d: rank %d invalid whence(%d)\n",
-                    __func__,__LINE__,rank,whence);
-            return NC_EINVAL;
-    }
-    file_off = lseek(fd->fd_sys, (off_t)offset, posix_whence);
-*/
-    if (file_off == -1)
-        err = ncmpii_error_posix2nc("lseek");
-
-    return err;
-}
-#endif
-
 /*----< PNC_File_get_info() >------------------------------------------------*/
 int PNC_File_get_info(ADIO_File fd,
                       MPI_Info *info_used)
@@ -139,55 +107,6 @@ int PNC_File_get_info(ADIO_File fd,
 
     return err;
 }
-
-#if 0
-static
-int PNC_Type_get_combiner(MPI_Datatype datatype, int *combiner)
-{
-    int ret;
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count ni, na, nc, nt;
-    ret = MPI_Type_get_envelope_c(datatype, &ni, &na, &nc, &nt, combiner);
-#else
-    int ni, na, nt;
-    ret = MPI_Type_get_envelope(datatype, &ni, &na, &nt, combiner);
-#endif
-    return ret;
-}
-
-int PNC_Type_ispredef(MPI_Datatype datatype, int *flag)
-{
-    int ret, combiner;
-    ret = PNC_Type_get_combiner(datatype, &combiner);
-    switch (combiner) {
-        case MPI_COMBINER_NAMED:
-        case MPI_COMBINER_F90_INTEGER:
-        case MPI_COMBINER_F90_REAL:
-        case MPI_COMBINER_F90_COMPLEX:
-            *flag = 1;
-            break;
-        default:
-            *flag = 0;
-            break;
-    }
-    return ret;
-}
-
-/* utility function for freeing user-defined datatypes,
- * MPI_DATATYPE_NULL and predefined datatypes are ignored,
- * datatype is set to MPI_DATATYPE_NULL upon return */
-int PNC_Type_dispose(MPI_Datatype * datatype)
-{
-    int ret, flag;
-    if (*datatype == MPI_DATATYPE_NULL)
-        return MPI_SUCCESS;
-    ret = PNC_Type_ispredef(*datatype, &flag);
-    if (ret == MPI_SUCCESS && !flag)
-        ret = MPI_Type_free(datatype);
-    *datatype = MPI_DATATYPE_NULL;
-    return ret;
-}
-#endif
 
 int ADIOI_Info_check_and_install_int(ADIO_File fd, MPI_Info info, const char *key,
                                      int *local_cache)
@@ -590,67 +509,6 @@ err_check:
     return ncmpii_error_mpi2nc(MPI_ERR_IO, err_msg);
 }
 
-#if 0
-void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag)
-{
-    int combiner;
-
-    PNC_Type_get_combiner(datatype, &combiner);
-
-    switch (combiner) {
-        case MPI_COMBINER_NAMED:
-            *flag = 1;
-            break;
-#ifdef MPIIMPL_HAVE_MPI_COMBINER_DUP
-        case MPI_COMBINER_DUP:
-#endif
-        case MPI_COMBINER_CONTIGUOUS:
-            {
-                int *ints;
-                MPI_Aint *adds;
-                MPI_Count *cnts;
-                MPI_Datatype *types;
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count nints, nadds, ncnts, ntypes;
-                MPI_Type_get_envelope_c(datatype, &nints, &nadds, &ncnts, &ntypes, &combiner);
-#else
-                int nints, nadds, ncnts = 0, ntypes;
-                MPI_Type_get_envelope(datatype, &nints, &nadds, &ntypes, &combiner);
-#endif
-                ints = (int *) ADIOI_Malloc((nints + 1) * sizeof(int));
-                adds = (MPI_Aint *) ADIOI_Malloc((nadds + 1) * sizeof(MPI_Aint));
-                cnts = (MPI_Count *) ADIOI_Malloc((ncnts + 1) * sizeof(MPI_Count));
-                types = (MPI_Datatype *) ADIOI_Malloc((ntypes + 1) * sizeof(MPI_Datatype));
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Type_get_contents_c(datatype, nints, nadds, ncnts, ntypes, ints, adds, cnts,
-                                        types);
-#else
-                MPI_Type_get_contents(datatype, nints, nadds, ntypes, ints, adds, types);
-#endif
-                PNC_Datatype_iscontig(types[0], flag);
-
-                PNC_Type_dispose(types);
-                ADIOI_Free(ints);
-                ADIOI_Free(adds);
-                ADIOI_Free(cnts);
-                ADIOI_Free(types);
-            }
-            break;
-        case MPI_COMBINER_F90_INTEGER:
-        case MPI_COMBINER_F90_REAL:
-        case MPI_COMBINER_F90_COMPLEX:
-            *flag = 1;
-            break;
-        default:
-            *flag = 0;
-            break;
-    }
-
-    /* This function needs more work. It should check for contiguity
-     * in other cases as well. */
-}
-#endif
-
 /*----< PNC_File_set_view() >------------------------------------------------*/
 int PNC_File_set_view(ADIO_File      fd,
                       MPI_Offset    disp,
@@ -696,7 +554,7 @@ int PNC_File_set_view(ADIO_File      fd,
     fd->etype = etype;
 
     ADIOI_Type_dispose(&fd->filetype);
-    PNC_Type_ispredef(filetype, &is_predef);
+    ADIOI_Type_ispredef(filetype, &is_predef);
     if (is_predef) {
         fd->filetype = filetype;
         filetype_is_contig = 1;
