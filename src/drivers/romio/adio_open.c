@@ -858,12 +858,12 @@ static int construct_aggr_list(ADIO_File fd, int root)
     return 0;
 }
 
-/*----< PNC_File_open() >----------------------------------------------------*/
-int PNC_File_open(MPI_Comm    comm,
-                  const char *filename,
-                  int         amode,
-                  MPI_Info    info,
-                  ADIO_File  *fh)
+/*----< ADIO_File_open() >---------------------------------------------------*/
+int ADIO_File_open(MPI_Comm    comm,
+                   const char *filename,
+                   int         amode,
+                   MPI_Info    info,
+                   ADIO_File  *fh)
 {
     /* Before reaching to this subroutine, ADIO_FileSysType() should have been
      * called to verify filename is on Lustre.
@@ -892,7 +892,7 @@ int PNC_File_open(MPI_Comm    comm,
     else
         MPI_Info_dup(info, &fd->info);
 
-    err = PNC_File_SetInfo(fd, fd->info);
+    err = ADIO_File_SetInfo(fd, fd->info);
     if (err != NC_NOERR)
         return err;
 
@@ -903,15 +903,22 @@ int PNC_File_open(MPI_Comm    comm,
         goto err_out;
     }
 
-    /* For Lustre, determining the I/O aggregators and constructing ranklist
-     * requires file stripe count, which can only be obtained after file is
-     * opened.
-     */
-    if (amode & MPI_MODE_CREATE)
-        err = lustre_file_create(fd, amode);
-    else
-        err = lustre_file_open(fd);
-    if (err != NC_NOERR) goto err_out;
+assert(fd->file_system == ADIO_LUSTRE);
+    if (fd->file_system == ADIO_LUSTRE) {
+        /* For Lustre, determining the I/O aggregators and constructing ranklist
+         * requires file stripe count, which can only be obtained after file is
+         * opened.
+         */
+        if (amode & MPI_MODE_CREATE)
+            err = lustre_file_create(fd, amode);
+        else
+            err = lustre_file_open(fd);
+        if (err != NC_NOERR) goto err_out;
+    }
+    else {
+        err = NC_EFSTYPE;
+        goto err_out;
+    }
 
     /* TODO: when no_indep_rw hint is enabled, only aggregators open the file */
     fd->is_open = 1;
@@ -985,8 +992,8 @@ if (rank == 0) {
     return err;
 }
 
-/*----< PNC_File_close() >---------------------------------------------------*/
-int PNC_File_close(ADIO_File *fh)
+/*----< ADIO_File_close() >--------------------------------------------------*/
+int ADIO_File_close(ADIO_File *fh)
 {
     int err = NC_NOERR;
 
@@ -1006,7 +1013,7 @@ int PNC_File_close(ADIO_File *fh)
     if ((*fh)->io_buf != NULL)
         ADIOI_Free((*fh)->io_buf);
     if ((*fh)->filetype != MPI_BYTE)
-        PNC_Type_dispose(&(*fh)->filetype);
+        ADIOI_Type_dispose(&(*fh)->filetype);
     NCI_Free(*fh);
 
     return err;

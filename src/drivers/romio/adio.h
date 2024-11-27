@@ -209,10 +209,10 @@ typedef struct {
 
 /*---- APIs -----------------------------------------------------------------*/
 int ADIO_FileSysType(const char *filename);
-int PNC_File_open(MPI_Comm comm, const char *filename, int amode,
-                  MPI_Info info, ADIO_File *fh);
+int ADIO_File_open(MPI_Comm comm, const char *filename, int amode,
+                   MPI_Info info, ADIO_File *fh);
 
-int PNC_File_close(ADIO_File *fh);
+int ADIO_File_close(ADIO_File *fh);
 int PNC_File_set_view(ADIO_File fh, MPI_Offset disp, MPI_Datatype etype,
                       MPI_Datatype filetype, char *datarep, MPI_Info info);
 int PNC_File_sync(ADIO_File fh);
@@ -221,7 +221,7 @@ int PNC_File_set_size(ADIO_File fh, MPI_Offset size);
 int PNC_File_get_size(ADIO_File fh, MPI_Offset *size);
 int PNC_File_seek(ADIO_File fh, MPI_Offset offset, int whence);
 int PNC_File_get_info(ADIO_File fh, MPI_Info *info_used);
-int PNC_File_SetInfo(ADIO_File fh, MPI_Info  users_info);
+int ADIO_File_SetInfo(ADIO_File fh, MPI_Info  users_info);
 
 int PNC_File_write(ADIO_File fh, const void *buf, int count,
                    MPI_Datatype datatype, MPI_Status *status);

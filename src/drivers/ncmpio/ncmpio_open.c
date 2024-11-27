@@ -79,7 +79,7 @@ ncmpio_open(MPI_Comm     comm,
     mpiomode = fIsSet(omode, NC_WRITE) ? MPI_MODE_RDWR : MPI_MODE_RDONLY;
 
     if (fstype == ADIO_LUSTRE) {
-        err = PNC_File_open(comm, (char *)path, mpiomode, user_info, &adio_fh);
+        err = ADIO_File_open(comm, (char *)path, mpiomode, user_info, &adio_fh);
         if (err != NC_NOERR) return err;
         adio_fh->file_system = ADIO_LUSTRE;
     }

@@ -312,8 +312,8 @@ fn_exit:
 }
 
 int
-PNC_File_SetInfo(ADIO_File fd,
-                 MPI_Info users_info)
+ADIO_File_SetInfo(ADIO_File fd,
+                  MPI_Info users_info)
 {
     int flag, nprocs = 0, len, ok_to_override_cb_nodes = 0;
     char value[MPI_MAX_INFO_VAL + 1];
@@ -688,14 +688,14 @@ int PNC_File_set_view(ADIO_File      fd,
     if (fd->etype_size != 0 && fd->ftype_size % fd->etype_size != 0)
         return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNC_File_set_view, type size");
 
-    err = PNC_File_SetInfo(fd, info);
+    err = ADIO_File_SetInfo(fd, info);
     if (err != NC_NOERR)
         return err;
 
     /* PnetCDF only uses etype = MPI_BYTE */
     fd->etype = etype;
 
-    PNC_Type_dispose(&fd->filetype);
+    ADIOI_Type_dispose(&fd->filetype);
     PNC_Type_ispredef(filetype, &is_predef);
     if (is_predef) {
         fd->filetype = filetype;
