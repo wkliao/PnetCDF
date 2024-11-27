@@ -62,8 +62,8 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
 
     fh = ncp->collective_fh;
 
-    if (ncp->is_lustre) {
-        err = PNC_File_set_view(ncp->pnc_fh, 0, MPI_BYTE, MPI_BYTE, "native",
+    if (ncp->fstype == ADIO_LUSTRE) {
+        err = PNC_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE, "native",
                                 MPI_INFO_NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }
@@ -77,8 +77,8 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
 
     if (fIsSet(reqMode, NC_REQ_RD)) {
         if (ncp->nprocs > 1) {
-            if (ncp->is_lustre) {
-                err = PNC_File_read_at_all(ncp->pnc_fh, 0, NULL, 0, MPI_BYTE,
+            if (ncp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_read_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                            &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
             }
@@ -93,8 +93,8 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
             }
         }
         else {
-            if (ncp->is_lustre) {
-                err = PNC_File_read_at(ncp->pnc_fh, 0, NULL, 0, MPI_BYTE,
+            if (ncp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_read_at(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                        &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
             }
@@ -110,8 +110,8 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
     }
     else { /* write request */
         if (ncp->nprocs > 1) {
-            if (ncp->is_lustre) {
-                err = PNC_File_write_at_all(ncp->pnc_fh, 0, NULL, 0, MPI_BYTE,
+            if (ncp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
             }
@@ -125,8 +125,8 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
             }
         }
         else {
-            if (ncp->is_lustre) {
-                err = PNC_File_write_at(ncp->pnc_fh, 0, NULL, 0, MPI_BYTE,
+            if (ncp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_write_at(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                         &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
             }

@@ -239,7 +239,7 @@ move_file_block(NC         *ncp,
         memset(&mpistatus, 0, sizeof(MPI_Status));
 
         /* read from file at off_from for amount of chunk_size */
-        if (ncp->is_lustre) {
+        if (ncp->fstype == ADIO_LUSTRE) {
             err = NC_NOERR;
             if (do_coll)
                 err = PNC_File_read_at_all(ncp->pnc_fh, off_from, buf, chunk_size,
@@ -301,7 +301,7 @@ move_file_block(NC         *ncp,
          * call to MPI_Get_count() above returns the actual amount of data read
          * from the file, i.e. get_size.
          */
-        if (ncp->is_lustre) {
+        if (ncp->fstype == ADIO_LUSTRE) {
             err = NC_NOERR;
             if (do_coll)
                 err = PNC_File_write_at_all(ncp->pnc_fh, off_to, buf,
@@ -727,8 +727,8 @@ write_NC(NC *ncp)
         for (i=0; i<ntimes; i++) {
             int bufCount = (int) MIN(remain, NC_MAX_INT);
             if (is_coll) {
-                if (ncp->is_lustre) {
-                    err = PNC_File_write_at_all(ncp->pnc_fh, offset, buf_ptr, bufCount,
+                if (ncp->fstype == ADIO_LUSTRE) {
+                    err = PNC_File_write_at_all(ncp->adio_fh, offset, buf_ptr, bufCount,
                                                 MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
                 }
@@ -745,8 +745,8 @@ write_NC(NC *ncp)
                 }
             }
             else {
-                if (ncp->is_lustre) {
-                    err = PNC_File_write_at(ncp->pnc_fh, offset, buf_ptr, bufCount,
+                if (ncp->fstype == ADIO_LUSTRE) {
+                    err = PNC_File_write_at(ncp->adio_fh, offset, buf_ptr, bufCount,
                                             MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
                 }
@@ -783,8 +783,8 @@ write_NC(NC *ncp)
     else if (fIsSet(ncp->flags, NC_HCOLL)) {
         /* other processes participate the collective call */
         for (i=0; i<ntimes; i++) {
-            if (ncp->is_lustre) {
-                err = PNC_File_write_at_all(ncp->pnc_fh, 0, NULL, 0, MPI_BYTE,
+            if (ncp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
             }

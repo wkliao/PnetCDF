@@ -16,13 +16,12 @@
 
 #include <dispatch.h>
 #include "ncmpio_driver.h"
+#include "adio.h"
 
 #define NC_DEFAULT_H_MINFREE 0
 #define NC_DEFAULT_V_ALIGN   512
 #define NC_DEFAULT_V_MINFREE 0
 #define NC_DEFAULT_R_ALIGN   4
-
-#include "pnc_lustre.h"
 
 #define FILE_ALIGNMENT_DEFAULT 512
 #define FILE_ALIGNMENT_LB      4
@@ -419,6 +418,8 @@ struct NC {
     MPI_Info      mpiinfo;        /* used MPI info object */
     MPI_File      collective_fh;  /* file handle for collective mode */
     MPI_File      independent_fh; /* file handle for independent mode */
+    ADIO_File     adio_fh;        /* romio file handler */
+    int           fstype;         /* file system type: ADIO_LUSTRE, ADIO_UFS */
 
     NC_dimarray   dims;     /* dimensions defined */
     NC_attrarray  attrs;    /* global attributes defined */
@@ -456,8 +457,6 @@ struct NC {
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double aggr_time;
 #endif
-    int is_lustre;
-    PNC_File pnc_fh;
 };
 
 #define NC_readonly(ncp)   fIsSet((ncp)->flags, NC_MODE_RDONLY)
@@ -494,14 +493,14 @@ ncmpio_NC_check_voffs(NC *ncp);
 typedef struct bufferinfo {
     MPI_Comm    comm;
     MPI_File    collective_fh;
-    PNC_File    pnc_fh;
+    ADIO_File   adio_fh;  /* romio file handler */
+    int         fstype;   /* file system type: ADIO_LUSTRE, ADIO_UFS */
     MPI_Offset  get_size; /* amount of file read n bytes so far */
     MPI_Offset  offset;   /* current read/write offset in the file */
     int         chunk;    /* chunk size for reading the header */
     int         version;  /* 1, 2, and 5 for CDF-1, 2, and 5 respectively */
     int         safe_mode;/* 0: disabled, 1: enabled */
     int         coll_mode;/* 0: independent, 1: collective */
-    int         is_lustre;
     char       *base;     /* beginning of read/write buffer */
     char       *pos;      /* current position in buffer */
     char       *end;      /* end position of buffer */
