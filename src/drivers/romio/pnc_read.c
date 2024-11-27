@@ -17,19 +17,22 @@
 
 #include "adio.h"
 
-/*----< PNC_ReadContig() >---------------------------------------------------*/
-int PNC_ReadContig(ADIO_File     fd,
-                   void         *buf,
-                   MPI_Aint      count,
-                   MPI_Datatype  bufType,
-                   int           file_ptr_type,
-                   ADIO_Offset   offset,
-                   ADIO_Status  *status)
+/*----< ADIO_ReadContig() >--------------------------------------------------*/
+int ADIO_ReadContig(ADIO_File     fd,
+                    void         *buf,
+                    MPI_Aint      count,
+                    MPI_Datatype  bufType,
+                    int           file_ptr_type,
+                    ADIO_Offset   offset,
+                    ADIO_Status  *status,
+                    int          *error_code)
 {
     ssize_t err = 0;
     size_t r_count;
     ADIO_Offset off, len, bytes_xfered = 0;
     char *p;
+
+    if (error_code != NULL) *error_code = MPI_SUCCESS;
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count bufType_size;
@@ -65,8 +68,10 @@ int PNC_ReadContig(ADIO_File     fd,
     /* if ADIO_EXPLICIT_OFFSET, do not update file pointer */
 
 ioerr:
-    if (err == -1)
+    if (err == -1) {
+        if (error_code != NULL) *error_code = MPI_ERR_IO;
         return ncmpii_error_posix2nc("pread");
+    }
 
     if (status)
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
@@ -105,8 +110,8 @@ int file_read(ADIO_File     fd,
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;
-        err = PNC_ReadContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
-                             offset, status);
+        err = ADIO_ReadContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
+                              offset, status, NULL);
     }
     else {
         ADIO_ReadStrided(fd, buf, count, bufType, file_ptr_type,
