@@ -115,8 +115,7 @@ ncmpio_create(MPI_Comm     comm,
 #endif
 
     /* check if path is on Lustre */
-    fstype = PNC_Check_Lustre(path);
-// printf("%s line %d: fstype=%d\n",__func__,__LINE__,fstype);
+    fstype = ADIO_FileSysType(path);
 
     if (fIsSet(cmode, NC_NOCLOBBER)) {
         /* check if file exists: NC_EEXIST is returned if the file already
@@ -231,6 +230,7 @@ ncmpio_create(MPI_Comm     comm,
         err = PNC_File_open(comm, (char *)path, mpiomode, user_info, &adio_fh);
         if (err != NC_NOERR)
             return err;
+        adio_fh->file_system = fstype;
     }
     else {
         TRACE_IO(MPI_File_open)(comm, (char *)path, mpiomode, user_info, &fh);
@@ -334,6 +334,9 @@ ncmpio_create(MPI_Comm     comm,
 
     ncp->fstype         = fstype;
     ncp->adio_fh        = adio_fh;
+
+    if (fstype == ADIO_LUSTRE)
+        MPI_Info_set(ncp->mpiinfo, "romio_filesystem_type", "LUSTRE:");
 
 #ifdef PNETCDF_DEBUG
     /* PNETCDF_DEBUG is set at configure time, which will be overwritten by

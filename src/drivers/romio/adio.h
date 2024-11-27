@@ -208,9 +208,9 @@ typedef struct {
 } ADIOI_Access;
 
 /*---- APIs -----------------------------------------------------------------*/
-int PNC_Check_Lustre(const char *filename);
+int ADIO_FileSysType(const char *filename);
 int PNC_File_open(MPI_Comm comm, const char *filename, int amode,
-                    MPI_Info info, ADIO_File *fh);
+                  MPI_Info info, ADIO_File *fh);
 
 int PNC_File_close(ADIO_File *fh);
 int PNC_File_set_view(ADIO_File fh, MPI_Offset disp, MPI_Datatype etype,

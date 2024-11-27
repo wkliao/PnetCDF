@@ -193,10 +193,10 @@ static int romio_statfs(const char *filename, int64_t * file_id)
     return err;
 }
 
-/* Check if file system is Lustre from file name, using a system-dependent
- * function call. This is a collective call.
+/* Check if file system type from file name, using a system-dependent function
+ * call.
  */
-int PNC_Check_Lustre(const char *filename)
+int ADIO_FileSysType(const char *filename)
 {
 #ifdef MIMIC_LUSTRE
     return 1;
@@ -228,7 +228,10 @@ int PNC_Check_Lustre(const char *filename)
             return 0;
     }
 
-    return ((file_id == LL_SUPER_MAGIC));
+    if (file_id == LL_SUPER_MAGIC)
+        return ADIO_LUSTRE;
+    else
+        return ADIO_UFS; /* UFS support if we don't know what else to use */
 }
 
 /*----< lustre_file_create() >-----------------------------------------------*/
@@ -862,7 +865,7 @@ int PNC_File_open(MPI_Comm    comm,
                   MPI_Info    info,
                   ADIO_File  *fh)
 {
-    /* Before reaching to this subroutine, PNC_Check_Lustre() should have been
+    /* Before reaching to this subroutine, ADIO_FileSysType() should have been
      * called to verify filename is on Lustre.
      */
     char value[MPI_MAX_INFO_VAL + 1];
@@ -878,7 +881,6 @@ int PNC_File_open(MPI_Comm    comm,
     fd->etype_size  = 1;
     fd->filetype    = MPI_BYTE;
     fd->ftype_size  = 1;
-    fd->file_system = ADIO_LUSTRE;
     fd->is_open     = 0;
     fd->access_mode = amode;
     fd->orig_access_mode = amode;
@@ -900,9 +902,6 @@ int PNC_File_open(MPI_Comm    comm,
         err = NC_ENOMEM;
         goto err_out;
     }
-
-    if (PNC_Check_Lustre(filename))
-        MPI_Info_set(fd->info, "romio_filesystem_type", "LUSTRE:");
 
     /* For Lustre, determining the I/O aggregators and constructing ranklist
      * requires file stripe count, which can only be obtained after file is
