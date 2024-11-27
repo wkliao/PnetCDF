@@ -194,7 +194,7 @@ fill_var_rec(NC         *ncp,
 
     /* make the entire file visible */
     if (ncp->fstype == ADIO_LUSTRE) {
-        err = PNC_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE, "native",
+        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE, "native",
                                 MPI_INFO_NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }
@@ -222,7 +222,7 @@ fill_var_rec(NC         *ncp,
     /* write to variable collectively */
     if (ncp->nprocs > 1) {
         if (ncp->fstype == ADIO_LUSTRE) {
-            err = PNC_File_write_at_all(ncp->adio_fh, offset, buf, (int)count, bufType,
+            err = ADIO_File_write_at_all(ncp->adio_fh, offset, buf, (int)count, bufType,
                                         &mpistatus);
             if (err != NC_NOERR && status == NC_NOERR) status = err;
         }
@@ -243,7 +243,7 @@ fill_var_rec(NC         *ncp,
     }
     else {
         if (ncp->fstype == ADIO_LUSTRE) {
-            err = PNC_File_write_at(ncp->adio_fh, offset, buf, (int)count, bufType,
+            err = ADIO_File_write_at(ncp->adio_fh, offset, buf, (int)count, bufType,
                                     &mpistatus);
             if (err != NC_NOERR && status == NC_NOERR) status = err;
         }
@@ -654,7 +654,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     fh = ncp->collective_fh;
 
     if (ncp->fstype == ADIO_LUSTRE) {
-        err = PNC_File_set_view(ncp->adio_fh, 0, MPI_BYTE, filetype, "native",
+        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, filetype, "native",
                                 MPI_INFO_NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }
@@ -694,7 +694,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     /* write to variable collectively */
     if (ncp->nprocs > 1) {
         if (ncp->fstype == ADIO_LUSTRE) {
-            err = PNC_File_write_at_all(ncp->adio_fh, 0, buf, (int)buf_len, bufType,
+            err = ADIO_File_write_at_all(ncp->adio_fh, 0, buf, (int)buf_len, bufType,
                                         &mpistatus);
             if (err != NC_NOERR && status == NC_NOERR) status = err;
         }
@@ -715,7 +715,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     }
     else {
         if (ncp->fstype == ADIO_LUSTRE) {
-            err = PNC_File_write_at(ncp->adio_fh, 0, buf, (int)buf_len, bufType,
+            err = ADIO_File_write_at(ncp->adio_fh, 0, buf, (int)buf_len, bufType,
                                     &mpistatus);
             if (err != NC_NOERR && status == NC_NOERR) status = err;
         }
@@ -743,7 +743,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     }
 
     if (ncp->fstype == ADIO_LUSTRE) {
-        err = PNC_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE, "native",
+        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE, "native",
                                 MPI_INFO_NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }

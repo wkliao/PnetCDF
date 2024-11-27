@@ -100,8 +100,8 @@ int file_read(ADIO_File     fd,
 #endif
     if (bufType_size == 0) return NC_NOERR;
 
-    PNC_Datatype_iscontig(bufType, &buftype_is_contig);
-    PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+    ADIOI_Datatype_iscontig(bufType, &buftype_is_contig);
+    ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;
@@ -119,17 +119,17 @@ int file_read(ADIO_File     fd,
     return err;
 }
 
-/*----< PNC_File_read_at() >-------------------------------------------------*/
+/*----< ADIO_File_read_at() >------------------------------------------------*/
 /* This is an independent call.
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNC_File_read_at(ADIO_File     fh,
-                     MPI_Offset    offset,
-                     void         *buf,
-                     int           count,
-                     MPI_Datatype  bufType,
-                     MPI_Status   *status)
+int ADIO_File_read_at(ADIO_File     fh,
+                      MPI_Offset    offset,
+                      void         *buf,
+                      int           count,
+                      MPI_Datatype  bufType,
+                      MPI_Status   *status)
 {
     int err = NC_NOERR;
 
@@ -146,13 +146,13 @@ int PNC_File_read_at(ADIO_File     fh,
     return err;
 }
 
-/*----< PNC_File_read() >----------------------------------------------------*/
+/*----< ADIO_File_read() >---------------------------------------------------*/
 /* This is an independent call. */
-int PNC_File_read(ADIO_File     fh,
-                  void         *buf,
-                  int           count,
-                  MPI_Datatype  bufType,
-                  MPI_Status   *status)
+int ADIO_File_read(ADIO_File     fh,
+                   void         *buf,
+                   int           count,
+                   MPI_Datatype  bufType,
+                   MPI_Status   *status)
 {
     int err = NC_NOERR;
 
@@ -168,17 +168,17 @@ int PNC_File_read(ADIO_File     fh,
     return err;
 }
 
-/*----< PNC_File_read_at_all() >---------------------------------------------*/
+/*----< ADIO_File_read_at_all() >--------------------------------------------*/
 /* This is a collective call.
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNC_File_read_at_all(ADIO_File     fh,
-                         MPI_Offset    offset,
-                         void         *buf,
-                         int           count,
-                         MPI_Datatype  bufType,
-                         MPI_Status   *status)
+int ADIO_File_read_at_all(ADIO_File     fh,
+                          MPI_Offset    offset,
+                          void         *buf,
+                          int           count,
+                          MPI_Datatype  bufType,
+                          MPI_Status   *status)
 {
     int err, st=NC_NOERR;
 
@@ -195,13 +195,13 @@ int PNC_File_read_at_all(ADIO_File     fh,
     return st;
 }
 
-/*----< PNC_File_read_all() >-----------------------------------------------*/
+/*----< ADIO_File_read_all() >----------------------------------------------*/
 /* This is a collective call. */
-int PNC_File_read_all(ADIO_File     fh,
-                      void         *buf,
-                      int           count,
-                      MPI_Datatype  bufType,
-                      MPI_Status   *status)
+int ADIO_File_read_all(ADIO_File     fh,
+                       void         *buf,
+                       int           count,
+                       MPI_Datatype  bufType,
+                       MPI_Status   *status)
 {
     int err, st=NC_NOERR;
 

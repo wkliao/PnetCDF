@@ -92,7 +92,7 @@ ncmpio_open(MPI_Comm     comm,
 
     /* get the file info used/modified by MPI-IO */
     if (fstype == ADIO_LUSTRE) {
-        err = PNC_File_get_info(adio_fh, &info_used);
+        err = ADIO_File_get_info(adio_fh, &info_used);
         if (err != NC_NOERR) return err;
     }
     else {

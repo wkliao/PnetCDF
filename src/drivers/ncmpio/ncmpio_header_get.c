@@ -362,7 +362,7 @@ hdr_fetch(bufferinfo *gbp) {
            not change the file pointer */
         if (gbp->coll_mode == 1) { /* collective read */
             if (gbp->fstype == ADIO_LUSTRE) {
-                err = PNC_File_read_at_all(gbp->adio_fh, gbp->offset, readBuf,
+                err = ADIO_File_read_at_all(gbp->adio_fh, gbp->offset, readBuf,
                                            readLen, MPI_BYTE, &mpistatus);
             }
             else {
@@ -377,7 +377,7 @@ hdr_fetch(bufferinfo *gbp) {
         }
         else {
             if (gbp->fstype == ADIO_LUSTRE) {
-                err = PNC_File_read_at(gbp->adio_fh, gbp->offset, readBuf,
+                err = ADIO_File_read_at(gbp->adio_fh, gbp->offset, readBuf,
                                        readLen, MPI_BYTE, &mpistatus);
             }
             else {
@@ -417,7 +417,7 @@ hdr_fetch(bufferinfo *gbp) {
     else if (gbp->coll_mode == 1) { /* collective read */
         /* other processes participate the collective call */
         if (gbp->fstype == ADIO_LUSTRE) {
-            err = PNC_File_read_at_all(gbp->adio_fh,  0, NULL,
+            err = ADIO_File_read_at_all(gbp->adio_fh,  0, NULL,
                                        0, MPI_BYTE, &mpistatus);
         }
         else {
