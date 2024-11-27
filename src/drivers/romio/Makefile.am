@@ -19,7 +19,7 @@ noinst_LTLIBRARIES = libromio.la
 
 H_SRCS = adio.h
 
-C_SRCS = pnc_lustre_open.c \
+C_SRCS = adio_open.c \
          pnc_lustre_misc.c \
          pnc_read.c \
          pnc_write.c \
