@@ -1,10 +1,10 @@
 /*
- *  Copyright (C) 2025, Northwestern University
+ *  Copyright (C) 2025, Northwestern University and Argonne National Laboratory
  *  See COPYRIGHT notice in top-level directory.
  */
 
-#ifndef H_PNC_LUSTRE
-#define H_PNC_LUSTRE
+#ifndef H_ADIO
+#define H_ADIO
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,7 +51,9 @@
 #endif
 
 
-#define ADIO_LUSTRE 163
+#define ADIO_UFS                 152    /* Unix file system */
+#define ADIO_LUSTRE              163    /* Lustre */
+
 #define ADIOI_Strdup strdup
 #define ADIOI_Malloc malloc
 #define ADIOI_Calloc(a,b) calloc((size_t)a,b)
@@ -125,7 +127,7 @@ typedef struct {
             int coll_threshold;
         } lustre;
     } fs_hints;
-} PNC_Hints;
+} ADIOI_Hints;
 
 typedef struct {
     MPI_Comm comm;          /* communicator indicating who called open */
@@ -140,6 +142,9 @@ typedef struct {
     int orig_access_mode;   /* Access mode provided by user: unmodified */
     int is_open;            /* no_indep_rw, 0: not open yet 1: is open */
     ADIO_Offset fp_ind;     /* individual file pointer (in bytes) */
+    ADIO_Offset fp_sys_posn;/* current location of the system file-pointer
+                             * in bytes */
+
     ADIO_Offset disp;       /* file displacement */
     MPI_Datatype etype;     /* element datatype */
     MPI_Datatype filetype;  /* file type set in fileview */
@@ -152,19 +157,19 @@ typedef struct {
     int ftype_size;
     MPI_Aint ftype_extent;
 #endif
+
     int atomicity;          /* true=atomic, false=nonatomic */
     char *io_buf;           /* two-phase buffer allocated out of i/o path */
     int is_agg;             /* bool: if I am an aggregator */
     int my_cb_nodes_index;  /* my index into cb_config_list. -1 if N/A */
+    ADIOI_Hints *hints;     /* structure containing fs-indep. info values */
     MPI_Info info;
-    PNC_Hints *hints;       /* structure containing fs-indep. info values */
 
-    ADIO_Offset fp_sys_posn;
 double lustre_write_metrics[3];
-} PNC_FileD;
+} ADIO_FileD;
 
-typedef PNC_FileD *PNC_File;
-typedef PNC_FileD *ADIO_File;
+typedef ADIO_FileD *ADIO_File;
+typedef ADIO_FileD *ADIO_File;
 
 typedef struct ADIOI_Fl_node {
     MPI_Datatype type;
@@ -205,35 +210,35 @@ typedef struct {
 /*---- APIs -----------------------------------------------------------------*/
 int PNC_Check_Lustre(const char *filename);
 int PNC_File_open(MPI_Comm comm, const char *filename, int amode,
-                    MPI_Info info, PNC_File *fh);
+                    MPI_Info info, ADIO_File *fh);
 
-int PNC_File_close(PNC_File *fh);
-int PNC_File_set_view(PNC_File fh, MPI_Offset disp, MPI_Datatype etype,
+int PNC_File_close(ADIO_File *fh);
+int PNC_File_set_view(ADIO_File fh, MPI_Offset disp, MPI_Datatype etype,
                       MPI_Datatype filetype, char *datarep, MPI_Info info);
-int PNC_File_sync(PNC_File fh);
+int PNC_File_sync(ADIO_File fh);
 int PNC_File_delete(const char *filename);
-int PNC_File_set_size(PNC_File fh, MPI_Offset size);
-int PNC_File_get_size(PNC_File fh, MPI_Offset *size);
-int PNC_File_seek(PNC_File fh, MPI_Offset offset, int whence);
-int PNC_File_get_info(PNC_File fh, MPI_Info *info_used);
-int PNC_File_SetInfo(PNC_File fh, MPI_Info  users_info);
+int PNC_File_set_size(ADIO_File fh, MPI_Offset size);
+int PNC_File_get_size(ADIO_File fh, MPI_Offset *size);
+int PNC_File_seek(ADIO_File fh, MPI_Offset offset, int whence);
+int PNC_File_get_info(ADIO_File fh, MPI_Info *info_used);
+int PNC_File_SetInfo(ADIO_File fh, MPI_Info  users_info);
 
-int PNC_File_write(PNC_File fh, const void *buf, int count,
+int PNC_File_write(ADIO_File fh, const void *buf, int count,
                    MPI_Datatype datatype, MPI_Status *status);
-int PNC_File_write_at(PNC_File fh, MPI_Offset offset, const void *buf,
+int PNC_File_write_at(ADIO_File fh, MPI_Offset offset, const void *buf,
                    int count, MPI_Datatype  datatype, MPI_Status *status);
-int PNC_File_write_all(PNC_File fh, const void *buf, int count,
+int PNC_File_write_all(ADIO_File fh, const void *buf, int count,
                    MPI_Datatype datatype, MPI_Status *status);
-int PNC_File_write_at_all(PNC_File fh, MPI_Offset offset, const void *buf,
+int PNC_File_write_at_all(ADIO_File fh, MPI_Offset offset, const void *buf,
                    int count, MPI_Datatype  datatype, MPI_Status *status);
 
-int PNC_File_read(PNC_File fh, void *buf, int count,
+int PNC_File_read(ADIO_File fh, void *buf, int count,
                   MPI_Datatype datatype, MPI_Status *status);
-int PNC_File_read_at(PNC_File fh, MPI_Offset offset, void *buf,
+int PNC_File_read_at(ADIO_File fh, MPI_Offset offset, void *buf,
                   int count, MPI_Datatype  datatype, MPI_Status *status);
-int PNC_File_read_all(PNC_File fh, void *buf, int count,
+int PNC_File_read_all(ADIO_File fh, void *buf, int count,
                   MPI_Datatype datatype, MPI_Status *status);
-int PNC_File_read_at_all(PNC_File fh, MPI_Offset offset, void *buf,
+int PNC_File_read_at_all(ADIO_File fh, MPI_Offset offset, void *buf,
                   int count, MPI_Datatype  datatype, MPI_Status *status);
 
 void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag);
