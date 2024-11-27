@@ -141,8 +141,8 @@ ncmpio_read_write(NC           *ncp,
         }
 
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
-            if (ncp->is_lustre) {
-                err = PNC_File_read_at_all(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
+            if (ncp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_read_at_all(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                            &mpistatus);
                 if (status == NC_NOERR) status = err;
             }
@@ -159,8 +159,8 @@ ncmpio_read_write(NC           *ncp,
                 }
             }
         } else {
-            if (ncp->is_lustre) {
-                err = PNC_File_read_at(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
+            if (ncp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_read_at(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                        &mpistatus);
                 if (status == NC_NOERR) status = err;
             }
@@ -310,8 +310,8 @@ ncmpio_read_write(NC           *ncp,
         }
 
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
-            if (ncp->is_lustre) {
-                err = PNC_File_write_at_all(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
+            if (ncp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_write_at_all(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                             &mpistatus);
                 if (status == NC_NOERR) status = err;
             }
@@ -328,8 +328,8 @@ ncmpio_read_write(NC           *ncp,
                 }
             }
         } else {
-            if (ncp->is_lustre) {
-                err = PNC_File_write_at(ncp->pnc_fh, offset, xbuf, xlen, xbuf_type,
+            if (ncp->fstype == ADIO_LUSTRE) {
+                err = PNC_File_write_at(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                         &mpistatus);
                 if (status == NC_NOERR) status = err;
             }

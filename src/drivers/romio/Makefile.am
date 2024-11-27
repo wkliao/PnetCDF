@@ -1,0 +1,45 @@
+#
+# Copyright (C) 2025, Northwestern University and Argonne National Laboratory
+# See COPYRIGHT notice in top-level directory.
+#
+# @configure_input@
+
+SUFFIXES = .a .o .c .m4 .h
+
+AM_CPPFLAGS  = -I${top_srcdir}/src/include
+AM_CPPFLAGS += -I${top_builddir}/src/include
+AM_CPPFLAGS += -I${top_srcdir}/src/drivers/include
+AM_CPPFLAGS += -I${top_builddir}/src/drivers/include
+
+if PNETCDF_DEBUG
+   AM_CPPFLAGS += -DPNETCDF_DEBUG
+endif
+
+noinst_LTLIBRARIES = libadio.la
+
+H_SRCS = adio.h
+
+C_SRCS = pnc_lustre_open.c \
+         pnc_lustre_misc.c \
+         pnc_read.c \
+         pnc_write.c \
+         ad_aggregate.c \
+         ad_read_str.c \
+         ad_read_coll.c \
+         ad_read_str_naive.c \
+         ad_write_str_naive.c \
+         ad_subarray.c \
+         ad_darray.c \
+         ad_utils.c \
+         ad_lustre_wrcoll.c \
+         ad_lustre_wrstr.c \
+         ad_iscontig.c \
+         ad_flatten.c \
+         ad_lock.c
+
+libadio_la_SOURCES = $(C_SRCS) $(H_SRCS)
+
+CLEANFILES = core core.* *.gcda *.gcno *.gcov gmon.out
+
+tests-local: all
+

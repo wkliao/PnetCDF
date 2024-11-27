@@ -44,11 +44,11 @@ ncmpio_create(MPI_Comm     comm,
 {
     char *env_str, *filename;
     int rank, nprocs, mpiomode, err, mpireturn, default_format, file_exist=1;
-    int use_trunc=1, is_lustre;
+    int use_trunc=1, fstype;
     MPI_File fh;
     MPI_Info info_used;
     NC *ncp=NULL;
-    PNC_File pnc_fh;
+    ADIO_File adio_fh;
 
     *ncpp = NULL;
 
@@ -115,8 +115,8 @@ ncmpio_create(MPI_Comm     comm,
 #endif
 
     /* check if path is on Lustre */
-    is_lustre = PNC_Check_Lustre(path);
-// printf("%s line %d: is_lustre=%d\n",__func__,__LINE__,is_lustre);
+    fstype = PNC_Check_Lustre(path);
+// printf("%s line %d: fstype=%d\n",__func__,__LINE__,fstype);
 
     if (fIsSet(cmode, NC_NOCLOBBER)) {
         /* check if file exists: NC_EEXIST is returned if the file already
@@ -149,7 +149,7 @@ ncmpio_create(MPI_Comm     comm,
                     err = NC_NOERR;
 #else
                 err = NC_NOERR;
-                if (is_lustre) {
+                if (fstype == ADIO_LUSTRE) {
                     err = PNC_File_delete((char *)path);
                 }
                 else {
@@ -184,12 +184,12 @@ ncmpio_create(MPI_Comm     comm,
                  * be expensive.
                  */
                 err = NC_NOERR;
-                if (is_lustre) {
-                    err = PNC_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, &pnc_fh);
+                if (fstype == ADIO_LUSTRE) {
+                    err = PNC_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, &adio_fh);
                     if (err == NC_NOERR)
-                        PNC_File_set_size(pnc_fh, 0); /* can be expensive */
+                        PNC_File_set_size(adio_fh, 0); /* can be expensive */
                     else
-                        PNC_File_close(&pnc_fh);
+                        PNC_File_close(&adio_fh);
                 }
                 else {
                     TRACE_IO(MPI_File_open)(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR,
@@ -227,8 +227,8 @@ ncmpio_create(MPI_Comm     comm,
     }
 
     /* create file collectively -------------------------------------------- */
-    if (is_lustre) {
-        err = PNC_File_open(comm, (char *)path, mpiomode, user_info, &pnc_fh);
+    if (fstype == ADIO_LUSTRE) {
+        err = PNC_File_open(comm, (char *)path, mpiomode, user_info, &adio_fh);
         if (err != NC_NOERR)
             return err;
     }
@@ -264,8 +264,8 @@ ncmpio_create(MPI_Comm     comm,
     }
 
     /* get the I/O hints used/modified by MPI-IO */
-    if (is_lustre) {
-        err = PNC_File_get_info(pnc_fh,  &info_used);
+    if (fstype == ADIO_LUSTRE) {
+        err = PNC_File_get_info(adio_fh,  &info_used);
         if (err != NC_NOERR) return err;
     }
     else {
@@ -332,8 +332,8 @@ ncmpio_create(MPI_Comm     comm,
     ncp->path = (char*) NCI_Malloc(strlen(path) + 1);
     strcpy(ncp->path, path);
 
-    ncp->is_lustre      = is_lustre;
-    ncp->pnc_fh         = pnc_fh;
+    ncp->fstype         = fstype;
+    ncp->adio_fh        = adio_fh;
 
 #ifdef PNETCDF_DEBUG
     /* PNETCDF_DEBUG is set at configure time, which will be overwritten by
