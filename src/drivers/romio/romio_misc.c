@@ -231,6 +231,11 @@ fn_exit:
 }
 
 /*----< ADIO_File_SetInfo() >------------------------------------------------*/
+/* When users_info == MPI_INFO_NULL, this subroutine is an independent call.
+ * When users_info != MPI_INFO_NULL, this subroutine is a collective call.
+ * because it calls ADIOI_Info_check_and_install_xxx(), which checks the
+ * consistency of all hints values set in user's info object.
+ */
 int
 ADIO_File_SetInfo(ADIO_File fd,
                   MPI_Info users_info)
@@ -511,12 +516,21 @@ err_check:
 }
 
 /*----< ADIO_File_set_view() >-----------------------------------------------*/
-int ADIO_File_set_view(ADIO_File      fd,
-                      MPI_Offset    disp,
-                      MPI_Datatype  etype,
-                      MPI_Datatype  filetype,
-                      char         *datarep,
-                      MPI_Info      info)
+/* For PnetCDF, this subroutine is always an independent call.
+ *
+ * Note PnetCDF calls MPI_File_set_view() only using the followings.
+ * Argument etype is always MPI_BYTE.
+ * Argument datarep is always "native".
+ * Argument info is always MPI_INFO_NULL. When info is MPI_INFO_NULL, this
+ * subroutine is an independent call, because there is no need to check hint
+ * consistency among all processes.
+ */
+int ADIO_File_set_view(ADIO_File     fd,
+                       MPI_Offset    disp,
+                       MPI_Datatype  etype,   /* Always MPI_BYTE by PnetCDF */
+                       MPI_Datatype  filetype,
+                       char         *datarep, /* Always "native" by PnetCDF */
+                       MPI_Info      info)    /* Always NULL by PnetCDF */
 {
     int is_predef, i, err, filetype_is_contig;
     MPI_Datatype copy_filetype;
@@ -547,6 +561,10 @@ int ADIO_File_set_view(ADIO_File      fd,
     if (fd->etype_size != 0 && fd->ftype_size % fd->etype_size != 0)
         return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, type size");
 
+    /* When info is MPI_INFO_NULL, ADIO_File_SetInfo() is an independent call.
+     * Otherwise, it is collective, because it checks hint consistency.
+     * PnetCDF always uses MPI_INFO_NULL when setting file view.
+     */
     err = ADIO_File_SetInfo(fd, info);
     if (err != NC_NOERR)
         return err;
