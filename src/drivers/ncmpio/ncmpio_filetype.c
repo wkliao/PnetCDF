@@ -624,7 +624,7 @@ ncmpio_file_set_view(const NC     *ncp,
 
     if (filetype == MPI_BYTE) {
         /* filetype is a contiguous space, make the whole file visible */
-        if (ncp->fstype == ADIO_LUSTRE) {
+        if (ncp->fstype != ADIO_UFS) {
             return ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE,
                                      "native", MPI_INFO_NULL);
         }
@@ -691,7 +691,7 @@ ncmpio_file_set_view(const NC     *ncp,
 #ifndef HAVE_MPI_LARGE_COUNT
 err_out:
 #endif
-        if (ncp->fstype == ADIO_LUSTRE) {
+        if (ncp->fstype != ADIO_UFS) {
             err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, root_filetype, "native",
                                     MPI_INFO_NULL);
             if (status == NC_NOERR) status = err;
@@ -711,7 +711,7 @@ err_out:
         *offset = ncp->begin_var;
     }
     else {
-        if (ncp->fstype == ADIO_LUSTRE) {
+        if (ncp->fstype != ADIO_UFS) {
             err = ADIO_File_set_view(ncp->adio_fh, *offset, MPI_BYTE, filetype, "native",
                                     MPI_INFO_NULL);
             if (status == NC_NOERR) status = err;

@@ -117,7 +117,7 @@ ncmpio_create(MPI_Comm     comm,
     /* check if path is on Lustre */
     fstype = ADIO_FileSysType(path);
 
-    if (fstype == ADIO_LUSTRE) {
+    if (fstype != ADIO_UFS) {
         adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
         adio_fh->file_system = fstype;
     }
@@ -153,7 +153,7 @@ ncmpio_create(MPI_Comm     comm,
                     err = NC_NOERR;
 #else
                 err = NC_NOERR;
-                if (fstype == ADIO_LUSTRE) {
+                if (fstype != ADIO_UFS) {
                     err = ADIO_File_delete((char *)path);
                 }
                 else {
@@ -188,7 +188,7 @@ ncmpio_create(MPI_Comm     comm,
                  * be expensive.
                  */
                 err = NC_NOERR;
-                if (fstype == ADIO_LUSTRE) {
+                if (fstype != ADIO_UFS) {
                     err = ADIO_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, adio_fh);
                     if (err == NC_NOERR)
                         ADIO_File_set_size(adio_fh, 0); /* can be expensive */
@@ -231,7 +231,7 @@ ncmpio_create(MPI_Comm     comm,
     }
 
     /* create file collectively -------------------------------------------- */
-    if (fstype == ADIO_LUSTRE) {
+    if (fstype != ADIO_UFS) {
         err = ADIO_File_open(comm, (char *)path, mpiomode, user_info, adio_fh);
         if (err != NC_NOERR)
             return err;
@@ -268,7 +268,7 @@ ncmpio_create(MPI_Comm     comm,
     }
 
     /* get the I/O hints used/modified by MPI-IO */
-    if (fstype == ADIO_LUSTRE) {
+    if (fstype != ADIO_UFS) {
         err = ADIO_File_get_info(adio_fh,  &info_used);
         if (err != NC_NOERR) return err;
     }
@@ -339,7 +339,7 @@ ncmpio_create(MPI_Comm     comm,
     ncp->fstype         = fstype;
     ncp->adio_fh        = adio_fh;
 
-    if (fstype == ADIO_LUSTRE)
+    if (fstype != ADIO_UFS)
         MPI_Info_set(ncp->mpiinfo, "romio_filesystem_type", "LUSTRE:");
 
 #ifdef PNETCDF_DEBUG
