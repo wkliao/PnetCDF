@@ -165,6 +165,35 @@ ncmpio_open(MPI_Comm     comm,
          * be '\0' (null character). In this case, safe_mode is enabled */
     }
 
+    /* construct the list of compute nodes */
+    ncp->num_nodes = 0;
+    ncp->node_ids = NULL;
+    if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_UFS) {
+        err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
+        if (err != NC_NOERR) return err;
+    }
+
+    /* set cb_nodes and construct the cb_node rank list */
+    if (fstype != ADIO_UFS) {
+        ADIO_Construct_aggr_list(ncp->adio_fh, ncp->num_nodes, ncp->node_ids);
+        ncp->adio_fh->num_nodes = ncp->num_nodes;
+    }
+
+    /* determine whether to enable intra-node aggregation and set up all
+     * intra-node aggregation metadata.
+     * ncp->num_aggrs_per_node = 0, or non-zero indicates whether this feature
+     *     is disabled or enabled globally for all processes, respectively.
+     * ncp->my_aggr = -1 or >= 0 indicates whether aggregation is effectively
+     *     enabled for the aggregation group of this process.
+     */
+    ncp->my_aggr = -1;
+    if (ncp->num_aggrs_per_node != 0) {
+        err = ncmpio_intra_node_aggr_init(ncp);
+        if (err != NC_NOERR) return err;
+    }
+
+    if (ncp->node_ids != NULL) NCI_Free(ncp->node_ids);
+
     /* read header from file into NC object pointed by ncp -------------------*/
     err = ncmpio_hdr_get_NC(ncp);
     if (err == NC_ENULLPAD) status = NC_ENULLPAD; /* non-fatal error */
@@ -218,19 +247,6 @@ ncmpio_open(MPI_Comm     comm,
     for (i=0; i<ncp->vars.ndefined; i++)
         ncp->vars.value[i]->attrs.hash_size = ncp->hash_size_attr;
 #endif
-
-    /* determine whether to enable intra-node aggregation and set up all
-     * intra-node aggregation metadata.
-     * ncp->num_aggrs_per_node = 0, or non-zero indicates whether this feature
-     *     is enabled globally for all processes.
-     * ncp->my_aggr = -1 or >= 0 indicates whether aggregation is effectively
-     *     enabled for the aggregation group of this process.
-     */
-    ncp->my_aggr = -1;
-    if (ncp->num_aggrs_per_node != 0) {
-        err = ncmpio_intra_node_aggr_init(ncp);
-        if (err != NC_NOERR) return err;
-    }
 
     *ncpp = (void*)ncp;
 
