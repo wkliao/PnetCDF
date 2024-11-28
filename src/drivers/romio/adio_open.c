@@ -485,365 +485,213 @@ err_out:
     return err;
 }
 
-/*----< construct_aggr_list() >----------------------------------------------*/
-/* Allocate and construct fd->hints->ranklist[].
- * Overwrite fd->hints->cb_nodes and set hint cb_nodes.
- * Set fd->is_agg, whether this rank is an I/O aggregator
- *     fd->hints->cb_nodes
- *     fd->hints->num_osts
+/*----< ADIO_Construct_aggr_list() >-----------------------------------------*/
+/* Construct the list of I/O aggregators. It sets the followings.
+ *   fd->hints->ranklist[].
+ *   fd->hints->cb_nodes and set file info for hint cb_nodes.
+ *   fd->is_agg: indicating whether this rank is an I/O aggregator
+ *   fd->my_cb_nodes_index: index into cb_config_list. -1 if N/A
  */
-static int construct_aggr_list(ADIO_File fd, int root)
+int ADIO_Construct_aggr_list(ADIO_File  fd,
+                             int        num_nodes,
+                             int       *node_ids)
 {
-    int i, j, k, rank, nprocs, num_aggr, my_procname_len, num_nodes;
-    int msg[3], striping_factor;
-    int *all_procname_lens = NULL;
+    int i, j, k, rank, nprocs, num_aggr, striping_factor;
     int *nprocs_per_node, **ranks_per_node;
-    char value[MPI_MAX_INFO_VAL + 1], my_procname[MPI_MAX_PROCESSOR_NAME];
-    char **all_procnames = NULL;
+    char value[MPI_MAX_INFO_VAL + 1];
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &rank);
 
-    /* Collect info about compute nodes in order to select I/O aggregators.
-     * Note my_procname is null character terminated, but my_procname_len
-     * does not include the null character.
+    /* number of MPI processes running on each node */
+    nprocs_per_node = (int *) ADIOI_Calloc(num_nodes, sizeof(int));
+
+    for (i=0; i<nprocs; i++) nprocs_per_node[node_ids[i]]++;
+
+    /* construct rank IDs of MPI processes running on each node */
+    ranks_per_node = (int **) ADIOI_Malloc(sizeof(int*) * num_nodes);
+    ranks_per_node[0] = (int *) ADIOI_Malloc(sizeof(int) * nprocs);
+    for (i=1; i<num_nodes; i++)
+        ranks_per_node[i] = ranks_per_node[i - 1] + nprocs_per_node[i - 1];
+
+    for (i=0; i<num_nodes; i++) nprocs_per_node[i] = 0;
+
+    /* Populate ranks_per_node[], list of MPI ranks running on each node.
+     * Populate nprocs_per_node[], number of MPI processes on each node.
      */
-#ifdef MIMIC_LUSTRE
-    /* mimic number of compute nodes = 4 */
-    int node_id, np_per_node = nprocs / 4;
-    if (nprocs % 4 > 0) np_per_node++;
-    if (rank < np_per_node * (nprocs % 4))
-        node_id = rank / np_per_node;
-    else
-        node_id = (rank - np_per_node * (nprocs % 4)) / (nprocs / 4) + (nprocs % 4);
-
-    sprintf(my_procname,"compute.node.%d", node_id);
-    my_procname_len = (int)strlen(my_procname);
-#else
-    MPI_Get_processor_name(my_procname, &my_procname_len);
-#endif
-    my_procname_len++; /* to include terminate null character */
-
-    if (rank == root) {
-        /* root collects all procnames */
-        all_procnames = (char **) ADIOI_Malloc(nprocs * sizeof(char *));
-        if (all_procnames == NULL)
-            return NC_ENOMEM;
-
-        all_procname_lens = (int *) ADIOI_Malloc(nprocs * sizeof(int));
-        if (all_procname_lens == NULL) {
-            ADIOI_Free(all_procnames);
-            return NC_ENOMEM;
-        }
+    for (i=0; i<nprocs; i++) {
+        k = node_ids[i];
+        ranks_per_node[k][nprocs_per_node[k]] = i;
+        nprocs_per_node[k]++;
     }
-    /* gather process name lengths from all processes first */
-    MPI_Gather(&my_procname_len, 1, MPI_INT, all_procname_lens, 1, MPI_INT,
-               root, fd->comm);
 
-    if (rank == root) {
-        int *disp;
-        size_t alloc_size = 0;
+    /* All processes run the same codes below to calculate num_aggr, number of
+     * aggregators, so we can save a call to MPI_Bcast().
+     * Given the number of nodes, num_nodes, and processes per node,
+     * nprocs_per_node, we can now set num_aggr, the number of I/O aggregators.
+     * At this moment, root should have obtained the file striping settings.
+     */
+    striping_factor = fd->hints->striping_factor;
 
-        for (i = 0; i < nprocs; i++)
-            alloc_size += all_procname_lens[i];
-
-        all_procnames[0] = (char *) ADIOI_Malloc(alloc_size);
-        if (all_procnames[0] == NULL) {
-            ADIOI_Free(all_procname_lens);
-            ADIOI_Free(all_procnames);
-            return NC_ENOMEM;
-        }
-
-        /* Construct displacement array for the MPI_Gatherv, as each process
-         * may have a different length for its process name.
+    if (striping_factor > nprocs) {
+        /* When number of MPI processes is less than striping_factor, set
+         * num_aggr to the max number less than nprocs that divides
+         * striping_factor. An naive way is:
+         *     num_aggr = nprocs;
+         *     while (striping_factor % num_aggr > 0)
+         *         num_aggr--;
+         * Below is equivalent, but faster.
          */
-        disp = (int *) ADIOI_Malloc(nprocs * sizeof(int));
-        disp[0] = 0;
-        for (i = 1; i < nprocs; i++) {
-            all_procnames[i] = all_procnames[i - 1] + all_procname_lens[i - 1];
-            disp[i] = disp[i - 1] + all_procname_lens[i - 1];
-        }
-
-        /* gather all process names */
-        MPI_Gatherv(my_procname, my_procname_len, MPI_CHAR,
-                    all_procnames[0], all_procname_lens, disp, MPI_CHAR,
-                    root, fd->comm);
-
-        ADIOI_Free(disp);
-        ADIOI_Free(all_procname_lens);
-    } else
-        /* send process name to root */
-        MPI_Gatherv(my_procname, my_procname_len, MPI_CHAR,
-                    NULL, NULL, NULL, MPI_CHAR, root, fd->comm);
-
-    if (rank == root) {
-        /* all_procnames[] can tell us the number of nodes and number of
-         * processes per node.
-         */
-        char **node_names;
-        int last, *node_ids;
-
-        /* number of MPI processes running on each node */
-        nprocs_per_node = (int *) ADIOI_Malloc(nprocs * sizeof(int));
-
-        /* ech MPI process's compute node ID */
-        node_ids = (int *) ADIOI_Malloc(nprocs * sizeof(int));
-
-        /* array of pointers pointing to unique host names (compute nodes) */
-        node_names = (char **) ADIOI_Malloc(nprocs * sizeof(char *));
-
-        /* calculate nprocs_per_node[] and node_ids[] */
-        last = 0;
-        num_nodes = 0; /* number of unique compute nodes */
-        for (i = 0; i < nprocs; i++) {
-            k = last;
-            for (j = 0; j < num_nodes; j++) {
-                /* check if [i] has already appeared in [] */
-                if (!strcmp(all_procnames[i], node_names[k])) { /* found */
-                    node_ids[i] = k;
-                    nprocs_per_node[k]++;
+        int divisor = 2;
+        num_aggr = 1;
+        /* try to divide */
+        while (striping_factor >= divisor * divisor) {
+            if ((striping_factor % divisor) == 0) {
+                if (striping_factor / divisor <= nprocs) {
+                    /* The value is found ! */
+                    num_aggr = striping_factor / divisor;
                     break;
                 }
-                k = (k == num_nodes - 1) ? 0 : k + 1;
+                /* if divisor is less than nprocs, divisor is a solution,
+                 * but it is not sure that it is the best one
+                 */
+                else if (divisor <= nprocs)
+                    num_aggr = divisor;
             }
-            if (j < num_nodes)  /* found, next iteration, start with node n */
-                last = k;
-            else {      /* not found, j == num_nodes, add a new node */
-                node_names[j] = ADIOI_Strdup(all_procnames[i]);
-                nprocs_per_node[j] = 1;
-                node_ids[i] = j;
-                last = j;
-                num_nodes++;
-            }
+            divisor++;
         }
-        /* num_nodes is now the number of compute nodes (unique node names) */
-        fd->num_nodes = num_nodes;
+    }
+    else { /* striping_factor <= nprocs */
+        /* Select striping_factor processes to be I/O aggregators */
 
-        for (i = 0; i < num_nodes; i++)
-            ADIOI_Free(node_names[i]);
-        ADIOI_Free(node_names);
-        ADIOI_Free(all_procnames[0]);
-        ADIOI_Free(all_procnames);
-
-        /* construct rank IDs of MPI processes running on each node */
-        ranks_per_node = (int **) ADIOI_Malloc(num_nodes * sizeof(int *));
-        ranks_per_node[0] = (int *) ADIOI_Malloc(nprocs * sizeof(int));
-        for (i = 1; i < num_nodes; i++)
-            ranks_per_node[i] = ranks_per_node[i - 1] + nprocs_per_node[i - 1];
-        for (i = 0; i < num_nodes; i++)
-            nprocs_per_node[i] = 0;
-
-        /* Populate ranks_per_node[], list of MPI ranks running on each node.
-         * Populate nprocs_per_node[], number of MPI processes on each node.
-         */
-        for (i = 0; i < nprocs; i++) {
-            k = node_ids[i];
-            ranks_per_node[k][nprocs_per_node[k]] = i;
-            nprocs_per_node[k]++;
-        }
-        ADIOI_Free(node_ids);
-
-        /* Given the number of nodes, num_nodes, and processes per node,
-         * nprocs_per_node, we can now set num_aggr, the number of I/O
-         * aggregators. At this moment, root should have obtained the file
-         * striping settings.
-         */
-        striping_factor = fd->hints->striping_factor;
-
-        if (striping_factor > nprocs) {
-            /* When number of MPI processes is less than striping_factor, set
-             * num_aggr to the max number less than nprocs that divides
-             * striping_factor. An naive way is:
-             *     num_aggr = nprocs;
-             *     while (striping_factor % num_aggr > 0)
-             *         num_aggr--;
-             * Below is equivalent, but faster.
+        if (fd->hints->cb_nodes == 0 || fd->access_mode & MPI_MODE_RDONLY) {
+            /* hint cb_nodes is not set by user and this file is opened for
+             * read only. Because collective read is using a different file
+             * domain partitioning strategy, for now we do not mess up
+             * ranklist for read operations and do not accept user hint to
+             * set ranklist for read operations
              */
-            int divisor = 2;
-            num_aggr = 1;
-            /* try to divide */
-            while (striping_factor >= divisor * divisor) {
-                if ((striping_factor % divisor) == 0) {
-                    if (striping_factor / divisor <= nprocs) {
-                        /* The value is found ! */
-                        num_aggr = striping_factor / divisor;
-                        break;
-                    }
-                    /* if divisor is less than nprocs, divisor is a solution,
-                     * but it is not sure that it is the best one
-                     */
-                    else if (divisor <= nprocs)
-                        num_aggr = divisor;
-                }
-                divisor++;
-            }
+            num_aggr = striping_factor;
         }
-        else { /* striping_factor <= nprocs */
-            /* Select striping_factor processes to be I/O aggregators */
-
-            if (fd->hints->cb_nodes == 0 || fd->access_mode & MPI_MODE_RDONLY) {
-                /* hint cb_nodes is not set by user and this file is opened for
-                 * read only. Because collective read is using a different file
-                 * domain partitioning strategy, for now we do not mess up
-                 * ranklist for read operations and do not accept user hint to
-                 * set ranklist for read operations
-                 */
-                num_aggr = striping_factor;
-            }
-            else if (fd->hints->cb_nodes <= striping_factor) {
-                /* User has set hint cb_nodes and cb_nodes <= striping_factor.
-                 * Ignore user's hint and try to set cb_nodes to be at least
-                 * striping_factor.
-                 */
-                num_aggr = striping_factor;
-            }
-            else {
-                /* User has set hint cb_nodes and cb_nodes > striping_factor */
-                if (nprocs < fd->hints->cb_nodes)
-                    num_aggr = nprocs; /* BAD cb_nodes set by users */
-                else
-                    num_aggr = fd->hints->cb_nodes;
-
-                /* Number of processes per node may not be enough to be picked
-                 * as aggregators. If this case, reduce num_aggr (cb_nodes).
-                 * Consider the following case: number of processes = 18,
-                 * number of nodes = 7, striping_factor = 8, cb_nodes = 16.
-                 * cb_nodes should be reduced to 8 and the ranks of aggregators
-                 * should be 0, 3, 6, 9, 12, 14, 16, 1.
-                 * If the number of processes changes to 25, then cb_nodes
-                 * should be 16 and the ranks of aggregators should be 0, 4, 8,
-                 * 12, 16, 19, 22, 1, 2, 6, 10, 14, 18, 21, 24, 3.
-                 */
-                int max_nprocs_node = 0;
-                for (i = 0; i < num_nodes; i++)
-                    max_nprocs_node = MAX(max_nprocs_node, nprocs_per_node[i]);
-                int max_naggr_node = striping_factor / num_nodes;
-                if (striping_factor % num_nodes) max_naggr_node++;
-                /* max_naggr_node is the max number of processes per node to be
-                 * picked as aggregator in each round.
-                 */
-                int rounds = num_aggr / striping_factor;
-                if (num_aggr % striping_factor) rounds++;
-                while (max_naggr_node * rounds > max_nprocs_node) rounds--;
-                num_aggr = striping_factor * rounds;
-            }
-        }
-
-        /* TODO: the above setting for num_aggr is for collective writes. Reads
-         * should be the number of nodes.
-         */
-
-        /* Next step is to determine the MPI rank IDs of I/O aggregators into
-         * ranklist[].
-         */
-        fd->hints->ranklist = (int *) ADIOI_Malloc(num_aggr * sizeof(int));
-        if (fd->hints->ranklist == NULL)
-            return NC_ENOMEM;
-
-        if (striping_factor <= num_nodes) {
-            /* When number of OSTs is less than number of compute nodes,
-             * first select number of nodes equal to the number of OSTs by
-             * spread the selection evenly across all compute nodes and then
-             * pick processes from the selected nodes, also evenly spread
-             * evenly among processes on each selected node to be aggregators.
+        else if (fd->hints->cb_nodes <= striping_factor) {
+            /* User has set hint cb_nodes and cb_nodes <= striping_factor.
+             * Ignore user's hint and try to set cb_nodes to be at least
+             * striping_factor.
              */
-            int avg = num_aggr / striping_factor;
-            int stride = num_nodes / striping_factor;
-            if (num_aggr % striping_factor) avg++;
-            for (i = 0; i < num_aggr; i++) {
-                j = (i % striping_factor) * stride; /* to select from node j */
-                k = (i / striping_factor) * (nprocs_per_node[j] / avg);
-                assert(k < nprocs_per_node[j]);
-                fd->hints->ranklist[i] = ranks_per_node[j][k];
-            }
+            num_aggr = striping_factor;
         }
-        else { /* striping_factor > num_nodes */
-            /* When number of OSTs is more than number of compute nodes, I/O
-             * aggregators are selected from all nodes are selected. Within
-             * each node, aggregators are spread evenly instead of the first
-             * few ranks.
+        else {
+            /* User has set hint cb_nodes and cb_nodes > striping_factor */
+            if (nprocs < fd->hints->cb_nodes)
+                num_aggr = nprocs; /* BAD cb_nodes set by users */
+            else
+                num_aggr = fd->hints->cb_nodes;
+
+            /* Number of processes per node may not be enough to be picked
+             * as aggregators. If this case, reduce num_aggr (cb_nodes).
+             * Consider the following case: number of processes = 18,
+             * number of nodes = 7, striping_factor = 8, cb_nodes = 16.
+             * cb_nodes should be reduced to 8 and the ranks of aggregators
+             * should be 0, 3, 6, 9, 12, 14, 16, 1.
+             * If the number of processes changes to 25, then cb_nodes
+             * should be 16 and the ranks of aggregators should be 0, 4, 8,
+             * 12, 16, 19, 22, 1, 2, 6, 10, 14, 18, 21, 24, 3.
              */
-            int *naggr_per_node, *idx_per_node, avg;
-            idx_per_node = (int*) ADIOI_Calloc(num_nodes, sizeof(int));
-            naggr_per_node = (int*) ADIOI_Malloc(num_nodes * sizeof(int));
-            for (i = 0; i < striping_factor % num_nodes; i++)
-                naggr_per_node[i] = striping_factor / num_nodes + 1;
-            for (; i < num_nodes; i++)
-                naggr_per_node[i] = striping_factor / num_nodes;
-            avg = num_aggr / striping_factor;
-            if (avg > 0)
-                for (i = 0; i < num_nodes; i++)
-                    naggr_per_node[i] *= avg;
+            int max_nprocs_node = 0;
             for (i = 0; i < num_nodes; i++)
-                naggr_per_node[i] = MIN(naggr_per_node[i], nprocs_per_node[i]);
-            /* naggr_per_node[] is the number of aggregators that can be
-             * selected as I/O aggregators
+                max_nprocs_node = MAX(max_nprocs_node, nprocs_per_node[i]);
+            int max_naggr_node = striping_factor / num_nodes;
+            if (striping_factor % num_nodes) max_naggr_node++;
+            /* max_naggr_node is the max number of processes per node to be
+             * picked as aggregator in each round.
              */
-
-#ifdef WKL_DEBUG
-// printf("%d: num_nodes=%d nprocs_per_node[0]=%d num_aggr=%d naggr_per_node[0]=%d\n",rank,num_nodes,nprocs_per_node[0],num_aggr,naggr_per_node[0]);
-#endif
-            for (i = 0; i < num_aggr; i++) {
-                int stripe_i = i % striping_factor;
-                j = stripe_i % num_nodes; /* to select from node j */
-                k = nprocs_per_node[j] / naggr_per_node[j];
-                k *= idx_per_node[j];
-                idx_per_node[j]++;
-                assert(k < nprocs_per_node[j]);
-                fd->hints->ranklist[i] = ranks_per_node[j][k];
-            }
-            ADIOI_Free(naggr_per_node);
-            ADIOI_Free(idx_per_node);
+            int rounds = num_aggr / striping_factor;
+            if (num_aggr % striping_factor) rounds++;
+            while (max_naggr_node * rounds > max_nprocs_node) rounds--;
+            num_aggr = striping_factor * rounds;
         }
-#ifdef WKL_DEBUG
-// printf("%d: num_nodes=%d nprocs_per_node[0]=%d num_aggr=%d ranklist=%d %d %d %d (%s)\n",rank,num_nodes,nprocs_per_node[0],num_aggr,fd->hints->ranklist[0],fd->hints->ranklist[1],fd->hints->ranklist[2],fd->hints->ranklist[3],fd->filename); fflush(stdout);
-#endif
+    }
 
-        /* TODO: we can keep these two arrays in case for dynamic construction
-         * of fd->hints->ranklist[], such as in group-cyclic file domain
-         * assignment method, used in each collective write call.
+    /* TODO: the above setting for num_aggr is for collective writes. Reads
+     * should be the number of nodes.
+     */
+
+    /* Next step is to determine the MPI rank IDs of I/O aggregators into
+     * ranklist[].
+     */
+    fd->hints->ranklist = (int *) ADIOI_Malloc(num_aggr * sizeof(int));
+    if (fd->hints->ranklist == NULL)
+        return NC_ENOMEM;
+
+    if (striping_factor <= num_nodes) {
+        /* When number of OSTs is less than number of compute nodes, first
+         * select number of nodes equal to the number of OSTs by spread the
+         * selection evenly across all compute nodes (i.e. with a stride
+         * between every 2 consecutive nodes) and then pick processes from the
+         * selected nodes, also evenly spread among processes on each selected
+         * node to be aggregators.
          */
-        ADIOI_Free(nprocs_per_node);
-        ADIOI_Free(ranks_per_node[0]);
-        ADIOI_Free(ranks_per_node);
+        int avg = num_aggr / striping_factor;
+        int stride = num_nodes / striping_factor;
+        if (num_aggr % striping_factor) avg++;
+        for (i = 0; i < num_aggr; i++) {
+            j = (i % striping_factor) * stride; /* to select from node j */
+            k = (i / striping_factor) * (nprocs_per_node[j] / avg);
+            assert(k < nprocs_per_node[j]);
+            fd->hints->ranklist[i] = ranks_per_node[j][k];
+        }
+    }
+    else { /* striping_factor > num_nodes */
+        /* When number of OSTs is more than number of compute nodes, I/O
+         * aggregators are selected from all nodes are selected. Within
+         * each node, aggregators are spread evenly instead of the first
+         * few ranks.
+         */
+        int *naggr_per_node, *idx_per_node, avg;
+        idx_per_node = (int*) ADIOI_Calloc(num_nodes, sizeof(int));
+        naggr_per_node = (int*) ADIOI_Malloc(num_nodes * sizeof(int));
+        for (i = 0; i < striping_factor % num_nodes; i++)
+            naggr_per_node[i] = striping_factor / num_nodes + 1;
+        for (; i < num_nodes; i++)
+            naggr_per_node[i] = striping_factor / num_nodes;
+        avg = num_aggr / striping_factor;
+        if (avg > 0)
+            for (i = 0; i < num_nodes; i++)
+                naggr_per_node[i] *= avg;
+        for (i = 0; i < num_nodes; i++)
+            naggr_per_node[i] = MIN(naggr_per_node[i], nprocs_per_node[i]);
+        /* naggr_per_node[] is the number of aggregators that can be
+         * selected as I/O aggregators
+         */
 
-        msg[0] = num_aggr;
-        msg[1] = fd->hints->num_osts;
-        msg[2] = num_nodes;
+        for (i = 0; i < num_aggr; i++) {
+            int stripe_i = i % striping_factor;
+            j = stripe_i % num_nodes; /* to select from node j */
+            k = nprocs_per_node[j] / naggr_per_node[j];
+            k *= idx_per_node[j];
+            idx_per_node[j]++;
+            assert(k < nprocs_per_node[j]);
+            fd->hints->ranklist[i] = ranks_per_node[j][k];
+        }
+        ADIOI_Free(naggr_per_node);
+        ADIOI_Free(idx_per_node);
     }
 
-    /* bcast cb_nodes and lustre.num_osts to all processes */
-    MPI_Bcast(msg, 3, MPI_INT, root, fd->comm);
-    num_aggr = msg[0];
-
-#ifdef WKL_DEBUG
-    if (rank == root && fd->hints->cb_nodes > 0 && fd->hints->cb_nodes != num_aggr) {
-        /* user has set hint cb_nodes and the value is not num_aggr */
-        printf("Warning: %s line %d: Set cb_nodes to %d and ignore user's hint of %d\n",
-               __func__, __LINE__, num_aggr, fd->hints->cb_nodes);
-    }
-#endif
+    /* TODO: we can keep these two arrays in case for dynamic construction
+     * of fd->hints->ranklist[], such as in group-cyclic file domain
+     * assignment method, used in each collective write call.
+     */
+    ADIOI_Free(nprocs_per_node);
+    ADIOI_Free(ranks_per_node[0]);
+    ADIOI_Free(ranks_per_node);
 
     /* set file striping hints */
     fd->hints->cb_nodes = num_aggr;
     sprintf(value, "%d", fd->hints->cb_nodes);
     MPI_Info_set(fd->info, "cb_nodes", value);
 
-    fd->hints->num_osts = msg[1];
     sprintf(value, "%d", fd->hints->num_osts);
     MPI_Info_set(fd->info, "lustre_num_osts", value);
-
-    /* save the number of unique compute nodes in communicator fd->comm */
-    fd->num_nodes = msg[2];
-
-    if (rank != root) {
-        /* ranklist[] contains the MPI ranks of I/O aggregators */
-        fd->hints->ranklist = (int *) ADIOI_Malloc(num_aggr * sizeof(int));
-        if (fd->hints->ranklist == NULL)
-            return NC_ENOMEM;
-    }
-
-    MPI_Bcast(fd->hints->ranklist, fd->hints->cb_nodes, MPI_INT, root, fd->comm);
 
     /* check whether this process is selected as an I/O aggregator */
     fd->is_agg = 0;
@@ -855,6 +703,40 @@ static int construct_aggr_list(ADIO_File fd, int root)
             break;
         }
     }
+
+    /* add to fd->info the hint "aggr_list", list of aggregators' rank IDs */
+    value[0] = '\0';
+    for (i = 0; i < fd->hints->cb_nodes; i++) {
+        char str[16];
+        if (i == 0)
+            snprintf(str, sizeof(str), "%d", fd->hints->ranklist[i]);
+        else
+            snprintf(str, sizeof(str), " %d", fd->hints->ranklist[i]);
+        if (strlen(value) + strlen(str) >= MPI_MAX_INFO_VAL-5) {
+            strcat(value, " ...");
+            break;
+        }
+        strcat(value, str);
+    }
+    MPI_Info_set(fd->info, "aggr_list", value);
+
+/*
+int rank; MPI_Comm_rank(comm, &rank);
+if (rank == 0) {
+    int  i, nkeys;
+    MPI_Info_get_nkeys(fd->info, &nkeys);
+    printf("%s line %d: MPI File Info: nkeys = %d\n",__func__,__LINE__,nkeys);
+    for (i=0; i<nkeys; i++) {
+        char key[MPI_MAX_INFO_KEY], value[MPI_MAX_INFO_VAL];
+        int  valuelen, flag;
+
+        MPI_Info_get_nthkey(fd->info, i, key);
+        MPI_Info_get_valuelen(fd->info, key, &valuelen, &flag);
+        MPI_Info_get(fd->info, key, valuelen+1, value, &flag);
+        printf("MPI File Info: [%2d] key = %25s, value = %s\n",i,key,value);
+    }
+}
+*/
 
     return 0;
 }
@@ -870,7 +752,7 @@ int ADIO_File_open(MPI_Comm    comm,
      * called to verify filename is on Lustre.
      */
     char value[MPI_MAX_INFO_VAL + 1];
-    int i, err, min_err;
+    int err, min_err;
 
     fd->comm        = comm;
     fd->filename    = ADIOI_Strdup(filename);
@@ -920,13 +802,6 @@ int ADIO_File_open(MPI_Comm    comm,
     /* TODO: when no_indep_rw hint is enabled, only aggregators open the file */
     fd->is_open = 1;
 
-    /* Use file striping count and number of unique OSTs to construct
-     * the I/O aggregator rank list, fd->hints->ranklist[]. Also, set
-     * hint cb_nodes, fd->is_agg, and fd->my_cb_nodes_index.
-     */
-    err = construct_aggr_list(fd, 0);
-    if (err != NC_NOERR) goto err_out;
-
     /* set file striping hints */
     snprintf(value, sizeof(value), "%d", fd->hints->striping_unit);
     MPI_Info_set(fd->info, "striping_unit", value);
@@ -937,22 +812,6 @@ int ADIO_File_open(MPI_Comm    comm,
     snprintf(value, sizeof(value), "%d", fd->hints->start_iodevice);
     MPI_Info_set(fd->info, "start_iodevice", value);
 
-    /* add to fd->info the hint "aggr_list", list of aggregators' rank IDs */
-    value[0] = '\0';
-    for (i = 0; i < fd->hints->cb_nodes; i++) {
-        char str[16];
-        if (i == 0)
-            snprintf(str, sizeof(str), "%d", fd->hints->ranklist[i]);
-        else
-            snprintf(str, sizeof(str), " %d", fd->hints->ranklist[i]);
-        if (strlen(value) + strlen(str) >= MPI_MAX_INFO_VAL-5) {
-            strcat(value, " ...");
-            break;
-        }
-        strcat(value, str);
-    }
-    MPI_Info_set(fd->info, "aggr_list", value);
-
 err_out:
     MPI_Allreduce(&err, &min_err, 1, MPI_INT, MPI_MIN, comm);
     /* All NC errors are < 0 */
@@ -960,32 +819,11 @@ err_out:
         if (err == 0) /* close file if opened successfully */
             close(fd->fd_sys);
         ADIOI_Free(fd->filename);
-        if (fd->hints->ranklist != NULL)
-            ADIOI_Free(fd->hints->ranklist);
         ADIOI_Free(fd->hints);
         if (fd->info != MPI_INFO_NULL)
             MPI_Info_free(&(fd->info));
         ADIOI_Free(fd->io_buf);
     }
-
-/*
-int rank; MPI_Comm_rank(comm, &rank);
-if (rank == 0) {
-    int  i, nkeys;
-    MPI_Info_get_nkeys(fd->info, &nkeys);
-    printf("%s line %d: MPI File Info: nkeys = %d\n",__func__,__LINE__,nkeys);
-    for (i=0; i<nkeys; i++) {
-        char key[MPI_MAX_INFO_KEY], value[MPI_MAX_INFO_VAL];
-        int  valuelen, flag;
-
-        MPI_Info_get_nthkey(fd->info, i, key);
-        MPI_Info_get_valuelen(fd->info, key, &valuelen, &flag);
-        MPI_Info_get(fd->info, key, valuelen+1, value, &flag);
-        printf("MPI File Info: [%2d] key = %25s, value = %s\n",i,key,value);
-    }
-}
-*/
-
     return err;
 }
 
