@@ -199,8 +199,9 @@ static int romio_statfs(const char *filename, int64_t * file_id)
 int ADIO_FileSysType(const char *filename)
 {
 #ifdef MIMIC_LUSTRE
-    return 1;
+    return ADIO_LUSTRE;
 #endif
+
     int err, retry_cnt;
     int64_t file_id=UNKNOWN_SUPER_MAGIC;
 
@@ -234,7 +235,7 @@ int ADIO_FileSysType(const char *filename)
         return ADIO_UFS; /* UFS support if we don't know what else to use */
 }
 
-/*----< lustre_file_create() >-----------------------------------------------*/
+/*----< file_create() >------------------------------------------------------*/
 /*   1. root creates the file
  *   2. root sets and obtains striping info
  *   3. root broadcasts striping info
@@ -242,8 +243,8 @@ int ADIO_FileSysType(const char *filename)
  *   5. non-root processes opens the fie
  */
 static int
-lustre_file_create(ADIO_File fd,
-                   int       access_mode)
+file_create(ADIO_File fd,
+            int       access_mode)
 {
     int err=NC_NOERR, rank, amode, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
@@ -406,12 +407,12 @@ err_out:
     return err;
 }
 
-/*----< lustre_file_open() >-------------------------------------------------*/
+/*----< file_open() >--------------------------------------------------------*/
 /*   1. all processes open the file.
  *   2. root obtains striping info and broadcasts to all others
  */
 static int
-lustre_file_open(ADIO_File fd)
+file_open(ADIO_File fd)
 {
     int err=NC_NOERR, rank, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
@@ -900,16 +901,15 @@ int ADIO_File_open(MPI_Comm    comm,
         goto err_out;
     }
 
-assert(fd->file_system == ADIO_LUSTRE);
-    if (fd->file_system == ADIO_LUSTRE) {
+    if (fd->file_system != ADIO_UFS) {
         /* For Lustre, determining the I/O aggregators and constructing ranklist
          * requires file stripe count, which can only be obtained after file is
          * opened.
          */
         if (amode & MPI_MODE_CREATE)
-            err = lustre_file_create(fd, amode);
+            err = file_create(fd, amode);
         else
-            err = lustre_file_open(fd);
+            err = file_open(fd);
         if (err != NC_NOERR) goto err_out;
     }
     else {
