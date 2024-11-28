@@ -117,11 +117,6 @@ ncmpio_create(MPI_Comm     comm,
     /* check if path is on Lustre */
     fstype = ADIO_FileSysType(path);
 
-    if (fstype != ADIO_UFS) {
-        adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
-        adio_fh->file_system = fstype;
-    }
-
     if (fIsSet(cmode, NC_NOCLOBBER)) {
         /* check if file exists: NC_EEXIST is returned if the file already
          * exists and NC_NOCLOBBER mode is used in ncmpi_create */
@@ -189,11 +184,13 @@ ncmpio_create(MPI_Comm     comm,
                  */
                 err = NC_NOERR;
                 if (fstype != ADIO_UFS) {
+                    adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
                     err = ADIO_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, adio_fh);
                     if (err == NC_NOERR)
                         ADIO_File_set_size(adio_fh, 0); /* can be expensive */
                     else
                         ADIO_File_close(&adio_fh);
+                    NCI_Free(adio_fh);
                 }
                 else {
                     TRACE_IO(MPI_File_open)(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR,
@@ -230,6 +227,11 @@ ncmpio_create(MPI_Comm     comm,
         if (err != NC_NOERR) return err;
     }
 
+    if (fstype != ADIO_UFS) {
+        adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
+        adio_fh->file_system = fstype;
+    }
+
     /* create file collectively -------------------------------------------- */
     if (fstype != ADIO_UFS) {
         err = ADIO_File_open(comm, (char *)path, mpiomode, user_info, adio_fh);
@@ -241,14 +243,15 @@ ncmpio_create(MPI_Comm     comm,
         if (mpireturn != MPI_SUCCESS) {
 #ifndef HAVE_ACCESS
             if (fIsSet(cmode, NC_NOCLOBBER)) {
-                /* This is the case when NC_NOCLOBBER is used in file creation and
-                 * function access() is not available. MPI_MODE_EXCL is set in open
-                 * mode. When MPI_MODE_EXCL is used and the file already exists,
-                 * MPI-IO should return error class MPI_ERR_FILE_EXISTS. But, some
-                 * MPI-IO implementations (older ROMIO) do not correctly return
-                 * this error class. In this case, we can do the followings: check
-                 * errno to see if it set to EEXIST. Note usually rank 0 makes the
-                 * file open call and can be the only one having errno set.
+                /* This is the case when NC_NOCLOBBER is used in file creation
+                 * and function access() is not available. MPI_MODE_EXCL is set
+                 * in open mode. When MPI_MODE_EXCL is used and the file
+                 * already exists, MPI-IO should return error class
+                 * MPI_ERR_FILE_EXISTS. But, some MPI-IO implementations (older
+                 * ROMIO) do not correctly return this error class. In this
+                 * case, we can do the followings: check errno to see if it set
+                 * to EEXIST. Note usually rank 0 makes the file open call and
+                 * can be the only one having errno set.
                  */
                 if (nprocs > 1)
                     TRACE_COMM(MPI_Bcast)(&errno, 1, MPI_INT, 0, comm);
@@ -256,14 +259,16 @@ ncmpio_create(MPI_Comm     comm,
             }
 #endif
             return ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
-            /* for NC_NOCLOBBER, MPI_MODE_EXCL was added to mpiomode. If the file
-             * already exists, MPI-IO should return error class MPI_ERR_FILE_EXISTS
-             * which PnetCDF will return error code NC_EEXIST. This is checked
-             * inside of ncmpii_error_mpi2nc()
+            /* for NC_NOCLOBBER, MPI_MODE_EXCL was added to mpiomode. If the
+             * file already exists, MPI-IO should return error class
+             * MPI_ERR_FILE_EXISTS which PnetCDF will return error code
+             * NC_EEXIST. This is checked inside of ncmpii_error_mpi2nc()
              */
         }
         else
-            /* reset errno, as MPI_File_open may change it, even for MPI_SUCCESS */
+            /* reset errno, as MPI_File_open may change it, even if it returns
+             * MPI_SUCCESS
+             */
             errno = 0;
     }
 
@@ -357,10 +362,24 @@ ncmpio_create(MPI_Comm     comm,
          * be '\0' (null character). In this case, safe_mode is enabled */
     }
 
+    /* construct the list of compute nodes */
+    ncp->num_nodes = 0;
+    ncp->node_ids = NULL;
+    if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_UFS) {
+        err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
+        if (err != NC_NOERR) return err;
+    }
+
+    /* set cb_nodes and construct the cb_node rank list */
+    if (fstype != ADIO_UFS) {
+        ADIO_Construct_aggr_list(ncp->adio_fh, ncp->num_nodes, ncp->node_ids);
+        ncp->adio_fh->num_nodes = ncp->num_nodes;
+    }
+
     /* determine whether to enable intra-node aggregation and set up all
      * intra-node aggregation metadata.
      * ncp->num_aggrs_per_node = 0, or non-zero indicates whether this feature
-     *     is enabled globally for all processes.
+     *     is disabled or enabled globally for all processes, respectively.
      * ncp->my_aggr = -1 or >= 0 indicates whether aggregation is effectively
      *     enabled for the aggregation group of this process.
      */
@@ -369,6 +388,8 @@ ncmpio_create(MPI_Comm     comm,
         err = ncmpio_intra_node_aggr_init(ncp);
         if (err != NC_NOERR) return err;
     }
+
+    if (ncp->node_ids != NULL) NCI_Free(ncp->node_ids);
 
     *ncpp = (void*)ncp;
 

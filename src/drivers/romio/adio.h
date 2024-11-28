@@ -211,7 +211,7 @@ typedef struct {
 int ADIO_FileSysType(const char *filename);
 int ADIO_File_open(MPI_Comm comm, const char *filename, int amode,
                    MPI_Info info, ADIO_File fh);
-
+int ADIO_Construct_aggr_list(ADIO_File fd, int num_nodes, int *node_ids);
 int ADIO_File_close(ADIO_File *fh);
 int ADIO_File_set_view(ADIO_File fh, MPI_Offset disp, MPI_Datatype etype,
                        MPI_Datatype filetype, char *datarep, MPI_Info info);

@@ -169,19 +169,21 @@ qsort_off_len_buf(MPI_Aint num,
  * will be divided into groups. The number of groups is the number of
  * aggregators on that node. The rank IDs of each group must be established.
  *
- * 1. Find information about MPI processes and their affinity to compute node.
+ * 1. Find the affinity of each MPI process to the compute node.
  * 2. Determine whether self process is an intra-node aggregator.
  * 3. For an aggregator, find the number of non-aggregators assigned to it and
  *    construct rank IDs of assigned non-aggregators.
  * 4. For a non-aggregator, find the rank ID of its assigned aggregator.
+ *
+ * This subroutine creates the followings.
+ *   ncp->my_aggr          rank ID of my aggregator
+ *   ncp->num_nonaggrs     number of non-aggregators assigned to me
+ *   ncp->nonaggr_ranks[]  rank IDs of assigned non-aggregators
  */
 int
 ncmpio_intra_node_aggr_init(NC *ncp)
 {
-    char my_procname[MPI_MAX_PROCESSOR_NAME], **all_procnames=NULL;
-    int i, j, k, my_procname_len, num_nodes, root=0;
-    int *node_ids=NULL, *all_procname_lens=NULL, *nprocs_per_node;
-    int naggrs_my_node, num_nonaggrs;
+    int i, naggrs_my_node, num_nonaggrs;
     int my_rank_index, *ranks_my_node, my_node_id, nprocs_my_node;
 
     /* initialize parameters of local-node aggregation */
@@ -208,119 +210,9 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     num_nonaggrs = ncp->nprocs / ncp->num_aggrs_per_node + 1;
     ncp->nonaggr_ranks = (int*) NCI_Malloc(sizeof(int) * num_nonaggrs);
 
-    /* Collect info about compute nodes in order to select I/O aggregators.
-     * Note my_procname is null character terminated, but my_procname_len
-     * does not include the null character.
-     */
-    MPI_Get_processor_name(my_procname, &my_procname_len);
-    my_procname_len++; /* to include terminate null character */
-
-    if (ncp->rank == root) {
-        /* root collects all procnames */
-        all_procnames = (char **) NCI_Malloc(sizeof(char*) * ncp->nprocs);
-        if (all_procnames == NULL)
-            DEBUG_RETURN_ERROR(NC_ENOMEM)
-
-        all_procname_lens = (int *) NCI_Malloc(sizeof(int) * ncp->nprocs);
-        if (all_procname_lens == NULL) {
-            NCI_Free(all_procnames);
-            DEBUG_RETURN_ERROR(NC_ENOMEM)
-        }
-    }
-    /* gather process name lengths from all processes first */
-    MPI_Gather(&my_procname_len, 1, MPI_INT, all_procname_lens, 1, MPI_INT,
-               root, ncp->comm);
-
-    if (ncp->rank == root) {
-        int *disp;
-        size_t alloc_size = 0;
-
-        for (i=0; i<ncp->nprocs; i++)
-            alloc_size += all_procname_lens[i];
-
-        all_procnames[0] = (char *) NCI_Malloc(alloc_size);
-        if (all_procnames[0] == NULL) {
-            NCI_Free(all_procname_lens);
-            NCI_Free(all_procnames);
-            DEBUG_RETURN_ERROR(NC_ENOMEM)
-        }
-
-        /* Construct displacement array for the MPI_Gatherv, as each process
-         * may have a different length for its process name.
-         */
-        disp = (int *) NCI_Malloc(sizeof(int) * ncp->nprocs);
-        disp[0] = 0;
-        for (i=1; i<ncp->nprocs; i++) {
-            all_procnames[i] = all_procnames[i - 1] + all_procname_lens[i - 1];
-            disp[i] = disp[i - 1] + all_procname_lens[i - 1];
-        }
-
-        /* gather all process names */
-        MPI_Gatherv(my_procname, my_procname_len, MPI_CHAR,
-                    all_procnames[0], all_procname_lens, disp, MPI_CHAR,
-                    root, ncp->comm);
-
-        NCI_Free(disp);
-        NCI_Free(all_procname_lens);
-    } else
-        /* send process name to root */
-        MPI_Gatherv(my_procname, my_procname_len, MPI_CHAR,
-                    NULL, NULL, NULL, MPI_CHAR, root, ncp->comm);
-
-    /* each MPI process's compute node ID */
-    node_ids = (int *) NCI_Malloc(sizeof(int) * ncp->nprocs);
-
-    if (ncp->rank == root) {
-        /* all_procnames[] can tell us the number of nodes and number of
-         * processes per node.
-         */
-        char **node_names;
-        int last;
-
-        /* array of pointers pointing to unique host names (compute nodes) */
-        node_names = (char **) NCI_Malloc(sizeof(char*) * ncp->nprocs);
-
-        /* number of MPI processes running on each node */
-        nprocs_per_node = (int *) NCI_Malloc(sizeof(int) * ncp->nprocs);
-
-        /* calculate nprocs_per_node[] and node_ids[] */
-        last = 0;
-        num_nodes = 0; /* number of unique compute nodes */
-        for (i=0; i<ncp->nprocs; i++) {
-            k = last;
-            for (j=0; j<num_nodes; j++) {
-                /* check if [i] has already appeared in [] */
-                if (!strcmp(all_procnames[i], node_names[k])) { /* found */
-                    node_ids[i] = k;
-                    break;
-                }
-                k = (k == num_nodes - 1) ? 0 : k + 1;
-            }
-            if (j < num_nodes)  /* found, next iteration, start with node n */
-                last = k;
-            else {      /* not found, j == num_nodes, add a new node */
-                node_names[j] = strdup(all_procnames[i]);
-                nprocs_per_node[j] = 1;
-                node_ids[i] = j;
-                last = j;
-                num_nodes++;
-            }
-        }
-        /* num_nodes is now the number of compute nodes (unique node names) */
-
-        NCI_Free(nprocs_per_node);
-
-        for (i=0; i<num_nodes; i++)
-            free(node_names[i]); /* allocated by strdup() */
-        NCI_Free(node_names);
-        NCI_Free(all_procnames[0]);
-        NCI_Free(all_procnames);
-    }
-
-    MPI_Bcast(node_ids, ncp->nprocs, MPI_INT, root, ncp->comm);
-
+    /* ncp->node_ids[] has been established in ncmpii_construct_node_list() */
     /* my_node_id is this rank's node ID */
-    my_node_id = node_ids[ncp->rank];
+    my_node_id = ncp->node_ids[ncp->rank];
 
     /* nprocs_my_node: the number of processes in my nodes
      * ranks_my_node[]: rank IDs of all processes in my node.
@@ -331,7 +223,7 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     my_rank_index = -1;
     nprocs_my_node = 0;
     for (i=0; i<ncp->nprocs; i++) {
-        if (node_ids[i] == my_node_id) {
+        if (ncp->node_ids[i] == my_node_id) {
             if (i == ncp->rank)
                 my_rank_index = nprocs_my_node;
             ranks_my_node[nprocs_my_node] = i;
@@ -341,8 +233,6 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     assert(my_rank_index >= 0);
 
     /* Now, ranks_my_node[my_rank_index] == ncp->rank */
-
-    NCI_Free(node_ids);
 
     /* make sure number of aggregators in my node <= nprocs_my_node */
     naggrs_my_node = MIN(ncp->num_aggrs_per_node, nprocs_my_node);
