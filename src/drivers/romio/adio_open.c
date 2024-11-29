@@ -373,7 +373,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
              * For now, set it to same as fd->hints->striping_factor.
              stripin_info[3] = num_uniq_osts(fd->filename);
              */
-            stripin_info[3] = fd->hints->striping_factor;
+            stripin_info[3] = lum->lmm_stripe_count;
         }
         else {
             fprintf(stderr,"%s line %d: rank %d fails to get stripe info from file %s (%s)\n",
@@ -458,7 +458,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
              * For now, set it to same as fd->hints->striping_factor.
              stripin_info[3] = fd->hints->striping_factor;
              */
-            stripin_info[3] = fd->hints->striping_factor;
+            stripin_info[3] = lum->lmm_stripe_count;
         }
         else
             err =  ncmpii_error_posix2nc("ioctl");
@@ -498,7 +498,6 @@ int ADIO_Construct_aggr_list(ADIO_File  fd,
 {
     int i, j, k, rank, nprocs, num_aggr, striping_factor;
     int *nprocs_per_node, **ranks_per_node;
-    char value[MPI_MAX_INFO_VAL + 1];
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &rank);
@@ -686,11 +685,6 @@ int ADIO_Construct_aggr_list(ADIO_File  fd,
 
     /* set file striping hints */
     fd->hints->cb_nodes = num_aggr;
-    sprintf(value, "%d", fd->hints->cb_nodes);
-    MPI_Info_set(fd->info, "cb_nodes", value);
-
-    sprintf(value, "%d", fd->hints->num_osts);
-    MPI_Info_set(fd->info, "lustre_num_osts", value);
 
     /* check whether this process is selected as an I/O aggregator */
     fd->is_agg = 0;
@@ -702,40 +696,6 @@ int ADIO_Construct_aggr_list(ADIO_File  fd,
             break;
         }
     }
-
-    /* add to fd->info the hint "aggr_list", list of aggregators' rank IDs */
-    value[0] = '\0';
-    for (i = 0; i < fd->hints->cb_nodes; i++) {
-        char str[16];
-        if (i == 0)
-            snprintf(str, sizeof(str), "%d", fd->hints->ranklist[i]);
-        else
-            snprintf(str, sizeof(str), " %d", fd->hints->ranklist[i]);
-        if (strlen(value) + strlen(str) >= MPI_MAX_INFO_VAL-5) {
-            strcat(value, " ...");
-            break;
-        }
-        strcat(value, str);
-    }
-    MPI_Info_set(fd->info, "aggr_list", value);
-
-/*
-int rank; MPI_Comm_rank(comm, &rank);
-if (rank == 0) {
-    int  i, nkeys;
-    MPI_Info_get_nkeys(fd->info, &nkeys);
-    printf("%s line %d: MPI File Info: nkeys = %d\n",__func__,__LINE__,nkeys);
-    for (i=0; i<nkeys; i++) {
-        char key[MPI_MAX_INFO_KEY], value[MPI_MAX_INFO_VAL];
-        int  valuelen, flag;
-
-        MPI_Info_get_nthkey(fd->info, i, key);
-        MPI_Info_get_valuelen(fd->info, key, &valuelen, &flag);
-        MPI_Info_get(fd->info, key, valuelen+1, value, &flag);
-        printf("MPI File Info: [%2d] key = %25s, value = %s\n",i,key,value);
-    }
-}
-*/
 
     return 0;
 }

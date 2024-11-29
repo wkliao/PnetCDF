@@ -344,9 +344,6 @@ ncmpio_create(MPI_Comm     comm,
     ncp->fstype         = fstype;
     ncp->adio_fh        = adio_fh;
 
-    if (fstype != ADIO_UFS)
-        MPI_Info_set(ncp->mpiinfo, "romio_filesystem_type", "LUSTRE:");
-
 #ifdef PNETCDF_DEBUG
     /* PNETCDF_DEBUG is set at configure time, which will be overwritten by
      * the run-time environment variable PNETCDF_SAFE_MODE */
@@ -372,8 +369,55 @@ ncmpio_create(MPI_Comm     comm,
 
     /* set cb_nodes and construct the cb_node rank list */
     if (fstype != ADIO_UFS) {
+        int i;
+        char value[MPI_MAX_INFO_VAL + 1];
+
         ADIO_Construct_aggr_list(ncp->adio_fh, ncp->num_nodes, ncp->node_ids);
         ncp->adio_fh->num_nodes = ncp->num_nodes;
+
+        if (fstype == ADIO_LUSTRE) {
+            MPI_Info_set(ncp->mpiinfo, "romio_filesystem_type", "LUSTRE:");
+            sprintf(value, "%d", ncp->adio_fh->hints->num_osts);
+            MPI_Info_set(ncp->mpiinfo, "lustre_num_osts", value);
+        }
+
+        /* set file striping hints */
+        sprintf(value, "%d", ncp->adio_fh->hints->cb_nodes);
+        MPI_Info_set(ncp->mpiinfo, "cb_nodes", value);
+
+        /* add hint "aggr_list", list of aggregators' rank IDs */
+        value[0] = '\0';
+        for (i=0; i<ncp->adio_fh->hints->cb_nodes; i++) {
+            char str[16];
+            if (i == 0)
+                snprintf(str, sizeof(str), "%d", ncp->adio_fh->hints->ranklist[i]);
+            else
+                snprintf(str, sizeof(str), " %d", ncp->adio_fh->hints->ranklist[i]);
+            if (strlen(value) + strlen(str) >= MPI_MAX_INFO_VAL-5) {
+                strcat(value, " ...");
+                break;
+            }
+            strcat(value, str);
+        }
+        MPI_Info_set(ncp->mpiinfo, "aggr_list", value);
+
+#if 0
+int rank; MPI_Comm_rank(comm, &rank);
+if (rank == 0) {
+    int  i, nkeys;
+    MPI_Info_get_nkeys(ncp->mpiinfo, &nkeys);
+    printf("%s line %d: MPI File Info: nkeys = %d\n",__func__,__LINE__,nkeys);
+    for (i=0; i<nkeys; i++) {
+        char key[MPI_MAX_INFO_KEY], value[MPI_MAX_INFO_VAL];
+        int  valuelen, flag;
+
+        MPI_Info_get_nthkey(ncp->mpiinfo, i, key);
+        MPI_Info_get_valuelen(ncp->mpiinfo, key, &valuelen, &flag);
+        MPI_Info_get(ncp->mpiinfo, key, valuelen+1, value, &flag);
+        printf("MPI File Info: [%2d] key = %25s, value = %s\n",i,key,value);
+    }
+}
+#endif
     }
 
     /* determine whether to enable intra-node aggregation and set up all
