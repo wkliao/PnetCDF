@@ -144,9 +144,6 @@ ncmpio_open(MPI_Comm     comm,
     ncp->path = (char*) NCI_Malloc(strlen(path) + 1);
     strcpy(ncp->path, path);
 
-    ncp->fstype         = fstype;
-    ncp->adio_fh        = adio_fh;
-
 #ifdef PNETCDF_DEBUG
     /* PNETCDF_DEBUG is set at configure time, which will be overwritten by
      * the run-time environment variable PNETCDF_SAFE_MODE */
@@ -163,10 +160,9 @@ ncmpio_open(MPI_Comm     comm,
     }
 
     /* construct the list of compute nodes */
-    ncp->num_nodes = 0;
     ncp->node_ids = NULL;
     if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_UFS) {
-        err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
+        err = ncmpii_construct_node_list(comm, &adio_fh->num_nodes, &ncp->node_ids);
         if (err != NC_NOERR) return err;
     }
 
@@ -175,27 +171,26 @@ ncmpio_open(MPI_Comm     comm,
         int i;
         char value[MPI_MAX_INFO_VAL + 1];
 
-        ADIO_Construct_aggr_list(ncp->adio_fh, ncp->num_nodes, ncp->node_ids);
-        ncp->adio_fh->num_nodes = ncp->num_nodes;
-
         if (fstype == ADIO_LUSTRE) {
+            ADIO_Lustre_set_aggr_list(adio_fh, adio_fh->num_nodes, ncp->node_ids);
+
             MPI_Info_set(ncp->mpiinfo, "romio_filesystem_type", "LUSTRE:");
-            sprintf(value, "%d", ncp->adio_fh->hints->num_osts);
+            sprintf(value, "%d", adio_fh->hints->num_osts);
             MPI_Info_set(ncp->mpiinfo, "lustre_num_osts", value);
         }
 
         /* set file striping hints */
-        sprintf(value, "%d", ncp->adio_fh->hints->cb_nodes);
+        sprintf(value, "%d", adio_fh->hints->cb_nodes);
         MPI_Info_set(ncp->mpiinfo, "cb_nodes", value);
 
         /* add hint "aggr_list", list of aggregators' rank IDs */
         value[0] = '\0';
-        for (i=0; i<ncp->adio_fh->hints->cb_nodes; i++) {
+        for (i=0; i<adio_fh->hints->cb_nodes; i++) {
             char str[16];
             if (i == 0)
-                snprintf(str, sizeof(str), "%d", ncp->adio_fh->hints->ranklist[i]);
+                snprintf(str, sizeof(str), "%d", adio_fh->hints->ranklist[i]);
             else
-                snprintf(str, sizeof(str), " %d", ncp->adio_fh->hints->ranklist[i]);
+                snprintf(str, sizeof(str), " %d", adio_fh->hints->ranklist[i]);
             if (strlen(value) + strlen(str) >= MPI_MAX_INFO_VAL-5) {
                 strcat(value, " ...");
                 break;
@@ -222,6 +217,9 @@ if (rank == 0) {
 }
 #endif
     }
+
+    ncp->fstype  = fstype;
+    ncp->adio_fh = adio_fh;
 
     /* determine whether to enable intra-node aggregation and set up all
      * intra-node aggregation metadata.
