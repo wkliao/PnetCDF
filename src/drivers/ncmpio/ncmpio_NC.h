@@ -438,7 +438,7 @@ struct NC {
 
     NC_buf       *abuf;     /* attached buffer, used by bput APIs */
 
-    char         *path;     /* file name */
+    const char   *path;     /* file name */
     struct NC    *old;      /* contains the previous NC during redef. */
 
     /* Below are used for intra-node aggregation */

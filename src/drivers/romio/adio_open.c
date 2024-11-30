@@ -714,7 +714,7 @@ int ADIO_File_open(MPI_Comm    comm,
     int err, min_err;
 
     fd->comm        = comm;
-    fd->filename    = ADIOI_Strdup(filename);
+    fd->filename    = filename;  /* without file system type name prefix */
     fd->atomicity   = 0;
     fd->etype       = MPI_BYTE;
     fd->etype_size  = 1;
@@ -722,7 +722,6 @@ int ADIO_File_open(MPI_Comm    comm,
     fd->ftype_size  = 1;
     fd->is_open     = 0;
     fd->access_mode = amode;
-    fd->orig_access_mode = amode;
 
     /* create and initialize info object */
     fd->hints = (ADIOI_Hints*) NCI_Calloc(1, sizeof(ADIOI_Hints));
@@ -777,7 +776,6 @@ err_out:
     if (min_err < 0) {
         if (err == 0) /* close file if opened successfully */
             close(fd->fd_sys);
-        ADIOI_Free(fd->filename);
         ADIOI_Free(fd->hints);
         if (fd->info != MPI_INFO_NULL)
             MPI_Info_free(&(fd->info));
@@ -795,7 +793,6 @@ int ADIO_File_close(ADIO_File *fh)
     if (err != 0)
         err = ncmpii_error_posix2nc("close");
 
-    ADIOI_Free((*fh)->filename);
     if ((*fh)->hints->ranklist != NULL)
         ADIOI_Free((*fh)->hints->ranklist);
     if ((*fh)->hints->cb_config_list != NULL)
