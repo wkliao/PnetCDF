@@ -131,19 +131,18 @@ typedef struct {
 
 typedef struct {
     MPI_Comm comm;          /* communicator indicating who called open */
-    char *filename;
+    const char *filename;
     int file_system;        /* type of file system */
+
     int fd_sys;             /* system file descriptor */
     int num_nodes;          /* number of unique compute nodes from
                              * MPI_Get_processor_name() */
     int access_mode;        /* Access mode (sequential, append, etc.),
                              * possibly modified to deal with
                              * data sieving or deferred open */
-    int orig_access_mode;   /* Access mode provided by user: unmodified */
+
     int is_open;            /* no_indep_rw, 0: not open yet 1: is open */
     ADIO_Offset fp_ind;     /* individual file pointer (in bytes) */
-    ADIO_Offset fp_sys_posn;/* current location of the system file-pointer
-                             * in bytes */
 
     ADIO_Offset disp;       /* file displacement */
     MPI_Datatype etype;     /* element datatype */
