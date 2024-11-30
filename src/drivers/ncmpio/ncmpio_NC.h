@@ -411,7 +411,6 @@ struct NC {
     MPI_Comm      comm;           /* MPI communicator */
     int           rank;           /* MPI rank of this process */
     int           nprocs;         /* number of MPI processes */
-    int           num_nodes;      /* number of unique compute nodes allocated */
     int          *node_ids;       /* [nprocs] node IDs of each rank */
     MPI_Info      mpiinfo;        /* used MPI info object */
     MPI_File      collective_fh;  /* file handle for collective mode */

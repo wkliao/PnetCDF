@@ -485,16 +485,16 @@ err_out:
     return err;
 }
 
-/*----< ADIO_Construct_aggr_list() >-----------------------------------------*/
+/*----< ADIO_Lustre_set_aggr_list() >----------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
  *   fd->hints->ranklist[].
  *   fd->hints->cb_nodes and set file info for hint cb_nodes.
  *   fd->is_agg: indicating whether this rank is an I/O aggregator
  *   fd->my_cb_nodes_index: index into cb_config_list. -1 if N/A
  */
-int ADIO_Construct_aggr_list(ADIO_File  fd,
-                             int        num_nodes,
-                             int       *node_ids)
+int ADIO_Lustre_set_aggr_list(ADIO_File  fd,
+                              int        num_nodes,
+                              int       *node_ids)
 {
     int i, j, k, rank, nprocs, num_aggr, striping_factor;
     int *nprocs_per_node, **ranks_per_node;
