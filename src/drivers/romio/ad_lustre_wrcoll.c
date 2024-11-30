@@ -843,8 +843,6 @@ static int wkl=0; if (wkl==0 && fd->disp>0) { printf("%s %d: --- SWITCH to indep
 #endif
     }
 
-    fd->fp_sys_posn = -1;       /* set it to null. */
-
 fd->lustre_write_metrics[0] = MPI_Wtime() - fd->lustre_write_metrics[0];
 double max_t[3]; MPI_Reduce(fd->lustre_write_metrics, max_t, 3, MPI_DOUBLE, MPI_MAX, 0, fd->comm);
 if (myrank == 0) printf("%s line %d: MAX lustre time write=%.4f pwrite=%.4f all-to-many senders=%ld (nprocs=%d)\n", __func__, __LINE__, max_t[0], max_t[1], (long)max_t[2], nprocs);
