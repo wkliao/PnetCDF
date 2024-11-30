@@ -495,8 +495,14 @@ ncmpi_create(MPI_Comm    comm,
     else
         pncp->comm = comm;
 
+    /* fill in pncp members */
+    pncp->path = (char*) NCI_Strdup(path);
+    if (pncp->path == NULL)
+        DEBUG_RETURN_ERROR(NC_ENOMEM)
+
     /* calling the driver's create subroutine */
-    err = driver->create(pncp->comm, path, cmode, *ncidp, combined_info, &ncp);
+    err = driver->create(pncp->comm, pncp->path, cmode, *ncidp, combined_info,
+                         &ncp);
     if (status == NC_NOERR) status = err;
     if (combined_info != MPI_INFO_NULL) MPI_Info_free(&combined_info);
     if (status != NC_NOERR && status != NC_EMULTIDEFINE_CMODE) {
@@ -508,18 +514,6 @@ ncmpi_create(MPI_Comm    comm,
         return status;
     }
 
-    /* fill in pncp members */
-    pncp->path = (char*) NCI_Malloc(strlen(path)+1);
-    if (pncp->path == NULL) {
-        driver->close(ncp); /* close file and ignore error */
-        del_from_PNCList(*ncidp);
-        if (pncp->comm != MPI_COMM_WORLD && pncp->comm != MPI_COMM_SELF)
-            MPI_Comm_free(&pncp->comm); /* a collective call */
-        NCI_Free(pncp);
-        *ncidp = -1;
-        DEBUG_RETURN_ERROR(NC_ENOMEM)
-    }
-    strcpy(pncp->path, path);
     pncp->mode       = cmode;
     pncp->driver     = driver;
     pncp->ndims      = 0;
@@ -759,8 +753,13 @@ ncmpi_open(MPI_Comm    comm,
     else
         pncp->comm = comm;
 
+    pncp->path = (char*) NCI_Strdup(path);
+    if (pncp->path == NULL)
+        DEBUG_RETURN_ERROR(NC_ENOMEM)
+
     /* calling the driver's open subroutine */
-    err = driver->open(pncp->comm, path, omode, *ncidp, combined_info, &ncp);
+    err = driver->open(pncp->comm, pncp->path, omode, *ncidp, combined_info,
+                       &ncp);
     if (status == NC_NOERR) status = err;
     if (combined_info != MPI_INFO_NULL) MPI_Info_free(&combined_info);
     if (status != NC_NOERR && status != NC_EMULTIDEFINE_OMODE &&
@@ -776,17 +775,6 @@ ncmpi_open(MPI_Comm    comm,
     }
 
     /* fill in pncp members */
-    pncp->path = (char*) NCI_Malloc(strlen(path)+1);
-    if (pncp->path == NULL) {
-        driver->close(ncp); /* close file and ignore error */
-        del_from_PNCList(*ncidp);
-        if (pncp->comm != MPI_COMM_WORLD && pncp->comm != MPI_COMM_SELF)
-            MPI_Comm_free(&pncp->comm); /* a collective call */
-        NCI_Free(pncp);
-        *ncidp = -1;
-        DEBUG_RETURN_ERROR(NC_ENOMEM)
-    }
-    strcpy(pncp->path, path);
     pncp->mode       = omode;
     pncp->driver     = driver;
     pncp->ndims      = 0;
