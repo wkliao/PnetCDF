@@ -42,8 +42,9 @@ int ADIO_File_sync(ADIO_File fd)
 int ADIO_File_delete(const char *filename)
 {
     int err = NC_NOERR;
+    char *path = ncmpii_remove_file_system_type_prefix(filename);
 
-    err = unlink(filename);
+    err = unlink(path);
     if (err != 0)
         err = ncmpii_error_posix2nc("unlink");
 
@@ -586,7 +587,7 @@ int ADIO_File_set_view(ADIO_File     fd,
 
         /* check filetype only if it is not a predefined MPI datatype */
         flat_file = ADIOI_Flatten_and_find(fd->filetype);
-        err = check_type(flat_file, fd->orig_access_mode, "filetype");
+        err = check_type(flat_file, fd->access_mode, "filetype");
         if (err != NC_NOERR)
             return err;
     }

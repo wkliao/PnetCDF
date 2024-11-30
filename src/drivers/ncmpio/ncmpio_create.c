@@ -114,7 +114,7 @@ ncmpio_create(MPI_Comm     comm,
     }
 #endif
 
-    /* check if path is on Lustre */
+    /* check file system type */
     fstype = ADIO_FileSysType(path);
 
     if (fIsSet(cmode, NC_NOCLOBBER)) {
@@ -148,11 +148,10 @@ ncmpio_create(MPI_Comm     comm,
                     err = NC_NOERR;
 #else
                 err = NC_NOERR;
-                if (fstype != ADIO_UFS) {
-                    err = ADIO_File_delete((char *)path);
-                }
+                if (fstype != ADIO_UFS)
+                    err = ADIO_File_delete(path);
                 else {
-                    TRACE_IO(MPI_File_delete)((char *)path, MPI_INFO_NULL);
+                    TRACE_IO(MPI_File_delete)(path, MPI_INFO_NULL);
                     if (mpireturn != MPI_SUCCESS) {
                         int errorclass;
                         MPI_Error_class(mpireturn, &errorclass);
@@ -185,7 +184,8 @@ ncmpio_create(MPI_Comm     comm,
                 err = NC_NOERR;
                 if (fstype != ADIO_UFS) {
                     adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
-                    err = ADIO_File_open(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR, MPI_INFO_NULL, adio_fh);
+                    err = ADIO_File_open(MPI_COMM_SELF, path, MPI_MODE_RDWR,
+                                         MPI_INFO_NULL, adio_fh);
                     if (err == NC_NOERR)
                         ADIO_File_set_size(adio_fh, 0); /* can be expensive */
                     else
@@ -193,7 +193,7 @@ ncmpio_create(MPI_Comm     comm,
                     NCI_Free(adio_fh);
                 }
                 else {
-                    TRACE_IO(MPI_File_open)(MPI_COMM_SELF, (char *)path, MPI_MODE_RDWR,
+                    TRACE_IO(MPI_File_open)(MPI_COMM_SELF, path, MPI_MODE_RDWR,
                                             MPI_INFO_NULL, &fh);
                     if (mpireturn != MPI_SUCCESS) {
                         int errorclass;
@@ -232,14 +232,26 @@ ncmpio_create(MPI_Comm     comm,
         adio_fh->file_system = fstype;
     }
 
+    /* allocate buffer for header object NC and initialize its contents */
+    ncp = (NC*) NCI_Calloc(1, sizeof(NC));
+    if (ncp == NULL) DEBUG_RETURN_ERROR(NC_ENOMEM)
+
+    /* For file create, ignore if NC_NOWRITE set in cmode by user */
+    ncp->iomode   = cmode | NC_WRITE;
+    ncp->comm     = comm;  /* reuse comm duplicated in dispatch layer */
+    ncp->path     = path;  /* reuse path duplicated in dispatch layer */
+    ncp->rank     = rank;
+    ncp->nprocs   = nprocs;
+    ncp->mpiomode = mpiomode;
+
     /* create file collectively -------------------------------------------- */
     if (fstype != ADIO_UFS) {
-        err = ADIO_File_open(comm, (char *)path, mpiomode, user_info, adio_fh);
+        err = ADIO_File_open(comm, path, mpiomode, user_info, adio_fh);
         if (err != NC_NOERR)
             return err;
     }
     else {
-        TRACE_IO(MPI_File_open)(comm, (char *)path, mpiomode, user_info, &fh);
+        TRACE_IO(MPI_File_open)(comm, path, mpiomode, user_info, &fh);
         if (mpireturn != MPI_SUCCESS) {
 #ifndef HAVE_ACCESS
             if (fIsSet(cmode, NC_NOCLOBBER)) {
@@ -283,11 +295,11 @@ ncmpio_create(MPI_Comm     comm,
             return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
     }
 
-    /* Now the file has been successfully created, allocate/set NC object */
-
-    /* allocate buffer for header object NC and initialize its contents */
-    ncp = (NC*) NCI_Calloc(1, sizeof(NC));
-    if (ncp == NULL) DEBUG_RETURN_ERROR(NC_ENOMEM)
+    /* Now the file has been successfully created */
+    ncp->collective_fh  = fh;
+    ncp->independent_fh = (nprocs > 1) ? MPI_FILE_NULL : fh;
+    ncp->fstype         = fstype;
+    ncp->adio_fh        = adio_fh;
 
     /* set the file format version based on the create mode, cmode */
          if (fIsSet(cmode, NC_64BIT_DATA))   ncp->format = 5;
@@ -311,11 +323,6 @@ ncmpio_create(MPI_Comm     comm,
     /* chunk size for reading header, set to default before check hints */
     ncp->chunk = PNC_DEFAULT_CHUNKSIZE;
 
-    /* calculate the true header size (not-yet aligned)
-     * No need to do this now.
-     * ncp->xsz = ncmpio_hdr_len_NC(ncp);
-     */
-
     /* initialize unlimited_id as no unlimited dimension yet defined */
     ncp->dims.unlimited_id = -1;
 
@@ -328,18 +335,6 @@ ncmpio_create(MPI_Comm     comm,
      * libraries.
      */
     ncmpio_set_pnetcdf_hints(ncp, user_info, info_used);
-
-    /* For file create, ignore if NC_NOWRITE set in cmode by user */
-    ncp->iomode         = cmode | NC_WRITE;
-    ncp->comm           = comm;  /* reuse comm duplicated in dispatch layer */
-    ncp->mpiinfo        = info_used; /* is not MPI_INFO_NULL */
-    ncp->mpiomode       = mpiomode;
-    ncp->rank           = rank;
-    ncp->nprocs         = nprocs;
-    ncp->collective_fh  = fh;
-    ncp->independent_fh = (nprocs > 1) ? MPI_FILE_NULL : fh;
-    ncp->path = (char*) NCI_Malloc(strlen(path) + 1);
-    strcpy(ncp->path, path);
 
 #ifdef PNETCDF_DEBUG
     /* PNETCDF_DEBUG is set at configure time, which will be overwritten by
@@ -371,14 +366,14 @@ ncmpio_create(MPI_Comm     comm,
         if (fstype == ADIO_LUSTRE) {
             ADIO_Lustre_set_aggr_list(adio_fh, adio_fh->num_nodes, ncp->node_ids);
 
-            MPI_Info_set(ncp->mpiinfo, "romio_filesystem_type", "LUSTRE:");
+            MPI_Info_set(info_used, "romio_filesystem_type", "LUSTRE:");
             sprintf(value, "%d", adio_fh->hints->num_osts);
-            MPI_Info_set(ncp->mpiinfo, "lustre_num_osts", value);
+            MPI_Info_set(info_used, "lustre_num_osts", value);
         }
 
         /* set file striping hints */
         sprintf(value, "%d", adio_fh->hints->cb_nodes);
-        MPI_Info_set(ncp->mpiinfo, "cb_nodes", value);
+        MPI_Info_set(info_used, "cb_nodes", value);
 
         /* add hint "aggr_list", list of aggregators' rank IDs */
         value[0] = '\0';
@@ -394,29 +389,27 @@ ncmpio_create(MPI_Comm     comm,
             }
             strcat(value, str);
         }
-        MPI_Info_set(ncp->mpiinfo, "aggr_list", value);
+        MPI_Info_set(info_used, "aggr_list", value);
 
 #if 0
 int rank; MPI_Comm_rank(comm, &rank);
 if (rank == 0) {
     int  i, nkeys;
-    MPI_Info_get_nkeys(ncp->mpiinfo, &nkeys);
+    MPI_Info_get_nkeys(info_used, &nkeys);
     printf("%s line %d: MPI File Info: nkeys = %d\n",__func__,__LINE__,nkeys);
     for (i=0; i<nkeys; i++) {
         char key[MPI_MAX_INFO_KEY], value[MPI_MAX_INFO_VAL];
         int  valuelen, flag;
 
-        MPI_Info_get_nthkey(ncp->mpiinfo, i, key);
-        MPI_Info_get_valuelen(ncp->mpiinfo, key, &valuelen, &flag);
-        MPI_Info_get(ncp->mpiinfo, key, valuelen+1, value, &flag);
+        MPI_Info_get_nthkey(info_used, i, key);
+        MPI_Info_get_valuelen(info_used, key, &valuelen, &flag);
+        MPI_Info_get(info_used, key, valuelen+1, value, &flag);
         printf("MPI File Info: [%2d] key = %25s, value = %s\n",i,key,value);
     }
 }
 #endif
     }
-
-    ncp->fstype  = fstype;
-    ncp->adio_fh = adio_fh;
+    ncp->mpiinfo = info_used; /* is not MPI_INFO_NULL */
 
     /* determine whether to enable intra-node aggregation and set up all
      * intra-node aggregation metadata.

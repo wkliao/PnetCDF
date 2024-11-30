@@ -51,7 +51,6 @@ ncmpio_free_NC(NC *ncp)
     if (ncp->get_list      != NULL) NCI_Free(ncp->get_list);
     if (ncp->put_list      != NULL) NCI_Free(ncp->put_list);
     if (ncp->abuf          != NULL) NCI_Free(ncp->abuf);
-    if (ncp->path          != NULL) NCI_Free(ncp->path);
     if (ncp->nonaggr_ranks != NULL) NCI_Free(ncp->nonaggr_ranks);
 
     NCI_Free(ncp);
@@ -88,7 +87,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
          * in define mode, the file is deleted */
         if (ncp->rank == 0) {
             if (ncp->fstype != ADIO_UFS) {
-                err = ADIO_File_delete((char *)ncp->path);
+                err = ADIO_File_delete(ncp->path);
                 if (err != NC_NOERR) return err;
             }
             else {
