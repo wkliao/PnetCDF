@@ -332,7 +332,6 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                     + (ADIO_Offset) n_filetypes *filetype_extent;
                 }
             }
-            fd->fp_sys_posn = -1;       /* set it to null. */
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
             MPI_Status_set_elements_x(status, datatype, count);
 #else
@@ -499,8 +498,6 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         if (file_ptr_type == ADIO_INDIVIDUAL)
             fd->fp_ind = off;
     }
-
-    fd->fp_sys_posn = -1;       /* set it to null. */
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
     MPI_Status_set_elements_x(status, datatype, count);

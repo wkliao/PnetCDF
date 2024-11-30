@@ -240,7 +240,6 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
                         + n_filetypes * filetype_extent;
                 }
             }
-            fd->fp_sys_posn = -1;       /* set it to null. */
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
             MPI_Status_set_elements_x(status, datatype, count);
 #else
@@ -394,8 +393,6 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
 
         ADIOI_Free(readbuf);    /* malloced in the buffered_read macro */
     }
-
-    fd->fp_sys_posn = -1;       /* set it to null. */
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
     MPI_Status_set_elements_x(status, datatype, count);
