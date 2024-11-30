@@ -61,8 +61,6 @@ int ADIO_ReadContig(ADIO_File     fd,
         p += err;
     }
 
-    fd->fp_sys_posn = offset + bytes_xfered;
-
     if (file_ptr_type == ADIO_INDIVIDUAL)
         fd->fp_ind += bytes_xfered;
     /* if ADIO_EXPLICIT_OFFSET, do not update file pointer */

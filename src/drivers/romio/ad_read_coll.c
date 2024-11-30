@@ -227,8 +227,6 @@ void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
     ADIOI_Free(offset_list);
     ADIOI_Free(st_offsets);
     ADIOI_Free(fd_start);
-
-    fd->fp_sys_posn = -1;       /* set it to null. */
 }
 
 void ADIOI_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount, MPI_Datatype

@@ -336,8 +336,6 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
             fd->fp_ind = off;
     }   /* end of (else noncontiguous in file) */
 
-    fd->fp_sys_posn = -1;       /* mark it as invalid. */
-
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
     MPI_Status_set_elements_x(status, buftype, count);
 #else
