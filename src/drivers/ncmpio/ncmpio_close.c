@@ -66,6 +66,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
 
     if (ncp->fstype != ADIO_UFS) {
         err = ADIO_File_close(&ncp->adio_fh);
+        NCI_Free(ncp->adio_fh);
         ncp->adio_fh = NULL;
         if (err != NC_NOERR) return err;
     }
