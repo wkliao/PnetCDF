@@ -38,7 +38,7 @@
 #include <sys/stat.h> /* fstat(), lstat(), stat() */
 #endif
 
-#ifndef MIMIC_LUSTRE
+#ifdef HAVE_LUSTRE
 #include <lustre/lustreapi.h>
 
 /* what is the basis for this define?
@@ -267,7 +267,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
      * in fd->hints->ranklist, no matter its is open or create mode.
      */
     if (rank == 0) {
-#ifndef MIMIC_LUSTRE
+#ifdef HAVE_LUSTRE
         char value[MPI_MAX_INFO_VAL+1];
         int lumlen, flag, set_layout = 0;
         struct lov_user_md *lum = NULL;
@@ -294,14 +294,12 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         if ((str_factor > 0) || (str_unit > 0) || (start_iodev >= 0))
             set_layout = 1;
 
-#ifdef HAVE_LUSTRE
         /* if hints were set, we need to delay creation of any lustre objects.
          * However, if we open the file with O_LOV_DELAY_CREATE and don't call
          * the follow-up ioctl, subsequent writes will fail
          */
         if (set_layout)
             amode = O_CREAT | O_LOV_DELAY_CREATE;
-#endif
 #endif
         fd->fd_sys = open(fd->filename, amode, perm);
         if (fd->fd_sys == -1) {
@@ -311,16 +309,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
             goto err_out;
         }
 
-#ifdef MIMIC_LUSTRE
-#define xstr(s) str(s)
-#define str(s) #s
-#define STRIPE_SIZE 1024
-#define STRIPE_COUNT 4
-        stripin_info[0] = STRIPE_SIZE;
-        stripin_info[1] = STRIPE_COUNT;
-        stripin_info[2] = 0;
-        stripin_info[3] = STRIPE_COUNT;
-#else
+#if defined(HAVE_LUSTRE)
         /* odd length here because lov_user_md contains some fixed data and
          * then a list of 'lmm_objects' representing stripe */
         lumlen = sizeof(struct lov_user_md)
@@ -381,6 +370,15 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
             err = ncmpii_error_posix2nc("ioctl");
         }
         ADIOI_Free(lum);
+#elif defined(MIMIC_LUSTRE)
+#define xstr(s) str(s)
+#define str(s) #s
+#define STRIPE_SIZE 1024
+#define STRIPE_COUNT 4
+        stripin_info[0] = STRIPE_SIZE;
+        stripin_info[1] = STRIPE_COUNT;
+        stripin_info[2] = 0;
+        stripin_info[3] = STRIPE_COUNT;
 #endif
     }
 err_out:
@@ -438,7 +436,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
      * processes.
      */
     if (rank == 0) {
-#ifndef MIMIC_LUSTRE
+#ifdef HAVE_LUSTRE
         ADIO_Offset str_factor = -1, str_unit = 0, start_iodev = -1;
         struct lov_user_md *lum = NULL;
 
@@ -463,7 +461,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         else
             err =  ncmpii_error_posix2nc("ioctl");
         ADIOI_Free(lum);
-#else
+#elif defined(MIMIC_LUSTRE)
 #define xstr(s) str(s)
 #define str(s) #s
 #define STRIPE_SIZE 1024
@@ -805,7 +803,6 @@ int ADIO_File_close(ADIO_File *fh)
         ADIOI_Free((*fh)->io_buf);
     if ((*fh)->filetype != MPI_BYTE)
         ADIOI_Type_dispose(&(*fh)->filetype);
-    NCI_Free(*fh);
 
     return err;
 }
