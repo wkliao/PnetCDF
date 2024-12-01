@@ -45,7 +45,7 @@ ncmpio_create(MPI_Comm     comm,
     char *env_str, *filename, *mpi_name;
     int rank, nprocs, mpiomode, err, mpireturn, default_format, file_exist=1;
     int use_trunc=1, fstype;
-    MPI_File fh;
+    MPI_File fh=MPI_FILE_NULL;
     MPI_Info info_used;
     NC *ncp=NULL;
     ADIO_File adio_fh=NULL;
