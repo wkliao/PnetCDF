@@ -187,7 +187,7 @@ ncmpio_create(MPI_Comm     comm,
                 err = NC_NOERR;
                 if (fstype != ADIO_UFS) {
                     adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
-                    err = ADIO_File_open(MPI_COMM_SELF, path, MPI_MODE_RDWR,
+                    err = ADIO_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDWR,
                                          MPI_INFO_NULL, adio_fh);
                     if (err == NC_NOERR)
                         ADIO_File_set_size(adio_fh, 0); /* can be expensive */
@@ -248,7 +248,7 @@ ncmpio_create(MPI_Comm     comm,
 
     /* create file collectively -------------------------------------------- */
     if (fstype != ADIO_UFS) {
-        err = ADIO_File_open(comm, path, mpiomode, user_info, adio_fh);
+        err = ADIO_File_open(comm, filename, mpiomode, user_info, adio_fh);
         if (err != NC_NOERR)
             return err;
     }
