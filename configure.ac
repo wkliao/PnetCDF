@@ -1575,30 +1575,26 @@ AC_CHECK_TYPE([blksize_t],[],[AC_DEFINE_UNQUOTED([blksize_t],[__blksize_t],[Prov
 AC_CHECK_DECLS([pwrite])
 
 #
-# Verify presence of lustre/lustre_user.h
+# Check if Lustre is available by verifying presence of lustre/lustre_user.h
 #
-AC_ARG_ENABLE([lustre],
-    [AS_HELP_STRING([--(en/dis)lustre],
-                    [Enable/disable PnetCDF Lustre driver. @<:@default: auto@:>@])],
-    [has_lustre=${enableval}], [has_lustre=auto]
-)
-UD_MSG_DEBUG([has_lustre=$has_lustre])
-
-if test "x$has_lustre" != xno ; then
-    AC_CHECK_HEADERS([linux/lustre/lustre_user.h lustre/lustre_user.h], break)
-    if test x"$ac_cv_header_linux_lustre_lustre_user_h" = "xyes" -o x"$ac_cv_header_lustre_lustre_user_h" = "xyes" ; then
-        AC_DEFINE(HAVE_LUSTRE, 1, [Define for LUSTRE])
-        has_lustre=yes
-        LIBS="$LIBS -llustreapi"
-    else
-        has_lustre=no
-    fi
-fi
-if test "$MIMIC_LUSTRE" = yes ; then
-   AC_DEFINE(MIMIC_LUSTRE, 1, [Define for Hecking ROMIO to mimic LUSTRE])
-   has_lustre=yes
+has_lustre=no
+AC_CHECK_HEADERS([lustre/lustre_user.h linux/lustre/lustre_user.h],
+                 [has_lustre=yes ; break])
+if test "x$has_lustre" = xyes ; then
+   AC_DEFINE(HAVE_LUSTRE, 1, [Define for LUSTRE])
+   LIBS="$LIBS -llustreapi"
 fi
 AM_CONDITIONAL(HAVE_LUSTRE, [test x$has_lustre = xyes])
+
+if test "x$has_lustre" = xno ; then
+   AC_MSG_CHECKING([for whether mimicking Lustre])
+   minicking_lustre=no
+   if test "x$MIMIC_LUSTRE" = xyes ; then
+      AC_DEFINE(MIMIC_LUSTRE, 1, [Define for mimicking LUSTRE file system])
+      minicking_lustre=yes
+   fi
+   AC_MSG_RESULT($minicking_lustre)
+fi
 
 AC_C_CHAR_UNSIGNED
 AC_C_BIGENDIAN
