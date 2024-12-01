@@ -509,6 +509,7 @@ ncmpi_create(MPI_Comm    comm,
         del_from_PNCList(*ncidp);
         if (pncp->comm != MPI_COMM_WORLD && pncp->comm != MPI_COMM_SELF)
             MPI_Comm_free(&pncp->comm); /* a collective call */
+        NCI_Free(pncp->path);
         NCI_Free(pncp);
         *ncidp = -1;
         return status;
@@ -769,6 +770,7 @@ ncmpi_open(MPI_Comm    comm,
         del_from_PNCList(*ncidp);
         if (pncp->comm != MPI_COMM_WORLD && pncp->comm != MPI_COMM_SELF)
             MPI_Comm_free(&pncp->comm); /* a collective call */
+        NCI_Free(pncp->path);
         NCI_Free(pncp);
         *ncidp = -1;
         return status;
