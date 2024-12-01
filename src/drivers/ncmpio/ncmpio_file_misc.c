@@ -446,12 +446,20 @@ int
 ncmpi_delete(const char *filename,
              MPI_Info    info)
 {
+    int err = NC_NOERR;
+#ifdef MIMIC_LUSTRE
+    char *path = ncmpii_remove_file_system_type_prefix(filename);
+    err = unlink(path);
+    if (err != 0)
+        err = ncmpii_error_posix2nc("unlink");
+#else
     char *mpi_name;
-    int err=NC_NOERR, mpireturn;
+    int mpireturn;
 
-    TRACE_IO(MPI_File_delete, ((char*)filename, info));
+    TRACE_IO(MPI_File_delete, (filename, info));
     if (mpireturn != MPI_SUCCESS)
         err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+#endif
     return err;
 }
 
