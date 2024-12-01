@@ -41,7 +41,7 @@ ncmpio_open(MPI_Comm     comm,
 {
     char *filename, *env_str;
     int i, mpiomode, err, status=NC_NOERR, mpireturn, fstype;
-    MPI_File fh;
+    MPI_File fh=MPI_FILE_NULL;
     MPI_Info info_used;
     NC *ncp=NULL;
     ADIO_File adio_fh=NULL;
