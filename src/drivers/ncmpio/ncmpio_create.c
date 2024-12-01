@@ -48,7 +48,7 @@ ncmpio_create(MPI_Comm     comm,
     MPI_File fh;
     MPI_Info info_used;
     NC *ncp=NULL;
-    ADIO_File adio_fh;
+    ADIO_File adio_fh=NULL;
 
     *ncpp = NULL;
 
@@ -194,6 +194,7 @@ ncmpio_create(MPI_Comm     comm,
                     else
                         ADIO_File_close(&adio_fh);
                     NCI_Free(adio_fh);
+                    adio_fh = NULL;
                 }
                 else {
                     TRACE_IO(MPI_File_open, (MPI_COMM_SELF, path, MPI_MODE_RDWR, MPI_INFO_NULL, &fh));
@@ -356,8 +357,9 @@ ncmpio_create(MPI_Comm     comm,
     /* construct the list of compute nodes */
     ncp->node_ids = NULL;
     if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_UFS) {
-        err = ncmpii_construct_node_list(comm, &adio_fh->num_nodes, &ncp->node_ids);
+        err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
         if (err != NC_NOERR) return err;
+        if (adio_fh != NULL) adio_fh->num_nodes = ncp->num_nodes;
     }
 
     /* set cb_nodes and construct the cb_node rank list */
@@ -366,7 +368,7 @@ ncmpio_create(MPI_Comm     comm,
         char value[MPI_MAX_INFO_VAL + 1];
 
         if (fstype == ADIO_LUSTRE) {
-            ADIO_Lustre_set_aggr_list(adio_fh, adio_fh->num_nodes, ncp->node_ids);
+            ADIO_Lustre_set_aggr_list(adio_fh, ncp->num_nodes, ncp->node_ids);
 
             MPI_Info_set(info_used, "romio_filesystem_type", "LUSTRE:");
             sprintf(value, "%d", adio_fh->hints->num_osts);
