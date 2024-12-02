@@ -114,6 +114,7 @@ ncmpio_create(MPI_Comm     comm,
     }
 #endif
 
+    /* If user explicitly want to use MPI-IO, then set fstype to ADIO_FSTYPE_NULL */
     /* check file system type */
     fstype = ADIO_FileSysType(path);
 
@@ -148,7 +149,7 @@ ncmpio_create(MPI_Comm     comm,
                     err = NC_NOERR;
 #else
                 err = NC_NOERR;
-                if (fstype != ADIO_UFS)
+                if (fstype != ADIO_FSTYPE_NULL)
                     err = ADIO_File_delete(path);
                 else {
                     TRACE_IO(MPI_File_delete)(path, MPI_INFO_NULL);
@@ -182,7 +183,7 @@ ncmpio_create(MPI_Comm     comm,
                  * be expensive.
                  */
                 err = NC_NOERR;
-                if (fstype != ADIO_UFS) {
+                if (fstype != ADIO_FSTYPE_NULL) {
                     adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
                     err = ADIO_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDWR,
                                          MPI_INFO_NULL, adio_fh);
@@ -228,7 +229,7 @@ ncmpio_create(MPI_Comm     comm,
         if (err != NC_NOERR) return err;
     }
 
-    if (fstype != ADIO_UFS) {
+    if (fstype != ADIO_FSTYPE_NULL) {
         adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
         adio_fh->file_system = fstype;
     }
@@ -246,7 +247,7 @@ ncmpio_create(MPI_Comm     comm,
     ncp->mpiomode = mpiomode;
 
     /* create file collectively -------------------------------------------- */
-    if (fstype != ADIO_UFS) {
+    if (fstype != ADIO_FSTYPE_NULL) {
         err = ADIO_File_open(comm, filename, mpiomode, user_info, adio_fh);
         if (err != NC_NOERR)
             return err;
@@ -286,7 +287,7 @@ ncmpio_create(MPI_Comm     comm,
     }
 
     /* get the I/O hints used/modified by MPI-IO */
-    if (fstype != ADIO_UFS) {
+    if (fstype != ADIO_FSTYPE_NULL) {
         err = ADIO_File_get_info(adio_fh,  &info_used);
         if (err != NC_NOERR) return err;
     }
@@ -354,14 +355,14 @@ ncmpio_create(MPI_Comm     comm,
 
     /* construct the list of compute nodes */
     ncp->node_ids = NULL;
-    if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_UFS) {
+    if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_FSTYPE_NULL) {
         err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
         if (err != NC_NOERR) return err;
         if (adio_fh != NULL) adio_fh->num_nodes = ncp->num_nodes;
     }
 
     /* set cb_nodes and construct the cb_node rank list */
-    if (fstype != ADIO_UFS) {
+    if (fstype != ADIO_FSTYPE_NULL) {
         int i;
         char value[MPI_MAX_INFO_VAL + 1];
 
@@ -372,6 +373,12 @@ ncmpio_create(MPI_Comm     comm,
             sprintf(value, "%d", adio_fh->hints->num_osts);
             MPI_Info_set(info_used, "lustre_num_osts", value);
         }
+        else if (fstype == ADIO_UFS) {
+            ADIO_GEN_set_aggr_list(adio_fh, ncp->num_nodes, ncp->node_ids);
+            MPI_Info_set(info_used, "romio_filesystem_type", "UFS:");
+        }
+        else
+            return NC_EFSTYPE;
 
         /* set file striping hints */
         sprintf(value, "%d", adio_fh->hints->cb_nodes);
