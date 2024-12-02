@@ -53,6 +53,7 @@
 
 #define ADIO_UFS                 152    /* Unix file system */
 #define ADIO_LUSTRE              163    /* Lustre */
+#define ADIO_FSTYPE_NULL         -1     /* Unsupported file system type */
 
 #define ADIOI_Strdup strdup
 #define ADIOI_Malloc malloc
@@ -248,6 +249,7 @@ int ADIOI_Type_dispose(MPI_Datatype * datatype);
 ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype);
 
 int ADIO_Lustre_set_aggr_list(ADIO_File fd, int num_nodes, int *node_ids);
+int ADIO_GEN_set_aggr_list(ADIO_File fd, int num_nodes, int *node_ids);
 
 void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                 MPI_Datatype datatype, int file_ptr_type, ADIO_Offset offset,
@@ -342,5 +344,13 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset,
                 int whence, ADIO_Offset len);
 int ADIOI_GEN_SetLock64(ADIO_File fd, int cmd, int type, ADIO_Offset offset,
                 int whence, ADIO_Offset len);
+
+void ADIOI_Heap_merge(ADIOI_Access *others_req, MPI_Count *count,
+                ADIO_Offset *srt_off, MPI_Count *srt_len, MPI_Count *start_pos,
+                int nprocs, int nprocs_recv, MPI_Count total_elements);
+
+void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
+                MPI_Datatype datatype, int file_ptr_type, ADIO_Offset offset,
+                ADIO_Status *status, int *error_code);
 
 #endif
