@@ -145,11 +145,11 @@ int file_write(ADIO_File     fd,
  * a count of etypes.
  */
 int ADIO_File_write_at(ADIO_File     fh,
-                      MPI_Offset    offset,
-                      const void   *buf,
-                      int           count,
-                      MPI_Datatype  bufType,
-                      MPI_Status   *status)
+                       MPI_Offset    offset,
+                       const void   *buf,
+                       int           count,
+                       MPI_Datatype  bufType,
+                       MPI_Status   *status)
 {
     int err = NC_NOERR;
 
@@ -169,10 +169,10 @@ int ADIO_File_write_at(ADIO_File     fh,
 /*----< ADIO_File_write() >--------------------------------------------------*/
 /* This is an independent call. */
 int ADIO_File_write(ADIO_File     fh,
-                   const void   *buf,
-                   int           count,
-                   MPI_Datatype  bufType,
-                   MPI_Status   *status)
+                    const void   *buf,
+                    int           count,
+                    MPI_Datatype  bufType,
+                    MPI_Status   *status)
 {
     int err = NC_NOERR;
 
@@ -207,8 +207,15 @@ int ADIO_File_write_at_all(ADIO_File     fh,
     if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
         st = NC_EPERM;
 
-    ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
-                                  offset, status, &err);
+    if (fh->file_system == ADIO_LUSTRE)
+        ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType,
+                                   ADIO_EXPLICIT_OFFSET, offset, status, &err);
+    else if (fh->file_system == ADIO_UFS)
+        ADIOI_GEN_WriteStridedColl(fh, buf, count, bufType,
+                                   ADIO_EXPLICIT_OFFSET, offset, status, &err);
+    else
+        return NC_EFSTYPE;
+
     if (err != MPI_SUCCESS && st == NC_NOERR)
         st = ncmpii_error_mpi2nc(err, "ADIO_File_write_at_all");
 
@@ -230,8 +237,15 @@ int ADIO_File_write_all(ADIO_File     fh,
     if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
         st = NC_EPERM;
 
-    ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
-                         0, status, &err);
+    if (fh->file_system == ADIO_LUSTRE)
+        ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
+                                      0, status, &err);
+    else if (fh->file_system == ADIO_UFS)
+        ADIOI_GEN_WriteStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
+                                      0, status, &err);
+    else
+        return NC_EFSTYPE;
+
     if (err != MPI_SUCCESS && st == NC_NOERR)
         st = ncmpii_error_mpi2nc(err, "ADIO_File_write_all");
 
