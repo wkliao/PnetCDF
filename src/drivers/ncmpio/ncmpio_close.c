@@ -64,7 +64,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
 
     assert(ncp != NULL); /* this should never occur */
 
-    if (ncp->fstype != ADIO_UFS) {
+    if (ncp->fstype != ADIO_FSTYPE_NULL) {
         err = ADIO_File_close(&ncp->adio_fh);
         NCI_Free(ncp->adio_fh);
         ncp->adio_fh = NULL;
@@ -88,7 +88,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
         /* called from ncmpi_abort, if the file is being created and is still
          * in define mode, the file is deleted */
         if (ncp->rank == 0) {
-            if (ncp->fstype != ADIO_UFS) {
+            if (ncp->fstype != ADIO_FSTYPE_NULL) {
                 err = ADIO_File_delete(ncp->path);
                 if (err != NC_NOERR) return err;
             }
