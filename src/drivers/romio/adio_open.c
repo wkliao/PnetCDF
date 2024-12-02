@@ -247,7 +247,7 @@ file_create(ADIO_File fd,
             int       access_mode)
 {
     int err=NC_NOERR, rank, amode, perm, old_mask;
-    int stripin_info[4] = {-1, -1, -1, -1};
+    int stripin_info[4] = {1048576, -1, -1, -1};
 
     MPI_Comm_rank(fd->comm, &rank);
 
@@ -413,7 +413,7 @@ static int
 file_open(ADIO_File fd)
 {
     int err=NC_NOERR, rank, perm, old_mask;
-    int stripin_info[4] = {-1, -1, -1, -1};
+    int stripin_info[4] = {1048576, -1, -1, -1};
 
     MPI_Comm_rank(fd->comm, &rank);
 
@@ -483,12 +483,88 @@ err_out:
     return err;
 }
 
+/*----< ADIO_GEN_set_aggr_list() >----------------------------------------*/
+/* Construct the list of I/O aggregators. It sets the followings.
+ *   fd->hints->ranklist[].
+ *   fd->hints->cb_nodes and set file info for hint cb_nodes.
+ *   fd->is_agg: indicating whether this rank is an I/O aggregator
+ *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
+ */
+int ADIO_GEN_set_aggr_list(ADIO_File  fd,
+                           int        num_nodes,
+                           int       *node_ids)
+{
+    int i, j, k, nprocs, *nprocs_per_node, **ranks_per_node;
+
+    MPI_Comm_size(fd->comm, &nprocs);
+
+    if (fd->hints->cb_nodes == 0)
+        /* If hint cb_nodes is not set by user, select one rank per node to be
+         * an I/O aggregator
+         */
+        fd->hints->cb_nodes = num_nodes;
+    else if (fd->hints->cb_nodes > 0)
+        /* cb_nodes must be <= nprocs */
+        fd->hints->cb_nodes = nprocs;
+
+    fd->hints->ranklist = (int *) ADIOI_Malloc(sizeof(int) * fd->hints->cb_nodes);
+    if (fd->hints->ranklist == NULL)
+        return NC_ENOMEM;
+
+    /* number of MPI processes running on each node */
+    nprocs_per_node = (int *) ADIOI_Calloc(num_nodes, sizeof(int));
+
+    for (i=0; i<nprocs; i++) nprocs_per_node[node_ids[i]]++;
+
+    /* construct rank IDs of MPI processes running on each node */
+    ranks_per_node = (int **) ADIOI_Malloc(sizeof(int*) * num_nodes);
+    ranks_per_node[0] = (int *) ADIOI_Malloc(sizeof(int) * nprocs);
+    for (i=1; i<num_nodes; i++)
+        ranks_per_node[i] = ranks_per_node[i - 1] + nprocs_per_node[i - 1];
+
+    for (i=0; i<num_nodes; i++) nprocs_per_node[i] = 0;
+
+    /* Populate ranks_per_node[], list of MPI ranks running on each node.
+     * Populate nprocs_per_node[], number of MPI processes on each node.
+     */
+    for (i=0; i<nprocs; i++) {
+        k = node_ids[i];
+        ranks_per_node[k][nprocs_per_node[k]] = i;
+        nprocs_per_node[k]++;
+    }
+
+    /* select process ranks from nodes in a round-robin fashion to be I/O
+     * aggregators
+     */
+    k = j = 0;
+    for (i=0; i<fd->hints->cb_nodes; i++) {
+        if (j >= nprocs_per_node[k]) { /* if run out of ranks in this node k */
+            k++;
+            if (k == num_nodes) { /* round-robin to first node */
+                k = 0;
+                j++;
+            }
+        }
+        /* select jth rank of node k as an I/O aggregator */
+        fd->hints->ranklist[i] = ranks_per_node[k++][j];
+        if (k == num_nodes) { /* round-robin to first node */
+            k = 0;
+            j++;
+        }
+    }
+    ADIOI_Free(ranks_per_node[0]);
+    ADIOI_Free(ranks_per_node);
+    ADIOI_Free(nprocs_per_node);
+
+    return 0;
+}
+
 /*----< ADIO_Lustre_set_aggr_list() >----------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
  *   fd->hints->ranklist[].
  *   fd->hints->cb_nodes and set file info for hint cb_nodes.
  *   fd->is_agg: indicating whether this rank is an I/O aggregator
- *   fd->my_cb_nodes_index: index into cb_config_list. -1 if N/A
+ *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
  */
 int ADIO_Lustre_set_aggr_list(ADIO_File  fd,
                               int        num_nodes,
@@ -723,7 +799,7 @@ int ADIO_File_open(MPI_Comm    comm,
     fd->access_mode = amode;
 
     /* create and initialize info object */
-    fd->hints = (ADIOI_Hints*) NCI_Calloc(1, sizeof(ADIOI_Hints));
+    fd->hints = (ADIOI_Hints*) ADIOI_Calloc(1, sizeof(ADIOI_Hints));
     if (info == MPI_INFO_NULL)
         MPI_Info_create(&fd->info);
     else
@@ -740,7 +816,7 @@ int ADIO_File_open(MPI_Comm    comm,
         goto err_out;
     }
 
-    if (fd->file_system != ADIO_UFS) {
+    if (fd->file_system != ADIO_FSTYPE_NULL) {
         /* For Lustre, determining the I/O aggregators and constructing ranklist
          * requires file stripe count, which can only be obtained after file is
          * opened.
@@ -797,7 +873,7 @@ int ADIO_File_close(ADIO_File *fh)
     if ((*fh)->hints->cb_config_list != NULL)
         ADIOI_Free((*fh)->hints->cb_config_list);
     if ((*fh)->hints != NULL)
-        NCI_Free((*fh)->hints);
+        ADIOI_Free((*fh)->hints);
     if ((*fh)->info != MPI_INFO_NULL)
         MPI_Info_free(&((*fh)->info));
     if ((*fh)->io_buf != NULL)
