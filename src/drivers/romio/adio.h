@@ -55,7 +55,7 @@
 #define ADIO_LUSTRE        163    /* Lustre */
 #define ADIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
 
-#if 0
+#if 1
 #define ADIOI_Strdup NCI_Strdup
 #define ADIOI_Malloc NCI_Malloc
 #define ADIOI_Calloc(a,b) NCI_Calloc((size_t)a,b)
