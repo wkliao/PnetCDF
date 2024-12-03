@@ -1723,6 +1723,7 @@ static void ADIOI_LUSTRE_W_Exchange_data(
     int hole, check_hole, cb_nodes, striping_unit;
     MPI_Count sum_recv;
     MPI_Status status;
+    static char myname[] = "ADIOI_LUSTRE_W_Exchange_data";
 
     *send_buf_ptr = NULL;
 
