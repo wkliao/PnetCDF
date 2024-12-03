@@ -59,11 +59,11 @@ ncmpio_open(MPI_Comm     comm,
     /* NC_MMAP is not supported yet */
     if (omode & NC_MMAP) DEBUG_RETURN_ERROR(NC_EINVAL_OMODE)
 
-    /* If user explicitly want to use MPI-IO, then set fstype to ADIO_FSTYPE_NULL */
+    /* If user explicitly want to use MPI-IO, then set fstype to ADIO_FSTYPE_MPIIO */
     /* check file system type */
     fstype = ADIO_FileSysType(path);
 
-    if (fstype != ADIO_FSTYPE_NULL) {
+    if (fstype != ADIO_FSTYPE_MPIIO) {
         adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
         adio_fh->file_system = fstype;
     }
@@ -105,7 +105,7 @@ ncmpio_open(MPI_Comm     comm,
     mpiomode = fIsSet(omode, NC_WRITE) ? MPI_MODE_RDWR : MPI_MODE_RDONLY;
     ncp->mpiomode = mpiomode;
 
-    if (fstype != ADIO_FSTYPE_NULL) {
+    if (fstype != ADIO_FSTYPE_MPIIO) {
         err = ADIO_File_open(comm, filename, mpiomode, user_info, adio_fh);
         if (err != NC_NOERR) return err;
     }
@@ -122,7 +122,7 @@ ncmpio_open(MPI_Comm     comm,
     ncp->adio_fh        = adio_fh;
 
     /* get the file info used/modified by MPI-IO */
-    if (fstype != ADIO_FSTYPE_NULL) {
+    if (fstype != ADIO_FSTYPE_MPIIO) {
         err = ADIO_File_get_info(adio_fh, &info_used);
         if (err != NC_NOERR) return err;
     }
@@ -170,14 +170,14 @@ ncmpio_open(MPI_Comm     comm,
 
     /* construct the list of compute nodes */
     ncp->node_ids = NULL;
-    if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_FSTYPE_NULL) {
+    if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_FSTYPE_MPIIO) {
         err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
         if (err != NC_NOERR) return err;
         if (adio_fh != NULL) adio_fh->num_nodes = ncp->num_nodes;
     }
 
     /* set cb_nodes and construct the cb_node rank list */
-    if (fstype != ADIO_FSTYPE_NULL) {
+    if (fstype != ADIO_FSTYPE_MPIIO) {
         int i;
         char value[MPI_MAX_INFO_VAL + 1];
 
