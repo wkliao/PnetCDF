@@ -816,7 +816,7 @@ int ADIO_File_open(MPI_Comm    comm,
         goto err_out;
     }
 
-    if (fd->file_system != ADIO_FSTYPE_NULL) {
+    if (fd->file_system != ADIO_FSTYPE_MPIIO) {
         /* For Lustre, determining the I/O aggregators and constructing ranklist
          * requires file stripe count, which can only be obtained after file is
          * opened.
@@ -880,6 +880,11 @@ int ADIO_File_close(ADIO_File *fh)
         ADIOI_Free((*fh)->io_buf);
     if ((*fh)->filetype != MPI_BYTE)
         ADIOI_Type_dispose(&(*fh)->filetype);
+
+    if (ADIOI_Flattened_type_keyval != MPI_KEYVAL_INVALID) {
+        MPI_Type_free_keyval(&ADIOI_Flattened_type_keyval);
+        ADIOI_Flattened_type_keyval = MPI_KEYVAL_INVALID;
+    }
 
     return err;
 }
