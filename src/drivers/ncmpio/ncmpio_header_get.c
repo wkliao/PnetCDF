@@ -361,7 +361,7 @@ hdr_fetch(bufferinfo *gbp) {
         /* fileview is already entire file visible and MPI_File_read_at does
            not change the file pointer */
         if (gbp->coll_mode == 1) { /* collective read */
-            if (gbp->fstype != ADIO_FSTYPE_NULL) {
+            if (gbp->fstype != ADIO_FSTYPE_MPIIO) {
                 err = ADIO_File_read_at_all(gbp->adio_fh, gbp->offset, readBuf,
                                            readLen, MPI_BYTE, &mpistatus);
             }
@@ -376,7 +376,7 @@ hdr_fetch(bufferinfo *gbp) {
             }
         }
         else {
-            if (gbp->fstype != ADIO_FSTYPE_NULL) {
+            if (gbp->fstype != ADIO_FSTYPE_MPIIO) {
                 err = ADIO_File_read_at(gbp->adio_fh, gbp->offset, readBuf,
                                        readLen, MPI_BYTE, &mpistatus);
             }
@@ -416,7 +416,7 @@ hdr_fetch(bufferinfo *gbp) {
     }
     else if (gbp->coll_mode == 1) { /* collective read */
         /* other processes participate the collective call */
-        if (gbp->fstype != ADIO_FSTYPE_NULL) {
+        if (gbp->fstype != ADIO_FSTYPE_MPIIO) {
             err = ADIO_File_read_at_all(gbp->adio_fh,  0, NULL,
                                        0, MPI_BYTE, &mpistatus);
         }
