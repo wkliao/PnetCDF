@@ -564,7 +564,7 @@ int ncmpio_write_header(NC *ncp)
             memset(&mpistatus, 0, sizeof(MPI_Status));
 
             if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
-                if (ncp->fstype != ADIO_FSTYPE_NULL) {
+                if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
                     err = ADIO_File_write_at_all(ncp->adio_fh, offset, buf_ptr, writeLen,
                                                 MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
@@ -584,7 +584,7 @@ int ncmpio_write_header(NC *ncp)
                 }
             }
             else { /* header independent write */
-                if (ncp->fstype != ADIO_FSTYPE_NULL) {
+                if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
                     err = ADIO_File_write_at(ncp->adio_fh, offset, buf_ptr, writeLen,
                                             MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
@@ -625,7 +625,7 @@ int ncmpio_write_header(NC *ncp)
     }
     else if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
         /* collective write: other processes participate the collective call */
-        if (ncp->fstype != ADIO_FSTYPE_NULL) {
+        if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
             for (i=0; i<ntimes; i++) {
                 err = ADIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);

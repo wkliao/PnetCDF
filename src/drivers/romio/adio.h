@@ -51,15 +51,24 @@
 #endif
 
 
-#define ADIO_UFS                 152    /* Unix file system */
-#define ADIO_LUSTRE              163    /* Lustre */
-#define ADIO_FSTYPE_NULL         -1     /* Unsupported file system type */
+#define ADIO_UFS           152    /* Unix file system */
+#define ADIO_LUSTRE        163    /* Lustre */
+#define ADIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
 
+#if 0
+#define ADIOI_Strdup NCI_Strdup
+#define ADIOI_Malloc NCI_Malloc
+#define ADIOI_Calloc(a,b) NCI_Calloc((size_t)a,b)
+#define ADIOI_Realloc NCI_Realloc
+#define ADIOI_Free NCI_Free
+#else
 #define ADIOI_Strdup strdup
 #define ADIOI_Malloc malloc
 #define ADIOI_Calloc(a,b) calloc((size_t)a,b)
 #define ADIOI_Realloc realloc
 #define ADIOI_Free free
+#endif
+
 #define ADIOI_Strncpy strncpy
 #define ADIOI_Info_get MPI_Info_get
 #define ADIOI_Info_set MPI_Info_set
@@ -207,6 +216,8 @@ typedef struct {
     size_t count;
 #endif
 } ADIOI_Access;
+
+extern int ADIOI_Flattened_type_keyval;
 
 /*---- APIs -----------------------------------------------------------------*/
 int ADIO_FileSysType(const char *filename);

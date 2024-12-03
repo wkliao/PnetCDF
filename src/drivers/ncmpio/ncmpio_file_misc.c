@@ -151,7 +151,7 @@ ncmpio_begin_indep_data(void *ncdp)
     /* raise independent flag */
     fSet(ncp->flags, NC_MODE_INDEP);
 
-    if (ncp->fstype != ADIO_FSTYPE_NULL) return NC_NOERR;
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO) return NC_NOERR;
 
     /* PnetCDF's default mode is collective. MPI file handle, collective_fh,
      * will never be MPI_FILE_NULL. We must use a separate MPI file handle
