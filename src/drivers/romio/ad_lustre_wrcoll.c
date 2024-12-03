@@ -489,8 +489,8 @@ if (myrank == 0) printf("%s --- max_recv_amnt=%lld time=%.4f\n",__func__,max_rec
 #endif
 }
 
-void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
-                                   MPI_Datatype buftype,
+void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
+                                   MPI_Aint count, MPI_Datatype buftype,
                                    int file_ptr_type, ADIO_Offset offset,
                                    ADIO_Status *status, int *error_code)
 {
@@ -502,11 +502,9 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count
      */
 
     int i, j, nprocs, myrank, old_error, tmp_error;
-    int do_collect = 0;
+    int do_collect = 0, is_btype_predef;
     ADIO_Offset orig_fp, start_offset, end_offset;
     ADIO_Offset min_st_loc = -1, max_end_loc = -1;
-    MPI_Aint lb;
-    ADIOI_Flatlist_node *flat_view = NULL;
     Flat_list flat_fview;
     Flat_list flat_bview;
 
@@ -577,17 +575,31 @@ fd->lustre_write_metrics[0] = MPI_Wtime();
      */
     flat_fview.is_contig = (flat_fview.count > 1) ? 0 : 1;
 
-    /* flatten user buffer datatype, buftype */
-    flat_view = ADIOI_Flatten_and_find(buftype);
+    ADIOI_Type_ispredef(buftype, &is_btype_predef);
 
-    flat_bview.type  = buftype;
-    flat_bview.count = flat_view->count;
-    flat_bview.off   = flat_view->indices;
-    flat_bview.len   = flat_view->blocklens;
-    flat_bview.rnd   = 0;
-    flat_bview.idx   = 0;
-    flat_bview.rem   = (flat_bview.count > 0) ? flat_bview.len[0] : 0;
-    MPI_Type_get_extent(buftype, &lb, &flat_bview.extent);
+    /* flatten user buffer datatype, buftype */
+    if (is_btype_predef) {
+        int buftype_size;
+        MPI_Type_size(buftype, &buftype_size);
+        flat_bview.count  = 1;
+        flat_bview.off    = (MPI_Offset*)NCI_Malloc(sizeof(MPI_Offset)*2);
+        flat_bview.len    = flat_bview.off + 1;
+        flat_bview.off[0] = 0;
+        flat_bview.len[0] = buftype_size;
+        flat_bview.extent = buftype_size;
+    }
+    else {
+        MPI_Aint lb;
+        ADIOI_Flatlist_node *flat_view = ADIOI_Flatten_and_find(buftype);
+        flat_bview.count = flat_view->count;
+        flat_bview.off   = flat_view->indices;
+        flat_bview.len   = flat_view->blocklens;
+        MPI_Type_get_extent(buftype, &lb, &flat_bview.extent);
+    }
+    flat_bview.type = buftype;
+    flat_bview.rnd  = 0;
+    flat_bview.idx  = 0;
+    flat_bview.rem  = (flat_bview.count > 0) ? flat_bview.len[0] : 0;
 
     /* Check if the user buffer is truly contiguous or not.
      * flat_bview.count being 1 is not the true indicator of whether or not
@@ -703,6 +715,8 @@ if (do_collect == 0) printf("%s --- SWITCH to independent write !!!\n",__func__)
 
         fd->fp_ind = orig_fp;
 
+        if (is_btype_predef) NCI_Free(flat_bview.off);
+
         if (flat_fview.is_contig && flat_bview.is_contig) {
             /* both buffer and fileview are contiguous */
             ADIO_Offset off = 0;
@@ -804,6 +818,8 @@ static int wkl=0; if (wkl==0 && fd->disp>0) { printf("%s %d: --- SWITCH to indep
     if (flat_fview.off != NULL)
         ADIOI_Free(flat_fview.off);
 
+    if (is_btype_predef) NCI_Free(flat_bview.off);
+
     /* If this collective write is followed by an independent write, it's
      * possible to have those subsequent writes on other processes race ahead
      * and sneak in before the read-modify-write completes.  We carry out a
@@ -843,10 +859,10 @@ static int wkl=0; if (wkl==0 && fd->disp>0) { printf("%s %d: --- SWITCH to indep
 #endif
     }
 
+#if defined(HAVE_LUSTRE) && !defined(MIMIC_LUSTRE)
 fd->lustre_write_metrics[0] = MPI_Wtime() - fd->lustre_write_metrics[0];
 double max_t[3]; MPI_Reduce(fd->lustre_write_metrics, max_t, 3, MPI_DOUBLE, MPI_MAX, 0, fd->comm);
 if (myrank == 0) printf("%s line %d: MAX lustre time write=%.4f pwrite=%.4f all-to-many senders=%ld (nprocs=%d)\n", __func__, __LINE__, max_t[0], max_t[1], (long)max_t[2], nprocs);
-#ifdef WKL_DEBUG
 #endif
 }
 
