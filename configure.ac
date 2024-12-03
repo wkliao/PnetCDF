@@ -1532,7 +1532,7 @@ AC_CHECK_DECLS([pwrite])
 has_lustre=no
 AC_CHECK_HEADERS([lustre/lustre_user.h linux/lustre/lustre_user.h],
                  [has_lustre=yes ; break])
-if test "x$has _lustre" = xyes ; then
+if test "x$has_lustre" = xyes ; then
    AC_DEFINE(HAVE_LUSTRE, 1, [Define for LUSTRE])
    LIBS="$LIBS -llustreapi"
 fi
