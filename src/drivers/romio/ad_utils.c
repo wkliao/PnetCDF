@@ -8,6 +8,7 @@
 #endif
 
 #include <limits.h>
+#include <stdarg.h> /* va_start(), va_end() */
 
 #include <adio.h>
 
@@ -363,3 +364,29 @@ void ADIOI_Heap_merge(ADIOI_Access * others_req, MPI_Count * count,
     }
     ADIOI_Free(a);
 }
+
+int MPIO_Err_create_code(int lastcode, int fatal, const char fcname[],
+                         int line, int error_class, const char generic_msg[],
+                         const char specific_msg[], ...)
+{
+    va_list Argp;
+    int idx = 0;
+    char *buf;
+
+    buf = (char *) ADIOI_Malloc(1024);
+    if (buf != NULL) {
+        idx += snprintf(buf, 1023, "%s (line %d): ", fcname, line);
+        if (specific_msg == NULL) {
+            snprintf(&buf[idx], 1023 - idx, "%s\n", generic_msg);
+        } else {
+            va_start(Argp, specific_msg);
+            vsnprintf(&buf[idx], 1023 - idx, specific_msg, Argp);
+            va_end(Argp);
+        }
+        FPRINTF(stderr, "%s", buf);
+        ADIOI_Free(buf);
+    }
+
+    return error_class;
+}
+
