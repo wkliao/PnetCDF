@@ -337,7 +337,6 @@ int ADIOI_Calc_aggregator(ADIO_File fd, ADIO_Offset off, ADIO_Offset min_off,
                 ADIO_Offset *fd_end);
 
 
-#define MPIO_Err_create_code(err, ...) err
 #define FPRINTF fprintf
 #define DBG_FPRINTF fprintf
 
@@ -363,5 +362,10 @@ void ADIOI_Heap_merge(ADIOI_Access *others_req, MPI_Count *count,
 void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
                 MPI_Datatype datatype, int file_ptr_type, ADIO_Offset offset,
                 ADIO_Status *status, int *error_code);
+
+#define MPIR_ERR_RECOVERABLE 0
+int MPIO_Err_create_code(int lastcode, int fatal, const char fcname[],
+                int line, int error_class, const char generic_msg[],
+                const char specific_msg[], ...);
 
 #endif
