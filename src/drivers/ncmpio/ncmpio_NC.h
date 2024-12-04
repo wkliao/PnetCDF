@@ -457,7 +457,7 @@ struct NC {
     int  num_nonaggrs;       /* number of non-aggregators assigned */
     int *nonaggr_ranks;      /* ranks of assigned non-aggregators */
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    double aggr_time[4];
+    double aggr_time[6];
 #endif
 };
 
