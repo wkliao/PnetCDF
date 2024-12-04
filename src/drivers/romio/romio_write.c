@@ -65,7 +65,9 @@ else
     printf("%2d %s line %d pread off=%lld len=%lld\n",rank,__func__,__LINE__,off,len);
 #endif
 
+#ifdef PNETCDF_PROFILING
 double tt = MPI_Wtime();
+#endif
     p = (char *) buf;
     while (bytes_xfered < len) {
         w_count = len - bytes_xfered;
@@ -77,7 +79,9 @@ double tt = MPI_Wtime();
         bytes_xfered += err;
         p += err;
     }
+#ifdef PNETCDF_PROFILING
 fd->lustre_write_metrics[1] += MPI_Wtime() - tt;
+#endif
 
     if (file_ptr_type == ADIO_INDIVIDUAL)
         fd->fp_ind += bytes_xfered;

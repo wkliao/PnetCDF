@@ -825,6 +825,10 @@ int ADIO_File_open(MPI_Comm    comm,
         else
             err = file_open(fd);
         if (err != NC_NOERR) goto err_out;
+
+#ifdef PNETCDF_PROFILING
+fd->lustre_write_metrics[0] = fd->lustre_write_metrics[1] = fd->lustre_write_metrics[2] = 0;
+#endif
     }
     else {
         err = NC_EFSTYPE;
