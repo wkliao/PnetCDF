@@ -174,19 +174,20 @@ ncmpio_close(void *ncdp)
 
 #ifdef PNETCDF_PROFILING
 if (! NC_readonly(ncp)) {
-double tt[8],max_t[8];
+double tt[9],max_t[9];
 tt[0] = ncp->aggr_time[0];
 tt[1] = ncp->aggr_time[1];
 tt[2] = ncp->aggr_time[2];
 tt[3] = ncp->aggr_time[3];
 tt[4] = ncp->aggr_time[4];
-tt[5] = ncp->adio_fh->lustre_write_metrics[0];
-tt[6] = ncp->adio_fh->lustre_write_metrics[1];
-tt[7] = ncp->adio_fh->lustre_write_metrics[2];
-MPI_Reduce(tt, max_t, 8, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
-if (ncp->rank == 0) printf("%s: MAX intra-node time %.4f %.4f %.4f %.4f %.4f coll time write=%.4f pwrite=%.4f all-to-many senders=%ld (nprocs=%d)\n", __func__,
-max_t[0], max_t[1], max_t[2], max_t[3], max_t[4],
-max_t[5], max_t[6], (long)max_t[7], ncp->nprocs);
+tt[5] = ncp->aggr_time[5];
+tt[6] = ncp->adio_fh->lustre_write_metrics[0];
+tt[7] = ncp->adio_fh->lustre_write_metrics[1];
+tt[8] = ncp->adio_fh->lustre_write_metrics[2];
+MPI_Reduce(tt, max_t, 9, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
+if (ncp->rank == 0) printf("%s: MAX time intra-node %.2f %.2f %.2f %.2f %.2f nsort=%ld coll time %.2f pwrite %.2f all-to-many senders %ld (nprocs %d)\n", __func__,
+max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], (long)max_t[5],
+max_t[6], max_t[7], (long)max_t[8], ncp->nprocs);
 }
 #endif
 
