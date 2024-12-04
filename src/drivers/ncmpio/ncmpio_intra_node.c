@@ -164,7 +164,7 @@ qsort_off_len_buf(MPI_Aint num,
     }
 }
 
-/*----< ncmpio_init_intra_node_aggr() >--------------------------------------*/
+/*----< ncmpio_intra_node_aggr_init() >--------------------------------------*/
 /* When intra-node write aggregation is enabled, processes on the same node
  * will be divided into groups. The number of groups is the number of
  * aggregators on that node. The rank IDs of each group must be established.
@@ -202,7 +202,7 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     double timing = MPI_Wtime();
     ncp->aggr_time[0] = ncp->aggr_time[1] = 0.0;
     ncp->aggr_time[2] = ncp->aggr_time[3] = 0.0;
-    ncp->aggr_time[4] = 0.0;
+    ncp->aggr_time[4] = ncp->aggr_time[5] = 0.0;
 #endif
 
     /* allocate space for storing the rank IDs of non-aggregators assigned to
@@ -1009,6 +1009,7 @@ intra_node_aggregation(NC           *ncp,
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
     ncp->aggr_time[2] += endT - startT;
+    startT = endT;
 #endif
 
     /* aggregator sorts the offset-length pairs, along with the buffer */
@@ -1028,6 +1029,8 @@ intra_node_aggregation(NC           *ncp,
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
     ncp->aggr_time[3] += endT - startT;
+    ncp->aggr_time[5] = MAX(ncp->aggr_time[5], npairs);
+    startT = endT;
 #endif
 
         /* merge the overlapped buffer segments, skip the overlapped regions
