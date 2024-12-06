@@ -164,7 +164,7 @@ qsort_off_len_buf(MPI_Aint num,
     }
 }
 
-/*----< ncmpio_init_intra_node_aggr() >--------------------------------------*/
+/*----< ncmpio_intra_node_aggr_init() >--------------------------------------*/
 /* When intra-node write aggregation is enabled, processes on the same node
  * will be divided into groups. The number of groups is the number of
  * aggregators on that node. The rank IDs of each group must be established.
