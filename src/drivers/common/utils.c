@@ -113,19 +113,21 @@ ncmpii_construct_node_list(MPI_Comm   comm,
      * character terminated, but my_procname_len does not include the null
      * character.
      */
+    MPI_Get_processor_name(my_procname, &my_procname_len);
+#if 0
 #ifdef MIMIC_LUSTRE
-    /* mimic number of compute nodes = 4 */
-    int node_id, np_per_node = nprocs / 4;
-    if (nprocs % 4 > 0) np_per_node++;
-    if (rank < np_per_node * (nprocs % 4))
+#define MIMIC_NUM_NODES 1
+    /* mimic number of compute nodes = MIMIC_NUM_NODES */
+    int node_id, np_per_node = nprocs / MIMIC_NUM_NODES;
+    if (nprocs % MIMIC_NUM_NODES > 0) np_per_node++;
+    if (rank < np_per_node * (nprocs % MIMIC_NUM_NODES))
         node_id = rank / np_per_node;
     else
-        node_id = (rank - np_per_node * (nprocs % 4)) / (nprocs / 4) + (nprocs % 4);
+        node_id = (rank - np_per_node * (nprocs % MIMIC_NUM_NODES)) / (nprocs / MIMIC_NUM_NODES) + (nprocs % MIMIC_NUM_NODES);
 
     sprintf(my_procname,"compute.node.%d", node_id);
     my_procname_len = (int)strlen(my_procname);
-#else
-    MPI_Get_processor_name(my_procname, &my_procname_len);
+#endif
 #endif
 
     my_procname_len++; /* to include terminate null character */
