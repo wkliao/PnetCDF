@@ -164,6 +164,154 @@ qsort_off_len_buf(MPI_Aint num,
     }
 }
 
+/* Heapify(a, i, heapsize); Algorithm from Cormen et al. pg. 143 modified for a
+ * heap with smallest element at root. The recursion has been removed so that
+ * there are no function calls. Function calls are too expensive.
+ *
+ * Requirement: all individual offsets lists must be already sorted !!!
+ */
+static
+void heap_merge(int              nprocs,
+                const MPI_Aint  *count,    /* [nprocs] */
+                MPI_Aint         nelems,
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Count       *offsets,  /* [nelems] */
+                MPI_Count       *blklens,  /* [nelems] */
+#else
+                MPI_Aint        *offsets,  /* [nelems] */
+                int             *blklens,  /* [nelems] */
+#endif
+                MPI_Aint        *bufAddr)  /* [nelems] */
+{
+    typedef struct {
+#ifdef HAVE_MPI_LARGE_COUNT
+        MPI_Count *off_list;
+        MPI_Count *len_list;
+#else
+        MPI_Aint  *off_list;
+        int       *len_list;
+#endif
+        MPI_Aint  *addr_list;
+        MPI_Aint  count;
+    } heap_struct;
+
+    heap_struct *a, tmp;
+    int i, j, heapsize, l, r, k, smallest;
+    size_t sum;
+
+    /* This heap_merge is not in-plance, taking too much memory footprint */
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Count *srt_off = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * nelems);
+    MPI_Count *srt_len = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * nelems);
+#else
+    MPI_Aint *srt_off = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nelems);
+    int      *srt_len = (int*)      NCI_Malloc(sizeof(int)      * nelems);
+#endif
+    MPI_Aint *srt_addr = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nelems);
+
+    a = (heap_struct *) NCI_Calloc(nprocs, sizeof(heap_struct));
+
+    /* there are nprocs number of lists to be merged */
+    j = 0;
+    sum = 0;
+    for (i = 0; i < nprocs; i++) {
+        if (count[i]) {
+            /* each of a[j].off_list is already sorted */
+            a[j].off_list = offsets + sum;
+            a[j].len_list = blklens + sum;
+            a[j].addr_list = bufAddr + sum;
+            sum += count[i];
+            a[j].count = count[i];
+            j++;
+        }
+    }
+
+#define SWAP_HEAP(x, y, tmp) { tmp = x ; x = y ; y = tmp ; }
+
+    heapsize = nprocs;
+
+    /* Build a heap out of the first element from each list, with the smallest
+     * element of the heap at the root. The first for loop is to find and move
+     * the smallest a[*].off_list[0] to a[0].
+     */
+    for (i = heapsize / 2 - 1; i >= 0; i--) {
+        k = i;
+        for (;;) {
+            r = 2 * (k + 1);
+            l = r - 1;
+            if (l < heapsize && a[l].off_list[0] < a[k].off_list[0])
+                smallest = l;
+            else
+                smallest = k;
+
+            if (r < heapsize && a[r].off_list[0] < a[smallest].off_list[0])
+                smallest = r;
+
+            if (smallest != k) {
+                SWAP_HEAP(a[k], a[smallest], tmp);
+                k = smallest;
+            } else
+                break;
+        }
+    }
+
+    /* The heap keeps the smallest element in its first element, i.e.
+     * a[0].off_list[0].
+     */
+    j = 0;
+    for (i = 0; i < nelems; i++) {
+        /* extract smallest element from heap, i.e. the root */
+        srt_off[i] = a[0].off_list[0];
+        srt_len[i] = a[0].len_list[0];
+        srt_addr[i] = a[0].addr_list[0];
+        a[0].count--;
+
+        if (!a[0].count) {
+            a[0] = a[heapsize - 1];
+            heapsize--;
+        } else {
+            a[0].off_list++;
+            a[0].len_list++;
+            a[0].addr_list++;
+        }
+
+        /* Heapify(a, 0, heapsize); */
+        k = 0;
+        for (;;) {
+            r = 2 * (k + 1);
+            l = r - 1;
+            if (l < heapsize && a[l].off_list[0] < a[k].off_list[0])
+                smallest = l;
+            else
+                smallest = k;
+
+            if (r < heapsize && a[r].off_list[0] < a[smallest].off_list[0])
+                smallest = r;
+
+            if (smallest != k) {
+                SWAP_HEAP(a[k], a[smallest], tmp);
+                k = smallest;
+            } else
+                break;
+        }
+    }
+
+#ifdef HAVE_MPI_LARGE_COUNT
+    memcpy(offsets, srt_off, sizeof(MPI_Count) * nelems);
+    memcpy(blklens, srt_len, sizeof(MPI_Count) * nelems);
+#else
+    memcpy(offsets, srt_off, sizeof(MPI_Count) * nelems);
+    memcpy(blklens, srt_len, sizeof(MPI_Count) * nelems);
+#endif
+    memcpy(bufAddr, srt_addr, sizeof(MPI_Aint) * nelems);
+
+    NCI_Free(a);
+    NCI_Free(srt_addr);
+    NCI_Free(srt_len);
+    NCI_Free(srt_off);
+}
+
+
 /*----< ncmpio_intra_node_aggr_init() >--------------------------------------*/
 /* When intra-node write aggregation is enabled, processes on the same node
  * will be divided into groups. The number of groups is the number of
@@ -493,10 +641,16 @@ flatten_req(NC                *ncp,
                                *offsets + idx,  /* OUT: array of offsets */
                                *lengths + idx); /* OUT: array of lengths */
 
+        if (num == 0) continue;
         if (idx == 0)
-            prev_offset = (*offsets)[0];
+            prev_offset = (*offsets)[num-1];
         else if (prev_offset > (*offsets)[idx])
             *is_incr = 0;  /* offsets are not incrementing */
+        else {
+            if (prev_offset > (*offsets)[idx])
+                *is_incr = 0;  /* offsets are not incrementing */
+            prev_offset = (*offsets)[idx + num-1];
+        }
 
         idx += num;
         assert(idx <= *num_pairs);
@@ -629,10 +783,14 @@ flatten_reqs(NC            *ncp,
                          &num,            /* OUT: number of off-len pairs */
                          *offsets + idx,  /* OUT: array of offsets */
                          *lengths + idx); /* OUT: array of lengths */
+        if (num == 0) continue;
         if (idx == 0)
-            prev_offset = (*offsets)[0];
-        else if (prev_offset > (*offsets)[idx])
-            *is_incr = 0;  /* offsets are not incrementing */
+            prev_offset = (*offsets)[num-1];
+        else {
+            if (prev_offset > (*offsets)[idx])
+                *is_incr = 0;  /* offsets are not incrementing */
+            prev_offset = (*offsets)[idx + num-1];
+        }
 
         idx += num;
     }
@@ -736,9 +894,9 @@ intra_node_aggregation(NC           *ncp,
                        MPI_Datatype  bufType,
                        void         *buf)
 {
-    int i, j, err, mpireturn, status=NC_NOERR, nreqs, do_qsort = 0;
+    int i, j, err, mpireturn, status=NC_NOERR, nreqs, do_sort=0, indv_sorted=1;
     char *recv_buf=NULL, *wr_buf = NULL;
-    MPI_Aint npairs=0, *msg;
+    MPI_Aint npairs=0, *msg, *count=NULL;
     MPI_Offset offset=0, buf_count;
     MPI_Datatype recvTypes, fileType=MPI_BYTE;
     MPI_File fh;
@@ -1014,20 +1172,39 @@ intra_node_aggregation(NC           *ncp,
         /* check if qsort is necessary. Find the first non-aggregator with
          * non-zero pairs
          */
-        for (i=0; i<ncp->num_nonaggrs; i++)
-            if (msg[i*3] > 0)
-                break;
-        if (msg[i*3+2] == 0) /* first is_incr */
-            do_qsort = 1;
-        else {
-            MPI_Aint sum = msg[i*3];
-            for (++i; i<ncp->num_nonaggrs; i++) {
-                if (msg[i*3+2] == 0 || offsets[sum-1] > offsets[sum]) {
-                    do_qsort = 1; /* offsets are not incrementing */
-                    break;
-                }
-                sum += msg[i*3];
+        for (i=-1,j=0; j<ncp->num_nonaggrs; j++) {
+            if (i == -1 && msg[j*3] > 0) /* find 1st one whose num_paris > 0 */
+                i = j;
+            if (msg[j*3+2] == 0) { /* individual j list is not sorted */
+                indv_sorted = 0;
+                do_sort = 1;
             }
+        }
+        if (i >= 0 && indv_sorted == 1) { /* further check if sort is needed */
+            if (msg[i*3+2] == 0) /* first is_incr */
+                do_sort = 1;
+            else {
+                MPI_Aint sum = msg[i*3];
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Count prev_off = offsets[sum-1];
+#else
+                MPI_Aint prev_off = offsets[sum-1];
+#endif
+                for (++i; i<ncp->num_nonaggrs; i++) {
+                    if (msg[i*3] == 0) continue;
+                    if (msg[i*3+2] == 0 || prev_off > offsets[sum]) {
+                        do_sort = 1; /* offsets are not incrementing */
+                        break;
+                    }
+                    sum += msg[i*3];
+                    prev_off = offsets[sum-1];
+                }
+            }
+        }
+        if (do_sort && indv_sorted) {
+            /* count will be used in heap_merge() */
+            count = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * ncp->num_nonaggrs);
+            for (i=0; i<ncp->num_nonaggrs; i++) count[i] = msg[i*3];
         }
         NCI_Free(req);
         NCI_Free(msg);
@@ -1064,8 +1241,14 @@ intra_node_aggregation(NC           *ncp,
         /* sort offsets, lengths, bufAddr altogether, based on offsets into
          * an increasing order
          */
-        if (do_qsort)
-            qsort_off_len_buf(npairs, offsets, lengths, bufAddr);
+        if (do_sort) {
+            if (indv_sorted) {
+                heap_merge(ncp->num_nonaggrs, count, npairs, offsets, lengths, bufAddr);
+                NCI_Free(count);
+            }
+            else
+                qsort_off_len_buf(npairs, offsets, lengths, bufAddr);
+        }
 
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
