@@ -300,8 +300,8 @@ void heap_merge(int              nprocs,
     memcpy(offsets, srt_off, sizeof(MPI_Count) * nelems);
     memcpy(blklens, srt_len, sizeof(MPI_Count) * nelems);
 #else
-    memcpy(offsets, srt_off, sizeof(MPI_Count) * nelems);
-    memcpy(blklens, srt_len, sizeof(MPI_Count) * nelems);
+    memcpy(offsets, srt_off, sizeof(MPI_Aint) * nelems);
+    memcpy(blklens, srt_len, sizeof(int)      * nelems);
 #endif
     memcpy(bufAddr, srt_addr, sizeof(MPI_Aint) * nelems);
 
