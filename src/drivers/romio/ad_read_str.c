@@ -68,7 +68,7 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
     MPI_Count n_etypes_in_filetype;
     ADIO_Offset n_filetypes, etype_in_filetype, st_n_filetypes, size_in_filetype;
     ADIO_Offset abs_off_in_filetype = 0, new_frd_size, frd_size = 0, st_frd_size;
-    MPI_Count filetype_size, etype_size, buftype_size, partial_read;
+    MPI_Count filetype_size, buftype_size, partial_read;
     MPI_Aint lb, filetype_extent, buftype_extent;
     int buf_count, buftype_is_contig, filetype_is_contig;
     ADIO_Offset userbuf_off, req_len, sum;
@@ -104,7 +104,6 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
     MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
     MPI_Type_size_x(datatype, &buftype_size);
     MPI_Type_get_extent(datatype, &lb, &buftype_extent);
-    etype_size = fd->etype_size;
 
     ADIOI_Assert((buftype_size * count) ==
                  ((ADIO_Offset) (MPI_Count) buftype_size * (ADIO_Offset) count));
@@ -125,7 +124,7 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
         flat_buf = ADIOI_Flatten_and_find(datatype);
 
         off = (file_ptr_type == ADIO_INDIVIDUAL) ? fd->fp_ind :
-            fd->disp + (ADIO_Offset) etype_size *offset;
+            fd->disp + offset;
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -162,7 +161,7 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
 
     else {      /* noncontiguous in file */
 
-        flat_file = ADIOI_Flatten_and_find(fd->filetype);
+        flat_file = fd->flat_file;
         disp = fd->disp;
 
         if (file_ptr_type == ADIO_INDIVIDUAL) {
@@ -193,10 +192,10 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
             st_index = i;       /* starting index in flat_file->indices[] */
             offset += disp + (ADIO_Offset) n_filetypes *filetype_extent;
         } else {
-            n_etypes_in_filetype = filetype_size / etype_size;
+            n_etypes_in_filetype = filetype_size;
             n_filetypes = offset / n_etypes_in_filetype;
             etype_in_filetype = offset % n_etypes_in_filetype;
-            size_in_filetype = etype_in_filetype * etype_size;
+            size_in_filetype = etype_in_filetype;
 
             sum = 0;
             for (i = 0; i < flat_file->count; i++) {

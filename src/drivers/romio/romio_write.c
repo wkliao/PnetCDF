@@ -34,6 +34,8 @@ int ADIO_WriteContig(ADIO_File     fd,
 
     if (error_code != NULL) *error_code = MPI_SUCCESS;
 
+    if (count == 0) return NC_NOERR;
+
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count bufType_size;
     MPI_Type_size_c(bufType, &bufType_size);
@@ -50,6 +52,7 @@ int ADIO_WriteContig(ADIO_File     fd,
         off = offset;
 
 #ifdef WKL_DEBUG
+    printf("%s line %d pwrite off=%lld len=%lld\n",__func__,__LINE__,off,len);
 printf("%s line %d: %s disp=%lld etype_size=%lld offset=%lld off=%lld count=%ld bufType_size=%d len=%lld\n",__func__,__LINE__,(file_ptr_type == ADIO_INDIVIDUAL)?"ADIO_INDIVIDUAL":"ADIO_EXPLICIT_OFFSET",fd->disp,fd->etype_size,offset,off,count,bufType_size,len);
 {
 int rank; MPI_Comm_rank(MPI_COMM_WORLD,&rank);
@@ -126,7 +129,15 @@ int file_write(ADIO_File     fd,
     if (bufType_size == 0) return NC_NOERR;
 
     ADIOI_Datatype_iscontig(bufType, &buftype_is_contig);
-    ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+
+// printf("%s %d: flat_file = %s\n",__func__,__LINE__,(fd->flat_file == NULL)?"NULL":"NOT NULL");
+
+    if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL)
+        filetype_is_contig = (fd->flat_file->count <= 1);
+    else if (fd->filetype == MPI_BYTE)
+        filetype_is_contig = 1;
+    else
+        ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;
@@ -211,6 +222,7 @@ int ADIO_File_write_at_all(ADIO_File     fh,
     if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
         st = NC_EPERM;
 
+// printf("%s %d: flat_file = %s\n",__func__,__LINE__,(fh->flat_file == NULL)?"NULL":"NOT NULL");
     if (fh->file_system == ADIO_LUSTRE)
         ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType,
                                    ADIO_EXPLICIT_OFFSET, offset, status, &err);

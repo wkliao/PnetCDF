@@ -62,8 +62,7 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
     fh = ncp->collective_fh;
 
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE, "native",
-                                MPI_INFO_NULL);
+        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }
     else {
@@ -2121,7 +2120,7 @@ req_aggregation(NC     *ncp,
 
     /* set the MPI-IO fileview, this is a collective call */
     offset = 0;
-    err = ncmpio_file_set_view(ncp, fh, &offset, filetype);
+    err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
     if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
@@ -2545,7 +2544,7 @@ mpi_io:
         fh = ncp->collective_fh;
 
     /* set the MPI-IO fileview, this is a collective call */
-    err = ncmpio_file_set_view(ncp, fh, &offset, filetype);
+    err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
     if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;

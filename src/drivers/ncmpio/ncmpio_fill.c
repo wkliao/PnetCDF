@@ -193,8 +193,7 @@ fill_var_rec(NC         *ncp,
 
     /* make the entire file visible */
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE, "native",
-                                MPI_INFO_NULL);
+        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }
     else {
@@ -625,10 +624,8 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     /* k is the number of valid write requests */
     NCI_Free(noFill);
 
-    if (k == 0) {
-        filetype = MPI_BYTE;
-    }
-    else {
+    filetype = MPI_BYTE;
+    if (k > 0 && buf_len > 0) {
         /* create fileview: a list of contiguous segment for each variable */
 #ifdef HAVE_MPI_LARGE_COUNT
         mpireturn = MPI_Type_create_hindexed_c(k, blocklengths, offset,
@@ -654,8 +651,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     fh = ncp->collective_fh;
 
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, filetype, "native",
-                                MPI_INFO_NULL);
+        err = ADIO_File_set_view(ncp->adio_fh, 0, filetype, 0, NULL, NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }
     else {
@@ -666,7 +662,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
             if (status == NC_NOERR) status = err;
         }
     }
-    if (k > 0) MPI_Type_free(&filetype);
+    if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
 
     bufType = MPI_BYTE;
     if (buf_len > NC_MAX_INT) {
@@ -727,8 +723,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
 
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE, "native",
-                                MPI_INFO_NULL);
+        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }
     else {

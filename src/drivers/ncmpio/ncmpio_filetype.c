@@ -607,26 +607,63 @@ ncmpio_filetype_create_vars(const NC         *ncp,
 }
 
 /*----< ncmpio_file_set_view() >---------------------------------------------*/
-/* This function handles the special case for root process for setting its
- * file view: to keeps the whole file header visible to the root process. This
- * is because the root process may update the number of records or attributes
- * into the file header while in data mode. In PnetCDF design, only root
- * process can read/write the file header.
- * This function is collective if called in collective data mode
+/* This subroutine is collective when using MPI-IO. When using internal I/O
+ * driver, this subroutine can be call independently.
+ *
+ * This subroutine prepends an additional view of the entire file header for
+ * root process, as root may have to update the number of records or attributes
+ * in the file header while in data mode. In PnetCDF design, only root process
+ * can read/write the file header. For non-root processes, no special treatment
+ * is given.
+ *
+ * filetype: this argument passed into this subroutine does not include file
+ *     header. This is why argument disp passed into this subroutine is always
+ *     ncp->begin_var (i.e. file offset of data section).
+ *
+ * disp: this argument passed into this subroutine is always ncp->begin_var.
+ *       Its value will be changed to the following when returned.
+ *           For root, disp will be set to ncp->begin_var;
+ *           For others, disp will be set to 0.
  */
 int
 ncmpio_file_set_view(const NC     *ncp,
                      MPI_File      fh,
-                     MPI_Offset   *offset,  /* IN/OUT */
-                     MPI_Datatype  filetype)
+                     MPI_Offset   *disp,  /* IN/OUT */
+                     MPI_Datatype  filetype,
+                     MPI_Aint      npairs,
+#ifdef HAVE_MPI_LARGE_COUNT
+                     MPI_Count    *offsets,
+                     MPI_Count    *lengths
+#else
+                     MPI_Offset   *offsets,
+                     int          *lengths
+#endif
+)
 {
     int err, mpireturn, status=NC_NOERR;
+
+// printf("%s line %d: filetype = %s\n",__func__,__LINE__,(filetype == MPI_DATATYPE_NULL)?"NULL":"NOT NULL");
+
+    if (filetype == MPI_DATATYPE_NULL) { /* from intra_node_aggregation() */
+
+        /* fd->flat_file should have need free by the callback of MPI_Type_free() */
+        ncp->adio_fh->flat_file = NULL;
+
+        /* mark this as called from intra_node_aggregation() */
+        ncp->adio_fh->filetype = MPI_DATATYPE_NULL;
+
+        /* Note: The passed-in offsets and lengths are not based on MPI-IO
+         * fileview. They are flattened byte offsets and sizes.
+         */
+        *disp = (npairs > 0) ? offsets[0] : 0;
+
+        return ADIO_File_set_view(ncp->adio_fh, 0, filetype, npairs, offsets, lengths);
+    }
 
     if (filetype == MPI_BYTE) {
         /* filetype is a contiguous space, make the whole file visible */
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-            return ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE,
-                                     "native", MPI_INFO_NULL);
+            return ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         }
         else {
             TRACE_IO(MPI_File_set_view)(fh, 0, MPI_BYTE, MPI_BYTE,
@@ -661,11 +698,11 @@ ncmpio_file_set_view(const NC     *ncp,
 
         /* second block is filetype, the subarray request(s) to the variable */
         blocklens[1] = 1;
-            disps[1] = *offset;
+            disps[1] = *disp;
            ftypes[1] = filetype;
 
 #if !defined(HAVE_MPI_LARGE_COUNT) && (SIZEOF_MPI_AINT != SIZEOF_MPI_OFFSET)
-        if (*offset > NC_MAX_INT) {
+        if (*disp > NC_MAX_INT) {
             DEBUG_ASSIGN_ERROR(status, NC_EINTOVERFLOW);
             goto err_out;
         }
@@ -692,8 +729,7 @@ ncmpio_file_set_view(const NC     *ncp,
 err_out:
 #endif
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-            err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, root_filetype, "native",
-                                    MPI_INFO_NULL);
+            err = ADIO_File_set_view(ncp->adio_fh, 0, root_filetype, 0, NULL, NULL);
             if (status == NC_NOERR) status = err;
         }
         else {
@@ -707,25 +743,24 @@ err_out:
         if (root_filetype != MPI_BYTE)
             MPI_Type_free(&root_filetype);
 
-        /* now update the explicit offset to be used in MPI-IO call later */
-        *offset = ncp->begin_var;
+        /* now update the explicit disp to be used in MPI-IO call later */
+        *disp = ncp->begin_var;
     }
     else {
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-            err = ADIO_File_set_view(ncp->adio_fh, *offset, MPI_BYTE, filetype, "native",
-                                    MPI_INFO_NULL);
+            err = ADIO_File_set_view(ncp->adio_fh, *disp, filetype, 0, NULL, NULL);
             if (status == NC_NOERR) status = err;
         }
         else {
-            TRACE_IO(MPI_File_set_view)(fh, *offset, MPI_BYTE, filetype, "native",
+            TRACE_IO(MPI_File_set_view)(fh, *disp, MPI_BYTE, filetype, "native",
                                         MPI_INFO_NULL);
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
                 if (status == NC_NOERR) status = err;
             }
         }
-        /* the explicit offset is already set in fileview */
-        *offset = 0;
+        /* the explicit disp is already set in fileview */
+        *disp = 0;
     }
 
     return status;

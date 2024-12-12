@@ -24,7 +24,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
     ADIO_Offset n_etypes_in_filetype;
     ADIO_Offset size, n_filetypes, etype_in_filetype;
     ADIO_Offset abs_off_in_filetype = 0, req_len;
-    MPI_Count filetype_size, etype_size, buftype_size;
+    MPI_Count filetype_size, buftype_size;
     MPI_Aint lb, filetype_extent, buftype_extent;
     int buf_count, buftype_is_contig, filetype_is_contig;
     ADIO_Offset userbuf_off;
@@ -33,20 +33,35 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
 
     *error_code = MPI_SUCCESS;  /* changed below if error */
 
-    ADIOI_Datatype_iscontig(buftype, &buftype_is_contig);
-    ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
-
-    MPI_Type_size_x(fd->filetype, &filetype_size);
-    if (!filetype_size) {
-        MPI_Status_set_elements(status, fd->filetype, 0);
-        *error_code = MPI_SUCCESS;
-        return;
+    if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL) {
+        MPI_Count n;
+        filetype_is_contig = (fd->flat_file->count <= 1);
+        filetype_size = 0;
+        for (n=0; n<fd->flat_file->count; n++)
+            filetype_size += fd->flat_file->blocklens[n];
+        filetype_extent = fd->flat_file->indices[fd->flat_file->count-1]
+                        + fd->flat_file->blocklens[fd->flat_file->count-1]
+                        - fd->flat_file->indices[0];
+    }
+    else if (fd->filetype == MPI_BYTE) {
+        filetype_is_contig = 1;
+        filetype_size = 1;
+        filetype_extent = 1;
+    }
+    else {
+        ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        MPI_Type_size_x(fd->filetype, &filetype_size);
+        if (!filetype_size) {
+            MPI_Status_set_elements(status, fd->filetype, 0);
+            *error_code = MPI_SUCCESS;
+            return;
+        }
+        MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
     }
 
-    MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
+    ADIOI_Datatype_iscontig(buftype, &buftype_is_contig);
     MPI_Type_size_x(buftype, &buftype_size);
     MPI_Type_get_extent(buftype, &lb, &buftype_extent);
-    etype_size = fd->etype_size;
 
     bufsize = buftype_size * count;
 
@@ -59,7 +74,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
         flat_buf = ADIOI_Flatten_and_find(buftype);
 
         off = (file_ptr_type == ADIO_INDIVIDUAL) ? fd->fp_ind :
-            fd->disp + (ADIO_Offset) etype_size *offset;
+            fd->disp + offset;
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -117,7 +132,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
          *
          */
 
-        flat_file = ADIOI_Flatten_and_find(fd->filetype);
+        flat_file = fd->flat_file;
         disp = fd->disp;
 
         if (file_ptr_type == ADIO_INDIVIDUAL) {
@@ -142,10 +157,10 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                 }
             }
         } else {
-            n_etypes_in_filetype = filetype_size / etype_size;
+            n_etypes_in_filetype = filetype_size;
             n_filetypes = offset / n_etypes_in_filetype;
             etype_in_filetype = offset % n_etypes_in_filetype;
-            size_in_filetype = etype_in_filetype * etype_size;
+            size_in_filetype = etype_in_filetype;
 
             sum = 0;
             for (f_index = 0; f_index < flat_file->count; f_index++) {

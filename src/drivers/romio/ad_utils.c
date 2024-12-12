@@ -20,6 +20,7 @@ int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner)
     int ret;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count ni, na, nc, nt;
+assert(datatype != MPI_DATATYPE_NULL);
     ret = MPI_Type_get_envelope_c(datatype, &ni, &na, &nc, &nt, combiner);
 #else
     int ni, na, nt;
@@ -255,7 +256,11 @@ void ADIOI_Heap_merge(ADIOI_Access * others_req, MPI_Count * count,
 {
     typedef struct {
         ADIO_Offset *off_list;
+#ifdef HAVE_MPI_LARGE_COUNT
         ADIO_Offset *len_list;
+#else
+        int *len_list;
+#endif
         MPI_Count nelem;
     } heap_struct;
 
