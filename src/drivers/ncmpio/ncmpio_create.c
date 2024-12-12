@@ -427,6 +427,14 @@ if (rank == 0) {
     }
 }
 #endif
+        /* collective buffer is used only by I/O aggregators only */
+        if (adio_fh->is_agg) {
+            adio_fh->io_buf = ADIOI_Calloc(1, adio_fh->hints->cb_buffer_size);
+            if (adio_fh->io_buf == NULL)
+                return NC_ENOMEM;
+        }
+        else
+            adio_fh->io_buf = NULL;
     }
     ncp->mpiinfo = info_used; /* is not MPI_INFO_NULL */
 
