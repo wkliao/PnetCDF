@@ -251,7 +251,7 @@ file_create(ADIO_File fd,
 
     MPI_Comm_rank(fd->comm, &rank);
 
-static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\n%s line %d: %s ---------%s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
 
     amode = O_CREAT;
     if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
@@ -417,7 +417,7 @@ file_open(ADIO_File fd)
 
     MPI_Comm_rank(fd->comm, &rank);
 
-static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\n%s line %d: %s ---------%s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
 
     old_mask = umask(022);
     umask(old_mask);
@@ -494,9 +494,10 @@ int ADIO_GEN_set_aggr_list(ADIO_File  fd,
                            int        num_nodes,
                            int       *node_ids)
 {
-    int i, j, k, nprocs, *nprocs_per_node, **ranks_per_node;
+    int i, j, k, nprocs, rank, *nprocs_per_node, **ranks_per_node;
 
     MPI_Comm_size(fd->comm, &nprocs);
+    MPI_Comm_rank(fd->comm, &rank);
 
     if (fd->hints->cb_nodes == 0)
         /* If hint cb_nodes is not set by user, select one rank per node to be
@@ -547,6 +548,10 @@ int ADIO_GEN_set_aggr_list(ADIO_File  fd,
         }
         /* select jth rank of node k as an I/O aggregator */
         fd->hints->ranklist[i] = ranks_per_node[k++][j];
+        if (rank == fd->hints->ranklist[i]) {
+            fd->is_agg = 1;
+            fd->my_cb_nodes_index = i;
+        }
         if (k == num_nodes) { /* round-robin to first node */
             k = 0;
             j++;
@@ -794,7 +799,8 @@ int ADIO_File_open(MPI_Comm    comm,
     // fd->ftype_size  = 1;
     fd->is_open     = 0;
     fd->access_mode = amode;
-    fd->flat_file   = NULL;
+    fd->flat_file   = NULL; /* flattend fileview in offset-length pairs */
+    fd->io_buf      = NULL; /* collective buffer used by aggregators only */
 
     /* create and initialize info object */
     fd->hints = (ADIOI_Hints*) ADIOI_Calloc(1, sizeof(ADIOI_Hints));
@@ -806,15 +812,6 @@ int ADIO_File_open(MPI_Comm    comm,
     err = ADIO_File_SetInfo(fd, fd->info);
     if (err != NC_NOERR)
         return err;
-
-    /* collective buffer */
-/* should this buffer be allocated at I/O aggregators only? */
-
-    fd->io_buf = ADIOI_Calloc(1, fd->hints->cb_buffer_size);
-    if (fd->io_buf == NULL) {
-        err = NC_ENOMEM;
-        goto err_out;
-    }
 
     if (fd->file_system != ADIO_FSTYPE_MPIIO) {
         /* For Lustre, determining the I/O aggregators and constructing ranklist
