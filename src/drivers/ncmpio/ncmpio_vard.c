@@ -313,7 +313,7 @@ err_check:
     }
 
     /* set the MPI-IO fileview, this is a collective call */
-    err = ncmpio_file_set_view(ncp, fh, &offset, filetype);
+    err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
         nelems = 0; /* skip this request */

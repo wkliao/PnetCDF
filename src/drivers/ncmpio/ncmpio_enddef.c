@@ -70,8 +70,7 @@ move_file_block(NC         *ncp,
 
     /* make fileview entire file visible */
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, MPI_BYTE, "native",
-                                MPI_INFO_NULL);
+        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }
     else {

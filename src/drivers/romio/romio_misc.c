@@ -528,52 +528,73 @@ err_check:
  */
 int ADIO_File_set_view(ADIO_File     fd,
                        MPI_Offset    disp,
-                       MPI_Datatype  etype,   /* Always MPI_BYTE by PnetCDF */
                        MPI_Datatype  filetype,
-                       char         *datarep, /* Always "native" by PnetCDF */
-                       MPI_Info      info)    /* Always NULL by PnetCDF */
+                       MPI_Aint      npairs,
+#ifdef HAVE_MPI_LARGE_COUNT
+                       MPI_Count    *offsets,
+                       MPI_Count    *lengths
+#else
+                       MPI_Offset   *offsets,
+                       int          *lengths
+#endif
+)
 {
-    int is_predef, i, err, filetype_is_contig;
+    int is_predef, i, err=NC_NOERR, filetype_is_contig;
     MPI_Datatype copy_filetype;
-    ADIOI_Flatlist_node *flat_file;
 
-    /* rudimentary checks for incorrect etype/filetype. */
-    if (etype == MPI_DATATYPE_NULL)
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, etype");
+// printf("%s line %d: filetype = %s\n",__func__,__LINE__,(filetype == MPI_DATATYPE_NULL)?"NULL":"NOT NULL");
 
-    if (filetype == MPI_DATATYPE_NULL)
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, filetype");
+    if (filetype == MPI_DATATYPE_NULL) { /* called from intra_node_aggregation() */
+        fd->flat_file = NCI_Malloc(sizeof(ADIOI_Flatlist_node));
+        fd->flat_file->indices   = offsets;
+        fd->flat_file->blocklens = lengths;
+        fd->flat_file->count     = npairs;
+        fd->flat_file->lb_idx    = -1;
+        fd->flat_file->ub_idx    = -1;
+        fd->flat_file->flag      = 0;
+        fd->flat_file->refct     = 1;
+
+        /* mark this request comes from intra_node_aggregation() */
+        fd->filetype = MPI_DATATYPE_NULL;
+
+        /* Note: PnetCDF uses only ADIO_EXPLICIT_OFFSET. In addition, the
+         * passed-in offsets and lengths are not based on MPI-IO fileview. They
+         * are flattened byte offsets and sizes.
+         */
+        fd->disp = 0;
+        fd->fp_ind = 0;
+        return NC_NOERR;
+    }
 
     if ((disp < 0) && (disp != MPI_DISPLACEMENT_CURRENT))
         return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, disp");
 
+#if 0
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count lb;
     MPI_Type_size_c(filetype, &fd->ftype_size);
-    MPI_Type_size_c(etype, &fd->etype_size);
     MPI_Type_get_extent_c(filetype, &lb, &fd->ftype_extent);
 #else
     MPI_Aint lb;
     MPI_Type_size(filetype, &fd->ftype_size);
-    MPI_Type_size(etype, &fd->etype_size);
     MPI_Type_get_extent(filetype, &lb, &fd->ftype_extent);
 #endif
-
-    if (fd->etype_size != 0 && fd->ftype_size % fd->etype_size != 0)
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, type size");
+#endif
 
     /* When info is MPI_INFO_NULL, ADIO_File_SetInfo() is an independent call.
      * Otherwise, it is collective, because it checks hint consistency.
      * PnetCDF always uses MPI_INFO_NULL when setting file view.
-     */
     err = ADIO_File_SetInfo(fd, info);
     if (err != NC_NOERR)
         return err;
+     */
 
-    /* PnetCDF only uses etype = MPI_BYTE */
-    fd->etype = etype;
-
+    /* free fileview if set previously */
     ADIOI_Type_dispose(&fd->filetype);
+
+    /* fd->flat_file should have need free by the callback of MPI_Type_free() */
+    fd->flat_file = NULL;
+
     ADIOI_Type_ispredef(filetype, &is_predef);
     if (is_predef) {
         fd->filetype = filetype;
@@ -586,8 +607,8 @@ int ADIO_File_set_view(ADIO_File     fd,
         ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
         /* check filetype only if it is not a predefined MPI datatype */
-        flat_file = ADIOI_Flatten_and_find(fd->filetype);
-        err = check_type(flat_file, fd->access_mode, "filetype");
+        fd->flat_file = ADIOI_Flatten_and_find(fd->filetype);
+        err = check_type(fd->flat_file, fd->access_mode, "filetype");
         if (err != NC_NOERR)
             return err;
     }
@@ -604,11 +625,11 @@ int ADIO_File_set_view(ADIO_File     fd,
     if (filetype_is_contig)
         fd->fp_ind = disp;
     else {
-// for (i = 0; i < flat_file->count; i++) printf("%s line %d: flat_file count=%lld [%d] indices=%lld blocklens=%lld\n",__func__,__LINE__,flat_file->count,i,flat_file->indices[i],flat_file->blocklens[i]);
+// for (i = 0; i < fd->flat_file->count; i++) printf("%s line %d: fd->flat_file count=%lld [%d] indices=%lld blocklens=%lld\n",__func__,__LINE__,fd->flat_file->count,i,fd->flat_file->indices[i],fd->flat_file->blocklens[i]);
 
-        for (i = 0; i < flat_file->count; i++) {
-            if (flat_file->blocklens[i]) {
-                fd->fp_ind = disp + flat_file->indices[i];
+        for (i = 0; i < fd->flat_file->count; i++) {
+            if (fd->flat_file->blocklens[i]) {
+                fd->fp_ind = disp + fd->flat_file->indices[i];
                 break;
             }
         }

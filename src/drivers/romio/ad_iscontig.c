@@ -30,6 +30,7 @@ void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
                 MPI_Datatype *types;
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count nints, nadds, ncnts, ntypes;
+assert(datatype != MPI_DATATYPE_NULL);
                 MPI_Type_get_envelope_c(datatype, &nints, &nadds, &ncnts, &ntypes, &combiner);
 #else
                 int nints, nadds, ncnts = 0, ntypes;

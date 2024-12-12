@@ -532,8 +532,15 @@ ncmpio_filetype_create_vars(const NC* ncp, const NC_var* varp,
                 MPI_Datatype *filetype, int *is_filetype_contig);
 
 extern int
-ncmpio_file_set_view(const NC *ncp, MPI_File fh, MPI_Offset *offset,
-                MPI_Datatype filetype);
+ncmpio_file_set_view(const NC *ncp, MPI_File fh, MPI_Offset *disp,
+                MPI_Datatype filetype,
+                MPI_Aint npairs,
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Count *offsets, MPI_Count *lengths
+#else
+                MPI_Offset *offsets, int *lengths
+#endif
+);
 
 /* Begin defined in ncmpio_igetput.m4 ---------------------------------------*/
 extern int
