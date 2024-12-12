@@ -428,7 +428,7 @@ timing = MPI_Wtime();
 
     /* now send the calculated offsets and lengths to respective processes */
 
-#define USE_ALLTOALLV_
+// #define USE_ALLTOALLV_
 #ifdef USE_ALLTOALLV_
 
     MPI_Offset *r_off_buf=NULL, *s_off_buf=NULL;
@@ -513,7 +513,7 @@ timing = MPI_Wtime();
 if (i == myrank) assert(fd->my_cb_nodes_index >= 0 && fd->my_cb_nodes_index <= fd->hints->cb_nodes);
 else recv_amnt += 2 * others_req[i].count;
 #endif
-        if (i == myrank)
+        if (i == myrank) {
             /* send to self uses memcpy(), here
              * others_req[i].count == my_req[fd->my_cb_nodes_index].count
              */
@@ -526,6 +526,7 @@ else recv_amnt += 2 * others_req[i].count;
             memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
                    my_req[fd->my_cb_nodes_index].count * sizeof(int));
 #endif
+        }
         else {
             MPI_Irecv(others_req[i].offsets, others_req[i].count,
                       ADIO_OFFSET, i, 0, fd->comm, &requests[nreqs++]);
