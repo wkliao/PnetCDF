@@ -184,8 +184,8 @@ tt[6] = ncp->adio_fh->lustre_write_metrics[0];
 tt[7] = ncp->adio_fh->lustre_write_metrics[1];
 tt[8] = ncp->adio_fh->lustre_write_metrics[2];
 MPI_Reduce(tt, max_t, 9, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
-if (ncp->rank == 0) printf("%s: MAX time intra-node %.2f %.2f %.2f %.2f %.2f nsort=%ld coll time %.2f pwrite %.2f all-to-many senders %ld (nprocs %d)\n", __func__,
-max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], (long)max_t[5],
+if (ncp->rank == 0) printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.2f nsort %8ld collw %.2f pwrite %.2f nsenders %5ld nprocs %d\n", __func__,ncp->num_aggrs_per_node,
+max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
 max_t[6], max_t[7], (long)max_t[8], ncp->nprocs);
 }
 #endif
