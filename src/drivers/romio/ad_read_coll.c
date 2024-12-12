@@ -732,6 +732,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
         if (flag) {
             MPI_Status read_status;
             ADIOI_Assert(size == (int) size);
+            /* This should be only reached by I/O aggregators only */
             ADIO_ReadContig(fd, read_buf + for_curr_iter, (int) size, MPI_BYTE,
                             ADIO_EXPLICIT_OFFSET, off, &read_status, error_code);
             if (*error_code != MPI_SUCCESS) {
