@@ -897,7 +897,7 @@ intra_node_aggregation(NC           *ncp,
     char *recv_buf=NULL, *wr_buf = NULL;
     MPI_Aint npairs=0, *msg, *count=NULL;
     MPI_Offset disp=0, buf_count=0;
-    MPI_Datatype recvTypes, fileType=MPI_BYTE;
+    MPI_Datatype saved_fileType=MPI_BYTE;
     MPI_File fh;
     MPI_Request *req=NULL;
 #ifdef PNETCDF_PROFILING
@@ -943,14 +943,13 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
             if (status == NC_NOERR) status = err;
         }
     }
-    else { /* non-aggregator */
+    else /* non-aggregator */
         MPI_Send(msg, 3, MPI_AINT, ncp->my_aggr, 0, ncp->comm);
-        if (num_pairs == 0)
-            NCI_Free(msg);
-    }
 
     /* Aggregator collects offset-length pairs from non-aggregators */
     if (ncp->rank == ncp->my_aggr) {
+        MPI_Datatype recvTypes;
+
         /* calculate the total number of offset-length pairs */
         npairs = num_pairs;
         for (i=1; i<ncp->num_nonaggrs; i++) npairs += msg[i*3];
@@ -1053,6 +1052,8 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
     }
     else if (num_pairs > 0) { /* non-aggregator */
         /* send offset-length pairs data to the aggregator */
+        MPI_Datatype sendTypes;
+
 #ifdef HAVE_MPI_LARGE_COUNT
         MPI_Aint aint;
         MPI_Count bklens[2];
@@ -1065,22 +1066,22 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         MPI_Get_address(lengths, &aint);
         disps[1] = aint;
         mpireturn = MPI_Type_create_hindexed_c(2, bklens, disps, MPI_BYTE,
-                                               &recvTypes);
+                                               &sendTypes);
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_create_hindexed_c");
             /* return the first encountered error if there is any */
             if (status == NC_NOERR) status = err;
         }
         else {
-            mpireturn = MPI_Type_commit(&recvTypes);
+            mpireturn = MPI_Type_commit(&sendTypes);
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_commit");
                 /* return the first encountered error if there is any */
                 if (status == NC_NOERR) status = err;
             }
         }
-        MPI_Send_c(MPI_BOTTOM, 1, recvTypes, ncp->my_aggr, 0, ncp->comm);
-        MPI_Type_free(&recvTypes);
+        MPI_Send_c(MPI_BOTTOM, 1, sendTypes, ncp->my_aggr, 0, ncp->comm);
+        MPI_Type_free(&sendTypes);
 #else
         int bklens[2];
         MPI_Aint disps[2];
@@ -1090,30 +1091,25 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         MPI_Get_address(offsets, &disps[0]);
         MPI_Get_address(lengths, &disps[1]);
         mpireturn = MPI_Type_create_hindexed(2, bklens, disps, MPI_BYTE,
-                                             &recvTypes);
+                                             &sendTypes);
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_create_hindexed");
             /* return the first encountered error if there is any */
             if (status == NC_NOERR) status = err;
         }
         else {
-            mpireturn = MPI_Type_commit(&recvTypes);
+            mpireturn = MPI_Type_commit(&sendTypes);
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_commit");
                 /* return the first encountered error if there is any */
                 if (status == NC_NOERR) status = err;
             }
         }
-        MPI_Send(MPI_BOTTOM, 1, recvTypes, ncp->my_aggr, 0, ncp->comm);
-        MPI_Type_free(&recvTypes);
+        MPI_Send(MPI_BOTTOM, 1, sendTypes, ncp->my_aggr, 0, ncp->comm);
+        MPI_Type_free(&sendTypes);
 #endif
-        NCI_Free(msg);
-    }
 
-ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
-
-    /* Non-aggregators send write data to the aggregator */
-    if (ncp->rank != ncp->my_aggr && bufLen > 0) {
+        /* Non-aggregators send write data to the aggregator */
         void *buf_ptr = (buf == NULL) ? MPI_BOTTOM : buf;
 #ifdef HAVE_MPI_LARGE_COUNT
         MPI_Count num = (buf == NULL) ? 1 : bufCount;
@@ -1126,8 +1122,9 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         NCI_Free(lengths);
         offsets = NULL;
         lengths = NULL;
-        npairs  = 0;
     }
+
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
@@ -1379,18 +1376,20 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         NCI_Free(lengths);
 #endif
     }
-    if (ncp->rank == ncp->my_aggr) {
+
+    NCI_Free(msg);
+    if (ncp->rank == ncp->my_aggr)
         NCI_Free(req);
-        NCI_Free(msg);
-    }
 
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
     ncp->aggr_time[4] += endT - startT;
 #endif
 
-    if (ncp->rank != ncp->my_aggr) /* non-aggregator writes nothing */
+    if (ncp->rank != ncp->my_aggr) { /* non-aggregator writes nothing */
         buf_count = 0;
+        npairs = 0;
+    }
 
     /* Only aggregators writes non-zero sized of data to the file. The
      * non-aggregators participate the collective write call with zero-length
@@ -1399,7 +1398,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
     fh = ncp->collective_fh;
 
     /* Preserve fd->filetype previously used */
-    fileType = ncp->adio_fh->filetype;
+    saved_fileType = ncp->adio_fh->filetype;
     disp = 0;
 
 // printf("%s line %4d: ncp->adio_fh->flat_file = %s\n",__func__,__LINE__,(ncp->adio_fh->flat_file == NULL)?"NULL":"NOT NULL");
@@ -1436,7 +1435,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
     ncp->adio_fh->flat_file = NULL;
 
     /* restore the original filetype */
-    ncp->adio_fh->filetype = fileType;
+    ncp->adio_fh->filetype = saved_fileType;
 
     return status;
 }
@@ -1462,6 +1461,9 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
 #ifdef PNETCDF_PROFILING
     double timing = MPI_Wtime();
 #endif
+
+MPI_Offset maxm;
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* currently supports write requests only */
     if (fIsSet(reqMode, NC_REQ_RD)) return NC_NOERR;
@@ -1547,6 +1549,9 @@ ncmpio_intra_node_aggregation(NC               *ncp,
 #ifdef PNETCDF_PROFILING
     double timing = MPI_Wtime();
 #endif
+
+MPI_Offset maxm;
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* currently supports write requests only */
     if (fIsSet(reqMode, NC_REQ_RD)) return NC_NOERR;
