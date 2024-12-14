@@ -1118,11 +1118,7 @@ void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, ADIOI_Flatlist_node
     ADIO_Offset flat_buf_sz, size_in_buf, buf_incr, size;
     int n_buftypes;
     ADIO_Offset off, user_buf_idx;
-#ifdef HAVE_MPI_LARGE_COUNT
     ADIO_Offset len, rem_len;
-#else
-    int len, rem_len;
-#endif
     MPI_Count *curr_from_proc, *done_from_proc, *recv_buf_idx;
 
     MPL_UNREFERENCED_ARG(requests);
