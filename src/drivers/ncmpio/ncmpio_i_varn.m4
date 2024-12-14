@@ -466,6 +466,8 @@ igetput_varn(NC                *ncp,
     xbufp = (char*)xbuf;
 
     for (i=0; i<num; i++) {
+        req->npairs = 0;
+
         if (req_nelems[i] == 0) continue; /* ignore this 0-length request i */
 
         req->nelems    = req_nelems[i];
@@ -478,6 +480,7 @@ igetput_varn(NC                *ncp,
         memcpy(start_ptr, starts[i], memChunk);
         start_ptr += varp->ndims; /* count[] */
         if (counts == NULL || counts[i] == NULL) {
+            /* counts == NULL, equivalent to all 1s */
             for (j=0; j<varp->ndims; j++)
                  start_ptr[j] = 1; /* start_ptr is now counts[] */
         }
@@ -491,6 +494,21 @@ igetput_varn(NC                *ncp,
 
             if (counts == NULL || counts[i] == NULL) num_rec = 1;
             else                                     num_rec = counts[i][0];
+
+            /* calculate number of flattened offset-length pairs */
+            req->npairs = 1;
+            if (counts == NULL || counts[i] == NULL) {
+                /* meaning var1 API, equivalent to all 1s */
+                req->offset_start = varp->begin;
+            }
+            else {
+                for (j=1; j<varp->ndims-1; j++)
+                    req->npairs *= counts[i][j];
+                /* special treatment for when there is only one pair */
+                if (req->npairs == 1)
+                    ncmpio_calc_off(ncp, varp, starts[i], counts[i],
+                                    &req->offset_start);
+            }
 
             max_rec = starts[i][0] + num_rec;
             lead_req->max_rec = MAX(lead_req->max_rec, max_rec);
@@ -514,8 +532,23 @@ igetput_varn(NC                *ncp,
             else
                 req++;
         }
-        else
+        else {
+            /* calculate number of flattened offset-length pairs */
+            req->npairs = 1;
+            if (counts == NULL || counts[i] == NULL) {
+                /* meaning var1 API, equivalent to all 1s */
+                req->offset_start = varp->begin;
+            }
+            else {
+                for (j=0; j<varp->ndims-1; j++)
+                    req->npairs *= counts[i][j];
+                /* special treatment for when there is only one pair */
+                if (req->npairs == 1)
+                    ncmpio_calc_off(ncp, varp, starts[i], counts[i],
+                                    &req->offset_start);
+            }
             req++;
+        }
     }
 
     if (reqid != NULL) *reqid = lead_req->id;

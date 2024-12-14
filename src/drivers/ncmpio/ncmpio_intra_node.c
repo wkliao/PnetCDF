@@ -30,6 +30,8 @@
 # include <config.h>
 #endif
 
+int debug = 0;
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>   /* strcmp() strdup() */
@@ -566,7 +568,7 @@ flatten_req(NC                *ncp,
 #endif
                                    )
 {
-    int j, err=NC_NOERR, ndims;
+    int i, j, err=NC_NOERR, ndims;
     MPI_Aint num, idx;
     MPI_Offset var_begin, *shape, count0, *ones=NULL;
 
@@ -595,8 +597,8 @@ flatten_req(NC                *ncp,
         num = 1;
         if (stride != NULL && stride[varp->ndims-1] > 1)
             num = count[varp->ndims-1];  /* count of last dimension */
-        for (j=0; j<varp->ndims-1; j++)
-            num *= count[j];       /* all count[] except the last dimension */
+        for (i=0; i<varp->ndims-1; i++)
+            num *= count[i];       /* all count[] except the last dimension */
     }
     *num_pairs = num;
 
@@ -612,7 +614,7 @@ flatten_req(NC                *ncp,
 
     if (stride == NULL) { /* equivalent to {1, 1, ..., 1} */
         ones = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * varp->ndims);
-        for (j=0; j<varp->ndims; j++) ones[j] = 1;
+        for (i=0; i<varp->ndims; i++) ones[i] = 1;
     }
 
     ndims = varp->ndims;
@@ -632,7 +634,8 @@ flatten_req(NC                *ncp,
 
     idx = 0;
     *is_incr = 1;
-    for (j=0; j<count0; j++) {
+    prev_offset = -1;
+    for (i=0; i<count0; i++) {
         /* flatten the request into a list of offset-length pairs */
         err = flatten_subarray(ndims, varp->xsz, var_begin, shape,
                                start, count, (stride == NULL) ? ones : stride,
@@ -641,14 +644,13 @@ flatten_req(NC                *ncp,
                                *lengths + idx); /* OUT: array of lengths */
 
         if (num == 0) continue;
-        if (idx == 0)
-            prev_offset = (*offsets)[num-1];
-        else if (prev_offset > (*offsets)[idx])
-            *is_incr = 0;  /* offsets are not incrementing */
-        else {
-            if (prev_offset > (*offsets)[idx])
+
+        /* check if (*offsets)[] are in an increasing order */
+        for (j=0; j<num; j++) {
+            if (prev_offset > (*offsets)[idx+j])
                 *is_incr = 0;  /* offsets are not incrementing */
-            prev_offset = (*offsets)[idx + num-1];
+            else
+                prev_offset = (*offsets)[idx+j];
         }
 
         idx += num;
@@ -691,6 +693,16 @@ flatten_reqs(NC            *ncp,
     /* Count the number off-len pairs from reqs[], so we can malloc a
      * contiguous memory space for storing off-len pairs
      */
+#if 1
+    for (i=0; i<num_reqs; i++) {
+        /* reqs[i].npairs is the number of offset-length pairs of this request,
+         * calculated in ncmpio_igetput_varm() and igetput_varn()
+         */
+        *num_pairs += reqs[i].npairs;
+        ndims = ncp->put_lead_list[reqs[i].lead_off].varp->ndims;
+        max_ndims = MAX(max_ndims, ndims);
+    }
+#else
     for (i=0; i<num_reqs; i++) {
         NC_lead_req *lead = ncp->put_lead_list + reqs[i].lead_off;
         ndims = lead->varp->ndims;
@@ -726,6 +738,16 @@ flatten_reqs(NC            *ncp,
         (*num_pairs) += num;
     }
 
+MPI_Aint nn = 0;
+int wkl=0;
+    for (i=0; i<num_reqs; i++) {
+        nn += reqs[i].npairs;
+// if (reqs[i].npairs > 1 && wkl == 0) { printf("reqs[%d].npairs=%ld > 1\n",i,reqs[i].npairs); wkl++; }
+    }
+if (nn != *num_pairs) printf("%s %d -------- num_reqs=%d num_pairs=%ld nn=%ld\n",__func__,__LINE__,num_reqs,(*num_pairs),nn);
+// wkl=0;
+#endif
+
     /* now we can allocate a contiguous memory space for the off-len pairs */
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count prev_offset;
@@ -736,16 +758,39 @@ flatten_reqs(NC            *ncp,
     *offsets = (MPI_Offset*)NCI_Malloc(sizeof(MPI_Offset) * (*num_pairs));
     *lengths = (int*)       NCI_Malloc(sizeof(int)        * (*num_pairs));
 #endif
-    idx = 0;
-    *is_incr = 1;
 
     ones = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * max_ndims);
     for (i=0; i<max_ndims; i++) ones[i] = 1;
+
+    idx = 0;
+    prev_offset = -1;
+    *is_incr = 1;
 
     /* now re-run the loop to fill in the off-len pairs */
     for (i=0; i<num_reqs; i++) {
         MPI_Offset var_begin;
         NC_lead_req *lead = ncp->put_lead_list + reqs[i].lead_off;
+
+        /* The case when reqs[i] contains only one offset-length pair has been
+         * specially handled to in ncmpio_igetput_varm() and igetput_varn()
+         * which store the relative offset to the beginning of the variable,
+         * varp->begin, to reqs[i].offset_start.  The length is stored in
+         * reqs[i].offset_end.
+         */
+        if (reqs[i].npairs == 1) {
+            (*offsets)[idx] = reqs[i].offset_start + lead->varp->begin;
+            if (IS_RECVAR(lead->varp))
+                (*offsets)[idx] += reqs[i].start[0] * ncp->recsize;
+            (*lengths)[idx] = reqs[i].nelems * lead->varp->xsz;
+
+            /* check if (*offsets)[] are in an increasing order */
+            if (prev_offset > (*offsets)[idx])
+                *is_incr = 0;  /* offsets are not incrementing */
+            else
+                prev_offset = (*offsets)[idx];
+            idx++;
+            continue;
+        }
 
         ndims = lead->varp->ndims;
         if (ndims > 0) {
@@ -782,15 +827,18 @@ flatten_reqs(NC            *ncp,
                          &num,            /* OUT: number of off-len pairs */
                          *offsets + idx,  /* OUT: array of offsets */
                          *lengths + idx); /* OUT: array of lengths */
-        if (num == 0) continue;
-        if (idx == 0)
-            prev_offset = (*offsets)[num-1];
-        else {
-            if (prev_offset > (*offsets)[idx])
-                *is_incr = 0;  /* offsets are not incrementing */
-            prev_offset = (*offsets)[idx + num-1];
-        }
+/*
+if (num > 1 && wkl == 0) { printf("---------------------- num=%ld > 1\n",num); wkl++; }
+if ((*offsets)[idx] != reqs[i].offset_start && wkl == 0) {printf("---------------------- offsets[idx=%ld] %lld != reqs[i=%d].offset_start %lld\n",idx, (*offsets)[idx], i, reqs[i].offset_start); wkl++; }
+*/
 
+        /* check if (*offsets)[] are in an increasing order */
+        for (j=0; j<num; j++) {
+            if (prev_offset > (*offsets)[idx+j])
+                *is_incr = 0;  /* offsets are not incrementing */
+            else
+                prev_offset = (*offsets)[idx+j];
+        }
         idx += num;
     }
     NCI_Free(ones);
@@ -913,7 +961,7 @@ intra_node_aggregation(NC           *ncp,
     bufLen *= bufCount;
 
 MPI_Offset maxm;
-ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* First, tell aggregator how much to receive by sending:
      * (num_pairs and bufLen). The message size to be sent by this rank
@@ -1124,7 +1172,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         lengths = NULL;
     }
 
-ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
@@ -1193,7 +1241,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
                 /* qsort is an in-place sorting */
                 qsort_off_len_buf(npairs, offsets, lengths, bufAddr);
         }
-ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
 #ifdef PNETCDF_PROFILING
         endT = MPI_Wtime();
@@ -1216,7 +1264,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
             recv_buf = (char*) NCI_Malloc(buf_count);
             wr_buf = (char*) NCI_Malloc(buf_count);
         }
-ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
         /* First, pack self write data into front of the recv_buf */
         if (bufLen > 0) {
@@ -1416,7 +1464,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("==== %s line %d: 
         buf_count = 0;
     }
     /* returned disp should point to the very file offset to be written */
-ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
 // printf("%s line %4d: ncp->adio_fh->flat_file = %s\n",__func__,__LINE__,(ncp->adio_fh->flat_file == NULL)?"NULL":"NOT NULL");
 // printf("%s: disp=%lld buf_count=%lld npairs=%ld\n", __func__,disp, buf_count,npairs);
@@ -1431,7 +1479,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         NCI_Free(offsets);
         NCI_Free(lengths);
     }
-ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
     NCI_Free(ncp->adio_fh->flat_file);
@@ -1466,7 +1514,7 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
 #endif
 
 MPI_Offset maxm;
-ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* currently supports write requests only */
     if (fIsSet(reqMode, NC_REQ_RD)) return NC_NOERR;
@@ -1554,7 +1602,7 @@ ncmpio_intra_node_aggregation(NC               *ncp,
 #endif
 
 MPI_Offset maxm;
-ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* currently supports write requests only */
     if (fIsSet(reqMode, NC_REQ_RD)) return NC_NOERR;
