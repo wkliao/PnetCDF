@@ -1431,8 +1431,8 @@ merge_requests(NC          *ncp,
                MPI_Offset  *nsegs,   /* OUT: no. off-len pairs */
                off_len    **segs)    /* OUT: [*nsegs] */
 {
-    int i, j, status=NC_NOERR, ndims;
-    MPI_Offset  nseg, *start, *count, *shape, *stride;
+    int i, j, status=NC_NOERR, ndims, is_incr;
+    MPI_Offset nseg, *start, *count, *shape, *stride, prev_offset;
     MPI_Aint addr, buf_addr;
 
     *nsegs = 0;    /* total number of offset-length pairs */
@@ -1447,43 +1447,18 @@ merge_requests(NC          *ncp,
     /* Count the number off-len pairs from reqs[], so we can malloc a
      * contiguous memory space for storing off-len pairs
      */
-    for (i=0; i<num_reqs; i++) {
-        NC_lead_req *lead = lead_list + reqs[i].lead_off;
-        ndims = lead->varp->ndims;
-        if (ndims > 0) {
-            start  = reqs[i].start;
-            count  = start + ndims;
-            stride = count + ndims;
-        }
-        else
-            start = count = stride = NULL;
-
-        /* for record variable, each reqs[] is within a record */
-        if (IS_RECVAR(lead->varp)) {
-            ndims--;
-            start++;
-            count++;
-            stride++;
-        }
-        if (fIsSet(lead->flag, NC_REQ_STRIDE_NULL)) stride = NULL;
-
-        if (ndims < 0) continue;
-        if (ndims == 0) {  /* 1D record variable */
-            (*nsegs)++;
-            continue;
-        }
-        nseg = 1;
-        if (stride != NULL && stride[ndims-1] > 1)
-            nseg = count[ndims-1];  /* count of last dimension */
-        for (j=0; j<ndims-1; j++)
-            nseg *= count[j];  /* all count[] except the last dimension */
-
-        *nsegs += nseg;
-    }
+    for (i=0; i<num_reqs; i++)
+        /* reqs[i].npairs is the number of offset-length pairs of this request,
+         * calculated in ncmpio_igetput_varm() and igetput_varn()
+         */
+        *nsegs += reqs[i].npairs;
 
     /* now we can allocate a contiguous memory space for the off-len pairs */
-    off_len *seg_ptr = (off_len*)NCI_Malloc(sizeof(off_len) * (*nsegs));
-    *segs = seg_ptr;
+    *segs = (off_len*)NCI_Malloc(sizeof(off_len) * (*nsegs));
+    off_len *seg_ptr = *segs;
+
+    prev_offset = -1;
+    is_incr = 1;
 
     /* now re-run the loop to fill in the off-len pairs */
     for (i=0; i<num_reqs; i++) {
@@ -1493,6 +1468,19 @@ merge_requests(NC          *ncp,
         /* buf_addr is the buffer address of the first valid request */
         MPI_Get_address(reqs[i].xbuf, &addr);
         addr = MPI_Aint_diff(addr, buf_addr);  /* distance to the buf of first req */
+
+        /* reqs[i].offset_start has been calculated in req_aggregation() */
+        if (reqs[i].npairs == 1) {
+            seg_ptr->off = reqs[i].offset_start;
+            seg_ptr->len = reqs[i].nelems * lead->varp->xsz;
+            seg_ptr->buf_addr = addr;
+            if (prev_offset > seg_ptr->off)
+                is_incr = 0;  /* offsets are not incrementing */
+            else
+                prev_offset = seg_ptr->off;
+            seg_ptr++;
+            continue;
+        }
 
         ndims = lead->varp->ndims;
         if (ndims > 0) {
@@ -1526,15 +1514,18 @@ merge_requests(NC          *ncp,
                      addr, start, count, stride,
                      &nseg,    /* OUT: number of offset-length pairs */
                      seg_ptr); /* OUT: array of offset-length pairs */
+
+        /* check if (*segs)[].off are in an increasing order */
+        for (j=0; j<nseg; j++) {
+            if (prev_offset > seg_ptr[j].off)
+                is_incr = 0;  /* offsets are not incrementing */
+            else
+                prev_offset = seg_ptr[j].off;
+        }
         seg_ptr += nseg; /* append the list to the end of segs array */
     }
 
-    /* check if (*segs)[].off are in an increasing order */
-    for (i=1; i<*nsegs; i++) {
-        if ((*segs)[i-1].off > (*segs)[i].off)
-            break;
-    }
-    if (i < *nsegs) /* not in an increasing order */
+    if (!is_incr) /* not in an increasing order */
         /* sort the off-len array, segs[], in an increasing order */
         qsort(*segs, (size_t)(*nsegs), sizeof(off_len), off_compare);
 
