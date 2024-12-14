@@ -816,3 +816,45 @@ ncmpio_unpack_xbuf(int           fmt,   /* NC_FORMAT_CDF2 NC_FORMAT_CDF5 etc. */
     return err;
 }
 
+/*----< ncmpio_calc_off() >--------------------------------------------------*/
+/* Returns the starting file offset of a subarray request.
+ * Note zero-length request should never call this subroutine.
+ * Only a single offset-length pair will call this subroutine.
+ */
+int
+ncmpio_calc_off(const NC         *ncp,
+                const NC_var     *varp,
+                const MPI_Offset *start,  /* [varp->ndims] */
+                const MPI_Offset *count,  /* [varp->ndims] */
+                MPI_Offset       *offset) /* OUT: start offset */
+{
+    int i, ndims = varp->ndims; /* number of dimensions of this variable */
+
+    /*
+     * varp->dsizes[] is computed from right to left product of shape
+     * For example, a 3D array of size 5x4x3 in C order,
+     * For fixed-size variable: dsizes[0]=60 dsizes[1]=12 dsizes[2]=3
+     * For record     variable: dsizes[0]=12 dsizes[1]=12 dsizes[2]=3
+     */
+    if (IS_RECVAR(varp)) {
+        *offset = 0;
+        if (ndims > 1) {
+            /* start from the least significant dimension */
+            *offset = start[ndims-1];
+            /* the remaining dimensions */
+            for (i=ndims-2; i>0; i--)
+                *offset += start[i]*varp->dsizes[i+1];
+        }
+        *offset *= varp->xsz;  /* offset in bytes */
+    }
+    else {
+        /* first handle the least significant dimension */
+        *offset = start[ndims-1];
+        /* remaining dimensions till the most significant dimension */
+        for (i=ndims-2; i>=0; i--)
+            *offset += start[i] * varp->dsizes[i+1];
+        *offset *= varp->xsz;  /* offset in bytes */
+    }
+
+    return NC_NOERR;
+}
