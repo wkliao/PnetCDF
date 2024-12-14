@@ -7,6 +7,7 @@
 # include <config.h>
 #endif
 
+static int debug=0;
 #include <adio.h>
 
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -620,7 +621,7 @@ double curT = MPI_Wtime();
 #endif
 
 MPI_Offset maxm;
-ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* Using user buffer datatype, count, and fileview to construct a list of
      * starting file offsets and write lengths of this rank and store them in
@@ -697,7 +698,7 @@ printf("--- offset=%lld flat_fview.count=%lld start_offset=%lld\n",offset,flat_f
 
     ADIOI_Type_ispredef(buftype, &is_btype_predef);
 
-ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* flatten user buffer datatype, buftype */
     if (is_btype_predef) {
@@ -832,7 +833,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: max
              * striping_range and writes are not interleaved in file space */
             do_collect = 0;
     }
-ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
 
     /* If collective I/O is not necessary, use independent I/O */
@@ -931,7 +932,7 @@ printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
     ADIOI_LUSTRE_Calc_my_req(fd, flat_fview, flat_bview.is_contig,
                              &my_req, buf_idx);
 
-ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* Calculate the portions of all other ranks' requests fall into this
      * process's file domain (note only I/O aggregators are assigned file
@@ -941,7 +942,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: max
      */
     ADIOI_LUSTRE_Calc_others_req(fd, my_req, &others_req);
 
-ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* Two-phase I/O: first communication phase to exchange write data from all
      * processes to the I/O aggregators, followed by the write phase where only
@@ -953,7 +954,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: max
                                 my_req, &flat_fview, min_st_loc,
                                 max_end_loc, buf_idx, error_code);
 
-ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* free all memory allocated */
     ADIOI_Free(others_req[0].offsets);
@@ -1023,7 +1024,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: max
 #endif
     }
 
-ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
 #ifdef PNETCDF_PROFILING
 if (fd->is_agg) fd->lustre_write_metrics[0] += MPI_Wtime() - curT;
