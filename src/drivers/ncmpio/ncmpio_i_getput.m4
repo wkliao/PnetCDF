@@ -122,6 +122,10 @@ ncmpio_add_record_requests(NC_lead_req      *lead_list,
         reqs[i].lead_off  = reqs[0].lead_off;
         reqs[i].xbuf      = xbuf;
         xbuf             += rec_bufsize;
+
+        /* copy the number of flattened offset-length pairs */
+        reqs[i].npairs       = reqs[0].npairs;
+        reqs[i].offset_start = reqs[0].offset_start;
     }
 
     return NC_NOERR;
@@ -142,7 +146,7 @@ ncmpio_igetput_varm(NC               *ncp,
                     int               reqMode)
 {
     void *xbuf=NULL;
-    int i, err=NC_NOERR, abuf_index=-1, isize, xsize, new_nreqs, rem;
+    int i, j, err=NC_NOERR, abuf_index=-1, isize, xsize, new_nreqs, rem;
     int mpireturn, buftype_is_contig=1, need_convert, free_xbuf=0;
     int need_swap, can_swap_in_place, need_swap_back_buf=0;
     MPI_Offset nelems=0, nbytes, *ptr;
@@ -520,9 +524,12 @@ ncmpio_igetput_varm(NC               *ncp,
     }
 
     /* allocate a single array for non-leads to store start/count/stride */
+    req->npairs = 0;
     if (varp->ndims == 0) { /* scalar variable, start may be NULL */
         lead_req->start = NULL;
         req->start = NULL;
+        req->npairs = 1;
+        req->offset_start = 0; /* relative to var's begin */
     }
     else if (stride == NULL) {
         size_t memChunk = varp->ndims * SIZEOF_MPI_OFFSET;
@@ -536,6 +543,12 @@ ncmpio_igetput_varm(NC               *ncp,
         memcpy(ptr, start, memChunk);
         ptr += varp->ndims;
         memcpy(ptr, count, memChunk);
+
+        /* calculate number of flattened offset-length pairs */
+        req->npairs = 1;
+        j = IS_RECVAR(varp) ? 1 : 0;
+        for (i=j; i<varp->ndims-1; i++)
+            req->npairs *= count[i];
     }
     else {
         size_t memChunk = varp->ndims * SIZEOF_MPI_OFFSET;
@@ -551,7 +564,17 @@ ncmpio_igetput_varm(NC               *ncp,
         memcpy(ptr, count, memChunk);
         ptr += varp->ndims;
         memcpy(ptr, stride, memChunk);
+
+        /* calculate number of flattened offset-length pairs */
+        req->npairs = (stride[varp->ndims-1] == 1) ? 1 : count[varp->ndims-1];
+        j = IS_RECVAR(varp) ? 1 : 0;
+        for (i=j; i<varp->ndims-1; i++)
+            req->npairs *= count[i];
     }
+
+    /* special treatment when there is only one offset-length pair */
+    if (req->npairs == 1 && varp->ndims > 0)
+        ncmpio_calc_off(ncp, varp, start, count, &req->offset_start);
 
     /* set the properties of non-lead request */
     req->xbuf   = xbuf;

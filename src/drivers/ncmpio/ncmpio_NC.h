@@ -343,6 +343,7 @@ typedef struct NC_req {
     MPI_Offset   *start;        /* [varp->ndims*3] for start/count/stride */
     void         *xbuf;         /* buffer in external type, used in file I/O calls */
     int           lead_off;     /* start index in the lead queue */
+    MPI_Aint      npairs;       /* number of flattened offset-length pairs */
 } NC_req;
 
 #define NC_ABUF_DEFAULT_TABLE_SIZE 128
@@ -658,6 +659,10 @@ ncmpio_unpack_xbuf(int format, NC_var *varp, MPI_Offset bufcount,
                  MPI_Datatype etype, MPI_Datatype imaptype, int need_convert,
                  int need_swap, void *buf, void *xbuf);
 
+extern int
+ncmpio_calc_off(const NC *ncp, const NC_var *varp, const MPI_Offset *start,
+                const MPI_Offset *count, MPI_Offset *offset);
+
 /* Begin defined in ncmpio_file_io.c ----------------------------------------*/
 extern int
 ncmpio_read_write(NC *ncp, int rw_flag, int coll_indep, MPI_Offset offset,
@@ -676,5 +681,6 @@ ncmpio_intra_node_aggregation(NC *ncp, int mode, NC_var *varp,
                               const MPI_Offset *start, const MPI_Offset *count,
                               const MPI_Offset *stride, MPI_Offset bufCount,
                               MPI_Datatype bufType, void *buf);
+
 
 #endif /* H_NC */
