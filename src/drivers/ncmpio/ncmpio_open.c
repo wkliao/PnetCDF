@@ -78,6 +78,7 @@ printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_io);
     if (fstype != ADIO_FSTYPE_MPIIO) {
         adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
         adio_fh->file_system = fstype;
+        adio_fh->ina_comm    = comm;
     }
 
     /* remove the file system type prefix name if there is any.  For example,

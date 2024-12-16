@@ -66,6 +66,11 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
 
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
         err = ADIO_File_close(&ncp->adio_fh);
+
+        if (ncp->adio_fh->ina_comm != MPI_COMM_NULL &&
+            ncp->adio_fh->ina_comm != ncp->comm)
+            MPI_Comm_free(&ncp->adio_fh->ina_comm);
+
         NCI_Free(ncp->adio_fh);
         ncp->adio_fh = NULL;
         if (err != NC_NOERR) return err;
