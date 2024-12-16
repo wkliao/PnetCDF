@@ -394,7 +394,8 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     num_nonaggrs = nprocs_my_node / naggrs_my_node;
     if (nprocs_my_node % naggrs_my_node) num_nonaggrs++;
 
-    if (num_nonaggrs == 1)
+    int do_io = 0;
+    if (num_nonaggrs == 1) {
         /* disable aggregation if the number of non-aggregators assigned to
          * this aggregator is 1. Note num_nonaggrs includes self. It is
          * possible for aggregation enabled or disabled on different nodes and
@@ -404,6 +405,8 @@ ncmpio_intra_node_aggr_init(NC *ncp)
          * enabled.
          */
         ncp->my_aggr = -1;
+        do_io = 1;
+    }
     else {
         /* find the rank ID of aggregator assigned to this rank */
         ncp->my_aggr = ranks_my_node[my_rank_index - my_rank_index % num_nonaggrs];
@@ -412,6 +415,7 @@ ncmpio_intra_node_aggr_init(NC *ncp)
             /* Set the number of non-aggregators assigned to this rank. For the
              * last group, make sure it does not go beyond nprocs_my_node.
              */
+            do_io = 1;
             ncp->num_nonaggrs = MIN(num_nonaggrs, nprocs_my_node - my_rank_index);
             if (ncp->num_nonaggrs == 1)
                 /* disable aggregation, as this aggregation group contains only
@@ -432,6 +436,61 @@ ncmpio_intra_node_aggr_init(NC *ncp)
         NCI_Free(ncp->nonaggr_ranks);
         ncp->nonaggr_ranks = NULL;
     }
+
+    /* Note when ncp->my_aggr < 0, it does not mean this rank will not write to
+     * the file. It just means intra-node aggregation is disabled for this
+     * rank. This rank may still have data to write to the file.
+     */
+
+#ifdef NOT_YET
+/* NOTE: using a communicator for intra-node aggregators does NOT work, because
+ * cb_nodes may not be the intra-node aggregator and communication in 2-phase
+ * I/O needs all cb_nodes to participate.
+ */
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        /* create a new MPI communicator containing intra-node aggregators */
+        int j, ina_nprocs, *ina_ranks;
+        MPI_Group origin_group, ina_group;
+
+        assert(ncp->adio_fh != NULL);
+
+        /* construct an arry of ranks that access to file */
+        ina_ranks = (int*) NCI_Malloc(sizeof(int) * ncp->nprocs);
+        MPI_Allgather(&do_io, 1, MPI_INT, ina_ranks, 1, MPI_INT, ncp->comm);
+
+        /* calculate number of processes that will access to the file */
+        for (ina_nprocs=0, i=0; i<ncp->nprocs; i++)
+            if (ina_ranks[i]) ina_nprocs++;
+
+// printf("ina_nprocs=%d ina_ranks=%d %d %d\n",ina_nprocs, ina_ranks[0],ina_ranks[1],ina_ranks[2]);
+
+        /* construct an arry of rank IDs that access to file */
+        for (j=0,i=0; i<ncp->nprocs; i++)
+            if (ina_ranks[i]) ina_ranks[j++] = i;
+
+// printf("ina_nprocs=%d ina_ranks=%d %d\n",ina_nprocs, ina_ranks[0],ina_ranks[1]);
+
+        /* create a new communicator containing only ranks that access to file */
+        MPI_Comm_group(ncp->comm, &origin_group);
+        MPI_Group_incl(origin_group, ina_nprocs, ina_ranks, &ina_group);
+        MPI_Comm_create(ncp->comm, ina_group, &ncp->adio_fh->ina_comm);
+        MPI_Group_free(&ina_group);
+        MPI_Group_free(&origin_group);
+        NCI_Free(ina_ranks);
+    }
+
+if (debug && ncp->fstype != ADIO_FSTYPE_MPIIO) {
+    int io_rank;
+    printf("world rank %d ncp->adio_fh->ina_comm = %s\n", ncp->rank,
+           (ncp->adio_fh->ina_comm == MPI_COMM_NULL) ? "MPI_COMM_NULL" : "NOT NULL");
+
+    if (ncp->adio_fh->ina_comm != MPI_COMM_NULL)
+        MPI_Comm_rank(ncp->adio_fh->ina_comm, &io_rank);
+    else
+        io_rank = -1;
+    printf("World rank = %d I/O comm rank = %d\n",ncp->rank, io_rank);
+}
+#endif
 
     /* TODO: For automatically determine Whether to enable intra-node write
      * aggregation, this should be done right before each collective write

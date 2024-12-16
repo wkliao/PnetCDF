@@ -200,6 +200,8 @@ typedef struct {
     ADIOI_Hints *hints;     /* structure containing fs-indep. info values */
     MPI_Info info;
 
+    MPI_Comm ina_comm; /* Communicator containing intra-node aggregators only */
+
 double lustre_write_metrics[4];
 } ADIO_FileD;
 
