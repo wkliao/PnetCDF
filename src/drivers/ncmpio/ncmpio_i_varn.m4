@@ -499,15 +499,18 @@ igetput_varn(NC                *ncp,
             req->npairs = 1;
             if (counts == NULL || counts[i] == NULL) {
                 /* meaning var1 API, equivalent to all 1s */
-                req->offset_start = varp->begin;
+                req->offset_start = 0;
+                req->offset_end = varp->xsz;
             }
             else {
                 for (j=1; j<varp->ndims-1; j++)
                     req->npairs *= counts[i][j];
                 /* special treatment for when there is only one pair */
-                if (req->npairs == 1)
+                if (req->npairs == 1) {
                     ncmpio_calc_off(ncp, varp, starts[i], counts[i],
                                     &req->offset_start);
+                    req->offset_end = req->nelems * varp->xsz;
+                }
             }
 
             max_rec = starts[i][0] + num_rec;
@@ -524,6 +527,11 @@ igetput_varn(NC                *ncp,
                 lead_list = (fIsSet(reqMode, NC_REQ_WR)) ? ncp->put_lead_list
                                                          : ncp->get_lead_list;
 
+
+                req->nelems /= counts[i][0];
+                if (req->npairs == 1)
+                    req->offset_end = req->nelems * varp->xsz;
+
                 /* append (counts[i][0]-1) number of requests to the queue */
                 ncmpio_add_record_requests(lead_list, req, counts[i][0], NULL);
                 start_ptr += (counts[i][0] - 1) * 2 * varp->ndims;
@@ -537,15 +545,18 @@ igetput_varn(NC                *ncp,
             req->npairs = 1;
             if (counts == NULL || counts[i] == NULL) {
                 /* meaning var1 API, equivalent to all 1s */
-                req->offset_start = varp->begin;
+                req->offset_start = 0;
+                req->offset_end = varp->xsz;
             }
             else {
                 for (j=0; j<varp->ndims-1; j++)
                     req->npairs *= counts[i][j];
                 /* special treatment for when there is only one pair */
-                if (req->npairs == 1)
+                if (req->npairs == 1) {
                     ncmpio_calc_off(ncp, varp, starts[i], counts[i],
                                     &req->offset_start);
+                    req->offset_end = req->nelems * varp->xsz;
+                }
             }
             req++;
         }
