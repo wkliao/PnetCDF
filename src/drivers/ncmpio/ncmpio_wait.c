@@ -437,7 +437,12 @@ construct_filetypes(NC           *ncp,
             disps[j]        = lead->varp->begin;
             is_ftype_contig = 1;
         }
-        else { /* non-scalar variable */
+        else if (reqs[i].npairs == 1) { /* only one offset-length pair */
+            /* reqs[i].offset_start has been set back in wait_getput() */
+            disps[j] = reqs[i].offset_start;
+            is_ftype_contig = 1;
+        }
+        else { /* non-scalar variable with more offset-length pairs */
             MPI_Offset offset, *count, *stride;
             count  = reqs[i].start + ndims;
             stride = fIsSet(lead->flag, NC_REQ_STRIDE_NULL) ?
@@ -1469,8 +1474,8 @@ merge_requests(NC          *ncp,
         MPI_Get_address(reqs[i].xbuf, &addr);
         addr = MPI_Aint_diff(addr, buf_addr);  /* distance to the buf of first req */
 
-        /* reqs[i].offset_start has been calculated in req_aggregation() */
         if (reqs[i].npairs == 1) {
+            /* reqs[i].offset_start has been set back in wait_getput() */
             seg_ptr->off = reqs[i].offset_start;
             seg_ptr->len = reqs[i].nelems * lead->varp->xsz;
             seg_ptr->buf_addr = addr;
@@ -2251,8 +2256,17 @@ wait_getput(NC         *ncp,
         varp = lead->varp;
 
         if (varp->ndims == 0) { /* scalar variable */
-            reqs[i].offset_start = varp->begin;
-            reqs[i].offset_end   = varp->begin + varp->xsz;
+            reqs[i].offset_start += varp->begin;
+            reqs[i].offset_end   += varp->begin;
+        }
+        else if (reqs[i].npairs == 1) { /* only one offset-length pair */
+            /* reqs[i].offset_end == reqs[i].nelems * varp->xsz */
+            MPI_Offset off = varp->begin;
+
+            if (IS_RECVAR(varp)) off += reqs[i].start[0] * ncp->recsize;
+
+            reqs[i].offset_start += off;
+            reqs[i].offset_end   += off;
         }
         else {
             /* start/count/stride have been allocated in a contiguous array */

@@ -126,6 +126,7 @@ ncmpio_add_record_requests(NC_lead_req      *lead_list,
         /* copy the number of flattened offset-length pairs */
         reqs[i].npairs       = reqs[0].npairs;
         reqs[i].offset_start = reqs[0].offset_start;
+        reqs[i].offset_end   = reqs[0].offset_end;
     }
 
     return NC_NOERR;
@@ -530,6 +531,7 @@ ncmpio_igetput_varm(NC               *ncp,
         req->start = NULL;
         req->npairs = 1;
         req->offset_start = 0; /* relative to var's begin */
+        req->offset_end = varp->xsz;
     }
     else if (stride == NULL) {
         size_t memChunk = varp->ndims * SIZEOF_MPI_OFFSET;
@@ -572,13 +574,15 @@ ncmpio_igetput_varm(NC               *ncp,
             req->npairs *= count[i];
     }
 
-    /* special treatment when there is only one offset-length pair */
-    if (req->npairs == 1 && varp->ndims > 0)
-        ncmpio_calc_off(ncp, varp, start, count, &req->offset_start);
-
     /* set the properties of non-lead request */
     req->xbuf   = xbuf;
     req->nelems = nelems;
+
+    /* special treatment when there is only one offset-length pair */
+    if (req->npairs == 1 && varp->ndims > 0) {
+        ncmpio_calc_off(ncp, varp, start, count, &req->offset_start);
+        req->offset_end = req->nelems * varp->xsz;
+    }
 
     if (IS_RECVAR(varp)) {
         /* save the last record number accessed */
@@ -599,6 +603,8 @@ ncmpio_igetput_varm(NC               *ncp,
                                                      : ncp->get_lead_list;
 
             req->nelems /= count[0];
+            if (req->npairs == 1)
+                req->offset_end = req->nelems * varp->xsz;
 
             /* add (count[0]-1) number of (sub)requests */
             ncmpio_add_record_requests(lead_list, req, count[0], stride);
