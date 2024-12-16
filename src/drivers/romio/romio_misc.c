@@ -589,13 +589,18 @@ int ADIO_File_set_view(ADIO_File     fd,
         return err;
      */
 
-    /* free fileview if set previously */
-    ADIOI_Type_dispose(&fd->filetype);
-
-    /* fd->flat_file should have need free by the callback of MPI_Type_free() */
+    /* fd->flat_file should have been freed at callback of MPI_Type_free() */
     fd->flat_file = NULL;
 
-    ADIOI_Type_ispredef(filetype, &is_predef);
+    /* free fileview if set previously */
+    if (fd->filetype != MPI_BYTE && fd->filetype != MPI_DATATYPE_NULL)
+        ADIOI_Type_dispose(&fd->filetype);
+
+    if (filetype != MPI_BYTE && filetype != MPI_DATATYPE_NULL)
+        ADIOI_Type_ispredef(filetype, &is_predef);
+    else
+        is_predef = 1;
+
     if (is_predef) {
         fd->filetype = filetype;
         filetype_is_contig = 1;
