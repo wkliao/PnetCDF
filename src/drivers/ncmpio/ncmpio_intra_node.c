@@ -945,7 +945,7 @@ intra_node_aggregation(NC           *ncp,
     char *recv_buf=NULL, *wr_buf = NULL;
     MPI_Aint npairs=0, *msg, *count=NULL;
     MPI_Offset disp=0, buf_count=0;
-    MPI_Datatype saved_fileType=MPI_BYTE;
+    MPI_Datatype saved_fileType, fileType=MPI_BYTE;
     MPI_File fh;
     MPI_Request *req=NULL;
 #ifdef PNETCDF_PROFILING
@@ -1384,47 +1384,48 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
         /* update number of pairs, now all off-len pairs are not overlapped */
         npairs = i+1;
 
-#if 0
-        if (npairs == 1) {
-            /* No need to create fileType if writing to a contiguous space */
-            disp = offsets[0];
-        }
-        else {
+        if (ncp->fstype == ADIO_FSTYPE_MPIIO) {
 
-/* TODO: When using internal Lustre driver, pass offsets and lengths to
- *       ncmpio_file_set_view() and then pass to ADIO_File_set_view(), to avoid
- *       creating a fileType and later be flattened. This can also save memory
- *       space.
- */
-
-#ifdef HAVE_MPI_LARGE_COUNT
-            /* construct fileview */
-            mpireturn = MPI_Type_create_hindexed_c(npairs, lengths, offsets,
-                                                   MPI_BYTE, &fileType);
-
-#else
-            /* construct fileview */
-            mpireturn = MPI_Type_create_hindexed(npairs, lengths, offsets,
-                                                 MPI_BYTE, &fileType);
-
-#endif
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_create_hindexed");
-                /* return the first encountered error if there is any */
-                if (status == NC_NOERR) status = err;
+            if (npairs == 1) {
+                /* Need not create fileType if writing to a contiguous space,
+                 * as when fileType is MPI_BYTE, ncmpio_file_set_view() will
+                 * make the entire file visible.
+                 */
+                disp = offsets[0];
             }
             else {
-                mpireturn = MPI_Type_commit(&fileType);
+#ifdef HAVE_MPI_LARGE_COUNT
+                /* construct fileview */
+                mpireturn = MPI_Type_create_hindexed_c(npairs, lengths, offsets,
+                                                       MPI_BYTE, &fileType);
+
+#else
+                assert(sizeof(*offsets) == sizeof(MPI_Aint));
+                /* construct fileview */
+                mpireturn = MPI_Type_create_hindexed(npairs, lengths,
+                                                     (MPI_Aint*)offsets,
+                                                     MPI_BYTE, &fileType);
+
+#endif
                 if (mpireturn != MPI_SUCCESS) {
-                    err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_commit");
+                    err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_create_hindexed");
                     /* return the first encountered error if there is any */
                     if (status == NC_NOERR) status = err;
                 }
+                else {
+                    mpireturn = MPI_Type_commit(&fileType);
+                    if (mpireturn != MPI_SUCCESS) {
+                        err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_commit");
+                        /* return the first encountered error if there is any */
+                        if (status == NC_NOERR) status = err;
+                    }
+                }
             }
+            NCI_Free(offsets);
+            NCI_Free(lengths);
+            offsets = NULL;
+            lengths = NULL;
         }
-        NCI_Free(offsets);
-        NCI_Free(lengths);
-#endif
     }
 
     NCI_Free(msg);
@@ -1448,44 +1449,54 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
     fh = ncp->collective_fh;
 
     /* Preserve fd->filetype previously used */
-    saved_fileType = ncp->adio_fh->filetype;
-    disp = 0;
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        disp = 0;
+        saved_fileType = ncp->adio_fh->filetype;
 
-// printf("%s line %4d: ncp->adio_fh->flat_file = %s\n",__func__,__LINE__,(ncp->adio_fh->flat_file == NULL)?"NULL":"NOT NULL");
-    /* set the MPI-IO fileview, this is a collective call.
-     * Use MPI_DATATYPE_NULL to  indicate this setting of fileview comes from
-     * intra-node aggregation.
-     */
-    err = ncmpio_file_set_view(ncp, fh, &disp, MPI_DATATYPE_NULL, npairs,
+        /* When using internal Lustre driver, pass offsets and lengths to
+         * ncmpio_file_set_view() and then pass to ADIO_File_set_view(), to
+         * avoid creating a fileType and later be flattened. This can also save
+         * memory space.
+         *
+         * Use MPI_DATATYPE_NULL to  indicate this setting of fileview comes
+         * from intra-node aggregation.
+         */
+        fileType = MPI_DATATYPE_NULL;
+    }
+
+    /* set the MPI-IO fileview, this is a collective call */
+    err = ncmpio_file_set_view(ncp, fh, &disp, fileType, npairs,
                                offsets, lengths);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
         buf_count = 0;
     }
-    /* returned disp should point to the very file offset to be written */
+    if (ncp->fstype == ADIO_FSTYPE_MPIIO && fileType != MPI_BYTE)
+        MPI_Type_free(&fileType);
+
 ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
-// printf("%s line %4d: ncp->adio_fh->flat_file = %s\n",__func__,__LINE__,(ncp->adio_fh->flat_file == NULL)?"NULL":"NOT NULL");
-// printf("%s: disp=%lld buf_count=%lld npairs=%ld\n", __func__,disp, buf_count,npairs);
-    /* call MPI_File_write_at_all */
+    /* call MPI_File_write_at_all, which returns disp that should point to the
+     * very file offset to be written
+     */
     err = ncmpio_read_write(ncp, NC_REQ_WR, NC_REQ_COLL, disp, buf_count,
                             MPI_BYTE, wr_buf, 1);
     if (status == NC_NOERR) status = err;
 
-    if (wr_buf != NULL) NCI_Free(wr_buf);
+    if (wr_buf  != NULL) NCI_Free(wr_buf);
+    if (offsets != NULL) NCI_Free(offsets);
+    if (lengths != NULL) NCI_Free(lengths);
 
-    if (npairs > 0) {
-        NCI_Free(offsets);
-        NCI_Free(lengths);
-    }
 ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
     /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
-    NCI_Free(ncp->adio_fh->flat_file);
-    ncp->adio_fh->flat_file = NULL;
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        NCI_Free(ncp->adio_fh->flat_file);
+        ncp->adio_fh->flat_file = NULL;
 
-    /* restore the original filetype */
-    ncp->adio_fh->filetype = saved_fileType;
+        /* restore the original filetype */
+        ncp->adio_fh->filetype = saved_fileType;
+    }
 
     return status;
 }
