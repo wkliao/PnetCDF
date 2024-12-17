@@ -250,7 +250,7 @@ void ADIOI_Calc_my_req(ADIO_File fd, ADIO_Offset * offset_list,
     MPI_Count *count_my_req_per_proc, count_my_req_procs, l;
     MPI_Aint *buf_idx;
     int proc;
-    size_t memLen;
+    size_t memLen, alloc_sz;
     ADIO_Offset fd_len, rem_len, curr_idx, off, *off_ptr;
 #ifdef HAVE_MPI_LARGE_COUNT
     ADIO_Offset *len_ptr;
@@ -324,11 +324,14 @@ void ADIOI_Calc_my_req(ADIO_File fd, ADIO_Offset * offset_list,
     for (int i = 0; i < nprocs; i++)
         memLen += count_my_req_per_proc[i];
 
-    my_req[0].offsets = (ADIO_Offset *) ADIOI_Malloc(memLen * sizeof(ADIO_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-    my_req[0].lens = (ADIO_Offset *) ADIOI_Malloc(memLen * sizeof(ADIO_Offset));
+    alloc_sz = sizeof(ADIO_Offset) * 2;
+    my_req[0].offsets = (ADIO_Offset *) ADIOI_Malloc(memLen * alloc_sz);
+    my_req[0].lens = my_req[0].offsets + memLen;
 #else
-    my_req[0].lens = (int *) ADIOI_Malloc(memLen * sizeof(int));
+    alloc_sz = sizeof(ADIO_Offset) + sizeof(int);
+    my_req[0].offsets = (ADIO_Offset *) ADIOI_Malloc(memLen * alloc_sz);
+    my_req[0].lens = (int*) (my_req[0].offsets + memLen);
 #endif
 
     off_ptr = my_req[0].offsets;
@@ -407,7 +410,6 @@ void ADIOI_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
 {
     ADIOI_Free(count_my_req_per_proc);
     ADIOI_Free(my_req[0].offsets);
-    ADIOI_Free(my_req[0].lens);
     ADIOI_Free(my_req);
     ADIOI_Free(buf_idx);
 }
@@ -429,6 +431,7 @@ void ADIOI_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
    requests of proc. i lie in this process's file domain. */
 
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
+    size_t alloc_sz;
     int i, j;
     MPI_Request *requests;
     ADIOI_Access *others_req;
@@ -455,13 +458,16 @@ void ADIOI_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
     for (i = 0; i < nprocs; i++)
         memLen += count_others_req_per_proc[i];
 
-    others_req[0].offsets = (ADIO_Offset *) ADIOI_Malloc(memLen * sizeof(ADIO_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-    others_req[0].lens = (ADIO_Offset *) ADIOI_Malloc(memLen * sizeof(ADIO_Offset));
-    others_req[0].mem_ptrs = (MPI_Count *) ADIOI_Malloc(memLen * sizeof(MPI_Count));
+    alloc_sz = sizeof(ADIO_Offset) * 2 + sizeof(MPI_Count);
+    others_req[0].offsets = (ADIO_Offset *) ADIOI_Malloc(memLen * alloc_sz);
+    others_req[0].lens = others_req[0].offsets + memLen;
+    others_req[0].mem_ptrs = (MPI_Count*) (others_req[0].lens + memLen);
 #else
-    others_req[0].lens = (int *) ADIOI_Malloc(memLen * sizeof(int));
-    others_req[0].mem_ptrs = (MPI_Aint *) ADIOI_Malloc(memLen * sizeof(MPI_Aint));
+    alloc_sz = sizeof(ADIO_Offset) + sizeof(int) + sizeof(MPI_Aint);
+    others_req[0].offsets = (ADIO_Offset *) ADIOI_Malloc(memLen * alloc_sz);
+    others_req[0].lens = (int *) (others_req[0].offsets + memLen);
+    others_req[0].mem_ptrs = (MPI_Aint*) (others_req[0].lens + memLen);
 #endif
     off_ptr = others_req[0].offsets;
     len_ptr = others_req[0].lens;
@@ -557,8 +563,6 @@ void ADIOI_Free_others_req(int nprocs, MPI_Count * count_others_req_per_proc,
 {
     ADIOI_Free(count_others_req_per_proc);
     ADIOI_Free(others_req[0].offsets);
-    ADIOI_Free(others_req[0].lens);
-    ADIOI_Free(others_req[0].mem_ptrs);
     ADIOI_Free(others_req);
 }
 

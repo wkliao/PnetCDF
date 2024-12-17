@@ -154,10 +154,8 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
         (!interleave_count && (fd->hints->cb_write == ADIOI_HINT_AUTO))) {
         /* use independent accesses */
         if (fd->hints->cb_write != ADIOI_HINT_DISABLE) {
-            if (fd->filetype != MPI_DATATYPE_NULL) {
+            if (fd->filetype != MPI_DATATYPE_NULL)
                 ADIOI_Free(offset_list);
-                ADIOI_Free(len_list);
-            }
             ADIOI_Free(st_offsets);
         }
 
@@ -258,10 +256,8 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
     ADIOI_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
     ADIOI_Free_others_req(nprocs, count_others_req_per_proc, others_req);
 
-    if (fd->filetype != MPI_DATATYPE_NULL) {
+    if (fd->filetype != MPI_DATATYPE_NULL)
         ADIOI_Free(offset_list);
-        ADIOI_Free(len_list);
-    }
     ADIOI_Free(st_offsets);
     ADIOI_Free(fd_start);
 

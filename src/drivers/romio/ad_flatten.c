@@ -31,7 +31,6 @@ static int ADIOI_Flattened_type_delete(MPI_Datatype datatype,
     node->refct--;
 
     if (node->refct <= 0) {
-        if (node->blocklens) ADIOI_Free(node->blocklens);
         if (node->indices) ADIOI_Free(node->indices);
         ADIOI_Free(node);
     }
@@ -79,6 +78,7 @@ else flat_hits++;
 #ifdef HAVE_MPIX_TYPE_IOV
 ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 {
+    size_t alloc_sz;
     MPI_Count type_size;
     ADIOI_Flatlist_node *flat;
 
@@ -110,11 +110,13 @@ ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
         flat = ADIOI_Malloc(sizeof(ADIOI_Flatlist_node));
         flat->count = num_iovs;
 #ifdef HAVE_MPI_LARGE_COUNT
-        flat->blocklens = (MPI_Count *) ADIOI_Malloc(flat->count * sizeof(MPI_Count));
-        flat->indices   = (MPI_Count *) ADIOI_Malloc(flat->count * sizeof(MPI_Count));
+        alloc_sz = sizeof(MPI_Count) * 2;
+        flat->indices   = (MPI_Count *) ADIOI_Malloc(alloc_sz * flat->count);
+        flat->blocklens = flat->indices + flat->count;
 #else
-        flat->blocklens = (int *) ADIOI_Malloc(flat->count * sizeof(int));
-        flat->indices   = (MPI_Aint *) ADIOI_Malloc(flat->count * sizeof(MPI_Aint));
+        alloc_sz = sizeof(MPI_Aint) + sizeof(int);
+        flat->indices   = (MPI_Aint *) ADIOI_Malloc(alloc_sz * flat->count);
+        flat->blocklens = (int*) (flat->indices + flat->count);
 #endif
         flat->refct = 1;
 
@@ -166,6 +168,7 @@ int flat_mem;
 #endif
 static ADIOI_Flatlist_node *flatlist_node_new(MPI_Datatype datatype, MPI_Count count)
 {
+    size_t alloc_sz;
     ADIOI_Flatlist_node *flat;
     flat = ADIOI_Malloc(sizeof(ADIOI_Flatlist_node));
 
@@ -175,11 +178,13 @@ static ADIOI_Flatlist_node *flatlist_node_new(MPI_Datatype datatype, MPI_Count c
     flat->flag = 0;
 
 #ifdef HAVE_MPI_LARGE_COUNT
-    flat->indices   = (MPI_Count *) ADIOI_Calloc(flat->count, sizeof(MPI_Count));
-    flat->blocklens = (MPI_Count *) ADIOI_Calloc(flat->count, sizeof(MPI_Count));
+    alloc_sz = sizeof(MPI_Count) * 2;
+    flat->indices   = (MPI_Count *) ADIOI_Calloc(flat->count, alloc_sz);
+    flat->blocklens = flat->indices + flat->count;
 #else
-    flat->indices   = (MPI_Offset *) ADIOI_Calloc(flat->count, sizeof(MPI_Offset));
-    flat->blocklens = (int *) ADIOI_Calloc(flat->count, sizeof(int));
+    alloc_sz = sizeof(MPI_Offset) + sizeof(int);
+    flat->indices   = (MPI_Offset *) ADIOI_Calloc(flat->count, alloc_sz);
+    flat->blocklens = (int*) (flat->indices + flat->count);
 #endif
 
 #ifdef WKL_MALLOC
@@ -198,14 +203,31 @@ flat_mem += sizeof(ADIOI_Flatlist_node) + flat->count * 2 * sizeof(ADIO_Offset);
  */
 static void flatlist_node_grow(ADIOI_Flatlist_node * flat, MPI_Count idx)
 {
+    size_t alloc_sz;
+
     if (idx >= flat->count) {
         size_t new_count = (flat->count * 1.25 + 4);
+        char *tmp;
 #ifdef HAVE_MPI_LARGE_COUNT
-        flat->blocklens = (MPI_Count*) NCI_Realloc(flat->blocklens, sizeof(MPI_Count) * new_count);
-        flat->indices   = (MPI_Count*) NCI_Realloc(flat->indices,   sizeof(MPI_Count) * new_count);
+        alloc_sz = sizeof(MPI_Count) * 2;
+        tmp = (char*) NCI_Malloc(alloc_sz * new_count);
+        memcpy(tmp, flat->indices, sizeof(MPI_Count) * flat->count);
+        flat->indices = (MPI_Count*) tmp;
+
+        tmp += sizeof(MPI_Count) * new_count;
+        memcpy(tmp, flat->blocklens, sizeof(MPI_Count) * flat->count);
+        flat->blocklens = (MPI_Count*) tmp;
+        NCI_Free(flat->indices);
 #else
-        flat->blocklens = (int*)        NCI_Realloc(flat->blocklens, sizeof(int)      * new_count);
-        flat->indices   = (MPI_Offset*) NCI_Realloc(flat->indices, sizeof(MPI_Offset) * new_count);
+        alloc_sz = sizeof(MPI_Offset) + sizeof(int);
+        tmp = (char*) NCI_Malloc(alloc_sz * new_count);
+        memcpy(tmp, flat->indices, sizeof(MPI_Offset) * flat->count);
+        flat->indices = (MPI_Offset*) tmp;
+
+        tmp += sizeof(MPI_Offset) * new_count;
+        memcpy(tmp, flat->blocklens, sizeof(int) * flat->count);
+        flat->blocklens = (int*) tmp;
+        NCI_Free(flat->indices);
 #endif
         flat->count = new_count;
     }
@@ -1395,6 +1417,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
  */
 static void ADIOI_Optimize_flattened(ADIOI_Flatlist_node * flat_type)
 {
+    size_t alloc_sz;
     int i, j, opt_blocks;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *opt_blocklens;
@@ -1439,11 +1462,13 @@ static void ADIOI_Optimize_flattened(ADIOI_Flatlist_node * flat_type)
         return;
 
 #ifdef HAVE_MPI_LARGE_COUNT
-    opt_blocklens = (MPI_Count *) ADIOI_Calloc(opt_blocks, sizeof(MPI_Count));
-    opt_indices   = (MPI_Count *) ADIOI_Calloc(opt_blocks, sizeof(MPI_Count));
+    alloc_sz = sizeof(MPI_Count) * 2;
+    opt_indices   = (MPI_Count*) ADIOI_Calloc(opt_blocks, alloc_sz);
+    opt_blocklens = opt_indices + opt_blocks;
 #else
-    opt_blocklens = (int *)        ADIOI_Calloc(opt_blocks, sizeof(int));
-    opt_indices   = (MPI_Offset *) ADIOI_Calloc(opt_blocks, sizeof(MPI_Offset));
+    alloc_sz = sizeof(MPI_Offset) + sizeof(int);
+    opt_indices   = (MPI_Offset*) ADIOI_Calloc(opt_blocks, alloc_sz);
+    opt_blocklens = (int*) (opt_indices + opt_blocks);
 #endif
 
     /* fill in new blocklists */
@@ -1461,7 +1486,6 @@ static void ADIOI_Optimize_flattened(ADIOI_Flatlist_node * flat_type)
     }
     flat_type->count = opt_blocks;
     ADIOI_Free(flat_type->indices);
-    ADIOI_Free(flat_type->blocklens);
     flat_type->blocklens = opt_blocklens;
     flat_type->indices = opt_indices;
     return;

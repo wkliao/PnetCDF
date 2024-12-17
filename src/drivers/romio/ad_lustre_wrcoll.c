@@ -162,7 +162,7 @@ void ADIOI_LUSTRE_Calc_my_req(ADIO_File fd,
 {
     int aggr, *aggr_ranks, cb_nodes;
     MPI_Count i, l;
-    size_t nelems;
+    size_t nelems, alloc_sz;
 #ifdef HAVE_MPI_LARGE_COUNT
     ADIO_Offset rem_len, avail_len, *avail_lens, *len_ptr;
 #else
@@ -183,11 +183,14 @@ void ADIOI_LUSTRE_Calc_my_req(ADIO_File fd,
      * my_req. Note that flat_fview.count has been calculated way back in
      * ADIOI_Calc_my_off_len()
      */
-    aggr_ranks = (int *) ADIOI_Malloc(flat_fview.count * sizeof(int));
 #ifdef HAVE_MPI_LARGE_COUNT
-    avail_lens = (ADIO_Offset *) ADIOI_Malloc(flat_fview.count * sizeof(ADIO_Offset));
+    alloc_sz = sizeof(int) + sizeof(ADIO_Offset);
+    aggr_ranks = (int*) ADIOI_Malloc(alloc_sz * flat_fview.count);
+    avail_lens = (ADIO_Offset*) (aggr_ranks + flat_fview.count);
 #else
-    avail_lens = (int *) ADIOI_Malloc(flat_fview.count * sizeof(int));
+    alloc_sz = sizeof(int) * 2;
+    aggr_ranks = (int*) ADIOI_Malloc(alloc_sz * flat_fview.count);
+    avail_lens = aggr_ranks + flat_fview.count;
 #endif
 
     /* nelems will be the number of offset-length pairs for my_req[] */
@@ -257,11 +260,14 @@ for (i=0; i<nelems; i++) buf_idx[0][i] = -1;
     }
 
     /* allocate space for my_req and its members offsets and lens */
-    my_req[0].offsets = (ADIO_Offset *) ADIOI_Malloc(nelems * sizeof(ADIO_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-    my_req[0].lens = (ADIO_Offset *) ADIOI_Malloc(nelems * sizeof(ADIO_Offset));
+    alloc_sz = sizeof(ADIO_Offset) * 2;
+    my_req[0].offsets = (ADIO_Offset*) ADIOI_Malloc(alloc_sz * nelems);
+    my_req[0].lens = my_req[0].offsets + nelems;
 #else
-    my_req[0].lens = (int *) ADIOI_Malloc(nelems * sizeof(int));
+    alloc_sz = sizeof(ADIO_Offset) + sizeof(int);
+    my_req[0].offsets = (ADIO_Offset*) ADIOI_Malloc(alloc_sz * nelems);
+    my_req[0].lens = (int*) (my_req[0].offsets + nelems);
 #endif
 
     off_ptr = my_req[0].offsets;
@@ -327,7 +333,6 @@ assert(aggr >= 0 && aggr <= cb_nodes);
         }
     }
     ADIOI_Free(aggr_ranks);
-    ADIOI_Free(avail_lens);
 }
 
 /* ADIOI_LUSTRE_Calc_others_req() calculates what requests of other processes
@@ -347,7 +352,7 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
     int i, myrank, nprocs;
     MPI_Count *count_my_req_per_proc, *count_others_req_per_proc;
     ADIOI_Access *others_req;
-    size_t memLen;
+    size_t memLen, alloc_sz;
     ADIO_Offset *off_ptr;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Offset *len_ptr;
@@ -390,13 +395,16 @@ if (!fd->is_agg) {
     for (i = 0; i < nprocs; i++)
         memLen += count_others_req_per_proc[i];
 
-    others_req[0].offsets = (ADIO_Offset *) ADIOI_Malloc(memLen * sizeof(ADIO_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-    others_req[0].lens = (ADIO_Offset *) ADIOI_Malloc(memLen * sizeof(ADIO_Offset));
-    others_req[0].mem_ptrs = (MPI_Count *) ADIOI_Malloc(memLen * sizeof(MPI_Count));
+    alloc_sz = sizeof(ADIO_Offset) * 2 +  sizeof(MPI_Count);
+    others_req[0].offsets  = (ADIO_Offset*) ADIOI_Malloc(memLen * alloc_sz);
+    others_req[0].lens     = others_req[0].offsets + memLen;
+    others_req[0].mem_ptrs = (MPI_Count*) (others_req[0].lens + memLen);
 #else
-    others_req[0].lens = (int *) ADIOI_Malloc(memLen * sizeof(int));
-    others_req[0].mem_ptrs = (MPI_Aint *) ADIOI_Malloc(memLen * sizeof(MPI_Aint));
+    alloc_sz = sizeof(ADIO_Offset) +  sizeof(int) +  sizeof(MPI_Count);
+    others_req[0].offsets  = (ADIO_Offset*) ADIOI_Malloc(memLen * alloc_sz);
+    others_req[0].lens     = (int*) (others_req[0].offsets + memLen);
+    others_req[0].mem_ptrs = (MPI_Aint*) (others_req[0].lens + memLen);
 #endif
     off_ptr = others_req[0].offsets;
     len_ptr = others_req[0].lens;
@@ -437,13 +445,15 @@ timing = MPI_Wtime();
     MPI_Offset *r_len_buf=NULL, *s_len_buf=NULL;
     MPI_Count *sendCounts, *recvCounts;
     MPI_Aint *sdispls, *rdispls;
-    sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Count));
-    sdispls = (MPI_Aint*) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Aint));
+    alloc_sz = sizeof(MPI_Count) + sizeof(MPI_Aint);
+    sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs * 2, alloc_sz);
+    sdispls = (MPI_Aint*) (sendCounts + nprocs * 2);
 #else
     int *r_len_buf=NULL, *s_len_buf=NULL;
     int *sendCounts, *recvCounts, *sdispls, *rdispls;
-    sendCounts = (int*) ADIOI_Calloc(nprocs * 2, sizeof(int));
-    sdispls = (int*) ADIOI_Calloc(nprocs * 2, sizeof(int));
+    alloc_sz = sizeof(int) * 2;
+    sendCounts = (int*) ADIOI_Calloc(nprocs * 2, alloc_sz);
+    sdispls = sendCounts + nprocs * 2;
 #endif
     recvCounts = sendCounts + nprocs;
     rdispls = sdispls + nprocs;
@@ -499,7 +509,6 @@ timing = MPI_Wtime();
 #endif
 
     ADIOI_Free(sendCounts);
-    ADIOI_Free(sdispls);
 
 #else /* #ifdef USE_ALLTOALLV_ */
     int nreqs;
@@ -530,19 +539,19 @@ else recv_amnt += 2 * others_req[i].count;
         }
         else {
             /* construct an MPI datatype to combine 2 receives */
-#ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, recvType;
-            MPI_Count blklen[2]={others_req[i].count, others_req[i].count};
-            MPI_Count disp[2];
-            MPI_Address(others_req[i].offsets, &disp[0]);
-            MPI_Address(others_req[i].lens, &disp[1]);
-            MPI_Type_create_struct_c(2, blklen, disp, types, &recvType);
-#else
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, recvType;
-            int blklen[2]={others_req[i].count, others_req[i].count};
             MPI_Aint disp[2];
             MPI_Address(others_req[i].offsets, &disp[0]);
             MPI_Address(others_req[i].lens, &disp[1]);
+#ifdef HAVE_MPI_LARGE_COUNT
+            MPI_Count disp_c[2];
+            disp_c[0] = disp[0];
+            disp_c[1] = disp[1];
+            MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, recvType;
+            MPI_Count blklen[2]={others_req[i].count, others_req[i].count};
+            MPI_Type_create_struct_c(2, blklen, disp_c, types, &recvType);
+#else
+            MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, recvType;
+            int blklen[2]={others_req[i].count, others_req[i].count};
             MPI_Type_create_struct(2, blklen, disp, types, &recvType);
 #endif
             MPI_Type_commit(&recvType);
@@ -567,19 +576,19 @@ else recv_amnt += 2 * others_req[i].count;
     for (i = 0; i < fd->hints->cb_nodes; i++) {
         if (my_req[i].count && i != fd->my_cb_nodes_index) {
             /* construct an MPI datatype to combine 2 sends */
-#ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, sendType;
-            MPI_Count blklen[2]={my_req[i].count, my_req[i].count};
-            MPI_Count disp[2];
-            MPI_Address(my_req[i].offsets, &disp[0]);
-            MPI_Address(my_req[i].lens, &disp[1]);
-            MPI_Type_create_struct_c(2, blklen, disp, types, &sendType);
-#else
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, sendType;
-            int blklen[2]={my_req[i].count, my_req[i].count};
             MPI_Aint disp[2];
             MPI_Address(my_req[i].offsets, &disp[0]);
             MPI_Address(my_req[i].lens, &disp[1]);
+#ifdef HAVE_MPI_LARGE_COUNT
+            MPI_Count disp_c[2];
+            disp_c[0] = disp[0];
+            disp_c[1] = disp[1];
+            MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, sendType;
+            MPI_Count blklen[2]={my_req[i].count, my_req[i].count};
+            MPI_Type_create_struct_c(2, blklen, disp_c, types, &sendType);
+#else
+            MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, sendType;
+            int blklen[2]={my_req[i].count, my_req[i].count};
             MPI_Type_create_struct(2, blklen, disp, types, &sendType);
 #endif
             MPI_Type_commit(&sendType);
@@ -725,13 +734,17 @@ start_T = end_T;;
     /* flatten user buffer datatype, buftype */
     if (is_btype_predef) {
         int buftype_size;
+        size_t alloc_sz;
         MPI_Type_size(buftype, &buftype_size);
         flat_bview.count  = 1;
-        flat_bview.off    = (MPI_Offset*)NCI_Malloc(sizeof(MPI_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-        flat_bview.len    = (MPI_Offset*)NCI_Malloc(sizeof(MPI_Offset));
+        alloc_sz = sizeof(MPI_Offset) * 2;
+        flat_bview.off = (MPI_Offset*)NCI_Malloc(alloc_sz);
+        flat_bview.len = flat_bview.off + 1;
 #else
-        flat_bview.len    = (int*)NCI_Malloc(sizeof(int));
+        alloc_sz = sizeof(MPI_Offset) + sizeof(int);
+        flat_bview.off = (MPI_Offset*)NCI_Malloc(alloc_sz);
+        flat_bview.len = (int*) (flat_bview.off + 1);
 #endif
         flat_bview.off[0] = 0;
         flat_bview.len[0] = buftype_size;
@@ -870,16 +883,12 @@ if (do_collect == 0) printf("%s --- SWITCH to independent write !!!\n",__func__)
 
         fd->fp_ind = orig_fp;
 
-        if (is_btype_predef) {
+        if (is_btype_predef)
             NCI_Free(flat_bview.off);
-            NCI_Free(flat_bview.len);
-        }
 
         if (count == 0) {
-            if (free_flat_fview && flat_fview.count > 0) {
+            if (free_flat_fview && flat_fview.count > 0)
                 ADIOI_Free(flat_fview.off);
-                ADIOI_Free(flat_fview.len);
-            }
             *error_code = MPI_SUCCESS;
             return;
         }
@@ -894,19 +903,15 @@ if (do_collect == 0) printf("%s --- SWITCH to independent write !!!\n",__func__)
                  * been counted into flat_fview.off[].
                  */
 
-            if (free_flat_fview && flat_fview.count > 0) {
+            if (free_flat_fview && flat_fview.count > 0)
                 ADIOI_Free(flat_fview.off);
-                ADIOI_Free(flat_fview.len);
-            }
 
 static int wkl=0; if (wkl==0 && count > 0 && fd->disp>0) { printf("xxxx %s %d: --- SWITCH to independent write ADIO_WriteContig fd->disp=%lld off=%lld !!!\n",__func__,__LINE__,fd->disp,off); wkl++; }
 
             ADIO_WriteContig(fd, buf, count, buftype, file_ptr_type, off, status, error_code);
         } else {
-            if (free_flat_fview && flat_fview.count > 0) {
+            if (free_flat_fview && flat_fview.count > 0)
                 ADIOI_Free(flat_fview.off);
-                ADIOI_Free(flat_fview.len);
-            }
 printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
 
             ADIO_WriteStrided(fd, buf, count, buftype, file_ptr_type, offset, status, error_code);
@@ -988,8 +993,6 @@ start_T = end_T;;
 
     /* free all memory allocated */
     ADIOI_Free(others_req[0].offsets);
-    ADIOI_Free(others_req[0].lens);
-    ADIOI_Free(others_req[0].mem_ptrs);
     ADIOI_Free(others_req);
 
     if (buf_idx != NULL) {
@@ -997,7 +1000,6 @@ start_T = end_T;;
         ADIOI_Free(buf_idx);
     }
     ADIOI_Free(my_req[0].offsets);
-    ADIOI_Free(my_req[0].lens);
     ADIOI_Free(my_req);
 
     /* restore the original striping_unit */
@@ -1005,15 +1007,11 @@ start_T = end_T;;
 
 /* TODO: If reusing flat_file's buffers, should we free them now? or lets caller do it */
 
-    if (free_flat_fview && flat_fview.count > 0) {
+    if (free_flat_fview && flat_fview.count > 0)
         ADIOI_Free(flat_fview.off);
-        ADIOI_Free(flat_fview.len);
-    }
 
-    if (is_btype_predef) {
+    if (is_btype_predef)
         NCI_Free(flat_bview.off);
-        NCI_Free(flat_bview.len);
-    }
 
     /* If this collective write is followed by an independent write, it's
      * possible to have those subsequent writes on other processes race ahead
@@ -1104,6 +1102,7 @@ void commit_comm_phase(ADIO_File      fd,
     MPI_Comm_size(fd->comm, &nprocs);
 
 #ifdef USE_ALLTOALLW_
+    size_t alloc_sz;
     MPI_Datatype *sendTypes, *recvTypes;
     sendTypes = (MPI_Datatype*)ADIOI_Malloc(sizeof(MPI_Datatype) * nprocs * 2);
     recvTypes = sendTypes + nprocs;
@@ -1114,12 +1113,14 @@ void commit_comm_phase(ADIO_File      fd,
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *sendCounts, *recvCounts;
     MPI_Aint *sdispls, *rdispls;
-    sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Count));
-    sdispls = (MPI_Aint*) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Aint));
+    alloc_sz = sizeof(MPI_Count) + sizeof(MPI_Aint);
+    sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs * 2, alloc_sz);
+    sdispls = (MPI_Aint*) (sendCounts + (nprocs * 2));
 #else
     int *sendCounts, *recvCounts, *sdispls, *rdispls;
-    sendCounts = (int*) ADIOI_Calloc(nprocs * 2, sizeof(int));
-    sdispls = (int*) ADIOI_Calloc(nprocs * 2, sizeof(int));
+    alloc_sz = sizeof(int) * 2;
+    sendCounts = (int*) ADIOI_Calloc(nprocs * 2, alloc_sz);
+    sdispls = (int*) (sendCounts + (nprocs * 2));
 #endif
     recvCounts = sendCounts + nprocs;
     rdispls = sdispls + nprocs;
@@ -1180,7 +1181,6 @@ void commit_comm_phase(ADIO_File      fd,
             MPI_Type_free(&recvTypes[i]);
     }
     ADIOI_Free(sendCounts);
-    ADIOI_Free(sdispls);
     ADIOI_Free(sendTypes);
 
 #else /* #ifdef USE_ALLTOALLW_ */
@@ -1295,6 +1295,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File fd,
      */
 
     char **write_buf = NULL, **recv_buf = NULL, **send_buf = NULL;
+    size_t alloc_sz;
     int i, nprocs, myrank, nbufs;
     MPI_Count j, m, ntimes;
     MPI_Count *recv_curr_offlen_ptr, **recv_size=NULL, **recv_count=NULL;
@@ -1379,11 +1380,13 @@ timing[0] = s_time = MPI_Wtime();
     for (i = 0; i < cb_nodes; i++) {
         send_list[i].count = 0;
 #ifdef HAVE_MPI_LARGE_COUNT
-        send_list[i].disp  = (MPI_Count*) ADIOI_Malloc(sizeof(MPI_Count) * nbufs);
-        send_list[i].len   = (MPI_Count*) ADIOI_Malloc(sizeof(MPI_Count) * nbufs);
+        alloc_sz = sizeof(MPI_Count) * 2;
+        send_list[i].disp = (MPI_Count*) ADIOI_Malloc(alloc_sz * nbufs);
+        send_list[i].len  = send_list[i].disp + nbufs;
 #else
-        send_list[i].disp  = (MPI_Aint*) ADIOI_Malloc(sizeof(MPI_Aint) * nbufs);
-        send_list[i].len   = (int*)      ADIOI_Malloc(sizeof(int)      * nbufs);
+        alloc_sz = sizeof(MPI_Aint) + sizeof(int);
+        send_list[i].disp = (MPI_Aint*) ADIOI_Malloc(alloc_sz * nbufs);
+        send_list[i].len  = (int*) (send_list[i].disp + nbufs);
 #endif
     }
 
@@ -1397,11 +1400,13 @@ timing[0] = s_time = MPI_Wtime();
         for (i = 0; i < nprocs; i++) {
             recv_list[i].count = 0;
 #ifdef HAVE_MPI_LARGE_COUNT
-            recv_list[i].disp  = (MPI_Count*) ADIOI_Malloc(sizeof(MPI_Count) * nbufs);
-            recv_list[i].len   = (MPI_Count*) ADIOI_Malloc(sizeof(MPI_Count) * nbufs);
+            alloc_sz = sizeof(MPI_Count) * 2;
+            recv_list[i].disp = (MPI_Count*) ADIOI_Malloc(alloc_sz * nbufs);
+            recv_list[i].len  = recv_list[i].disp + nbufs;
 #else
-            recv_list[i].disp  = (MPI_Aint*) ADIOI_Malloc(sizeof(MPI_Aint) * nbufs);
-            recv_list[i].len   = (int*)      ADIOI_Malloc(sizeof(int)      * nbufs);
+            alloc_sz = sizeof(MPI_Aint) + sizeof(int);
+            recv_list[i].disp = (MPI_Aint*) ADIOI_Malloc(alloc_sz * nbufs);
+            recv_list[i].len  = (int*) (recv_list[i].disp + nbufs);
 #endif
         }
     }
@@ -1750,7 +1755,6 @@ if (srt_off_len[j].len[i] == 0) printf("%s line %d: ADIO_WriteContig count == 0\
                 }
                 if (srt_off_len[j].num > 0) {
                     ADIOI_Free(srt_off_len[j].off);
-                    ADIOI_Free(srt_off_len[j].len);
                     srt_off_len[j].num = 0;
                 }
             }
@@ -1785,17 +1789,13 @@ timing[2] += e_time - s_time;
     if (send_buf != NULL)
         ADIOI_Free(send_buf);
     if (send_list != NULL) {
-        for (i = 0; i < cb_nodes; i++) {
-            ADIOI_Free(send_list[i].len);
+        for (i = 0; i < cb_nodes; i++)
             ADIOI_Free(send_list[i].disp);
-        }
         ADIOI_Free(send_list);
     }
     if (recv_list != NULL) {
-        for (i = 0; i < nprocs; i++) {
-            ADIOI_Free(recv_list[i].len);
+        for (i = 0; i < nprocs; i++)
             ADIOI_Free(recv_list[i].disp);
-        }
         ADIOI_Free(recv_list);
     }
 #ifdef WKL_DEBUG
@@ -1970,6 +1970,7 @@ static void ADIOI_LUSTRE_W_Exchange_data(
             int            *error_code)   /* OUT: */
 {
     char *buf_ptr, *contig_buf;
+    size_t alloc_sz;
     int i, nprocs, myrank, nprocs_recv, err;
     int hole, check_hole, cb_nodes, striping_unit;
     MPI_Count sum_recv;
@@ -2032,11 +2033,14 @@ static void ADIOI_LUSTRE_W_Exchange_data(
          * (srt_off_len->off and srt_off_len->len) in an increasing order of
          * file offsets using a heap-merge sorting algorithm.
          */
-        srt_off_len->off = (ADIO_Offset *) ADIOI_Malloc(srt_off_len->num * sizeof(ADIO_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-        srt_off_len->len = (MPI_Count *) ADIOI_Malloc(srt_off_len->num * sizeof(MPI_Count));
+        alloc_sz = sizeof(ADIO_Offset) + sizeof(MPI_Count);
+        srt_off_len->off = (ADIO_Offset*) ADIOI_Malloc(alloc_sz * srt_off_len->num);
+        srt_off_len->len = (MPI_Count*) (srt_off_len->off + srt_off_len->num);
 #else
-        srt_off_len->len = (int *) ADIOI_Malloc(srt_off_len->num * sizeof(int));
+        alloc_sz = sizeof(ADIO_Offset) + sizeof(int);
+        srt_off_len->off = (ADIO_Offset *) ADIOI_Malloc(alloc_sz * srt_off_len->num);
+        srt_off_len->len = (int*) (srt_off_len->off + srt_off_len->num);
 #endif
 
         heap_merge(others_req, recv_count, srt_off_len->off, srt_off_len->len,
@@ -2065,11 +2069,13 @@ static void ADIOI_LUSTRE_W_Exchange_data(
         srt_off_len->num = 1;
         if (srt_off_len->off == NULL) {
 #ifdef HAVE_MPI_LARGE_COUNT
-            srt_off_len->off = (ADIO_Offset *) ADIOI_Malloc(sizeof(ADIO_Offset));
-            srt_off_len->len = (MPI_Count *) ADIOI_Malloc(sizeof(MPI_Count));
+            alloc_sz = sizeof(ADIO_Offset) + sizeof(MPI_Count);
+            srt_off_len->off = (ADIO_Offset*) ADIOI_Malloc(alloc_sz);
+            srt_off_len->len = (MPI_Count*) (srt_off_len->off + 1);
 #else
-            srt_off_len->off = (MPI_Offset *) ADIOI_Malloc(sizeof(MPI_Offset));
-            srt_off_len->len = (int *) ADIOI_Malloc(sizeof(int));
+            alloc_sz = sizeof(ADIO_Offset) + sizeof(int);
+            srt_off_len->off = (MPI_Offset*) ADIOI_Malloc(alloc_sz);
+            srt_off_len->len = (int*) (srt_off_len->off + 1);
 #endif
         }
         srt_off_len->off[0] = range_off;
