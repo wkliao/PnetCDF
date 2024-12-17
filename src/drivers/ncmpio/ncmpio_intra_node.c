@@ -920,7 +920,7 @@ if ((*offsets)[idx] != reqs[i].offset_start && wkl == 0) {printf("--------------
 static int
 construct_buf_type(const NC     *ncp,
                    int           num_reqs,  /* IN: # requests */
-                   const NC_req *reqs,      /* [num_reqs] requests */
+                   const NC_req *reqs,      /* IN: [num_reqs] requests */
                    MPI_Aint     *bufLen,    /* OUT: buffer size in bytes */
                    MPI_Datatype *bufType)   /* OUT: buffer datatype */
 {
@@ -928,11 +928,11 @@ construct_buf_type(const NC     *ncp,
     NC_lead_req *lead;
 
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count *blocklens = (MPI_Count*)NCI_Malloc(sizeof(MPI_Count) * num_reqs);
     MPI_Count *disps     = (MPI_Count*)NCI_Malloc(sizeof(MPI_Count) * num_reqs);
+    MPI_Count *blocklens = (MPI_Count*)NCI_Malloc(sizeof(MPI_Count) * num_reqs);
 #else
-    int       *blocklens = (int*)      NCI_Malloc(sizeof(int)       * num_reqs);
     MPI_Aint  *disps     = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint)  * num_reqs);
+    int       *blocklens = (int*)      NCI_Malloc(sizeof(int)       * num_reqs);
 #endif
 
     *bufLen = 0;
