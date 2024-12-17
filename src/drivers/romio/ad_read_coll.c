@@ -162,7 +162,6 @@ void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
         /* don't do aggregation */
         if (fd->hints->cb_read != ADIOI_HINT_DISABLE) {
             ADIOI_Free(offset_list);
-            ADIOI_Free(len_list);
             ADIOI_Free(st_offsets);
         }
 
@@ -251,7 +250,6 @@ void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
     ADIOI_Free_others_req(nprocs, count_others_req_per_proc, others_req);
 
     ADIOI_Free(offset_list);
-    ADIOI_Free(len_list);
     ADIOI_Free(st_offsets);
     ADIOI_Free(fd_start);
 }
@@ -273,6 +271,7 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
 {
     MPI_Count filetype_size;
     MPI_Count buftype_size;
+    size_t alloc_sz;
     int i, j;
     MPI_Count k;
     ADIO_Offset i_offset;
@@ -382,11 +381,14 @@ assert(filetype_size != 0);
 
     if (filetype_is_contig) {
         *contig_access_count_ptr = 1;
-        *offset_list_ptr = (ADIO_Offset *) ADIOI_Malloc(sizeof(ADIO_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-        *len_list_ptr = (ADIO_Offset *) ADIOI_Malloc(sizeof(ADIO_Offset));
+        alloc_sz = sizeof(ADIO_Offset) * 2;
+        *offset_list_ptr = (ADIO_Offset *) ADIOI_Malloc(alloc_sz);
+        *len_list_ptr = (*offset_list_ptr + 1);
 #else
-        *len_list_ptr = (int *) ADIOI_Malloc(sizeof(int));
+        alloc_sz = sizeof(ADIO_Offset) + sizeof(int);
+        *offset_list_ptr = (ADIO_Offset *) ADIOI_Malloc(alloc_sz);
+        *len_list_ptr = (int*) (*offset_list_ptr + 1);
 #endif
 
         offset_list = *offset_list_ptr;
@@ -491,12 +493,14 @@ assert(filetype_size != 0);
 
         /* allocate space for offset_list and len_list */
 
-        *offset_list_ptr =
-            (ADIO_Offset *) ADIOI_Malloc(contig_access_count * sizeof(ADIO_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-        *len_list_ptr = (ADIO_Offset *) ADIOI_Malloc(contig_access_count * sizeof(ADIO_Offset));
+        alloc_sz = sizeof(ADIO_Offset) * 2;
+        *offset_list_ptr = (ADIO_Offset *) ADIOI_Malloc(alloc_sz * contig_access_count);
+        *len_list_ptr = *offset_list_ptr + contig_access_count;
 #else
-        *len_list_ptr = (int *) ADIOI_Malloc(contig_access_count * sizeof(int));
+        alloc_sz = sizeof(ADIO_Offset) + sizeof(int);
+        *offset_list_ptr = (ADIO_Offset *) ADIOI_Malloc(alloc_sz * contig_access_count);
+        *len_list_ptr = (int*) (*offset_list_ptr + contig_access_count);
 #endif
 
         offset_list = *offset_list_ptr;
