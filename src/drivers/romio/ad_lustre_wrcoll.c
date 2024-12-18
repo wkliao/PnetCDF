@@ -349,7 +349,7 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
                                   const ADIOI_Access *my_req,
                                   ADIOI_Access **others_req_ptr)
 {
-    int i, myrank, nprocs;
+    int i, myrank, nprocs, do_alltoallv;
     MPI_Count *count_my_req_per_proc, *count_others_req_per_proc;
     ADIOI_Access *others_req;
     size_t memLen, alloc_sz;
@@ -437,129 +437,141 @@ timing = MPI_Wtime();
 
     /* now send the calculated offsets and lengths to respective processes */
 
-// #define USE_ALLTOALLV_
-#ifdef USE_ALLTOALLV_
+    /* When the number of processes per compute node is large, using
+     * MPI_Alltoallv() can avoid possible hanging. Hanging error messages are
+     * 1. RXC (0x11291:0) PtlTE 397:[Fatal] OVERFLOW buffer list exhausted
+     * 2. MPICH WARNING: OFI is failing to make progress on posting a receive.
+     *    MPICH suspects a hang due to completion queue exhaustion. Setting
+     *    environment variable FI_CXI_DEFAULT_CQ_SIZE to a higher number might
+     *    circumvent this scenario. OFI retry continuing...
+     *
+     * Below use a threshold of 48, number of processes per compute node.
+     */
+    do_alltoallv = (fd->num_nodes > 0) ? (nprocs / fd->num_nodes > 48) : 0;
 
-    MPI_Offset *r_off_buf=NULL, *s_off_buf=NULL;
+    if (do_alltoallv) {
+        MPI_Offset *r_off_buf=NULL, *s_off_buf=NULL;
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Offset *r_len_buf=NULL, *s_len_buf=NULL;
-    MPI_Count *sendCounts, *recvCounts;
-    MPI_Aint *sdispls, *rdispls;
-    alloc_sz = sizeof(MPI_Count) + sizeof(MPI_Aint);
-    sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs * 2, alloc_sz);
-    sdispls = (MPI_Aint*) (sendCounts + nprocs * 2);
+        MPI_Offset *r_len_buf=NULL, *s_len_buf=NULL;
+        MPI_Count *sendCounts, *recvCounts;
+        MPI_Aint *sdispls, *rdispls;
+        alloc_sz   = sizeof(MPI_Count) * 2 + sizeof(MPI_Aint) * 2;
+        sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs, alloc_sz);
+        recvCounts = sendCounts + nprocs;
+        sdispls    = (MPI_Aint*) (recvCounts + nprocs);
+        rdispls    = sdispls + nprocs;
 #else
-    int *r_len_buf=NULL, *s_len_buf=NULL;
-    int *sendCounts, *recvCounts, *sdispls, *rdispls;
-    alloc_sz = sizeof(int) * 2;
-    sendCounts = (int*) ADIOI_Calloc(nprocs * 2, alloc_sz);
-    sdispls = sendCounts + nprocs * 2;
+        int *r_len_buf=NULL, *s_len_buf=NULL;
+        int *sendCounts, *recvCounts, *sdispls, *rdispls;
+        alloc_sz   = sizeof(int) * 4;
+        sendCounts = (int*) ADIOI_Calloc(nprocs, alloc_sz);
+        recvCounts = sendCounts + nprocs;
+        sdispls    = recvCounts + nprocs;
+        rdispls    = sdispls + nprocs;
 #endif
-    recvCounts = sendCounts + nprocs;
-    rdispls = sdispls + nprocs;
 
-    /* prepare receive side */
-    for (i=0; i<nprocs; i++) {
-        if (others_req[i].count == 0) continue;
-        if (i == myrank) {
-            /* send to self uses memcpy(), here
-             * others_req[i].count == my_req[fd->my_cb_nodes_index].count
-             */
-            memcpy(others_req[i].offsets, my_req[fd->my_cb_nodes_index].offsets,
-                   my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
+        /* prepare receive side */
+        for (i=0; i<nprocs; i++) {
+            if (others_req[i].count == 0) continue;
+            if (i == myrank) {
+                /* send to self uses memcpy(), here
+                * others_req[i].count == my_req[fd->my_cb_nodes_index].count
+                */
+                memcpy(others_req[i].offsets, my_req[fd->my_cb_nodes_index].offsets,
+                    my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-            memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
-                   my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
+                memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
+                    my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
 #else
-            memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
-                   my_req[fd->my_cb_nodes_index].count * sizeof(int));
+                memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
+                    my_req[fd->my_cb_nodes_index].count * sizeof(int));
 #endif
+            }
+            else {
+                recvCounts[i] = others_req[i].count;
+                if (r_off_buf == NULL) r_off_buf = others_req[i].offsets;
+                if (r_len_buf == NULL) r_len_buf = others_req[i].lens;
+                /* Note all others_req[*].offsets are allocated in a single malloc(). */
+                rdispls[i] = others_req[i].offsets - r_off_buf;
+            }
         }
-        else {
-            recvCounts[i] = others_req[i].count;
-            if (r_off_buf == NULL) r_off_buf = others_req[i].offsets;
-            if (r_len_buf == NULL) r_len_buf = others_req[i].lens;
-            /* Note all others_req[*].offsets are allocated in a single malloc(). */
-            rdispls[i] = others_req[i].offsets - r_off_buf;
-        }
-    }
 
-    /* prepare send side */
-    for (i = 0; i < fd->hints->cb_nodes; i++) {
-        if (my_req[i].count && i != fd->my_cb_nodes_index) {
-            int dest = fd->hints->ranklist[i];
-            sendCounts[dest] = my_req[i].count;
-            if (s_off_buf == NULL) s_off_buf = my_req[i].offsets;
-            if (s_len_buf == NULL) s_len_buf = my_req[i].lens;
-            /* Note all my_req[*].offsets are allocated in a single malloc(). */
-            sdispls[dest] = my_req[i].offsets - s_off_buf;
+        /* prepare send side */
+        for (i = 0; i < fd->hints->cb_nodes; i++) {
+            if (my_req[i].count && i != fd->my_cb_nodes_index) {
+                int dest = fd->hints->ranklist[i];
+                sendCounts[dest] = my_req[i].count;
+                if (s_off_buf == NULL) s_off_buf = my_req[i].offsets;
+                if (s_len_buf == NULL) s_len_buf = my_req[i].lens;
+                /* Note all my_req[*].offsets are allocated in a single malloc(). */
+                sdispls[dest] = my_req[i].offsets - s_off_buf;
+            }
         }
-    }
 
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Alltoallv_c(s_off_buf, sendCounts, sdispls, MPI_OFFSET,
+        MPI_Alltoallv_c(s_off_buf, sendCounts, sdispls, MPI_OFFSET,
+                        r_off_buf, recvCounts, rdispls, MPI_OFFSET, fd->comm);
+        MPI_Alltoallv_c(s_len_buf, sendCounts, sdispls, MPI_OFFSET,
+                        r_len_buf, recvCounts, rdispls, MPI_OFFSET, fd->comm);
+#else
+        MPI_Alltoallv(s_off_buf, sendCounts, sdispls, MPI_OFFSET,
                     r_off_buf, recvCounts, rdispls, MPI_OFFSET, fd->comm);
-    MPI_Alltoallv_c(s_len_buf, sendCounts, sdispls, MPI_OFFSET,
-                    r_len_buf, recvCounts, rdispls, MPI_OFFSET, fd->comm);
-#else
-    MPI_Alltoallv(s_off_buf, sendCounts, sdispls, MPI_OFFSET,
-                  r_off_buf, recvCounts, rdispls, MPI_OFFSET, fd->comm);
-    MPI_Alltoallv(s_len_buf, sendCounts, sdispls, MPI_INT,
-                  r_len_buf, recvCounts, rdispls, MPI_INT, fd->comm);
+        MPI_Alltoallv(s_len_buf, sendCounts, sdispls, MPI_INT,
+                    r_len_buf, recvCounts, rdispls, MPI_INT, fd->comm);
 #endif
 
-    ADIOI_Free(sendCounts);
+        ADIOI_Free(sendCounts);
+    }
+    else { /* not using alltoall */
+        int nreqs;
+        MPI_Request *requests = (MPI_Request *)
+            ADIOI_Malloc((nprocs + fd->hints->cb_nodes) * sizeof(MPI_Request));
 
-#else /* #ifdef USE_ALLTOALLV_ */
-    int nreqs;
-    MPI_Request *requests = (MPI_Request *)
-        ADIOI_Malloc((nprocs + fd->hints->cb_nodes) * sizeof(MPI_Request));
-
-    nreqs = 0;
-    for (i = 0; i < nprocs; i++) {
-        if (others_req[i].count == 0)
-            continue;
+        nreqs = 0;
+        for (i = 0; i < nprocs; i++) {
+            if (others_req[i].count == 0)
+                continue;
 #ifdef WKL_DEBUG
 if (i == myrank) assert(fd->my_cb_nodes_index >= 0 && fd->my_cb_nodes_index <= fd->hints->cb_nodes);
 else recv_amnt += 2 * others_req[i].count;
 #endif
-        if (i == myrank) {
-            /* send to self uses memcpy(), here
-             * others_req[i].count == my_req[fd->my_cb_nodes_index].count
-             */
-            memcpy(others_req[i].offsets, my_req[fd->my_cb_nodes_index].offsets,
-                   my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
+            if (i == myrank) {
+                /* send to self uses memcpy(), here
+                * others_req[i].count == my_req[fd->my_cb_nodes_index].count
+                */
+                memcpy(others_req[i].offsets, my_req[fd->my_cb_nodes_index].offsets,
+                    my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
 #ifdef HAVE_MPI_LARGE_COUNT
-            memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
-                   my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
+                memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
+                    my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
 #else
-            memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
-                   my_req[fd->my_cb_nodes_index].count * sizeof(int));
+                memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
+                    my_req[fd->my_cb_nodes_index].count * sizeof(int));
 #endif
-        }
-        else {
-            /* construct an MPI datatype to combine 2 receives */
-            MPI_Aint disp[2];
-            MPI_Address(others_req[i].offsets, &disp[0]);
-            MPI_Address(others_req[i].lens, &disp[1]);
+            }
+            else {
+                /* construct an MPI datatype to combine 2 receives */
+                MPI_Aint disp[2];
+                MPI_Address(others_req[i].offsets, &disp[0]);
+                MPI_Address(others_req[i].lens, &disp[1]);
 #ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Count disp_c[2];
-            disp_c[0] = disp[0];
-            disp_c[1] = disp[1];
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, recvType;
-            MPI_Count blklen[2]={others_req[i].count, others_req[i].count};
-            MPI_Type_create_struct_c(2, blklen, disp_c, types, &recvType);
+                MPI_Count disp_c[2];
+                disp_c[0] = disp[0];
+                disp_c[1] = disp[1];
+                MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, recvType;
+                MPI_Count blklen[2]={others_req[i].count, others_req[i].count};
+                MPI_Type_create_struct_c(2, blklen, disp_c, types, &recvType);
 #else
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, recvType;
-            int blklen[2]={others_req[i].count, others_req[i].count};
-            MPI_Type_create_struct(2, blklen, disp, types, &recvType);
+                MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, recvType;
+                int blklen[2]={others_req[i].count, others_req[i].count};
+                MPI_Type_create_struct(2, blklen, disp, types, &recvType);
 #endif
-            MPI_Type_commit(&recvType);
-            MPI_Irecv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm,
-                      &requests[nreqs++]);
-            MPI_Type_free(&recvType);
+                MPI_Type_commit(&recvType);
+                MPI_Irecv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm,
+                        &requests[nreqs++]);
+                MPI_Type_free(&recvType);
+            }
         }
-    }
 
 #ifdef WKL_DEBUG
 /* WRF hangs below when calling MPI_Waitall(), at running 16 nodes, 128 ranks
@@ -573,43 +585,43 @@ else recv_amnt += 2 * others_req[i].count;
 // MPI_Barrier(fd->comm); /* This barrier prevents the MPI_Waitall below from hanging !!! */
 #endif
 
-    for (i = 0; i < fd->hints->cb_nodes; i++) {
-        if (my_req[i].count && i != fd->my_cb_nodes_index) {
-            /* construct an MPI datatype to combine 2 sends */
-            MPI_Aint disp[2];
-            MPI_Address(my_req[i].offsets, &disp[0]);
-            MPI_Address(my_req[i].lens, &disp[1]);
+        for (i = 0; i < fd->hints->cb_nodes; i++) {
+            if (my_req[i].count && i != fd->my_cb_nodes_index) {
+                /* construct an MPI datatype to combine 2 sends */
+                MPI_Aint disp[2];
+                MPI_Address(my_req[i].offsets, &disp[0]);
+                MPI_Address(my_req[i].lens, &disp[1]);
 #ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Count disp_c[2];
-            disp_c[0] = disp[0];
-            disp_c[1] = disp[1];
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, sendType;
-            MPI_Count blklen[2]={my_req[i].count, my_req[i].count};
-            MPI_Type_create_struct_c(2, blklen, disp_c, types, &sendType);
+                MPI_Count disp_c[2];
+                disp_c[0] = disp[0];
+                disp_c[1] = disp[1];
+                MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, sendType;
+                MPI_Count blklen[2]={my_req[i].count, my_req[i].count};
+                MPI_Type_create_struct_c(2, blklen, disp_c, types, &sendType);
 #else
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, sendType;
-            int blklen[2]={my_req[i].count, my_req[i].count};
-            MPI_Type_create_struct(2, blklen, disp, types, &sendType);
+                MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, sendType;
+                int blklen[2]={my_req[i].count, my_req[i].count};
+                MPI_Type_create_struct(2, blklen, disp, types, &sendType);
 #endif
-            MPI_Type_commit(&sendType);
-            MPI_Issend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
-                       fd->comm, &requests[nreqs++]);
-            MPI_Type_free(&sendType);
+                MPI_Type_commit(&sendType);
+                MPI_Issend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
+                        fd->comm, &requests[nreqs++]);
+                MPI_Type_free(&sendType);
+            }
         }
-    }
 
-    if (nreqs) {
+        if (nreqs) {
 #ifdef MPI_STATUSES_IGNORE
-        MPI_Waitall(nreqs, requests, MPI_STATUSES_IGNORE);
+            MPI_Waitall(nreqs, requests, MPI_STATUSES_IGNORE);
 #else
-        MPI_Status *statuses = (MPI_Status *)
-                               ADIOI_Malloc(nreqs * sizeof(MPI_Status));
-        MPI_Waitall(nreqs, requests, statuses);
-        ADIOI_Free(statuses);
+            MPI_Status *statuses = (MPI_Status *)
+                                ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+            MPI_Waitall(nreqs, requests, statuses);
+            ADIOI_Free(statuses);
 #endif
+        }
+        ADIOI_Free(requests);
     }
-    ADIOI_Free(requests);
-#endif
 
 #ifdef WKL_DEBUG
 timing = MPI_Wtime() - timing;
