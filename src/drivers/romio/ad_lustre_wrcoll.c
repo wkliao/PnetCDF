@@ -263,19 +263,31 @@ for (i=0; i<nelems; i++) buf_idx[0][i] = -1;
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(ADIO_Offset) * 2;
     my_req[0].offsets = (ADIO_Offset*) ADIOI_Malloc(alloc_sz * nelems);
-    my_req[0].lens = my_req[0].offsets + nelems;
-#else
-    alloc_sz = sizeof(ADIO_Offset) + sizeof(int);
-    my_req[0].offsets = (ADIO_Offset*) ADIOI_Malloc(alloc_sz * nelems);
-    my_req[0].lens = (int*) (my_req[0].offsets + nelems);
-#endif
-
+    my_req[0].lens    = my_req[0].offsets + my_req[0].count;
     for (i=1; i<cb_nodes; i++) {
-        my_req[i].offsets = my_req[i-1].offsets + my_req[i-1].count;
-        my_req[i].lens    = my_req[i-1].lens    + my_req[i-1].count;
+        my_req[i].offsets = my_req[i-1].offsets + my_req[i-1].count * 2;
+        my_req[i].lens    = my_req[i].offsets + my_req[i].count;
         my_req[i-1].count = 0; /* reset, will be incremented where needed later */
     }
     my_req[cb_nodes-1].count = 0;
+#else
+    alloc_sz = sizeof(ADIO_Offset) + sizeof(int);
+    my_req[0].offsets = (ADIO_Offset*) ADIOI_Malloc(alloc_sz * nelems);
+    my_req[0].lens    = (int*) (my_req[0].offsets + my_req[0].count);
+
+    char *ptr = (char*) my_req[0].offsets + alloc_sz * my_req[0].count;
+    for (i=1; i<cb_nodes; i++) {
+        my_req[i].offsets = (MPI_Offset*)ptr;
+        ptr += sizeof(ADIO_Offset) * my_req[i].count;
+        my_req[i].lens = (int*)ptr;
+        ptr += sizeof(int) * my_req[i].count;
+        my_req[i].count = 0; /* reset, will be incremented where needed later */
+    }
+    my_req[cb_nodes-1].count = 0;
+#endif
+
+    for (i=0; i<cb_nodes; i++)
+        my_req[i].count = 0; /* reset, will be incremented where needed later */
 
     /* now fill in my_req */
     curr_idx = 0;
@@ -347,12 +359,15 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
     int i, myrank, nprocs, do_alltoallv;
     MPI_Count *count_my_req_per_proc, *count_others_req_per_proc;
     ADIOI_Access *others_req;
-    size_t memLen, alloc_sz;
+    size_t memLen, alloc_sz, pair_sz;
 
     /* first find out how much to send/recv and from/to whom */
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
+
+    others_req = (ADIOI_Access *) ADIOI_Malloc(nprocs * sizeof(ADIOI_Access));
+    *others_req_ptr = others_req;
 
     /* Use my_req[].count to set count_others_req_per_proc[], a contiguous
      * buffer, so it can be used in th call to MPI_Alltoall().
@@ -375,33 +390,41 @@ if (!fd->is_agg) {
 }
 #endif
 
-    others_req = (ADIOI_Access *) ADIOI_Malloc(nprocs * sizeof(ADIOI_Access));
-    *others_req_ptr = others_req;
-
     memLen = 0;
     for (i=0; i<nprocs; i++) {
         memLen += count_others_req_per_proc[i];
         others_req[i].count = count_others_req_per_proc[i];
     }
+    ADIOI_Free(count_others_req_per_proc);
 
 #ifdef HAVE_MPI_LARGE_COUNT
-    alloc_sz = sizeof(ADIO_Offset) * 2 + sizeof(MPI_Count);
+    pair_sz = sizeof(MPI_Offset) * 2;
+    alloc_sz = pair_sz + sizeof(MPI_Count);
     others_req[0].offsets  = (ADIO_Offset*) ADIOI_Malloc(memLen * alloc_sz);
-    others_req[0].lens     = others_req[0].offsets + memLen;
-    others_req[0].mem_ptrs = (MPI_Count*) (others_req[0].lens + memLen);
-#else
-    alloc_sz = sizeof(ADIO_Offset) + sizeof(int) + sizeof(MPI_Aint);
-    others_req[0].offsets  = (ADIO_Offset*) ADIOI_Malloc(memLen * alloc_sz);
-    others_req[0].lens     = (int*) (others_req[0].offsets + memLen);
-    others_req[0].mem_ptrs = (MPI_Aint*) (others_req[0].lens + memLen);
-#endif
-
+    others_req[0].lens     = others_req[0].offsets + others_req[0].count;
+    others_req[0].mem_ptrs = (MPI_Count*) (others_req[0].offsets + memLen * 2);
     for (i=1; i<nprocs; i++) {
-        others_req[i].offsets  = others_req[i-1].offsets  + count_others_req_per_proc[i-1];
-        others_req[i].lens     = others_req[i-1].lens     + count_others_req_per_proc[i-1];
-        others_req[i].mem_ptrs = others_req[i-1].mem_ptrs + count_others_req_per_proc[i-1];
+        others_req[i].offsets  = others_req[i-1].offsets + others_req[i-1].count * 2;
+        others_req[i].lens     = others_req[i].offsets + others_req[i].count;
+        others_req[i].mem_ptrs = others_req[i-1].mem_ptrs + others_req[i-1].count;
     }
-    ADIOI_Free(count_others_req_per_proc);
+#else
+    pair_sz = sizeof(MPI_Offset) + sizeof(int);
+    alloc_sz = pair_sz + sizeof(MPI_Aint);
+    others_req[0].offsets  = (ADIO_Offset*) ADIOI_Malloc(memLen * alloc_sz);
+    others_req[0].lens     = (int*) (others_req[0].offsets + others_req[0].count);
+    char *ptr = (char*) others_req[0].offsets + pair_sz * memLen;
+    others_req[0].mem_ptrs = (MPI_Aint*)ptr;
+
+    ptr = (char*) others_req[0].offsets + pair_sz * others_req[0].count;
+    for (i=1; i<nprocs; i++) {
+        others_req[i].offsets = (MPI_Offset*)ptr;
+        ptr += sizeof(ADIO_Offset) * others_req[i].count;
+        others_req[i].lens = (int*)ptr;
+        ptr += sizeof(int) * others_req[i].count;
+        others_req[i].mem_ptrs = others_req[i-1].mem_ptrs + others_req[i-1].count;
+    }
+#endif
 
 #ifdef WKL_DEBUG
 if (!fd->is_agg) {
@@ -431,7 +454,6 @@ timing = MPI_Wtime();
     if (do_alltoallv) {
         MPI_Offset *r_off_buf=NULL, *s_off_buf=NULL;
 #ifdef HAVE_MPI_LARGE_COUNT
-        MPI_Offset *r_len_buf=NULL, *s_len_buf=NULL;
         MPI_Count *sendCounts, *recvCounts;
         MPI_Aint *sdispls, *rdispls;
         alloc_sz   = sizeof(MPI_Count) * 2 + sizeof(MPI_Aint) * 2;
@@ -440,7 +462,6 @@ timing = MPI_Wtime();
         sdispls    = (MPI_Aint*) (recvCounts + nprocs);
         rdispls    = sdispls + nprocs;
 #else
-        int *r_len_buf=NULL, *s_len_buf=NULL;
         int *sendCounts, *recvCounts, *sdispls, *rdispls;
         alloc_sz   = sizeof(int) * 4;
         sendCounts = (int*) ADIOI_Calloc(nprocs, alloc_sz);
@@ -450,53 +471,28 @@ timing = MPI_Wtime();
 #endif
 
         /* prepare receive side */
+        r_off_buf = others_req[0].offsets;
         for (i=0; i<nprocs; i++) {
-            if (others_req[i].count == 0) continue;
-            if (i == myrank) {
-                /* send to self uses memcpy(), here
-                * others_req[i].count == my_req[fd->my_cb_nodes_index].count
-                */
-                memcpy(others_req[i].offsets, my_req[fd->my_cb_nodes_index].offsets,
-                    my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
-#ifdef HAVE_MPI_LARGE_COUNT
-                memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
-                    my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
-#else
-                memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
-                    my_req[fd->my_cb_nodes_index].count * sizeof(int));
-#endif
-            }
-            else {
-                recvCounts[i] = others_req[i].count;
-                if (r_off_buf == NULL) r_off_buf = others_req[i].offsets;
-                if (r_len_buf == NULL) r_len_buf = others_req[i].lens;
-                /* Note all others_req[*].offsets are allocated in a single malloc(). */
-                rdispls[i] = others_req[i].offsets - r_off_buf;
-            }
+            recvCounts[i] = others_req[i].count * pair_sz;
+            /* Note all others_req[*].offsets are allocated in a single malloc(). */
+            rdispls[i] = (char*)others_req[i].offsets - (char*)r_off_buf;
         }
 
         /* prepare send side */
-        for (i = 0; i < fd->hints->cb_nodes; i++) {
-            if (my_req[i].count && i != fd->my_cb_nodes_index) {
-                int dest = fd->hints->ranklist[i];
-                sendCounts[dest] = my_req[i].count;
-                if (s_off_buf == NULL) s_off_buf = my_req[i].offsets;
-                if (s_len_buf == NULL) s_len_buf = my_req[i].lens;
-                /* Note all my_req[*].offsets are allocated in a single malloc(). */
-                sdispls[dest] = my_req[i].offsets - s_off_buf;
-            }
+        s_off_buf = my_req[0].offsets;
+        for (i=0; i<fd->hints->cb_nodes; i++) {
+            int dest = fd->hints->ranklist[i];
+            sendCounts[dest] = my_req[i].count * pair_sz;
+            /* Note all my_req[*].offsets are allocated in a single malloc(). */
+            sdispls[dest] = (char*)my_req[i].offsets - (char*)s_off_buf;
         }
 
 #ifdef HAVE_MPI_LARGE_COUNT
-        MPI_Alltoallv_c(s_off_buf, sendCounts, sdispls, MPI_OFFSET,
-                        r_off_buf, recvCounts, rdispls, MPI_OFFSET, fd->comm);
-        MPI_Alltoallv_c(s_len_buf, sendCounts, sdispls, MPI_OFFSET,
-                        r_len_buf, recvCounts, rdispls, MPI_OFFSET, fd->comm);
+        MPI_Alltoallv_c(s_off_buf, sendCounts, sdispls, MPI_BYTE,
+                        r_off_buf, recvCounts, rdispls, MPI_BYTE, fd->comm);
 #else
-        MPI_Alltoallv(s_off_buf, sendCounts, sdispls, MPI_OFFSET,
-                      r_off_buf, recvCounts, rdispls, MPI_OFFSET, fd->comm);
-        MPI_Alltoallv(s_len_buf, sendCounts, sdispls, MPI_INT,
-                      r_len_buf, recvCounts, rdispls, MPI_INT, fd->comm);
+        MPI_Alltoallv(s_off_buf, sendCounts, sdispls, MPI_BYTE,
+                      r_off_buf, recvCounts, rdispls, MPI_BYTE, fd->comm);
 #endif
 
         ADIOI_Free(sendCounts);
@@ -514,41 +510,19 @@ timing = MPI_Wtime();
 if (i == myrank) assert(fd->my_cb_nodes_index >= 0 && fd->my_cb_nodes_index <= fd->hints->cb_nodes);
 else recv_amnt += 2 * others_req[i].count;
 #endif
+            /* Note the memory address of others_req[i].lens is right after
+             * others_req[i].offsets. This simplifies the following recv.
+             */
             if (i == myrank) {
                 /* send to self uses memcpy(), here
-                * others_req[i].count == my_req[fd->my_cb_nodes_index].count
-                */
+                 * others_req[i].count == my_req[fd->my_cb_nodes_index].count
+                 */
                 memcpy(others_req[i].offsets, my_req[fd->my_cb_nodes_index].offsets,
-                    my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
-#ifdef HAVE_MPI_LARGE_COUNT
-                memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
-                    my_req[fd->my_cb_nodes_index].count * sizeof(ADIO_Offset));
-#else
-                memcpy(others_req[i].lens, my_req[fd->my_cb_nodes_index].lens,
-                    my_req[fd->my_cb_nodes_index].count * sizeof(int));
-#endif
+                    my_req[fd->my_cb_nodes_index].count * pair_sz);
             }
             else {
-                /* construct an MPI datatype to combine 2 receives */
-                MPI_Aint disp[2];
-                MPI_Address(others_req[i].offsets, &disp[0]);
-                MPI_Address(others_req[i].lens, &disp[1]);
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count disp_c[2];
-                disp_c[0] = disp[0];
-                disp_c[1] = disp[1];
-                MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, recvType;
-                MPI_Count blklen[2]={others_req[i].count, others_req[i].count};
-                MPI_Type_create_struct_c(2, blklen, disp_c, types, &recvType);
-#else
-                MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, recvType;
-                int blklen[2]={others_req[i].count, others_req[i].count};
-                MPI_Type_create_struct(2, blklen, disp, types, &recvType);
-#endif
-                MPI_Type_commit(&recvType);
-                MPI_Irecv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm,
-                          &requests[nreqs++]);
-                MPI_Type_free(&recvType);
+                MPI_Irecv(others_req[i].offsets, others_req[i].count * pair_sz,
+                          MPI_BYTE, i, 0, fd->comm, &requests[nreqs++]);
             }
         }
 
@@ -568,26 +542,11 @@ else recv_amnt += 2 * others_req[i].count;
             if (my_req[i].count == 0 || i == fd->my_cb_nodes_index)
                 continue; /* nothing to send */
 
-            /* construct an MPI datatype to combine 2 sends */
-            MPI_Aint disp[2];
-            MPI_Address(my_req[i].offsets, &disp[0]);
-            MPI_Address(my_req[i].lens, &disp[1]);
-#ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Count disp_c[2];
-            disp_c[0] = disp[0];
-            disp_c[1] = disp[1];
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_OFFSET}, sendType;
-            MPI_Count blklen[2]={my_req[i].count, my_req[i].count};
-            MPI_Type_create_struct_c(2, blklen, disp_c, types, &sendType);
-#else
-            MPI_Datatype types[2]={MPI_OFFSET, MPI_INT}, sendType;
-            int blklen[2]={my_req[i].count, my_req[i].count};
-            MPI_Type_create_struct(2, blklen, disp, types, &sendType);
-#endif
-            MPI_Type_commit(&sendType);
-            MPI_Issend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
-                       fd->comm, &requests[nreqs++]);
-            MPI_Type_free(&sendType);
+            /* Note the memory address of my_req[i].lens is right after
+             * my_req[i].offsets. This simplifies the following send.
+             */
+            MPI_Issend(my_req[i].offsets, my_req[i].count * pair_sz, MPI_BYTE,
+                       fd->hints->ranklist[i], 0, fd->comm, &requests[nreqs++]);
         }
 
         if (nreqs) {
@@ -722,7 +681,7 @@ printf("--- offset=%lld flat_fview.count=%lld start_offset=%lld\n",offset,flat_f
     ADIOI_Type_ispredef(buftype, &is_btype_predef);
 
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MBi time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
 
     /* flatten user buffer datatype, buftype */
@@ -863,7 +822,7 @@ start_T = end_T;;
             do_collect = 0;
     }
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MBi time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
 
 
@@ -956,7 +915,7 @@ printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
                              &my_req, buf_idx);
 
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MBi time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
 
     /* Calculate the portions of all other ranks' requests fall into this
@@ -968,7 +927,7 @@ start_T = end_T;;
     ADIOI_LUSTRE_Calc_others_req(fd, my_req, &others_req);
 
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MBi time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
 
     /* Two-phase I/O: first communication phase to exchange write data from all
@@ -995,7 +954,7 @@ start_T = end_T;;
                                     max_end_loc, buf_idx, error_code);
 
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MBi time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
 
     /* free all memory allocated */
@@ -1060,7 +1019,7 @@ start_T = end_T;;
     }
 
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MBi time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 
 #ifdef PNETCDF_PROFILING
 if (fd->is_agg) fd->lustre_write_metrics[0] += MPI_Wtime() - curT;
