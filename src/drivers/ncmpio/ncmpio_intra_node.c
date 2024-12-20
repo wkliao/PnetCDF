@@ -335,7 +335,7 @@ void heap_merge(int              nprocs,
 int
 ncmpio_intra_node_aggr_init(NC *ncp)
 {
-    int i, naggrs_my_node, num_nonaggrs;
+    int i, naggrs_my_node;
     int my_rank_index, *ranks_my_node, my_node_id, nprocs_my_node;
 
     /* initialize parameters of local-node aggregation */
@@ -358,8 +358,8 @@ ncmpio_intra_node_aggr_init(NC *ncp)
      * this rank. Note ncp->nonaggr_ranks[] will be freed when closing the
      * file, if allocated.
      */
-    num_nonaggrs = ncp->nprocs / ncp->num_aggrs_per_node + 1;
-    ncp->nonaggr_ranks = (int*) NCI_Malloc(sizeof(int) * num_nonaggrs);
+    ncp->num_nonaggrs = ncp->nprocs / ncp->num_aggrs_per_node + 1;
+    ncp->nonaggr_ranks = (int*) NCI_Malloc(sizeof(int) * ncp->num_nonaggrs);
 
     /* ncp->node_ids[] has been established in ncmpii_construct_node_list() */
     /* my_node_id is this rank's node ID */
@@ -391,11 +391,17 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     /* calculate the number of non-aggregators assigned to an aggregator.
      * Note num_nonaggrs includes self.
      */
-    num_nonaggrs = nprocs_my_node / naggrs_my_node;
-    if (nprocs_my_node % naggrs_my_node) num_nonaggrs++;
+    ncp->num_nonaggrs = nprocs_my_node / naggrs_my_node;
+    if (nprocs_my_node % naggrs_my_node) ncp->num_nonaggrs++;
+
+    /* Set the number of non-aggregators assigned to this rank. For the last
+     * group, make sure it does not go beyond nprocs_my_node.
+     */
+    int first_rank = my_rank_index - my_rank_index % ncp->num_nonaggrs;
+    ncp->num_nonaggrs = MIN(ncp->num_nonaggrs, nprocs_my_node - first_rank);
 
     int do_io = 0;
-    if (num_nonaggrs == 1) {
+    if (ncp->num_nonaggrs <= 1) {
         /* disable aggregation if the number of non-aggregators assigned to
          * this aggregator is 1. Note num_nonaggrs includes self. It is
          * possible for aggregation enabled or disabled on different nodes and
@@ -407,32 +413,36 @@ ncmpio_intra_node_aggr_init(NC *ncp)
         ncp->my_aggr = -1;
         do_io = 1;
     }
-    else {
+    else { /* num_nonaggrs > 1 */
         /* find the rank ID of aggregator assigned to this rank */
-        ncp->my_aggr = ranks_my_node[my_rank_index - my_rank_index % num_nonaggrs];
+        int rank_off = 1;
+        ncp->my_aggr = ranks_my_node[first_rank + rank_off];
 
         if (ncp->my_aggr == ncp->rank) { /* this rank is an aggregator */
-            /* Set the number of non-aggregators assigned to this rank. For the
-             * last group, make sure it does not go beyond nprocs_my_node.
-             */
             do_io = 1;
-            ncp->num_nonaggrs = MIN(num_nonaggrs, nprocs_my_node - my_rank_index);
             if (ncp->num_nonaggrs == 1)
                 /* disable aggregation, as this aggregation group contains only
                  * self rank
                  */
                 ncp->my_aggr = -1;
-            else
+            else {
                 /* copy the rank IDs over to ncp->nonaggr_ranks[] */
                 memcpy(ncp->nonaggr_ranks,
-                       ranks_my_node + my_rank_index,
-                       sizeof(int) * num_nonaggrs);
+                       ranks_my_node + first_rank,
+                       sizeof(int) * ncp->num_nonaggrs);
+                if (ncp->nonaggr_ranks[0] != ncp->rank) {
+                    /* swap aggregator's rank with the nonaggr_ranks[0] */
+                    int tmp = ncp->nonaggr_ranks[0];
+                    ncp->nonaggr_ranks[0] = ncp->rank;
+                    ncp->nonaggr_ranks[rank_off] = tmp;
+                }
+            }
         }
     }
     NCI_Free(ranks_my_node);
 
-    if (ncp->my_aggr < 0) {
-        /* free ncp->nonaggr_ranks if aggregation is not enabled */
+    if (ncp->my_aggr != ncp->rank) {
+        /* free ncp->nonaggr_ranks if this rank is not an aggregator */
         NCI_Free(ncp->nonaggr_ranks);
         ncp->nonaggr_ranks = NULL;
     }
@@ -1058,8 +1068,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
         MPI_Datatype recvTypes;
 
         /* calculate the total number of offset-length pairs */
-        npairs = num_pairs;
-        for (i=1; i<ncp->num_nonaggrs; i++) npairs += msg[i*3];
+        for (npairs=0, i=0; i<ncp->num_nonaggrs; i++) npairs += msg[i*3];
 
 #ifdef HAVE_MPI_LARGE_COUNT
         if (npairs > num_pairs) {
@@ -1312,8 +1321,8 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
 #endif
 
         /* calculate the total write account */
-        buf_count = bufLen;
-        for (i=1; i<ncp->num_nonaggrs; i++) buf_count += msg[i*3 + 1];
+        for (buf_count=0,i=0; i<ncp->num_nonaggrs; i++)
+            buf_count += msg[i*3 + 1];
 
         /* Allocate receive buffer, which will be sorted into an increasing
          * order based on the file offsets. Thus, after sorting pack recv_buf
