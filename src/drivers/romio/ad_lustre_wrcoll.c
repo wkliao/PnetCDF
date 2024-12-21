@@ -359,7 +359,7 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
     int i, myrank, nprocs, do_alltoallv;
     MPI_Count *count_my_req_per_proc, *count_others_req_per_proc;
     ADIOI_Access *others_req;
-    size_t memLen, alloc_sz, pair_sz;
+    size_t npairs, alloc_sz, pair_sz;
 
     /* first find out how much to send/recv and from/to whom */
 
@@ -369,19 +369,17 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
     others_req = (ADIOI_Access *) ADIOI_Malloc(nprocs * sizeof(ADIOI_Access));
     *others_req_ptr = others_req;
 
-    /* Use my_req[].count to set count_others_req_per_proc[], a contiguous
-     * buffer, so it can be used in th call to MPI_Alltoall().
-     * my_req[i].count is the number of contiguous requests of this rank that
-     * fall in aggregator i's file domain.
+    /* Use my_req[].count to set count_others_req_per_proc[]. my_req[i].count
+     * is the number of offset-length pairs, i.e. noncontiguous file regions,
+     * that fall into aggregator i's file domain.
      */
-    count_others_req_per_proc = (MPI_Count *) ADIOI_Malloc(nprocs * sizeof(MPI_Count));
-    count_my_req_per_proc = (MPI_Count*) ADIOI_Calloc(nprocs, sizeof(MPI_Count));
+    count_my_req_per_proc = (MPI_Count *) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Count));
+    count_others_req_per_proc = count_my_req_per_proc + nproc;
     for (i=0; i<fd->hints->cb_nodes; i++)
         count_my_req_per_proc[fd->hints->ranklist[i]] = my_req[i].count;
 
     MPI_Alltoall(count_my_req_per_proc, 1, MPI_COUNT,
                  count_others_req_per_proc, 1, MPI_COUNT, fd->comm);
-    ADIOI_Free(count_my_req_per_proc);
 
 #ifdef WKL_DEBUG
 if (!fd->is_agg) {
@@ -390,19 +388,25 @@ if (!fd->is_agg) {
 }
 #endif
 
-    memLen = 0;
+    /* calculate total number of offset-length pairs */
+    npairs = 0;
     for (i=0; i<nprocs; i++) {
-        memLen += count_others_req_per_proc[i];
+        npairs += count_others_req_per_proc[i];
         others_req[i].count = count_others_req_per_proc[i];
     }
-    ADIOI_Free(count_others_req_per_proc);
+    ADIOI_Free(count_my_req_per_proc);
 
+    /* The best communication approach for aggregators to collect offset-length
+     * pairs from the non-aggregators is to allocate a single contiguous memory
+     * space for my_req[] to store its offsets and lens. The same for
+     * others_req[].
+     */
 #ifdef HAVE_MPI_LARGE_COUNT
     pair_sz = sizeof(MPI_Offset) * 2;
     alloc_sz = pair_sz + sizeof(MPI_Count);
-    others_req[0].offsets  = (ADIO_Offset*) ADIOI_Malloc(memLen * alloc_sz);
+    others_req[0].offsets  = (ADIO_Offset*) ADIOI_Malloc(npairs * alloc_sz);
     others_req[0].lens     = others_req[0].offsets + others_req[0].count;
-    others_req[0].mem_ptrs = (MPI_Count*) (others_req[0].offsets + memLen * 2);
+    others_req[0].mem_ptrs = (MPI_Count*) (others_req[0].offsets + npairs * 2);
     for (i=1; i<nprocs; i++) {
         others_req[i].offsets  = others_req[i-1].offsets + others_req[i-1].count * 2;
         others_req[i].lens     = others_req[i].offsets + others_req[i].count;
@@ -411,9 +415,9 @@ if (!fd->is_agg) {
 #else
     pair_sz = sizeof(MPI_Offset) + sizeof(int);
     alloc_sz = pair_sz + sizeof(MPI_Aint);
-    others_req[0].offsets  = (ADIO_Offset*) ADIOI_Malloc(memLen * alloc_sz);
+    others_req[0].offsets  = (ADIO_Offset*) ADIOI_Malloc(npairs * alloc_sz);
     others_req[0].lens     = (int*) (others_req[0].offsets + others_req[0].count);
-    char *ptr = (char*) others_req[0].offsets + pair_sz * memLen;
+    char *ptr = (char*) others_req[0].offsets + pair_sz * npairs;
     others_req[0].mem_ptrs = (MPI_Aint*)ptr;
 
     ptr = (char*) others_req[0].offsets + pair_sz * others_req[0].count;
@@ -511,7 +515,8 @@ if (i == myrank) assert(fd->my_cb_nodes_index >= 0 && fd->my_cb_nodes_index <= f
 else recv_amnt += 2 * others_req[i].count;
 #endif
             /* Note the memory address of others_req[i].lens is right after
-             * others_req[i].offsets. This simplifies the following recv.
+             * others_req[i].offsets. This allows the following recv call to
+             * receive both offsets and lens in a single call.
              */
             if (i == myrank) {
                 /* send to self uses memcpy(), here
@@ -543,7 +548,8 @@ else recv_amnt += 2 * others_req[i].count;
                 continue; /* nothing to send */
 
             /* Note the memory address of my_req[i].lens is right after
-             * my_req[i].offsets. This simplifies the following send.
+             * my_req[i].offsets. This allows the following Issend call to
+             * send both offsets and lens in a single call.
              */
             MPI_Issend(my_req[i].offsets, my_req[i].count * pair_sz, MPI_BYTE,
                        fd->hints->ranklist[i], 0, fd->comm, &requests[nreqs++]);
