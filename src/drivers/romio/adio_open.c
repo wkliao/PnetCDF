@@ -46,6 +46,13 @@
 #define MAX_LOV_UUID_COUNT      1000
 #endif
 
+#ifdef MIMIC_LUSTRE
+#define xstr(s) str(s)
+#define str(s) #s
+#define STRIPE_SIZE 64
+#define STRIPE_COUNT 4
+#endif
+
 #include <mpi.h>
 
 #include "adio.h"
@@ -371,10 +378,6 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         }
         ADIOI_Free(lum);
 #elif defined(MIMIC_LUSTRE)
-#define xstr(s) str(s)
-#define str(s) #s
-#define STRIPE_SIZE 1024
-#define STRIPE_COUNT 4
         stripin_info[0] = STRIPE_SIZE;
         stripin_info[1] = STRIPE_COUNT;
         stripin_info[2] = 0;
@@ -462,10 +465,6 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
             err =  ncmpii_error_posix2nc("ioctl");
         ADIOI_Free(lum);
 #elif defined(MIMIC_LUSTRE)
-#define xstr(s) str(s)
-#define str(s) #s
-#define STRIPE_SIZE 1024
-#define STRIPE_COUNT 4
         stripin_info[0] = STRIPE_SIZE;
         stripin_info[1] = STRIPE_COUNT;
         stripin_info[2] = 0;
