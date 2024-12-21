@@ -415,7 +415,7 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     }
     else { /* num_nonaggrs > 1 */
         /* find the rank ID of aggregator assigned to this rank */
-        int rank_off = 1;
+        int rank_off = 0;
         ncp->my_aggr = ranks_my_node[first_rank + rank_off];
 
         if (ncp->my_aggr == ncp->rank) { /* this rank is an aggregator */
@@ -1258,6 +1258,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
             if (msg[j*3+2] == 0) { /* individual j list is not sorted */
                 indv_sorted = 0;
                 do_sort = 1;
+                break;
             }
         }
         if (i >= 0 && indv_sorted == 1) { /* further check if sort is needed */
@@ -1309,7 +1310,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
                 /* qsort is an in-place sorting */
                 qsort_off_len_buf(npairs, offsets, lengths, bufAddr);
         }
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB sort=%s\n",__func__,__LINE__,(float)maxm/1048576.0, (do_sort)?((indv_sorted)?"HEAP":"QSORT"):"NO");
 
 #ifdef PNETCDF_PROFILING
         endT = MPI_Wtime();
