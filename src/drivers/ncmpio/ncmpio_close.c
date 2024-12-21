@@ -198,6 +198,40 @@ MPI_Reduce(tt, max_t, NTIMERS, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
 if (ncp->rank == 0) printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.2f nsort %8ld collw %5.2f pwrite %5.2f comm %5.2f nsenders %5ld nprocs %d\n", __func__,ncp->num_aggrs_per_node,
 max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
 max_t[6], max_t[7], max_t[8], (long)max_t[9], ncp->nprocs);
+
+/* print if this rank is an I/O aggregator, but not an intra-node aggregator */
+if (ncp->adio_fh != NULL && ncp->adio_fh->is_agg && ncp->my_aggr == -1)
+printf("%s: rank %d is an I/O aggregator, but not an intra-node aggregator\n",__func__,ncp->rank);
+#if 0
+/* print I/O aggregator ranks */
+if (ncp->rank == 0) {
+    char value[MPI_MAX_INFO_VAL + 1];
+    int valuelen=MPI_MAX_INFO_VAL, flag;
+    MPI_Info_get(ncp->mpiinfo, "aggr_list", valuelen, value, &flag);
+    printf("%s: aggr_list=%s\n",__func__,value);
+}
+
+/* print intra-node I/O aggregator ranks */
+int do_io = (ncp->rank == ncp->my_aggr) ? 1 : 0;
+int *ina_ranks = (int*) malloc(sizeof(int) * ncp->nprocs);
+MPI_Gather(&do_io, 1, MPI_INT, ina_ranks, 1, MPI_INT, 0, ncp->comm);
+if (ncp->rank == 0) {
+    char *value=(char*)malloc(ncp->nprocs*6 + 1024);
+    int i, ina_nprocs = 0;
+    /* add hint "aggr_list", list of aggregators' rank IDs */
+    value[0] = '\0';
+    for (i=0; i<ncp->nprocs; i++) {
+        char str[16];
+        if (ina_ranks[i] == 0) continue;
+        ina_nprocs++;
+        snprintf(str, sizeof(str), " %d", i);
+        strcat(value, str);
+    }
+    printf("%s: ina_nprocs=%d intra-node aggr=%s\n",__func__,ina_nprocs,value);
+    free(value);
+}
+free(ina_ranks);
+#endif
 }
 #endif
 
