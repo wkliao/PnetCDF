@@ -374,7 +374,7 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
      * that fall into aggregator i's file domain.
      */
     count_my_req_per_proc = (MPI_Count *) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Count));
-    count_others_req_per_proc = count_my_req_per_proc + nproc;
+    count_others_req_per_proc = count_my_req_per_proc + nprocs;
     for (i=0; i<fd->hints->cb_nodes; i++)
         count_my_req_per_proc[fd->hints->ranklist[i]] = my_req[i].count;
 
@@ -1236,8 +1236,21 @@ fd->lustre_write_metrics[3] = MAX(fd->lustre_write_metrics[3], nrecvs);
             recv_list[i].count = 0;
 }
 
-/* If successful, error_code is set to MPI_SUCCESS.  Otherwise an error code is
- * created and returned in error_code.
+/*----< ADIOI_LUSTRE_Exch_and_write() >--------------------------------------*/
+/* Each process sends all its write requests to I/O aggregators based on the
+ * file domain assignment to the aggregators. In this implementation, a file is
+ * first divided into stripes which are assigned to the aggregators in a
+ * round-robin fashion. The "exchange" of write data from non-aggregators to
+ * aggregators is carried out in 'ntimes' rounds. Each round covers an
+ * aggregate file region of size equal to the file stripe size times the number
+ * of I/O aggregators. The file writes are carried out in every 'nbufs'
+ * iterations, where 'nbufs' == cb_buffer_size / file stripe size. This approach
+ * is different from ROMIO's implementation as in MPICH 4.2.3.
+ *
+ * Other implementations developers are referring to the paper: Wei-keng Liao,
+ * and Alok Choudhary. "Dynamically Adapting File Domain Partitioning Methods
+ * for Collective I/O Based on Underlying Parallel File System Locking
+ * Protocols", in The Supercomputing Conference, 2008.
  */
 static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
                                         const void    *buf,
@@ -1250,30 +1263,13 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
                                         ADIO_Offset  **buf_idx,
                                         int           *error_code)
 {
-    /* Each process sends all its write requests to I/O aggregators based on
-     * the file domain assignment to the aggregators. In this implementation,
-     * a file is first divided into stripes and all its stripes are assigned to
-     * I/O aggregators in a round-robin fashion. The collective write is
-     * carried out in 'ntimes' rounds of two-phase I/O. Each round covers an
-     * aggregate file region of size equal to the file stripe size times the
-     * number of I/O aggregators. In other words, the 'collective buffer size'
-     * used in each aggregator is always set equally to the file stripe size,
-     * ignoring the MPI-IO hint 'cb_buffer_size'. There are other algorithms
-     * allowing an aggregator to write more than a file stripe size in each
-     * round, up to the cb_buffer_size hint. For those, refer to the paper:
-     * Wei-keng Liao, and Alok Choudhary. "Dynamically Adapting File Domain
-     * Partitioning Methods for Collective I/O Based on Underlying Parallel
-     * File System Locking Protocols", in The Supercomputing Conference, 2008.
-     */
 
     char **write_buf = NULL, **recv_buf = NULL, **send_buf = NULL;
     size_t alloc_sz;
-    int i, nprocs, myrank, nbufs;
+    int i, nprocs, myrank, nbufs, ibuf, batch_idx=0, cb_nodes, striping_unit;
     MPI_Count j, m, ntimes;
     MPI_Count *recv_curr_offlen_ptr, **recv_size=NULL, **recv_count=NULL;
-    MPI_Count **recv_start_pos=NULL;
-    MPI_Count *send_curr_offlen_ptr, *send_size;
-    int batch_idx = 0, cb_nodes, striping_unit;
+    MPI_Count **recv_start_pos=NULL, *send_curr_offlen_ptr, *send_size;
     ADIO_Offset end_loc, req_off, iter_end_off, *off_list, step_size;
     ADIO_Offset *this_buf_idx;
     off_len_list *srt_off_len = NULL;
@@ -1285,25 +1281,23 @@ MPI_Barrier(fd->comm);
 timing[0] = s_time = MPI_Wtime();
 #endif
 
+    /* If successful, error_code is set to MPI_SUCCESS. Otherwise an error
+     * code is created and returned in error_code.
+     */
     *error_code = MPI_SUCCESS;
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
+    cb_nodes = fd->hints->cb_nodes;
+    striping_unit = fd->hints->striping_unit;
+
     /* The aggregate access region (across all processes) of this collective
      * write starts from min_st_loc and ends at max_end_loc. The collective
      * write is carried out in 'ntimes' rounds of two-phase I/O. Each round
      * covers an aggregate file region of size 'step_size' written only by
-     * cb_nodes number of I/O aggregators. Note
-     * non-aggregators must also participate all ntimes rounds to send their
-     * requests to I/O aggregators.
-     */
-
-    cb_nodes = fd->hints->cb_nodes;
-    striping_unit = fd->hints->striping_unit;
-
-    /* step_size is the size of aggregate access region covered by each round
-     * of two-phase I/O
+     * cb_nodes number of I/O aggregators. Note non-aggregators must also
+     * participate all ntimes rounds to send their requests to I/O aggregators.
      */
     step_size = (ADIO_Offset)cb_nodes * striping_unit;
 
@@ -1316,9 +1310,9 @@ timing[0] = s_time = MPI_Wtime();
         ntimes++;
 
     /* off_list[m] is the starting file offset of this process's write region
-     * in iteration m (file domain of iteration m). This offset may not be
-     * aligned with file stripe boundaries. end_loc is the ending file offset
-     * of this process's file domain.
+     *     in iteration m (file domain of iteration m). This offset may not be
+     *     aligned with file stripe boundaries.
+     * end_loc is the ending file offset of this process's file domain.
      */
     off_list = (ADIO_Offset *) ADIOI_Malloc(ntimes * sizeof(ADIO_Offset));
     end_loc = -1;
@@ -1385,27 +1379,29 @@ timing[0] = s_time = MPI_Wtime();
         }
     }
 
-    /* end_loc >= 0 indicates this process has something to write. Only I/O
-     * aggregators can have end_loc > 0. write_buf is the collective buffer and
-     * only matter for I/O aggregators. recv_buf is the buffer used only in
-     * aggregators to receive requests from other processes. Its size may be
-     * larger then the file stripe size. In this case, it will be realloc-ed in
+    /* end_loc >= 0 indicates this process has something to write to the file.
+     * Only I/O aggregators can have end_loc > 0. write_buf is the collective
+     * buffer and only matter for I/O aggregators. recv_buf is the buffer used
+     * only by aggregators to receive requests from non-aggregators. Its size
+     * may be larger then the file stripe size, in case when writes from
+     * non-aggregators overlap. In this case, it will be realloc-ed in
      * ADIOI_LUSTRE_W_Exchange_data(). The received data is later copied over
      * to write_buf, whose contents will be written to file.
      */
     if (end_loc >= 0) {
-        write_buf = (char **) ADIOI_Malloc(nbufs * sizeof(char*));
-
-        /* collective buffer was allocated in ADIO_Open(). For this Lustre ADIO
-         * driver, its size must be at least (nbufs * striping_unit)
+        /* collective buffer was allocated in ADIO_Open(). For Lustre, its size
+         * must be at least (nbufs * striping_unit)
          */
         if (fd->hints->cb_buffer_size < nbufs * striping_unit)
             fd->io_buf = (char*) ADIOI_Realloc(fd->io_buf, nbufs * striping_unit);
 
+        /* divide collective buffer into nbufs sub-buffers */
+        write_buf = (char **) ADIOI_Malloc(nbufs * sizeof(char*));
         write_buf[0] = fd->io_buf;
         for (j = 1; j < nbufs; j++)
             write_buf[j] = write_buf[j-1] + striping_unit;
 
+        /* Similarly, receive buffer consists of nbufs sub-buffers */
         recv_buf = (char **) ADIOI_Malloc(nbufs * sizeof(char*));
         for (j = 0; j < nbufs; j++)
             /* recv_buf[j] may be realloc in ADIOI_LUSTRE_W_Exchange_data() */
@@ -1417,15 +1413,21 @@ timing[0] = s_time = MPI_Wtime();
      */
     send_buf = (char **) ADIOI_Malloc(nbufs * sizeof(char*));
 
-    /* this_buf_idx contains indices to user buffer for sending this rank's
-     * write data to remote aggregators. It is used only when user buffer is
-     * contiguous.
+    /* this_buf_idx contains indices to the user write buffer for sending this
+     * rank's write data to aggregators, one for each aggregator. It is used
+     * only when user buffer is contiguous.
      */
     if (flat_bview->is_contig)
-        this_buf_idx = (ADIO_Offset *) ADIOI_Malloc(cb_nodes * sizeof(ADIO_Offset));
+        this_buf_idx = (ADIO_Offset *) ADIOI_Malloc(sizeof(ADIO_Offset) * cb_nodes);
 
     /* Allocate multiple buffers of type int altogether at once in a single
-     * calloc call. Their use is explained below. calloc initializes to 0.
+     * calloc call, whose contents are required to be initialized to 0.
+     */
+
+    /* recv_curr_offlen_ptr[i] - index of others_req[i]'s offset-length pairs
+     *     that is being processed at the current round.
+     * send_curr_offlen_ptr[i] - index of my_req[i]'s offset-length pairs that
+     *     is being processed at the current round.
      */
     recv_curr_offlen_ptr = (MPI_Count *) ADIOI_Calloc((nprocs + 2 * cb_nodes), sizeof(MPI_Count));
     send_curr_offlen_ptr = recv_curr_offlen_ptr + nprocs;
@@ -1433,52 +1435,48 @@ timing[0] = s_time = MPI_Wtime();
     /* array of data sizes to be sent to each aggregator in a 2-phase round */
     send_size = send_curr_offlen_ptr + cb_nodes;
 
-    /* I need to check if there are any outstanding nonblocking writes to
-     * the file, which could potentially interfere with the writes taking
-     * place in this collective write call. Since this is not likely to be
-     * common, let me do the simplest thing possible here: Each process
-     * completes all pending nonblocking operations before completing.
-     */
-    /*ADIOI_Complete_async(error_code);
-     * if (*error_code != MPI_SUCCESS) return;
-     * MPI_Barrier(fd->comm);
-     */
-
-    /* min_st_loc has been downward aligned to the nearest file stripe
-     * boundary, iter_end_off is the ending file offset of aggregate write
-     * region of iteration m, upward aligned to the file stripe boundary.
+    /* min_st_loc is the beginning file offsets of the aggregate access region
+     *     of this collective write, and it has been downward aligned to the
+     *     nearest file stripe boundary
+     * iter_end_off is the ending file offset of aggregate write region of
+     *     iteration m, upward aligned to the file stripe boundary.
      */
     iter_end_off = min_st_loc + step_size;
 
     /* the number of off-len pairs to be received from each proc in a round. */
-    recv_count = (MPI_Count**) ADIOI_Malloc(3 * nbufs * sizeof(MPI_Count*));
-    recv_count[0] = (MPI_Count*) ADIOI_Malloc(3 * nbufs * nprocs * sizeof(MPI_Count));
+    recv_count    = (MPI_Count**) ADIOI_Malloc(3 * nbufs * sizeof(MPI_Count*));
+    recv_count[0] = (MPI_Count*)  ADIOI_Malloc(3 * nbufs * nprocs * sizeof(MPI_Count));
     for (i = 1; i < nbufs; i++)
         recv_count[i] = recv_count[i-1] + nprocs;
 
-    /* recv_size is array of data sizes to be received from each proc in a
-     * round. */
+    /* recv_size is array of sizes of data to be received from each proc in a
+     * round
+     */
     recv_size = recv_count + nbufs;
     recv_size[0] = recv_count[0] + nbufs * nprocs;
     for (i = 1; i < nbufs; i++)
         recv_size[i] = recv_size[i-1] + nprocs;
 
-    /* recv_start_pos[j][i] stores the starting value of
-     * recv_curr_offlen_ptr[i] for remote rank i in round j
+    /* recv_start_pos[j][i] stores the starting index of offset-length arrays
+     * pointed by recv_curr_offlen_ptr[i] for remote rank i in round j
      */
     recv_start_pos = recv_size + nbufs;
     recv_start_pos[0] = recv_size[0] + nbufs * nprocs;
     for (i = 1; i < nbufs; i++)
         recv_start_pos[i] = recv_start_pos[i-1] + nprocs;
 
+    /* srt_off_len consists of file offset-length pairs sorted in a
+     * monotonically non-decreasing order (required by MPI-IO standard) which
+     * is used when writing to the file
+     */
     srt_off_len = (off_len_list*) ADIOI_Malloc(nbufs * sizeof(off_len_list));
-
-    int ibuf = 0;
 
 #ifdef WKL_DEBUG
 e_time = MPI_Wtime();
 timing[3] += e_time - s_time;
 #endif
+
+    ibuf = 0;
     for (m = 0; m < ntimes; m++) {
         MPI_Count range_size;
         ADIO_Offset range_off;
@@ -1490,24 +1488,25 @@ s_time = MPI_Wtime();
          * 14.1.1) requires that the typemap displacements of etype and
          * filetype are non-negative and monotonically non-decreasing. This
          * simplifies implementation a bit compared to reads.
-         *
-         * iter_end_off  = ending file offset of aggregate write region of this
-         *                 round, and upward aligned to the file stripe
-         *                 boundary. Note the aggregate write region of this
-         *                 round starts from (iter_end_off-step_size) to
-         *                 iter_end_off, aligned with file stripe boundaries.
-         * send_size[i]  = total size in bytes of this process's write data
-         *                 fall into aggregator i's FD in this round.
-         * recv_size[j][i] = total size in bytes of write data to be received
-         *                 by this process (aggregator) in round j.
-         * recv_count[j][i] = number of noncontiguous offset-length pairs from
-         *                 process i fall into this aggregator's write region
-         *                 in round j.
          */
 
-        /* Calculate what should be communicated. First, calculate the amount
-         * to be send to each aggregator for this round of m, by going through
-         * all my_req.
+        /* Calculate what should be communicated.
+         *
+         * First, calculate the amount to be sent to each aggregator i, at this
+         * round m, by going through all offset-length pairs in my_req[i].
+         *
+         * iter_end_off - ending file offset of aggregate write region of this
+         *                round, and upward aligned to the file stripe
+         *                boundary. Note the aggregate write region of this
+         *                round starts from (iter_end_off-step_size) to
+         *                iter_end_off, aligned with file stripe boundaries.
+         * send_size[i] - total size in bytes of this process's write data
+         *                fall into aggregator i's FD in this round.
+         * recv_size[m][i] - size in bytes of data to be received by this
+         *                aggregator from process i in round m.
+         * recv_count[m][i] - number of noncontiguous offset-length pairs from
+         *                process i fall into this aggregator's write region
+         *                in round m.
          */
         for (i = 0; i < cb_nodes; i++) {
             /* reset communication metadata to all 0s for this round */
@@ -1525,7 +1524,7 @@ s_time = MPI_Wtime();
                 /* buf_idx is used only when user buffer is contiguous.
                  * this_buf_idx[i] points to the starting offset of user
                  * buffer, buf, for amount of send_size[i] to be sent to
-                 * aggregator i in this round of m.
+                 * aggregator i at this round.
                  */
                 this_buf_idx[i] = buf_idx[i][send_curr_offlen_ptr[i]];
 
@@ -1536,23 +1535,25 @@ s_time = MPI_Wtime();
                 else
                     break;
             }
-            send_curr_offlen_ptr[i] = j;
-            /* point to the jth offset-length pair of my_req[i], which will
-             * be used as the first pair in the next round of iteration.
+
+            /* update send_curr_offlen_ptr[i] to point to the jth offset-length
+             * pair of my_req[i], which will be used as the first pair in the
+             * next round of iteration.
              */
+            send_curr_offlen_ptr[i] = j;
         }
 
         /* range_off is the starting file offset of this aggregator's write
-         * region for this round (may not be aligned to stripe boundary).
+         *     region at this round (may not be aligned to stripe boundary).
          * range_size is the size (in bytes) of this aggregator's write region
-         * for this round (whose size is always <= striping_unit).
+         *     for this round (whose size is always <= striping_unit).
          */
         range_off = off_list[m];
         range_size = MIN(striping_unit - range_off % striping_unit,
                          end_loc - range_off + 1);
 
-        /* Calculate the amount to be received from each process for this round
-         * of m, by going through others_req.
+        /* Calculate the amount to be received from each process i at this round,
+         * by going through all offset-length pairs of others_req[i].
          */
         for (i = 0; i < nprocs; i++) {
             /* reset communication metadata to all 0s for this round */
@@ -1570,6 +1571,10 @@ s_time = MPI_Wtime();
                     break;
                 }
             }
+            /* update recv_curr_offlen_ptr[i] to point to the jth offset-length
+             * pair of others_req[i], which will be used as the first pair in
+             * the next round of iteration.
+             */
             recv_curr_offlen_ptr[i] = j;
         }
         iter_end_off += step_size;
@@ -1579,10 +1584,11 @@ e_time = MPI_Wtime();
 timing[4] += e_time - s_time;
 s_time = e_time;
 #endif
-        /* redistribute (exchange) this process's write requests to I/O
-         * aggregators. Communication are Issend and Irecv only. No collective
-         * communication. Only aggregators have non-NULL write_buf and
-         * recv_buf. All processes have non-NULL send_buf.
+        /* exchange phase - each process sends it's write data to I/O
+         * aggregators and aggregators receive from non-aggregators.
+         * Communication are MPI_Issend and MPI_Irecv only. There is no
+         * collective communication. Only aggregators have non-NULL write_buf
+         * and recv_buf. All processes have non-NULL send_buf.
          */
         char *wbuf = (write_buf == NULL) ? NULL : write_buf[ibuf];
         char *rbuf = (recv_buf  == NULL) ? NULL :  recv_buf[ibuf];
@@ -1621,8 +1627,12 @@ s_time = e_time;
 e_time = MPI_Wtime();
 timing[5] += e_time - s_time;
 #endif
-        /* commit communication and write for this batch of numBufs */
-        if (m % nbufs == nbufs - 1 || m == ntimes - 1) {
+        if (m % nbufs < nbufs - 1 && m < ntimes - 1) {
+            /* continue to the next round */
+            ibuf++;
+        }
+        else {
+            /* commit communication and write this batch of numBufs to file */
             int numBufs = ibuf + 1;
 
             /* reset ibuf to the first element of nbufs */
@@ -1656,9 +1666,9 @@ s_time = e_time;
                 }
             }
             if (!fd->is_agg) /* non-aggregators are done for this batch */
-                continue;    /* next run of loop m */
+                continue;
 
-            /* unpack the data in recv_buf[] into write_buf */
+            /* this aggregator unpacks the data in recv_buf[] into write_buf */
             if (end_loc >= 0) {
                 for (j = 0; j < numBufs; j++) {
                     char *buf_ptr = recv_buf[j];
@@ -1676,7 +1686,7 @@ s_time = e_time;
                 }
             }
 
-            /* write to numBufs number of stripes */
+            /* this aggregator writes to numBufs number of stripes */
             for (j=0; j<numBufs; j++) {
 
                 /* if there is no data to write in round (batch_idx + j) */
@@ -1694,22 +1704,21 @@ s_time = e_time;
                                  end_loc - range_off + 1);
 
                 /* When srt_off_len[j].num == 1, either there is no hole in the
-                 * write buffer or the file domain has been read into write
-                 * buffer and updated with the received write data. When
-                 * srt_off_len[j].num > 1, holes have been found and the list
-                 * of sorted offset-length pairs describing noncontiguous
-                 * writes have been constructed. Call writes for each
-                 * offset-length pair. Note the offset-length pairs
+                 * write buffer or the file domain has been read-modify-written
+                 * with the received write data. When srt_off_len[j].num > 1,
+                 * data sieving is not performed and holes have been found. In
+                 * this case, srt_off_len[] is the list of sorted offset-length
+                 * pairs describing noncontiguous writes. Now call writes for
+                 * each offset-length pair. Note the offset-length pairs
                  * (represented by srt_off_len[j].off, srt_off_len[j].len, and
                  * srt_off_len[j].num) have been coalesced in
                  * ADIOI_LUSTRE_W_Exchange_data().
                  */
-
                 for (i = 0; i < srt_off_len[j].num; i++) {
                     MPI_Status status;
 
-                    /* all write requests in this round should fall into this
-                     * range of [range_off, range_off+range_size). This
+                    /* all write requests in this round should fall into file
+                     * range of [range_off, range_off+range_size). This below
                      * assertion should never fail.
                      */
                     ADIOI_Assert(srt_off_len[j].off[i] < range_off + range_size &&
@@ -1736,8 +1745,6 @@ e_time = MPI_Wtime();
 timing[2] += e_time - s_time;
 #endif
         }
-        else
-            ibuf++;
     }
 
   over:
