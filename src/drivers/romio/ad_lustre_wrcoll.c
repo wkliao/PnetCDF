@@ -1333,13 +1333,15 @@ timing[0] = s_time = MPI_Wtime();
         }
     }
 
-    /* collective buffer size is divided by 2, one for write buffer and the
-     * other for receive messages from other processes. nbufs is the number of
-     * write buffers, each of size equal to Lustre stripe size. Write requests
-     * are sent to aggregators for nbufs amount before writing to the file.
+    /* collective buffer is divided into 'nbufs' sub-buffers. Each sub-buffer
+     * is of size equal to Lustre stripe size. Write data of non-aggregators
+     * are sent to aggregators and stored in aggregators' sub-buffers, one for
+     * each round. All nbufs sub-buffers are altogether flushed to file every
+     * nbufs rounds.
      */
-    nbufs = fd->hints->cb_buffer_size / striping_unit / 2;
-    if (fd->hints->cb_buffer_size % striping_unit) nbufs++;
+    nbufs = fd->hints->cb_buffer_size / striping_unit;
+
+    /* in case number of rounds is less than nbufs */
     nbufs = (ntimes < nbufs) ? (int)ntimes : nbufs;
     if (nbufs == 0) nbufs = 1; /* must at least 1 */
 
