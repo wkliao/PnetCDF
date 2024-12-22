@@ -209,20 +209,21 @@ typedef ADIO_FileD *ADIO_File;
 typedef ADIO_FileD *ADIO_File;
 
 typedef struct {
-    ADIO_Offset *offsets;       /* array of offsets */
+    ADIO_Offset *offsets; /* array of offsets */
 #ifdef HAVE_MPI_LARGE_COUNT
-    ADIO_Offset *lens;          /* array of lengths */
-    MPI_Count *mem_ptrs;        /* array of pointers. used in the read/write
-                                 * phase to indicate where the data
-                                 * is stored in memory
-                                 * promoted to MPI_Count so we can construct
-                                 * types with _c versions */
-    MPI_Count count;            /* size of above arrays */
+    ADIO_Offset *lens;    /* array of lengths */
+    MPI_Count *mem_ptrs;  /* array of pointers. used in the read/write
+                           * phase to indicate where the data
+                           * is stored in memory
+                           * promoted to MPI_Count so we can construct
+                           * types with _c versions */
+    MPI_Count count;      /* size of above arrays */
 #else
-    int      *lens;          /* array of lengths */
+    int      *lens;       /* array of lengths */
     MPI_Aint *mem_ptrs;
     size_t    count;
 #endif
+    size_t    curr; /* index of offsets/lens that is currently being processed */
 } ADIOI_Access;
 
 extern int ADIOI_Flattened_type_keyval;
