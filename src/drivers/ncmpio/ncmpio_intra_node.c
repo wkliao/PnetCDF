@@ -343,7 +343,8 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     ncp->num_nonaggrs = 0;     /* number of non-aggregators assigned */
     ncp->nonaggr_ranks = NULL; /* ranks of assigned non-aggregators */
 
-    if (ncp->num_aggrs_per_node == 0 || ncp->num_aggrs_per_node == ncp->nprocs)
+    if (ncp->num_aggrs_per_node == 0 ||
+        ncp->num_aggrs_per_node * ncp->num_nodes >= ncp->nprocs)
         /* disable intra-node aggregation */
         return NC_NOERR;
 
