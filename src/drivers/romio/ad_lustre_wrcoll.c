@@ -14,9 +14,9 @@ static int debug=1;
 #define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
     int _k;                                                      \
     char *_ptr = (inbuf);                                        \
-    MPI_Count   *mem_ptrs = others_req[x].mem_ptrs + (start)[x]; \
-    ADIO_Offset *mem_lens = others_req[x].lens     + (start)[x]; \
-    for (_k=0; _k<(count)[x]; _k++) {                            \
+    MPI_Count   *mem_ptrs = others_req[x].mem_ptrs + (start);    \
+    ADIO_Offset *mem_lens = others_req[x].lens     + (start);    \
+    for (_k=0; _k<count; _k++) {                                 \
         memcpy((outbuf) + mem_ptrs[_k], _ptr, mem_lens[_k]);     \
         _ptr += mem_lens[_k];                                    \
     }                                                            \
@@ -25,9 +25,9 @@ static int debug=1;
 #define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
     int _k;                                                      \
     char *_ptr = (inbuf);                                        \
-    MPI_Aint *mem_ptrs = others_req[x].mem_ptrs + (start)[x];    \
-    int      *mem_lens = others_req[x].lens     + (start)[x];    \
-    for (_k=0; _k<(count)[x]; _k++) {                            \
+    MPI_Aint *mem_ptrs = others_req[x].mem_ptrs + (start);       \
+    int      *mem_lens = others_req[x].lens     + (start);       \
+    for (_k=0; _k<count; _k++) {                                 \
         memcpy((outbuf) + mem_ptrs[_k], _ptr, mem_lens[_k]);     \
         _ptr += mem_lens[_k];                                    \
     }                                                            \
@@ -88,6 +88,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File fd,
                                         ADIO_Offset max_end_loc,
                                         ADIO_Offset **buf_idx,
                                         int *error_code);
+
 static void ADIOI_LUSTRE_Fill_send_buffer(ADIO_File fd, const void *buf,
                                           Flat_list *flat_fview,
                                           Flat_list *flat_bview,
@@ -96,24 +97,37 @@ static void ADIOI_LUSTRE_Fill_send_buffer(ADIO_File fd, const void *buf,
                                           const MPI_Count *send_size,
                                           char **self_buf,
                                           disp_len_list *send_list);
-static void ADIOI_LUSTRE_W_Exchange_data(ADIO_File fd, const void *buf,
-                                         char *write_buf,
-                                         char **recve_buf,
-                                         char **send_buf_ptr,
-                                         Flat_list *flat_fview,
-                                         Flat_list *flat_bview,
-                                         const MPI_Count *send_size,
-                                         const MPI_Count *recv_size,
-                                         ADIO_Offset range_off,
-                                         MPI_Count range_size,
-                                         const MPI_Count *count,
-                                         const MPI_Count *start_pos,
-                                         const ADIOI_Access *others_req,
-                                         const ADIO_Offset *buf_idx,
-                                         off_len_list *srt_off_len,
-                                         disp_len_list *send_list,
-                                         disp_len_list *recv_list,
-                                         int *error_code);
+
+static void Exchange_data_recv(ADIO_File             fd,
+                               const void           *buf,
+                                     char           *write_buf,
+                                     char          **recv_buf,
+                                     Flat_list      *flat_fview,
+                                     Flat_list      *flat_bview,
+                               const MPI_Count      *recv_size,
+                                     ADIO_Offset     range_off,
+                                     MPI_Count       range_size,
+                               const MPI_Count      *recv_count,
+                               const MPI_Count      *start_pos,
+                               const ADIOI_Access   *others_req,
+                               const ADIO_Offset    *buf_idx,
+                                     off_len_list   *srt_off_len,
+                                     disp_len_list  *recv_list,
+                                     int            *error_code);
+
+static void Exchange_data_send(      ADIO_File       fd,
+                               const void           *buf,
+                                     char           *write_buf,
+                                     char          **send_buf_ptr,
+                                     Flat_list      *flat_fview,
+                                     Flat_list      *flat_bview,
+                               const MPI_Count      *send_size,
+                                     MPI_Count       self_count,
+                                     MPI_Count       start_pos,
+                               const ADIOI_Access   *others_req,
+                               const ADIO_Offset    *buf_idx,
+                                     disp_len_list  *send_list);
+
 static
 int ADIOI_LUSTRE_Calc_aggregator(ADIO_File fd,
                                  ADIO_Offset off,
@@ -1099,7 +1113,7 @@ void commit_comm_phase(ADIO_File      fd,
     rdispls = sdispls + nprocs;
 
     /* prepare receive side */
-    if (fd->is_agg) {
+    if (fd->is_agg && recv_list != NULL) {
         for (i=0; i<nprocs; i++) {
             if (recv_list[i].count == 0) continue;
 
@@ -1171,31 +1185,31 @@ void commit_comm_phase(ADIO_File      fd,
 #ifdef PNETCDF_PROFILING
 int nrecvs = 0;
 #endif
-    if (fd->is_agg) {
+    if (fd->is_agg && recv_list != NULL) {
         for (i = 0; i < nprocs; i++) {
-            if (recv_list[i].count > 0) {
-                /* combine reqs using new datatype */
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Type_create_hindexed_c(recv_list[i].count, recv_list[i].len,
-                                           recv_list[i].disp, MPI_BYTE,
-                                           &recvType);
-#else
-                MPI_Type_create_hindexed(recv_list[i].count, recv_list[i].len,
-                                         recv_list[i].disp, MPI_BYTE,
-                                         &recvType);
-#endif
-                MPI_Type_commit(&recvType);
+            if (recv_list[i].count == 0) continue;
 
-                if (fd->atomicity) /* Blocking Recv */
-                    MPI_Recv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm, &status);
-                else
-                    MPI_Irecv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm,
-                              &reqs[nreqs++]);
-                MPI_Type_free(&recvType);
+            /* combine reqs using new datatype */
+#ifdef HAVE_MPI_LARGE_COUNT
+            MPI_Type_create_hindexed_c(recv_list[i].count, recv_list[i].len,
+                                       recv_list[i].disp, MPI_BYTE,
+                                       &recvType);
+#else
+            MPI_Type_create_hindexed(recv_list[i].count, recv_list[i].len,
+                                     recv_list[i].disp, MPI_BYTE,
+                                     &recvType);
+#endif
+            MPI_Type_commit(&recvType);
+
+            if (fd->atomicity) /* Blocking Recv */
+                MPI_Recv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm, &status);
+            else
+                MPI_Irecv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm,
+                          &reqs[nreqs++]);
+            MPI_Type_free(&recvType);
 #ifdef PNETCDF_PROFILING
 nrecvs++;
 #endif
-            }
         }
     }
 
@@ -1232,7 +1246,7 @@ fd->lustre_write_metrics[3] = MAX(fd->lustre_write_metrics[3], nrecvs);
     for (i = 0; i < fd->hints->cb_nodes; i++)
         send_list[i].count = 0;
 
-    if (fd->is_agg)
+    if (recv_list != NULL)
         for (i = 0; i < nprocs; i++)
             recv_list[i].count = 0;
 }
@@ -1310,24 +1324,6 @@ timing[0] = s_time = MPI_Wtime();
     if ((max_end_loc - min_st_loc + 1) % step_size)
         ntimes++;
 
-    /* off_list[m] is the starting file offset of this process's write region
-     *     in iteration m (file domain of iteration m). This offset may not be
-     *     aligned with file stripe boundaries.
-     * end_loc is the ending file offset of this process's file domain.
-     */
-    off_list = (ADIO_Offset *) ADIOI_Malloc(ntimes * sizeof(ADIO_Offset));
-    end_loc = -1;
-    for (m = 0; m < ntimes; m++)
-        off_list[m] = max_end_loc;
-    for (i = 0; i < nprocs; i++) {
-        for (j = 0; j < others_req[i].count; j++) {
-            req_off = others_req[i].offsets[j];
-            m = (int) ((req_off - min_st_loc) / step_size);
-            off_list[m] = MIN(off_list[m], req_off);
-            end_loc = MAX(end_loc, (others_req[i].offsets[j] + others_req[i].lens[j] - 1));
-        }
-    }
-
     /* collective buffer is divided into 'nbufs' sub-buffers. Each sub-buffer
      * is of size equal to Lustre stripe size. Write data of non-aggregators
      * are sent to aggregators and stored in aggregators' sub-buffers, one for
@@ -1343,6 +1339,24 @@ timing[0] = s_time = MPI_Wtime();
 
     /* in case number of rounds is less than nbufs */
     nbufs = (ntimes < nbufs) ? (int)ntimes : nbufs;
+
+    /* off_list[m] is the starting file offset of this aggregator's write
+     *     region in iteration m (file domain of iteration m). This offset
+     *     may not be aligned with file stripe boundaries.
+     * end_loc is the ending file offset of this aggregator's file domain.
+     */
+    off_list = (ADIO_Offset *) ADIOI_Malloc(ntimes * sizeof(ADIO_Offset));
+    end_loc = -1;
+    for (m = 0; m < ntimes; m++)
+        off_list[m] = max_end_loc;
+    for (i = 0; i < nprocs; i++) {
+        for (j = 0; j < others_req[i].count; j++) {
+            req_off = others_req[i].offsets[j];
+            m = (int) ((req_off - min_st_loc) / step_size);
+            off_list[m] = MIN(off_list[m], req_off);
+            end_loc = MAX(end_loc, (others_req[i].offsets[j] + others_req[i].lens[j] - 1));
+        }
+    }
 
     /* Allocate displacement-length pair arrays, describing the send buffer.
      * send_list[i].count: number displacement-length pairs.
@@ -1363,12 +1377,23 @@ timing[0] = s_time = MPI_Wtime();
 #endif
     }
 
-    /* Allocate displacement-length pair arrays, describing the recv buffer.
-     * recv_list[i].count: number displacement-length pairs.
-     * recv_list[i].len: length in bytes.
-     * recv_list[i].disp: displacement (recv buffer address).
+    /* end_loc >= 0 indicates this process has something to write to the file.
+     * Only I/O aggregators can have end_loc > 0. write_buf is the collective
+     * buffer and only matter for I/O aggregators. recv_buf is the buffer used
+     * only by aggregators to receive requests from non-aggregators. Its size
+     * may be larger then the file stripe size, in case when writes from
+     * non-aggregators overlap. In this case, it will be realloc-ed in
+     * ADIOI_LUSTRE_W_Exchange_data(). The received data is later copied over
+     * to write_buf, whose contents will be written to file.
      */
-    if (fd->is_agg) {
+    if (end_loc >= 0) {
+        /* Allocate displacement-length pair arrays, describing the recv buffer.
+         * recv_list[i].count: number displacement-length pairs.
+         * recv_list[i].len: length in bytes.
+         * recv_list[i].disp: displacement (recv buffer address).
+         */
+        assert(fd->is_agg);
+
         recv_list = (disp_len_list*) ADIOI_Malloc(sizeof(disp_len_list) * nprocs);
         for (i = 0; i < nprocs; i++) {
             recv_list[i].count = 0;
@@ -1382,18 +1407,7 @@ timing[0] = s_time = MPI_Wtime();
             recv_list[i].len  = (int*) (recv_list[i].disp + nbufs);
 #endif
         }
-    }
 
-    /* end_loc >= 0 indicates this process has something to write to the file.
-     * Only I/O aggregators can have end_loc > 0. write_buf is the collective
-     * buffer and only matter for I/O aggregators. recv_buf is the buffer used
-     * only by aggregators to receive requests from non-aggregators. Its size
-     * may be larger then the file stripe size, in case when writes from
-     * non-aggregators overlap. In this case, it will be realloc-ed in
-     * ADIOI_LUSTRE_W_Exchange_data(). The received data is later copied over
-     * to write_buf, whose contents will be written to file.
-     */
-    if (end_loc >= 0) {
         /* collective buffer was allocated at file open/create. For Lustre, its
          * size must be at least striping_unit, which has been checked at the
          * time fd->io_buf is allocated.
@@ -1403,14 +1417,41 @@ timing[0] = s_time = MPI_Wtime();
         /* divide collective buffer into nbufs sub-buffers */
         write_buf = (char **) ADIOI_Malloc(nbufs * sizeof(char*));
         write_buf[0] = fd->io_buf;
-        for (j = 1; j < nbufs; j++)
-            write_buf[j] = write_buf[j-1] + striping_unit;
 
         /* Similarly, receive buffer consists of nbufs sub-buffers */
         recv_buf = (char **) ADIOI_Malloc(nbufs * sizeof(char*));
-        for (j = 0; j < nbufs; j++)
+        recv_buf[0] = (char *) ADIOI_Malloc(striping_unit);
+
+        /* recv_count[j][i] is the number of off-len pairs to be received from
+         * each proc i in round j
+         */
+        recv_count    = (MPI_Count**) ADIOI_Malloc(3 * nbufs * sizeof(MPI_Count*));
+        recv_count[0] = (MPI_Count*)  ADIOI_Malloc(3 * nbufs * nprocs * sizeof(MPI_Count));
+
+        /* recv_size[j][i] is the receive size from proc i in round j */
+        recv_size = recv_count + nbufs;
+        recv_size[0] = recv_count[0] + nbufs * nprocs;
+
+        /* recv_start_pos[j][i] is the starting index of offset-length arrays
+         * pointed by others_req[i].curr for remote rank i in round j
+         */
+        recv_start_pos = recv_size + nbufs;
+        recv_start_pos[0] = recv_size[0] + nbufs * nprocs;
+
+        for (j = 1; j < nbufs; j++) {
+            write_buf[j] = write_buf[j-1] + striping_unit;
             /* recv_buf[j] may be realloc in ADIOI_LUSTRE_W_Exchange_data() */
-            recv_buf[j] = (char *) ADIOI_Malloc(striping_unit);
+            recv_buf[j]       = (char *) ADIOI_Malloc(striping_unit);
+            recv_count[j]     = recv_count[j-1]     + nprocs;
+            recv_size[j]      = recv_size[j-1]      + nprocs;
+            recv_start_pos[j] = recv_start_pos[j-1] + nprocs;
+        }
+
+        /* srt_off_len consists of file offset-length pairs sorted in a
+         * monotonically non-decreasing order (required by MPI-IO standard)
+         * which is used when writing to the file
+         */
+        srt_off_len = (off_len_list*) ADIOI_Malloc(nbufs * sizeof(off_len_list));
     }
 
     /* send_buf[] will be allocated in ADIOI_LUSTRE_W_Exchange_data(), when the
@@ -1435,34 +1476,6 @@ timing[0] = s_time = MPI_Wtime();
      *     iteration m, upward aligned to the file stripe boundary.
      */
     iter_end_off = min_st_loc + step_size;
-
-    /* the number of off-len pairs to be received from each proc in a round. */
-    recv_count    = (MPI_Count**) ADIOI_Malloc(3 * nbufs * sizeof(MPI_Count*));
-    recv_count[0] = (MPI_Count*)  ADIOI_Malloc(3 * nbufs * nprocs * sizeof(MPI_Count));
-    for (i = 1; i < nbufs; i++)
-        recv_count[i] = recv_count[i-1] + nprocs;
-
-    /* recv_size is array of sizes of data to be received from each proc in a
-     * round
-     */
-    recv_size = recv_count + nbufs;
-    recv_size[0] = recv_count[0] + nbufs * nprocs;
-    for (i = 1; i < nbufs; i++)
-        recv_size[i] = recv_size[i-1] + nprocs;
-
-    /* recv_start_pos[j][i] stores the starting index of offset-length arrays
-     * pointed by others_req[i].curr for remote rank i in round j
-     */
-    recv_start_pos = recv_size + nbufs;
-    recv_start_pos[0] = recv_size[0] + nbufs * nprocs;
-    for (i = 1; i < nbufs; i++)
-        recv_start_pos[i] = recv_start_pos[i-1] + nprocs;
-
-    /* srt_off_len consists of file offset-length pairs sorted in a
-     * monotonically non-decreasing order (required by MPI-IO standard) which
-     * is used when writing to the file
-     */
-    srt_off_len = (off_len_list*) ADIOI_Malloc(nbufs * sizeof(off_len_list));
 
 #ifdef WKL_DEBUG
 e_time = MPI_Wtime();
@@ -1545,30 +1558,34 @@ s_time = MPI_Wtime();
         range_size = MIN(striping_unit - range_off % striping_unit,
                          end_loc - range_off + 1);
 
-        /* Calculate the amount to be received from each process i at this round,
-         * by going through all offset-length pairs of others_req[i].
+        /* Calculate the amount to be received from each process i at this
+         * round, by going through all offset-length pairs of others_req[i].
          */
-        for (i = 0; i < nprocs; i++) {
-            /* reset communication metadata to all 0s for this round */
-            recv_count[ibuf][i] = recv_size[ibuf][i] = recv_start_pos[ibuf][i] = 0;
+        if (recv_count != NULL) {
+            for (i=0; i<nprocs; i++) {
+                /* reset communication metadata to all 0s for this round */
+                recv_count[ibuf][i] = recv_size[ibuf][i] = 0;
+                recv_start_pos[ibuf][i] = 0;
 
-            if (others_req[i].count == 0) continue;
+                if (others_req[i].count == 0) continue;
 
-            recv_start_pos[ibuf][i] = others_req[i].curr;
-            for (j = others_req[i].curr; j < others_req[i].count; j++) {
-                if (others_req[i].offsets[j] < iter_end_off) {
-                    recv_count[ibuf][i]++;
-                    others_req[i].mem_ptrs[j] = others_req[i].offsets[j] - range_off;
-                    recv_size[ibuf][i] += others_req[i].lens[j];
-                } else {
-                    break;
+                recv_start_pos[ibuf][i] = others_req[i].curr;
+                for (j = others_req[i].curr; j < others_req[i].count; j++) {
+                    if (others_req[i].offsets[j] < iter_end_off) {
+                        recv_count[ibuf][i]++;
+                        others_req[i].mem_ptrs[j] = others_req[i].offsets[j]
+                                                  - range_off;
+                        recv_size[ibuf][i] += others_req[i].lens[j];
+                    } else {
+                        break;
+                    }
                 }
+                /* update others_req[i].curr to point to the jth offset-length
+                 * pair of others_req[i], which will be used as the first pair
+                 * in the next round of iteration.
+                 */
+                others_req[i].curr = j;
             }
-            /* update others_req[i].curr to point to the jth offset-length
-             * pair of others_req[i], which will be used as the first pair in
-             * the next round of iteration.
-             */
-            others_req[i].curr = j;
         }
         iter_end_off += step_size;
 
@@ -1584,37 +1601,60 @@ s_time = e_time;
          * and recv_buf. All processes have non-NULL send_buf.
          */
         char *wbuf = (write_buf == NULL) ? NULL : write_buf[ibuf];
-        char *rbuf = (recv_buf  == NULL) ? NULL :  recv_buf[ibuf];
+
+        /* Exchange_data_recv() and Exchange_data_send() below perform one
+         * round of communication phase and there are ntimes rounds.
+         */
+        if (recv_list != NULL) { /* this aggregator has something to received */
+            char *rbuf = (recv_buf  == NULL) ? NULL :  recv_buf[ibuf];
+
+            Exchange_data_recv(fd,
+                               buf,                /* IN: user buffer */
+                               wbuf,               /* OUT: write buffer */
+                               &rbuf,              /* OUT: receive buffer */
+                               flat_fview,
+                               flat_bview,
+                               recv_size[ibuf],     /* IN: changed each round */
+                               range_off,           /* IN: changed each round */
+                               range_size,          /* IN: changed each round */
+                               recv_count[ibuf],    /* IN: changed each round */
+                               recv_start_pos[ibuf],/* IN: changed each round */
+                               others_req,          /* IN: changed each round */
+                               this_buf_idx,        /* IN: changed each round */
+                               &srt_off_len[ibuf],/* OUT: write off-len pairs */
+                               recv_list,         /* OUT: recv disp-len pairs */
+                               error_code);
+            if (*error_code != MPI_SUCCESS)
+                goto over;
+
+            /* rbuf might be realloc-ed */
+            if (recv_buf != NULL) recv_buf[ibuf] = rbuf;
+        }
+
+        /* sender part */
+        MPI_Count self_count, self_start_pos;
+        if (recv_count == NULL) {
+            self_count = 0;
+            self_start_pos = 0;
+        }
+        else {
+            self_count     = recv_count[ibuf][myrank];
+            self_start_pos = recv_start_pos[ibuf][myrank];
+        }
         send_buf[ibuf] = NULL;
 
-        /* ADIOI_LUSTRE_W_Exchange_data performs one round of communication
-         * phase and there are ntimes rounds
-         */
-        ADIOI_LUSTRE_W_Exchange_data(fd,
-                                     buf,                /* IN: user buffer */
-                                     wbuf,               /* OUT: write buffer */
-                                     &rbuf,              /* OUT: receive buffer */
-                                     &send_buf[ibuf],    /* OUT: send buffer */
-                                     flat_fview,
-                                     flat_bview,
-                                     send_size,            /* IN: changed each round */
-                                     recv_size[ibuf],      /* IN: changed each round */
-                                     range_off,            /* IN: changed each round */
-                                     range_size,           /* IN: changed each round */
-                                     recv_count[ibuf],     /* IN: changed each round */
-                                     recv_start_pos[ibuf], /* IN: changed each round */
-                                     others_req,           /* IN: changed each round */
-                                     this_buf_idx,         /* IN: changed each round */
-                                     &srt_off_len[ibuf],   /* OUT: list of write request off-len pairs */
-                                     send_list,            /* OUT: send displacement-length pairs */
-                                     recv_list,            /* OUT: send displacement-length pairs */
-                                     error_code);
-
-        if (*error_code != MPI_SUCCESS)
-            goto over;
-
-        /* rbuf might be realloc-ed */
-        if (recv_buf != NULL) recv_buf[ibuf] = rbuf;
+        Exchange_data_send(fd,
+                           buf,             /* IN: user buffer */
+                           wbuf,            /* OUT: write buffer */
+                           &send_buf[ibuf], /* OUT: send buffer */
+                           flat_fview,
+                           flat_bview,
+                           send_size,       /* IN: changed each round */
+                           self_count,
+                           self_start_pos,
+                           others_req,      /* IN: changed each round */
+                           this_buf_idx,    /* IN: changed each round */
+                           send_list);      /* OUT: send disp-len pairs */
 
 #ifdef WKL_DEBUG
 e_time = MPI_Wtime();
@@ -1661,6 +1701,9 @@ s_time = e_time;
             if (!fd->is_agg) /* non-aggregators are done for this batch */
                 continue;
 
+            if (recv_list == NULL) /*  this aggregator has nothing to write */
+                continue;
+
             /* this aggregator unpacks the data in recv_buf[] into write_buf */
             if (end_loc >= 0) {
                 for (j = 0; j < numBufs; j++) {
@@ -1671,8 +1714,8 @@ s_time = e_time;
                              * been taken care of earlier by receiving the
                              * message directly into write_buf.
                              */
-                            MEMCPY_UNPACK(i, buf_ptr, recv_start_pos[j], recv_count[j],
-                                          write_buf[j]);
+                            MEMCPY_UNPACK(i, buf_ptr, recv_start_pos[j][i],
+                                          recv_count[j][i], write_buf[j]);
                             buf_ptr += recv_size[j][i];
                         }
                     }
@@ -1920,46 +1963,55 @@ void heap_merge(const ADIOI_Access *others_req,
     list.count++;                        \
 }
 
-static void ADIOI_LUSTRE_W_Exchange_data(
-            ADIO_File       fd,
-      const void           *buf,          /* user buffer */
-            char           *write_buf,    /* OUT: internal buffer used to write to file */
-            char          **recv_buf,     /* OUT: [nbufs] internal buffer used to receive */
-            char          **send_buf_ptr, /* OUT: [cb_nodes] internal buffer used to send */
-            Flat_list      *flat_fview,   /* IN/OUT: flattened file offset-length pairs */
-            Flat_list      *flat_bview,   /* IN/OUT: flattened buffer offset-length pairs */
-      const MPI_Count      *send_size,    /* [cb_nodes] send_size[i] is amount of this rank sent to aggregator i */
-      const MPI_Count      *recv_size,    /* [nprocs] recv_size[i] is amount of this aggregator recv from rank i */
-            ADIO_Offset     range_off,    /* starting file offset of this aggregator's write region */
-            MPI_Count       range_size,   /* amount of this aggregator's write region */
-      const MPI_Count      *recv_count,   /* [nprocs] recv_count[i] is No. offset-length pairs received from rank i */
-      const MPI_Count      *start_pos,    /* [nprocs] start_pos[i] starting value of others_req[i].curr */
-      const ADIOI_Access   *others_req,   /* [nprocs] others_req[i] is rank i's write requests fall into this aggregator's file domain */
-      const ADIO_Offset    *buf_idx,      /* [cb_nodes] indices to user buffer offsets for sending this rank's write data to aggregator i */
-            off_len_list   *srt_off_len,  /* OUT: list of write offset-length pairs of this aggregator */
-            disp_len_list  *send_list,    /* OUT: displacement-length pairs of send buffer */
-            disp_len_list  *recv_list,    /* OUT: displacement-length pairs of recv buffer */
-            int            *error_code)   /* OUT: */
+static
+void Exchange_data_recv(
+          ADIO_File       fd,
+    const void           *buf,          /* user buffer */
+          char           *write_buf,    /* OUT: internal buffer used to write
+                                         * to file */
+          char          **recv_buf,     /* OUT: [nbufs] internal buffer used to
+                                         * receive from other processes */
+          Flat_list      *flat_fview,   /* IN/OUT: flattened file offset-length
+                                         * pairs */
+          Flat_list      *flat_bview,   /* IN/OUT: flattened buffer
+                                         * offset-length pairs */
+    const MPI_Count      *recv_size,    /* [nprocs] recv_size[i] is amount of
+                                         * this aggregator recv from rank i */
+          ADIO_Offset     range_off,    /* starting file offset of this
+                                         * aggregator's write region */
+          MPI_Count       range_size,   /* amount of this aggregator's write
+                                         * region */
+    const MPI_Count      *recv_count,   /* [nprocs] recv_count[i] is the number
+                                         * of offset-length pairs received from
+                                         * rank i */
+    const MPI_Count      *start_pos,    /* [nprocs] start_pos[i] starting value
+                                         * of others_req[i].curr */
+    const ADIOI_Access   *others_req,   /* [nprocs] others_req[i] is rank i's
+                                         * write requests fall into this
+                                         * aggregator's file domain */
+    const ADIO_Offset    *buf_idx,      /* [cb_nodes] indices to user buffer
+                                         * offsets for sending this rank's
+                                         * write data to aggregator i */
+          off_len_list   *srt_off_len,  /* OUT: list of write offset-length
+                                         * pairs of this aggregator */
+          disp_len_list  *recv_list,    /* OUT: displacement-length pairs of
+                                         * recv buffer */
+          int            *error_code)   /* OUT: */
 {
     char *buf_ptr, *contig_buf;
     size_t alloc_sz;
     int i, nprocs, myrank, nprocs_recv, err;
-    int hole, check_hole, cb_nodes, striping_unit;
+    int hole, check_hole;
     MPI_Count sum_recv;
     MPI_Status status;
     static char myname[] = "ADIOI_LUSTRE_W_Exchange_data";
 
-    *send_buf_ptr = NULL;
-
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
-    cb_nodes = fd->hints->cb_nodes;
-    striping_unit = fd->hints->striping_unit;
-
-    /* srt_off_len->num   OUT: number of elements in the above off-len list */
-    /* srt_off_len->off[] OUT: list of write offsets by this rank in this round */
-    /* srt_off_len->len[] OUT: list of write lengths by this rank in this round */
+    /* srt_off_len->num   number of elements in the above off-len list */
+    /* srt_off_len->off[] list of write offsets by this rank in this round */
+    /* srt_off_len->len[] list of write lengths by this rank in this round */
 
     /* calculate send receive metadata */
     srt_off_len->num = 0;
@@ -2026,12 +2078,12 @@ static void ADIOI_LUSTRE_W_Exchange_data(
 
     /* data sieving */
     if (fd->hints->ds_write != ADIOI_HINT_DISABLE && hole) {
-        ADIO_ReadContig(fd, write_buf, range_size, MPI_BYTE, ADIO_EXPLICIT_OFFSET,
-                        range_off, &status, &err);
+        ADIO_ReadContig(fd, write_buf, range_size, MPI_BYTE,
+                        ADIO_EXPLICIT_OFFSET, range_off, &status, &err);
         if (err != MPI_SUCCESS) {
-            *error_code = MPIO_Err_create_code(err,
-                                               MPIR_ERR_RECOVERABLE,
-                                               myname, __LINE__, MPI_ERR_IO, "**ioRMWrdwr", 0);
+            *error_code = MPIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
+                                               myname, __LINE__, MPI_ERR_IO,
+                                               "**ioRMWrdwr", 0);
             return;
         }
 
@@ -2066,7 +2118,7 @@ static void ADIOI_LUSTRE_W_Exchange_data(
      * case, which is rare), we allocate a separate buffer of size sum_recv.
      */
     sum_recv -= recv_size[myrank];
-    if (sum_recv > striping_unit)
+    if (sum_recv > fd->hints->striping_unit)
         *recv_buf = (char *) ADIOI_Realloc(*recv_buf, sum_recv);
     contig_buf = *recv_buf;
 
@@ -2095,10 +2147,44 @@ static void ADIOI_LUSTRE_W_Exchange_data(
              * buftype is not contiguous is handled at the send time below.
              */
             char *fromBuf = (char *) buf + buf_idx[fd->my_cb_nodes_index];
-            MEMCPY_UNPACK(i, fromBuf, start_pos, recv_count, write_buf);
+            MEMCPY_UNPACK(i, fromBuf, start_pos[i], recv_count[i], write_buf);
         }
     }
+}
 
+static
+void Exchange_data_send(
+          ADIO_File       fd,
+    const void           *buf,          /* user buffer */
+          char           *write_buf,    /* OUT: internal buffer used to write
+                                         * to file, only matter when send to
+                                         * self */
+          char          **send_buf_ptr, /* OUT: [cb_nodes] point to internal
+                                         * send buffer */
+          Flat_list      *flat_fview,   /* IN/OUT: flattened file offset-length
+                                         * pairs */
+          Flat_list      *flat_bview,   /* IN/OUT: flattened buffer
+                                         * offset-length pairs */
+    const MPI_Count      *send_size,    /* [cb_nodes] send_size[i] is amount of
+                                         * this rank sent to aggregator i */
+          MPI_Count       self_count,   /* No. offset-length pairs sent to self
+                                         * rank */
+          MPI_Count       start_pos,    /* others_req[myrank].curr */
+    const ADIOI_Access   *others_req,   /* [nprocs] only used when send to self,
+                                         * others_req[myrank] */
+    const ADIO_Offset    *buf_idx,      /* [cb_nodes] indices to user buffer
+                                         * for sending this rank's write data
+                                         * to aggregator i */
+          disp_len_list  *send_list)    /* OUT: displacement-length pairs of
+                                         * send buffer */
+{
+    int i, myrank, cb_nodes;
+
+    *send_buf_ptr = NULL;
+
+    MPI_Comm_rank(fd->comm, &myrank);
+
+    cb_nodes = fd->hints->cb_nodes;
     if (flat_bview->is_contig) {
         /* If buftype is contiguous, data can be directly sent from user buf
          * at location given by buf_idx.
@@ -2139,7 +2225,7 @@ static void ADIOI_LUSTRE_W_Exchange_data(
              * write_buf.
              */
             if (self_buf == NULL) self_buf = send_buf[fd->my_cb_nodes_index];
-            MEMCPY_UNPACK(myrank, self_buf, start_pos, recv_count, write_buf);
+            MEMCPY_UNPACK(myrank, self_buf, start_pos, self_count, write_buf);
         }
 
         *send_buf_ptr = send_buf[0];
