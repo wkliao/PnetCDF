@@ -986,7 +986,7 @@ start_T = end_T;;
 
 end_T = MPI_Wtime();
 ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
-start_T = end_T;;
+start_T = end_T;
 
     /* free all memory allocated */
     ADIOI_Free(others_req[0].offsets);
@@ -1288,7 +1288,6 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
                                         ADIO_Offset  **buf_idx,
                                         int           *error_code)
 {
-
     char **write_buf = NULL, **recv_buf = NULL, **send_buf = NULL;
     size_t alloc_sz;
     int i, nprocs, myrank, nbufs, ibuf, batch_idx=0, cb_nodes, striping_unit;
@@ -1302,8 +1301,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
 
 #ifdef WKL_DEBUG
 double timing[6]={0,0,0,0,0,0}, s_time, e_time;
-MPI_Barrier(fd->comm);
-timing[0] = s_time = MPI_Wtime();
+s_time = MPI_Wtime();
 #endif
 
     /* If successful, error_code is set to MPI_SUCCESS. Otherwise an error
@@ -1489,7 +1487,8 @@ timing[0] = s_time = MPI_Wtime();
 
 #ifdef WKL_DEBUG
 e_time = MPI_Wtime();
-timing[3] += e_time - s_time;
+timing[0] = e_time - s_time;
+s_time = e_time;
 #endif
 
     ibuf = 0;
@@ -1497,9 +1496,6 @@ timing[3] += e_time - s_time;
         MPI_Count range_size;
         ADIO_Offset range_off;
 
-#ifdef WKL_DEBUG
-s_time = MPI_Wtime();
-#endif
         /* Note that MPI standard (MPI3.1 Chapter 13.1.1 and MPI 4.0 Chapter
          * 14.1.1) requires that the typemap displacements of etype and
          * filetype are non-negative and monotonically non-decreasing. This
@@ -1601,7 +1597,7 @@ s_time = MPI_Wtime();
 
 #ifdef WKL_DEBUG
 e_time = MPI_Wtime();
-timing[4] += e_time - s_time;
+timing[1] += e_time - s_time;
 s_time = e_time;
 #endif
         /* exchange phase - each process sends it's write data to I/O
@@ -1640,6 +1636,11 @@ s_time = e_time;
             /* rbuf might be realloc-ed */
             if (recv_buf != NULL) recv_buf[ibuf] = rbuf;
         }
+#ifdef WKL_DEBUG
+e_time = MPI_Wtime();
+timing[2] += e_time - s_time;
+s_time = e_time;
+#endif
 
         /* sender part */
         MPI_Count self_count, self_start_pos;
@@ -1668,7 +1669,8 @@ s_time = e_time;
 
 #ifdef WKL_DEBUG
 e_time = MPI_Wtime();
-timing[5] += e_time - s_time;
+timing[3] += e_time - s_time;
+s_time = e_time;
 #endif
         if (m % nbufs < nbufs - 1 && m < ntimes - 1) {
             /* continue to the next round */
@@ -1681,11 +1683,6 @@ timing[5] += e_time - s_time;
             /* reset ibuf to the first element of nbufs */
             ibuf = 0;
 
-#ifdef WKL_DEBUG
-MPI_Barrier(fd->comm);
-s_time = MPI_Wtime();
-#endif
-
 #ifdef PNETCDF_PROFILING
 double curT = MPI_Wtime();
 #endif
@@ -1697,7 +1694,7 @@ if (fd->is_agg) fd->lustre_write_metrics[2] += MPI_Wtime() - curT;
 
 #ifdef WKL_DEBUG
 e_time = MPI_Wtime();
-timing[1] += e_time - s_time;
+timing[4] += e_time - s_time;
 s_time = e_time;
 #endif
 
@@ -1788,7 +1785,8 @@ s_time = e_time;
             batch_idx += numBufs; /* only matters for aggregators */
 #ifdef WKL_DEBUG
 e_time = MPI_Wtime();
-timing[2] += e_time - s_time;
+timing[5] += e_time - s_time;
+s_time = e_time;
 #endif
         }
     }
@@ -1824,8 +1822,6 @@ timing[2] += e_time - s_time;
         ADIOI_Free(recv_list);
     }
 #ifdef WKL_DEBUG
-timing[0] = MPI_Wtime() - timing[0];
-
 /* check any pending messages to be received */
 MPI_Status probe_st;
 int probe_flag;
@@ -1835,9 +1831,7 @@ printf("ERROR ++++ MPI_Iprobe rank=%4d is_agg=%d: ---- cb_nodes=%d ntimes=%lld n
 fflush(stdout);
 }
 
-double max_t[6];
-MPI_Reduce(timing, max_t, 6, MPI_DOUBLE, MPI_MAX, 0, fd->comm);
-if (myrank == 0) printf("%s ---- time collective=%.4f comm=%.4f pwrite=%.4f others=%.4f %.4f %.4f\n",__func__,max_t[0],max_t[1],max_t[2],max_t[3],max_t[4],max_t[5]);
+if (myrank == 0) printf("%s ---- %.4f %.4f %.4f %.4f %.4f %.4f\n",__func__,timing[0],timing[1],timing[2],timing[3],timing[4],timing[5]);
 #endif
 }
 
