@@ -2000,62 +2000,77 @@ void Exchange_data_recv(
 {
     char *buf_ptr, *contig_buf;
     size_t alloc_sz;
-    int i, nprocs, myrank, nprocs_recv, err;
-    int hole, check_hole;
+    int i, j, nprocs, myrank, nprocs_recv, err, hole, check_hole;
     MPI_Count sum_recv;
     MPI_Status status;
-    static char myname[] = "ADIOI_LUSTRE_W_Exchange_data";
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
-    /* srt_off_len->num   number of elements in the above off-len list */
-    /* srt_off_len->off[] list of write offsets by this rank in this round */
-    /* srt_off_len->len[] list of write lengths by this rank in this round */
+    /* srt_off_len contains the file offset-length pairs to be written by this
+     * aggregator at this round. The file region starts from range_off with
+     * size of range_size.
+     */
 
-    /* calculate send receive metadata */
     srt_off_len->num = 0;
     srt_off_len->off = NULL;
     sum_recv = 0;
     nprocs_recv = 0;
+
+    /* calculate receive metadata */
+    j = -1;
     for (i = 0; i < nprocs; i++) {
         srt_off_len->num += recv_count[i];
+        if (j == -1 && recv_count[i] > 0) j = i;
         sum_recv += recv_size[i];
         if (recv_size[i])
             nprocs_recv++;
     }
 
     /* determine whether checking holes is necessary */
-    check_hole = 1;
     if (srt_off_len->num == 0) {
         /* this process has nothing to receive and hence no hole */
         check_hole = 0;
         hole = 0;
+    } else if (srt_off_len->num == 1) {
+        check_hole = 0;
+        hole = 0;
+#ifdef HAVE_MPI_LARGE_COUNT
+        alloc_sz = sizeof(ADIO_Offset) + sizeof(MPI_Count);
+        srt_off_len->off = (ADIO_Offset*) ADIOI_Malloc(alloc_sz);
+        srt_off_len->len = (MPI_Count*) (srt_off_len->off + 1);
+#else
+        alloc_sz = sizeof(ADIO_Offset) + sizeof(int);
+        srt_off_len->off = (ADIO_Offset*) ADIOI_Malloc(alloc_sz);
+        srt_off_len->len = (int*) (srt_off_len->off + 1);
+#endif
+        srt_off_len->off[0] = others_req[j].offsets[start_pos[j]];
+        srt_off_len->len[0] = others_req[j].lens[start_pos[j]];
+    } else if (fd->hints->ds_write == ADIOI_HINT_ENABLE) {
+        /* skip hole checking and proceed to read-modify-write */
+        check_hole = 0;
+        /* assuming there are holes */
+        hole = 1;
     } else if (fd->hints->ds_write == ADIOI_HINT_AUTO) {
         if (srt_off_len->num > fd->hints->ds_wr_lb) {
-            /* Number of offset-length pairs is too large, making merge sort
-             * expensive. Skip the sorting in hole checking and proceed with
+            /* Number of offset-length pairs is too large, making heap-merge
+             * expensive. Skip the heap-merge and hole checking. Proceed to
              * read-modify-write.
              */
             check_hole = 0;
+            /* assuming there are holes */
             hole = 1;
         }
-        /* else: merge sort is less expensive, proceed to check_hole */
+        else /* heap-merge is less expensive, proceed to check_hole */
+            check_hole = 1;
+    } else if (fd->hints->ds_write == ADIOI_HINT_DISABLE) {
+        /* user do not want to perform read-modify-write, must check holes */
+        check_hole = 1;
     }
-    else if (fd->hints->ds_write == ADIOI_HINT_ENABLE) {
-        check_hole = 0;
-        hole = 1;
-    }
-    /* else: fd->hints->ds_write == ADIOI_HINT_DISABLE,
-     * proceed to check_hole, as we must construct srt_off_len->off and
-     * srt_off_len->len.
-     */
 
     if (check_hole) {
-        /* merge the offset-length pairs of all others_req[] (already sorted
-         * individually) into a single list of offset-length pairs
-         * (srt_off_len->off and srt_off_len->len) in an increasing order of
-         * file offsets using a heap-merge sorting algorithm.
+        /* merge all the offset-length pairs from others_req[] (already sorted
+         * individually) into a single list of offset-length pairs.
          */
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(ADIO_Offset) + sizeof(MPI_Count);
@@ -2070,8 +2085,8 @@ void Exchange_data_recv(
         heap_merge(others_req, recv_count, srt_off_len->off, srt_off_len->len,
                    start_pos, nprocs, nprocs_recv, &srt_off_len->num);
 
-        /* srt_off_len->num has been updated in heap_merge() such that
-         * srt_off_len->off and srt_off_len->len were coalesced
+        /* Now, (srt_off_len->off and srt_off_len->len) are in an increasing
+         * order of file offsets. In addition, they are coalesced.
          */
         hole = (srt_off_len->num > 1);
     }
@@ -2082,7 +2097,7 @@ void Exchange_data_recv(
                         ADIO_EXPLICIT_OFFSET, range_off, &status, &err);
         if (err != MPI_SUCCESS) {
             *error_code = MPIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
-                                               myname, __LINE__, MPI_ERR_IO,
+                                               __func__, __LINE__, MPI_ERR_IO,
                                                "**ioRMWrdwr", 0);
             return;
         }
@@ -2091,7 +2106,7 @@ void Exchange_data_recv(
          * offset-length pairs, srt_off_len->num, becomes one.
          */
         srt_off_len->num = 1;
-        if (srt_off_len->off == NULL) {
+        if (srt_off_len->off == NULL) { /* if has not been malloc-ed yet */
 #ifdef HAVE_MPI_LARGE_COUNT
             alloc_sz = sizeof(ADIO_Offset) + sizeof(MPI_Count);
             srt_off_len->off = (ADIO_Offset*) ADIOI_Malloc(alloc_sz);
@@ -2143,8 +2158,8 @@ void Exchange_data_recv(
                           write_buf + others_req[i].mem_ptrs[start_pos[i]])
             }
         } else if (flat_bview->is_contig && recv_count[i] > 0) {
-            /* send/recv to/from self uses memcpy()
-             * buftype is not contiguous is handled at the send time below.
+            /* send/recv to/from self uses memcpy(). The case when buftype is
+             * not contiguous will be handled later in Exchange_data_send().
              */
             char *fromBuf = (char *) buf + buf_idx[fd->my_cb_nodes_index];
             MEMCPY_UNPACK(i, fromBuf, start_pos[i], recv_count[i], write_buf);
