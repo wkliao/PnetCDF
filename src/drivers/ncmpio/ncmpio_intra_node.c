@@ -343,7 +343,8 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     ncp->num_nonaggrs = 0;     /* number of non-aggregators assigned */
     ncp->nonaggr_ranks = NULL; /* ranks of assigned non-aggregators */
 
-    if (ncp->num_aggrs_per_node == 0 || ncp->num_aggrs_per_node == ncp->nprocs)
+    if (ncp->num_aggrs_per_node == 0 ||
+        ncp->num_aggrs_per_node * ncp->num_nodes >= ncp->nprocs)
         /* disable intra-node aggregation */
         return NC_NOERR;
 
@@ -1360,7 +1361,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
          * the write data into a single send call.
          */
 
-        /* post requests to receive write data from non-aggregators */
+        /* receive write data sent from non-aggregators */
         if (buf_count > 0) {
             char *ptr = recv_buf + bufLen;
             nreqs = 0;
@@ -1393,9 +1394,9 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
                 continue;
 
             MPI_Offset gap = offsets[i] + lengths[i] - offsets[j];
-            if (gap >= 0) { /* segments i and j overlaps */
+            if (gap >= 0) { /* segments i and j overlap */
                 if (bufAddr[i] + lengths[i] == bufAddr[j] + gap) {
-                    /* buffers i and j are contiguous, merge j to i */
+                    /* buffers i and j are contiguous, merge j into i */
                     lengths[i] += lengths[j] - gap;
                 }
                 else { /* buffers are not contiguous, reduce j's len */
