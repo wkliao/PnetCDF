@@ -541,8 +541,13 @@ else recv_amnt += 2 * others_req[i].count;
                     my_req[fd->my_cb_nodes_index].count * pair_sz);
             }
             else {
-                MPI_Irecv(others_req[i].offsets, others_req[i].count * pair_sz,
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Irecv_c(others_req[i].offsets, others_req[i].count*pair_sz,
                           MPI_BYTE, i, 0, fd->comm, &requests[nreqs++]);
+#else
+                MPI_Irecv(others_req[i].offsets, others_req[i].count*pair_sz,
+                          MPI_BYTE, i, 0, fd->comm, &requests[nreqs++]);
+#endif
             }
         }
 
@@ -566,8 +571,13 @@ else recv_amnt += 2 * others_req[i].count;
              * my_req[i].offsets. This allows the following Issend call to
              * send both offsets and lens in a single call.
              */
+#ifdef HAVE_MPI_LARGE_COUNT
+            MPI_Issend_c(my_req[i].offsets, my_req[i].count * pair_sz, MPI_BYTE,
+                       fd->hints->ranklist[i], 0, fd->comm, &requests[nreqs++]);
+#else
             MPI_Issend(my_req[i].offsets, my_req[i].count * pair_sz, MPI_BYTE,
                        fd->hints->ranklist[i], 0, fd->comm, &requests[nreqs++]);
+#endif
         }
 
         if (nreqs) {
@@ -2063,7 +2073,7 @@ void Exchange_data_recv(
         }
         else /* heap-merge is less expensive, proceed to check_hole */
             check_hole = 1;
-    } else if (fd->hints->ds_write == ADIOI_HINT_DISABLE) {
+    } else { /* if (fd->hints->ds_write == ADIOI_HINT_DISABLE) */
         /* user do not want to perform read-modify-write, must check holes */
         check_hole = 1;
     }
