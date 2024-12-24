@@ -401,7 +401,6 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     int first_rank = my_rank_index - my_rank_index % ncp->num_nonaggrs;
     ncp->num_nonaggrs = MIN(ncp->num_nonaggrs, nprocs_my_node - first_rank);
 
-    int do_io = 0;
     if (ncp->num_nonaggrs <= 1) {
         /* disable aggregation if the number of non-aggregators assigned to
          * this aggregator is 1. Note num_nonaggrs includes self. It is
@@ -412,30 +411,50 @@ ncmpio_intra_node_aggr_init(NC *ncp)
          * enabled.
          */
         ncp->my_aggr = -1;
-        do_io = 1;
     }
     else { /* num_nonaggrs > 1 */
-        /* find the rank ID of aggregator assigned to this rank */
-        int rank_off = 0;
-        ncp->my_aggr = ranks_my_node[first_rank + rank_off];
+        /* copy the rank IDs over to ncp->nonaggr_ranks[], which contains rank
+         * IDs of MPI processes assigned in this group.
+         */
+        memcpy(ncp->nonaggr_ranks, ranks_my_node + first_rank,
+               sizeof(int) * ncp->num_nonaggrs);
 
-        if (ncp->my_aggr == ncp->rank) { /* this rank is an aggregator */
-            do_io = 1;
-            if (ncp->num_nonaggrs == 1)
-                /* disable aggregation, as this aggregation group contains only
-                 * self rank
-                 */
-                ncp->my_aggr = -1;
-            else {
-                /* copy the rank IDs over to ncp->nonaggr_ranks[] */
-                memcpy(ncp->nonaggr_ranks,
-                       ranks_my_node + first_rank,
-                       sizeof(int) * ncp->num_nonaggrs);
-                if (ncp->nonaggr_ranks[0] != ncp->rank) {
-                    /* swap aggregator's rank with the nonaggr_ranks[0] */
-                    int tmp = ncp->nonaggr_ranks[0];
-                    ncp->nonaggr_ranks[0] = ncp->rank;
-                    ncp->nonaggr_ranks[rank_off] = tmp;
+        /* assign the first rank as an intra-node aggregator of this group */
+        ncp->my_aggr = ncp->nonaggr_ranks[0];
+
+        if (ncp->fstype != ADIO_FSTYPE_MPIIO && ncp->adio_fh != NULL) {
+            /* check if the aggregator is also an MPI-IO aggregator. If not,
+            * change it to the first MPI-IO aggregator in the group. Note that
+            * binary search cannot be used, because the MPI rank IDs of all
+            * MPI-IO aggregators, ncp->adio_fh->hints->ranklist[], may not be
+            * sorted in an increasing order. On the other hand, rank IDs in
+            * ranks_my_node[], rank IDs of this rank's intra-node group, are in
+            * an increasing order.
+            *
+            * Note MPI ranks allocated to compute nodes are set at the run
+            * time. Two common allocation methods are block (consecutive IDs on
+            * a node) and cyclic (round-robin over all nodes). Both result in
+            * MPI rank IDs allocated to each compute node in an increasing
+            * order.
+            */
+            int j, cb_nodes = ncp->adio_fh->hints->cb_nodes;
+            int *ranklist = ncp->adio_fh->hints->ranklist;
+
+            for (i=0; i<ncp->num_nonaggrs; i++) {
+                for (j=0; j<cb_nodes; j++) {
+                    if (ncp->nonaggr_ranks[i] == ranklist[j])
+                        break; /* found */
+                }
+                if (j < cb_nodes) {
+                    if (i > 0) {
+                        /* change intra-node aggregator */
+                        ncp->my_aggr = ncp->nonaggr_ranks[i];
+                        /* swap aggregator's rank with nonaggr_ranks[0] */
+                        int tmp = ncp->nonaggr_ranks[0];
+                        ncp->nonaggr_ranks[0] = ncp->my_aggr;
+                        ncp->nonaggr_ranks[i] = tmp;
+                    }
+                    break;
                 }
             }
         }
@@ -443,7 +462,7 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     NCI_Free(ranks_my_node);
 
     if (ncp->my_aggr != ncp->rank) {
-        /* free ncp->nonaggr_ranks if this rank is not an aggregator */
+        /* free ncp->nonaggr_ranks as it is used by aggregators only */
         NCI_Free(ncp->nonaggr_ranks);
         ncp->nonaggr_ranks = NULL;
     }
@@ -460,10 +479,16 @@ ncmpio_intra_node_aggr_init(NC *ncp)
  */
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
         /* create a new MPI communicator containing intra-node aggregators */
-        int j, ina_nprocs, *ina_ranks;
+        int j, do_io, ina_nprocs, *ina_ranks;
         MPI_Group origin_group, ina_group;
 
         assert(ncp->adio_fh != NULL);
+
+        do_io = 0;
+        if (ncp->my_aggr == -1) /* intra-node aggregation is disabled */
+            do_io = 1;
+        else if (ncp->my_aggr == ncp->rank)
+            do_io = 1;
 
         /* construct an arry of ranks that access to file */
         ina_ranks = (int*) NCI_Malloc(sizeof(int) * ncp->nprocs);
