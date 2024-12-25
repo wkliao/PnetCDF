@@ -30,7 +30,7 @@
 # include <config.h>
 #endif
 
-int debug = 0;
+static int debug = 1;
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1582,8 +1582,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
     if (offsets != NULL) NCI_Free(offsets);
     if (lengths != NULL) NCI_Free(lengths);
 
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
-
+ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0); debug=0;
     /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
         NCI_Free(ncp->adio_fh->flat_file);
