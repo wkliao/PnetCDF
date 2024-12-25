@@ -1050,7 +1050,7 @@ start_T = end_T;
     }
 
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T); debug=0;
 
 #ifdef PNETCDF_PROFILING
 if (fd->is_agg) fd->lustre_write_metrics[0] += MPI_Wtime() - curT;
