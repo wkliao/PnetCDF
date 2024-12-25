@@ -199,13 +199,12 @@ if (ncp->rank == 0) printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.
 max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
 max_t[6], max_t[7], max_t[8], (long)max_t[9], ncp->nprocs);
 
-/* print if this rank is an I/O aggregator, but not an intra-node aggregator */
-
+/* print if this rank is an MPI-IO aggregator, but not an intra-node aggregator */
 if (ncp->adio_fh != NULL &&
-    (ncp->num_aggrs_per_node > 0 && ncp->num_aggrs_per_node * ncp->num_nodes < ncp->nprocs) && /* intra-node aggregation is enabled */
-    ncp->my_aggr == ncp->rank && /* this rank is an intra-node I/O aggregator */
-    ncp->adio_fh->is_agg == 0)   /* this rank is NOT an MPI-IO aggregator */
-printf("%s: rank %d is intra-node aggregator, but not MPI-IO aggregator\n",__func__,ncp->rank);
+    ncp->adio_fh->is_agg == 1  && /* this rank is an MPI-IO aggregator */
+    ncp->nonaggr_ranks != NULL && /* this rank is an intra-node I/O aggregator */
+    ncp->my_aggr != ncp->rank)    /* this rank's intra-node I/O aggregator is NOT self */
+printf("%s: rank %d is MPI-IO aggregator, but its intra-node aggregator is %d\n",__func__,ncp->rank,ncp->my_aggr);
 #if 0
 /* print I/O aggregator ranks */
 if (ncp->rank == 0) {
