@@ -6,7 +6,7 @@
 #
 # @configure_input@
 
-SUBDIRS = C
+SUBDIRS = C WRF-IO
 DIST_SUBDIRS = C FLASH-IO
 
 if HAS_FORTRAN
