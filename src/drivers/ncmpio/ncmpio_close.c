@@ -195,9 +195,15 @@ tt[9] = ncp->adio_fh->lustre_write_metrics[3];
 }
 else tt[6] = tt[7] = tt[8] = tt[9] = 0;
 MPI_Reduce(tt, max_t, NTIMERS, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
-if (ncp->rank == 0) printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.2f nsort %8ld collw %5.2f pwrite %5.2f comm %5.2f nsenders %5ld nprocs %d\n", __func__,ncp->num_aggrs_per_node,
-max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
-max_t[6], max_t[7], max_t[8], (long)max_t[9], ncp->nprocs);
+if (ncp->rank == 0) {
+    printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.2f nsort %8ld collw %5.2f pwrite %5.2f comm %5.2f nsenders %5ld nprocs %d\n", __func__,ncp->num_aggrs_per_node,
+    max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
+    max_t[6], max_t[7], max_t[8], (long)max_t[9], ncp->nprocs);
+
+    printf("excel: %.2f %8ld %5.2f %5.2f %5.2f %5ld\n",
+    max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
+    max_t[7], max_t[8], max_t[6], (long)max_t[9]);
+}
 
 /* print if this rank is an MPI-IO aggregator, but not an intra-node aggregator */
 if (ncp->adio_fh != NULL &&
