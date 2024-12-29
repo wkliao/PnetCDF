@@ -917,6 +917,18 @@ printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
     int orig_striping_unit = fd->hints->striping_unit;
     if (fd->hints->striping_factor >= fd->num_nodes * 2) {
         fd->hints->striping_unit *= (fd->hints->striping_factor / fd->num_nodes);
+
+        if (fd->hints->cb_buffer_size < fd->hints->striping_unit) {
+            char value[MPI_MAX_INFO_VAL + 1];
+
+            fd->hints->cb_buffer_size = fd->hints->striping_unit;
+            sprintf(value, "%d", fd->hints->cb_buffer_size);
+            MPI_Info_set(fd->info, "cb_buffer_size", value);
+            if (fd->is_agg) {
+                NCI_Free(fd->io_buf);
+                fd->io_buf = (void*) NCI_Calloc(1, fd->hints->cb_buffer_size);
+            }
+        }
 #ifdef WKL_DEBUG
         if (myrank == 0)
             printf("Warning: %s line %d: Change striping_unit from %d to %d\n",
@@ -1341,6 +1353,9 @@ s_time = MPI_Wtime();
      * fd->hints->cb_buffer_size, collective buffer size, for Lustre must be at
      * least striping_unit. This requirement has been checked at the file
      * open/create time when fd->io_buf is allocated.
+     *
+     * Note cb_buffer_size and striping_unit may also be adjusted earlier in
+     * ADIOI_LUSTRE_WriteStridedColl().
      */
     nbufs = fd->hints->cb_buffer_size / striping_unit;
     assert(nbufs > 0); /* must at least 1 */
