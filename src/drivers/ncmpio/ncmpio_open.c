@@ -168,7 +168,8 @@ printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_io);
      */
     ncmpio_set_pnetcdf_hints(ncp, user_info, info_used);
 
-    if (adio_fh->hints->cb_buffer_size < adio_fh->hints->striping_unit) {
+    if (fstype != ADIO_FSTYPE_MPIIO &&
+        adio_fh->hints->cb_buffer_size < adio_fh->hints->striping_unit) {
         /* collective buffer size must be at least file striping size */
         adio_fh->hints->cb_buffer_size = adio_fh->hints->striping_unit;
         sprintf(value, "%d", adio_fh->hints->cb_buffer_size);
