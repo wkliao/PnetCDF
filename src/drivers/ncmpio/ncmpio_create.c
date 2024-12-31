@@ -122,9 +122,7 @@ ncmpio_create(MPI_Comm     comm,
             use_mpi_io = 1;
     }
 if ((env_str = getenv("PNETCDF_USE_MPI_IO")) != NULL) use_mpi_io = (strcasecmp(env_str, "true") == 0);
-printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_io);
-/*
-*/
+if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_io);
 
     if (use_mpi_io == 1)
         fstype = ADIO_FSTYPE_MPIIO;
