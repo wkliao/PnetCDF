@@ -772,36 +772,73 @@ int ADIO_Lustre_set_aggr_list(ADIO_File  fd,
      * should be the number of nodes.
      */
 
-    /* Next step is to determine the MPI rank IDs of I/O aggregators into
-     * ranklist[].
+    /* Next step is to determine the MPI rank IDs of I/O aggregators and add
+     * them into ranklist[].
      */
     fd->hints->ranklist = (int *) ADIOI_Malloc(num_aggr * sizeof(int));
     if (fd->hints->ranklist == NULL)
         return NC_ENOMEM;
 
+int block_assignment=0;
+char *env_str;
+if ((env_str = getenv("PNETCDF_USE_BLOCK_ASSIGN")) != NULL) block_assignment = (strcasecmp(env_str, "true") == 0);
+if (rank == 0) printf("xxxx %s %d: PNETCDF_USE_BLOCK_ASSIGN = %d\n",__func__,__LINE__,block_assignment);
+
     if (striping_factor <= num_nodes) {
         /* When number of OSTs is less than number of compute nodes, first
          * select number of nodes equal to the number of OSTs by spread the
          * selection evenly across all compute nodes (i.e. with a stride
-         * between every 2 consecutive nodes) and then pick processes from the
-         * selected nodes, also evenly spread among processes on each selected
-         * node to be aggregators.
+         * between every 2 consecutive nodes).
+         * Selection of MPI ranks can be done in 2 ways.
+         * 1. block assignment
+         *    Select ranks from a node and then move on to the next node.
+         * 2. cyclic assignment
+         *    Select ranks round-robin across all selected nodes.
+         * Note when selecting ranks within a node, the ranks are evenly spread
+         * among all processes in the node.
          */
-        int avg = num_aggr / striping_factor;
-        int stride = num_nodes / striping_factor;
-        if (num_aggr % striping_factor) avg++;
-        for (i = 0; i < num_aggr; i++) {
-            j = (i % striping_factor) * stride; /* to select from node j */
-            k = (i / striping_factor) * (nprocs_per_node[j] / avg);
-            assert(k < nprocs_per_node[j]);
-            fd->hints->ranklist[i] = ranks_per_node[j][k];
+        if (block_assignment) {
+            int n=0;
+            int remain = num_aggr % striping_factor;
+            int node_stride = num_nodes / striping_factor;
+            /* walk through each node and pick aggregators */
+            for (j=0; j<num_nodes; j+=node_stride) {
+                /* Selecting node IDs with a stride. j is the node ID */
+                int nranks_per_node = num_aggr / striping_factor;
+                /* front nodes may have 1 more to pick */
+                if (remain > 0 && j/node_stride < remain) nranks_per_node++;
+// printf("node %d pick %d ranks\n", j, nranks_per_node);
+                int rank_stride = nprocs_per_node[j] / nranks_per_node;
+                for (k=0; k<nranks_per_node; k++) {
+                    /* Selecting rank IDs within node j with a stride */
+                    fd->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
+                    // printf("aggr %d is node %d %dth rank %d\n", n,j,k, ranks_per_node[j][k*rank_stride]);
+                    if (++n == num_aggr) {
+                        j = num_nodes; /* break loop j */
+                        break; /* loop k */
+                    }
+                }
+            }
+        }
+        else {
+            int avg = num_aggr / striping_factor;
+            int stride = num_nodes / striping_factor;
+            if (num_aggr % striping_factor) avg++;
+            for (i = 0; i < num_aggr; i++) {
+                /* j is the selected node ID. This selection is round-robin
+                 * across selected nodes.
+                 */
+                j = (i % striping_factor) * stride;
+                k = (i / striping_factor) * (nprocs_per_node[j] / avg);
+                assert(k < nprocs_per_node[j]);
+                fd->hints->ranklist[i] = ranks_per_node[j][k];
+            }
         }
     }
     else { /* striping_factor > num_nodes */
         /* When number of OSTs is more than number of compute nodes, I/O
-         * aggregators are selected from all nodes are selected. Within
-         * each node, aggregators are spread evenly instead of the first
-         * few ranks.
+         * aggregators are selected from all nodes. Within each node,
+         * aggregators are spread evenly instead of the first few ranks.
          */
         int *naggr_per_node, *idx_per_node, avg;
         idx_per_node = (int*) ADIOI_Calloc(num_nodes, sizeof(int));
@@ -820,14 +857,34 @@ int ADIO_Lustre_set_aggr_list(ADIO_File  fd,
          * selected as I/O aggregators
          */
 
-        for (i = 0; i < num_aggr; i++) {
-            int stripe_i = i % striping_factor;
-            j = stripe_i % num_nodes; /* to select from node j */
-            k = nprocs_per_node[j] / naggr_per_node[j];
-            k *= idx_per_node[j];
-            idx_per_node[j]++;
-            assert(k < nprocs_per_node[j]);
-            fd->hints->ranklist[i] = ranks_per_node[j][k];
+        if (block_assignment) {
+            int n = 0;
+            for (j=0; j<num_nodes; j++) {
+                /* j is the node ID */
+                // printf("node %d select %d ranks\n", j, naggr_per_node[j]);
+                int rank_stride = nprocs_per_node[j] / naggr_per_node[j];
+// try stride==1 seems no effect, rank_stride = 1;
+                for (k=0; k<naggr_per_node[j]; k++) {
+                    fd->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
+                    // printf("aggr %d is node %d %dth rank %d\n", n,j,k, ranks_per_node[j][k*rank_stride]);
+                    if (++n == num_aggr) {
+                        j = num_nodes; /* break loop j */
+                        break; /* loop k */
+                    }
+                }
+            }
+        }
+        else {
+            for (i = 0; i < num_aggr; i++) {
+                int stripe_i = i % striping_factor;
+                j = stripe_i % num_nodes; /* to select from node j */
+                k = nprocs_per_node[j] / naggr_per_node[j];
+                k *= idx_per_node[j];
+// try stride==1 seems no effect, k = idx_per_node[j];
+                idx_per_node[j]++;
+                assert(k < nprocs_per_node[j]);
+                fd->hints->ranklist[i] = ranks_per_node[j][k];
+            }
         }
         ADIOI_Free(naggr_per_node);
         ADIOI_Free(idx_per_node);
