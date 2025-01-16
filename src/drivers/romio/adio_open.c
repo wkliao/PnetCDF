@@ -13,7 +13,10 @@
 #include <string.h>   /* strdup() */
 #include <assert.h>
 #include <sys/errno.h>
-#include <fcntl.h>    /* O_CREAT */
+#include <fcntl.h>    /* open(), O_CREAT */
+
+#include <sys/types.h>  /* open(), fgetxattr() */
+#include <sys/xattr.h>  /* fgetxattr() */
 
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
@@ -35,7 +38,7 @@
 #include <sys/mount.h> /* struct statfs */
 #endif
 #ifdef HAVE_SYS_STAT_H
-#include <sys/stat.h> /* fstat(), lstat(), stat() */
+#include <sys/stat.h> /* open(), fstat(), lstat(), stat() */
 #endif
 
 #ifdef HAVE_LUSTRE
@@ -242,6 +245,82 @@ int ADIO_FileSysType(const char *filename)
         return ADIO_UFS; /* UFS support if we don't know what else to use */
 }
 
+#define ERR(fn) { \
+    printf("Error at %s (%d) calling %s\n", __func__, __LINE__, fn); \
+    return -1; \
+}
+
+static int compare(const void *a, const void *b)
+{
+     if (*(uint64_t*)a > *(uint64_t*)b) return (1);
+     if (*(uint64_t*)a < *(uint64_t*)b) return (-1);
+     return (0);
+}
+
+/*----< num_uniq_osts() >----------------------------------------------------*/
+static int num_uniq_osts(int fd_sys)
+{
+    int err;
+    void *xattr_val;
+    size_t xattr_size = XATTR_SIZE_MAX;
+    struct llapi_layout *layout;
+    uint64_t i, stripe_count, stripe_size, *osts, numOSTs;
+
+    if ((xattr_val = calloc(1, xattr_size)) == NULL)
+        ERR("calloc")
+
+    xattr_size = fgetxattr(fd_sys, "lustre.lov", xattr_val, xattr_size);
+    if (xattr_size == -1) {
+        free(xattr_val);
+        ERR("fgetxattr")
+    }
+
+    layout = llapi_layout_get_by_xattr(xattr_val, xattr_size, 0);
+    free(xattr_val);
+    if (layout == NULL) ERR("llapi_layout_get_by_xattr")
+
+    /* obtain file striping count */
+    err = llapi_layout_stripe_count_get(layout, &stripe_count);
+    if (err != 0) ERR("llapi_layout_stripe_count_get")
+
+    /* obtain file striping unit size */
+    err = llapi_layout_stripe_size_get(layout, &stripe_size);
+    if (err != 0) ERR("llapi_layout_stripe_size_get")
+
+    /* obtain all OST IDs */
+    osts = (uint64_t*) malloc(sizeof(uint64_t) * stripe_count);
+    for (i=0; i<stripe_count; i++) {
+        uint64_t tmp_ost;
+        if (llapi_layout_ost_index_get(layout, i, &tmp_ost) == -1)
+            ERR("llapi_layout_ost_index_get")
+        else
+            osts[i] = tmp_ost;
+    }
+
+    /* if (debug) {
+        printf("Input file=%s\n",path);
+        printf("stripe_count=%llu\n",stripe_count);
+        printf("stripe_size=%llu\n",stripe_size);
+        for (i=0; i<stripe_count; i++)
+            printf("\tosts[%d]=%d\n",i,osts[i]);
+    } */
+
+    /* count the number of unique OST IDs. When Lustre overstriping is
+     * used, the unique OSTs may be less than stripe_count.
+     */
+    qsort(osts, stripe_count, sizeof(uint64_t), compare);
+    numOSTs = 0;
+    for (i=1; i<stripe_count; i++) {
+        if (osts[i] > osts[numOSTs]) osts[++numOSTs] = osts[i];
+    }
+    numOSTs++;
+
+    free(osts);
+    llapi_layout_free(layout);
+
+    return numOSTs;
+}
+
 /*----< file_create() >------------------------------------------------------*/
 /*   1. root creates the file
  *   2. root sets and obtains striping info
@@ -364,12 +443,10 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
             stripin_info[0] = lum->lmm_stripe_size;
             stripin_info[1] = lum->lmm_stripe_count;
             stripin_info[2] = lum->lmm_stripe_offset;
-            /* TODO: figure out the correct way to find the number of unique
-             * OSTs. This is relevant only when Lustre over-striping is used.
-             * For now, set it to same as fd->hints->striping_factor.
-             stripin_info[3] = num_uniq_osts(fd->filename);
+            /* Find the number of unique OSTs. This is relevant only when
+             * Lustre over-striping is used.
              */
-            stripin_info[3] = lum->lmm_stripe_count;
+            stripin_info[3] = num_uniq_osts(fd->fd_sys);
         }
         else {
             fprintf(stderr,"%s line %d: rank %d fails to get stripe info from file %s (%s)\n",
@@ -462,7 +539,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
             stripin_info[3] = lum->lmm_stripe_count;
         }
         else
-            err =  ncmpii_error_posix2nc("ioctl");
+            err = ncmpii_error_posix2nc("ioctl");
         ADIOI_Free(lum);
 #elif defined(MIMIC_LUSTRE)
         stripin_info[0] = STRIPE_SIZE;
@@ -700,7 +777,10 @@ int ADIO_Lustre_set_aggr_list(ADIO_File  fd,
     if (fd->hints->ranklist == NULL)
         return NC_ENOMEM;
 
-int block_assignment=1;
+int block_assignment=0;
+char *env_str;
+if ((env_str = getenv("PNETCDF_USE_BLOCK_ASSIGN")) != NULL) block_assignment = (strcasecmp(env_str, "true") == 0);
+if (rank == 0) printf("xxxx %s %d: PNETCDF_USE_BLOCK_ASSIGN = %d\n",__func__,__LINE__,block_assignment);
 
     if (striping_factor <= num_nodes) {
         /* When number of OSTs is less than number of compute nodes,
@@ -767,8 +847,9 @@ int block_assignment=1;
         if (block_assignment) {
             int n = 0;
             for (j=0; j<num_nodes; j++) {
-                printf("node %d select %d ranks\n", j, naggr_per_node[j]);
+                // printf("node %d select %d ranks\n", j, naggr_per_node[j]);
                 int rank_stride = nprocs_per_node[j] / naggr_per_node[j];
+// try stride==1 seems no effect, rank_stride = 1;
                 for (k=0; k<naggr_per_node[j]; k++) {
                     fd->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
                     // printf("aggr %d is node %d %dth rank %d\n", n,j,k, ranks_per_node[j][k*rank_stride]);
@@ -785,6 +866,7 @@ int block_assignment=1;
                 j = stripe_i % num_nodes; /* to select from node j */
                 k = nprocs_per_node[j] / naggr_per_node[j];
                 k *= idx_per_node[j];
+// try stride==1 seems no effect, k = idx_per_node[j];
                 idx_per_node[j]++;
                 assert(k < nprocs_per_node[j]);
                 fd->hints->ranklist[i] = ranks_per_node[j][k];
@@ -832,6 +914,9 @@ int ADIO_File_open(MPI_Comm    comm,
     char value[MPI_MAX_INFO_VAL + 1];
     int err, min_err;
 
+extern int first_ost_id;
+first_ost_id = -1;
+
     fd->comm        = comm;
     fd->filename    = filename;  /* without file system type name prefix */
     fd->atomicity   = 0;
@@ -865,7 +950,7 @@ int ADIO_File_open(MPI_Comm    comm,
         if (err != NC_NOERR) goto err_out;
 
 #ifdef PNETCDF_PROFILING
-fd->lustre_write_metrics[0] = fd->lustre_write_metrics[1] = fd->lustre_write_metrics[2] = fd->lustre_write_metrics[3] = fd->lustre_write_metrics[4] = 0;
+{int i; for (i=0; i<10; i++) fd->lustre_write_metrics[i] = 0; }
 #endif
     }
     else {
