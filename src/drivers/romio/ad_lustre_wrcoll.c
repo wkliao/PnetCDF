@@ -10,6 +10,10 @@
 static int debug=1;
 #include <adio.h>
 
+int wkl_ntimes;
+int wkl_nbufs;
+int use_alltoallw;
+
 #ifdef HAVE_MPI_LARGE_COUNT
 #define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
     int _k;                                                      \
@@ -977,18 +981,24 @@ start_T = end_T;;
 
     /* Two-phase I/O: first communication phase to exchange write data from all
      * processes to the I/O aggregators, followed by the write phase where only
-     * I/O aggregators write to the file. There is no collective MPI
-     * communication in ADIOI_LUSTRE_Exch_and_write(), only MPI_Issend,
-     * MPI_Irecv, and MPI_Waitall.
+     * I/O aggregators write to the file. Unless MPI_Alltoallw() is used (when
+     * use_alltoallw is set to 1), there is no collective MPI communication in
+     * ADIOI_LUSTRE_Exch_and_write(), as it calls MPI_Issend, MPI_Irecv, and
+     * MPI_Waitall.
      */
-#ifdef USE_ALLTOALLW_
-    do_ex_wr = 1;
-#else
-    for (do_ex_wr=0, i=0; i<fd->hints->cb_nodes; i++) {
-        do_ex_wr = 1;
-        break;
-    }
-#endif
+
+    /* if this rank has data to write, then participate exchange-and-write */
+    do_ex_wr = (count > 0) ? 1 : 0;
+
+/* When num_nodes < striping_factor, using MPI_Alltoallw in commit_comm_phase()
+ * is faster than MPI_Issend/MPI_Irecv ... ?
+ */
+char *env_str; use_alltoallw=0;
+if ((env_str = getenv("PNETCDF_USE_ALLTOALLW")) != NULL) use_alltoallw = (strcasecmp(env_str, "true") == 0);
+if (use_alltoallw) do_ex_wr = 1;
+
+if (myrank == 0) printf("\n\n ===== %s %d %s ====== striping_factor=%d cb_nodes=%d\n\n",
+__func__,__LINE__,(use_alltoallw)?"USE_ALLTOALLW_":"USE ISSEND/IRECV",fd->hints->striping_factor, fd->hints->cb_nodes);
 
     if (do_ex_wr || fd->is_agg)
         /* This rank participates exchange and write only when it has non-zero
@@ -1064,7 +1074,7 @@ start_T = end_T;
     }
 
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T); debug=0;
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (ntimes=%d nbufs=%d)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T, wkl_ntimes, wkl_nbufs); debug=0;
 
 #ifdef PNETCDF_PROFILING
 if (fd->is_agg) fd->lustre_write_metrics[0] += MPI_Wtime() - curT;
@@ -1108,11 +1118,13 @@ void commit_comm_phase(ADIO_File      fd,
      * element of recv_list[] and uses it when calling MPI_Irecv or MPI_Recv
      * to receive write data from all processes.
      */
-    int i, nprocs;
+    int i, nprocs, rank;
+double timing=MPI_Wtime();
 
     MPI_Comm_size(fd->comm, &nprocs);
+    MPI_Comm_rank(fd->comm, &rank);
 
-#ifdef USE_ALLTOALLW_
+if (use_alltoallw) {
     size_t alloc_sz;
     MPI_Datatype *sendTypes, *recvTypes;
     sendTypes = (MPI_Datatype*)ADIOI_Malloc(sizeof(MPI_Datatype) * nprocs * 2);
@@ -1137,9 +1149,11 @@ void commit_comm_phase(ADIO_File      fd,
     rdispls = sdispls + nprocs;
 
     /* prepare receive side */
+int nrecvs = 0;
     if (fd->is_agg && recv_list != NULL) {
         for (i=0; i<nprocs; i++) {
-            if (recv_list[i].count == 0) continue;
+            /* check if nothing to receive or if self */
+            if (recv_list[i].count == 0 || i == rank) continue;
 
             recvCounts[i] = 1;
 
@@ -1154,12 +1168,15 @@ void commit_comm_phase(ADIO_File      fd,
                                      &recvTypes[i]);
 #endif
             MPI_Type_commit(&recvTypes[i]);
+nrecvs++;
         }
     }
 
     /* prepare send side */
+int nsends=0;
     for (i=0; i<fd->hints->cb_nodes; i++) {
-        if (send_list[i].count == 0) continue;
+        /* check if nothing to send or if self */
+        if (send_list[i].count == 0 || i == fd->my_cb_nodes_index) continue;
 
         int dest = fd->hints->ranklist[i];
         sendCounts[dest] = 1;
@@ -1175,6 +1192,7 @@ void commit_comm_phase(ADIO_File      fd,
                                  &sendTypes[dest]);
 #endif
         MPI_Type_commit(&sendTypes[dest]);
+nsends++;
     }
 
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -1194,11 +1212,14 @@ void commit_comm_phase(ADIO_File      fd,
     ADIOI_Free(sendCounts);
     ADIOI_Free(sendTypes);
 
-#else /* #ifdef USE_ALLTOALLW_ */
+fd->lustre_write_metrics[3] = MAX(fd->lustre_write_metrics[3], nsends);
+fd->lustre_write_metrics[4] = MAX(fd->lustre_write_metrics[4], nrecvs);
+
+} else { /* #ifdef USE_ALLTOALLW_ */
     int nreqs;
     MPI_Request *reqs;
-    MPI_Status status;
     MPI_Datatype sendType, recvType;
+double dtype_time=MPI_Wtime();
 
     nreqs = fd->hints->cb_nodes;
     nreqs += (fd->is_agg) ? nprocs : 0;
@@ -1209,10 +1230,21 @@ void commit_comm_phase(ADIO_File      fd,
 #ifdef PNETCDF_PROFILING
 int nrecvs = 0;
 #endif
+int j;
+MPI_Offset max_s_amnt=0, max_r_amnt=0, max_s_count=0, max_r_count=0;
+MPI_Offset r_amnt=0;
     if (fd->is_agg && recv_list != NULL) {
         for (i = 0; i < nprocs; i++) {
-            if (recv_list[i].count == 0) continue;
+            /* check if nothing to receive or if self */
+            if (recv_list[i].count == 0 || i == rank) continue;
 
+for (j=0; j<recv_list[i].count; j++) r_amnt += recv_list[i].len[j];
+max_r_amnt = MAX(max_r_amnt, r_amnt);
+max_r_count = MAX(max_r_count, recv_list[i].count);
+
+if (recv_list[i].count == 1) {
+                MPI_Irecv(NULL+recv_list[i].disp[0], recv_list[i].len[0], MPI_BYTE, i, 0, fd->comm, &reqs[nreqs++]);
+} else {
             /* combine reqs using new datatype */
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Type_create_hindexed_c(recv_list[i].count, recv_list[i].len,
@@ -1225,12 +1257,15 @@ int nrecvs = 0;
 #endif
             MPI_Type_commit(&recvType);
 
-            if (fd->atomicity) /* Blocking Recv */
+            if (fd->atomicity) { /* Blocking Recv */
+                MPI_Status status;
                 MPI_Recv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm, &status);
+            }
             else
                 MPI_Irecv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm,
                           &reqs[nreqs++]);
             MPI_Type_free(&recvType);
+}
 #ifdef PNETCDF_PROFILING
 nrecvs++;
 #endif
@@ -1241,38 +1276,54 @@ nrecvs++;
 int nsends=0;
 for (i=0; i<fd->hints->cb_nodes; i++) if (send_list[i].count > 0) nsends++;
 
+MPI_Offset s_amnt=0;
     for (i = 0; i < fd->hints->cb_nodes; i++) {
-        if (send_list[i].count > 0) {
-            /* combine reqs using new datatype */
-#ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Type_create_hindexed_c(send_list[i].count, send_list[i].len,
-                                       send_list[i].disp, MPI_BYTE, &sendType);
-#else
-            MPI_Type_create_hindexed(send_list[i].count, send_list[i].len,
-                                     send_list[i].disp, MPI_BYTE, &sendType);
-#endif
-            MPI_Type_commit(&sendType);
+        /* check if nothing to send or if self */
+        if (send_list[i].count == 0 || i == fd->my_cb_nodes_index) continue;
 
-if (nsends <= fd->hints->cb_nodes / 4) // if (nsends <= fd->num_nodes / 2)
-            MPI_Isend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
-                       fd->comm, &reqs[nreqs++]);
+for (j=0; j<send_list[i].count; j++) s_amnt += send_list[i].len[j];
+max_s_amnt = MAX(max_s_amnt, s_amnt);
+max_s_count = MAX(max_s_count, send_list[i].count);
+
+if (send_list[i].count == 1) {
+        MPI_Issend(NULL+send_list[i].disp[0], send_list[i].len[0], MPI_BYTE, fd->hints->ranklist[i], 0, fd->comm, &reqs[nreqs++]);
+} else {
+        /* combine reqs using new datatype */
+#ifdef HAVE_MPI_LARGE_COUNT
+        MPI_Type_create_hindexed_c(send_list[i].count, send_list[i].len,
+                                   send_list[i].disp, MPI_BYTE, &sendType);
+#else
+        MPI_Type_create_hindexed(send_list[i].count, send_list[i].len,
+                                 send_list[i].disp, MPI_BYTE, &sendType);
+#endif
+        MPI_Type_commit(&sendType);
+
+if (0) // if (nsends <= fd->hints->cb_nodes / 4) // if (nsends <= fd->num_nodes / 2)
+        MPI_Isend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
+                   fd->comm, &reqs[nreqs++]);
 else
-            MPI_Issend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
-                       fd->comm, &reqs[nreqs++]);
-            MPI_Type_free(&sendType);
-        }
+        MPI_Issend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
+                   fd->comm, &reqs[nreqs++]);
+        MPI_Type_free(&sendType);
+}
     }
+dtype_time = MPI_Wtime() - dtype_time;
 
 #ifdef PNETCDF_PROFILING
 fd->lustre_write_metrics[3] = MAX(fd->lustre_write_metrics[3], nsends);
 fd->lustre_write_metrics[4] = MAX(fd->lustre_write_metrics[4], nrecvs);
+fd->lustre_write_metrics[5] += dtype_time;
+fd->lustre_write_metrics[6] = MAX(fd->lustre_write_metrics[6], r_amnt); // max_r_amnt);
+fd->lustre_write_metrics[7] = MAX(fd->lustre_write_metrics[7], s_amnt); // max_s_amnt);
+fd->lustre_write_metrics[8] = MAX(fd->lustre_write_metrics[8], max_r_count);
+fd->lustre_write_metrics[9] = MAX(fd->lustre_write_metrics[9], max_s_count);
 #endif
 
     if (nreqs > 0)
         MPI_Waitall(nreqs, reqs, MPI_STATUSES_IGNORE);
 
     ADIOI_Free(reqs);
-#endif
+}
 
     /* clear send_list and recv_list for future reuse */
     for (i = 0; i < fd->hints->cb_nodes; i++)
@@ -1343,6 +1394,11 @@ s_time = MPI_Wtime();
      * covers an aggregate file region of size 'step_size' written only by
      * cb_nodes number of I/O aggregators. Note non-aggregators must also
      * participate all ntimes rounds to send their requests to I/O aggregators.
+     *
+     * step_size = the number of I/O aggregators x striping_unit
+     *
+     * Note the number of write phases = ntimes / nbufs, as writes (and
+     * communication) are accumulated for nbufs rounds before flushed.
      */
     step_size = (ADIO_Offset)cb_nodes * striping_unit;
 
@@ -1353,6 +1409,8 @@ s_time = MPI_Wtime();
     ntimes = (max_end_loc - min_st_loc + 1) / step_size;
     if ((max_end_loc - min_st_loc + 1) % step_size)
         ntimes++;
+
+if (myrank == 0) printf("%s line %d: cb_nodes=%d striping_unit=%d step_size=%lld min_st_loc=%lld max_end_loc=%lld ntimes=%lld\n",__func__,__LINE__,cb_nodes,striping_unit,step_size,min_st_loc,max_end_loc,ntimes);
 
     /* collective buffer is divided into 'nbufs' sub-buffers. Each sub-buffer
      * is of size equal to Lustre stripe size. Write data of non-aggregators
@@ -1373,6 +1431,8 @@ s_time = MPI_Wtime();
     /* in case number of rounds is less than nbufs */
     nbufs = (ntimes < nbufs) ? (int)ntimes : nbufs;
 
+wkl_ntimes=ntimes;
+wkl_nbufs=nbufs;
 #if 0
 /* for striping size 4M 8M and 64 OSTs, on 16 compute nodes, setting nbufs to 1 still yields large comm time */
 nbufs = 1;
