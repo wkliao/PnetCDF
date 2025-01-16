@@ -41,7 +41,7 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdlib.h> /* getenv() */
 #include <string.h> /* strcpy(), strncpy() */
 #include <unistd.h> /* getopt() */
 #include <assert.h>
@@ -2155,13 +2155,14 @@ err_out:
         if (rank == 0 && sum_size > 0)
             printf("heap memory allocated by PnetCDF internally has %lld bytes yet to be freed\n",
                    sum_size);
+        if (malloc_size > 0) ncmpi_inq_malloc_list();
     }
     /* report the PnetCDF internal heap memory allocation high water mark */
     err = ncmpi_inq_malloc_max_size(&malloc_size);
     if (err == NC_NOERR) {
         MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_MAX, 0, MPI_COMM_WORLD);
         if (verbose && rank == 0)
-            printf("Max heap memory allocated by PnetCDF internally is %.2f MiB\n",
+            printf("Max heap memory allocated by PnetCDF internally is %.2f MiB\n\n",
                    (float)sum_size/1048576);
     }
     fflush(stdout);
@@ -2188,11 +2189,11 @@ int main(int argc, char** argv)
 {
     extern int optind;
     extern char *optarg;
-    char filename[1024];
+    char filename[1024], *env_str;
     int i, j, err, nerrs=0, nprocs, rank, ntimes, psizes[2];
     int logitute, latitute, num_cb_nodes, num_intra_nodes;
-    int cb_nodes[]={64, 128, 512};
-    int nc_num_aggrs_per_node[]={0, 64, 16, 4};
+    int stripe_count=0, cb_nodes, cb_nodes_ratio[]={4};
+    int nc_num_aggrs_per_node[]={0};
     MPI_Info info=MPI_INFO_NULL;
 
     MPI_Init(&argc, &argv);
@@ -2236,16 +2237,23 @@ int main(int argc, char** argv)
         fflush(stdout);
     }
 
-    num_cb_nodes = sizeof(cb_nodes) / sizeof(int);
+    num_cb_nodes = sizeof(cb_nodes_ratio) / sizeof(int);
     num_intra_nodes = sizeof(nc_num_aggrs_per_node) / sizeof(int);
 
     /* set PnetCDF I/O hints */
     MPI_Info_create(&info);
 
+    if ((env_str = getenv("PNETCDF_WRF_IO_STRIPE_COUNT")) != NULL)
+        stripe_count = atoi(env_str);
+
     for (i=0; i<num_cb_nodes; i++) {
         char str[16];
-        sprintf(str, "%d", cb_nodes[i]);
-        MPI_Info_set(info, "cb_nodes", str);
+
+        cb_nodes = cb_nodes_ratio[i] * stripe_count;
+        if (stripe_count > 0) {
+            sprintf(str, "%d", cb_nodes);
+            MPI_Info_set(info, "cb_nodes", str);
+        }
 
         for (j=0; j<num_intra_nodes; j++) {
             sprintf(str, "%d", nc_num_aggrs_per_node[j]);
@@ -2253,7 +2261,7 @@ int main(int argc, char** argv)
 
             if (debug && rank == 0) {
                 printf("Info cb_nodes set to %d nc_num_aggrs_per_node set to=%d\n",
-                       cb_nodes[i],nc_num_aggrs_per_node[j]);
+                       cb_nodes,nc_num_aggrs_per_node[j]);
                 fflush(stdout);
             }
 
