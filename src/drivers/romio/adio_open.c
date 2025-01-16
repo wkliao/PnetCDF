@@ -245,6 +245,7 @@ int ADIO_FileSysType(const char *filename)
         return ADIO_UFS; /* UFS support if we don't know what else to use */
 }
 
+#ifndef MIMIC_LUSTRE
 #define ERR(fn) { \
     printf("Error at %s (%d) calling %s\n", __func__, __LINE__, fn); \
     return -1; \
@@ -320,6 +321,7 @@ static int num_uniq_osts(int fd_sys)
 
     return numOSTs;
 }
+#endif
 
 /*----< file_create() >------------------------------------------------------*/
 /*   1. root creates the file
