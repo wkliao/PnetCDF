@@ -17,6 +17,8 @@
 
 #include "adio.h"
 
+int first_ost_id;
+
 /*----< ADIO_WriteContig() >-------------------------------------------------*/
 int ADIO_WriteContig(ADIO_File     fd,
                      const void   *buf,
@@ -51,20 +53,19 @@ int ADIO_WriteContig(ADIO_File     fd,
         // off = fd->disp + fd->etype_size * offset;
         off = offset;
 
+{
+int rank; MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+ADIO_Offset ost_id = (off / fd->hints->striping_unit) % fd->hints->striping_factor;
+    if (first_ost_id == -1) {
+        first_ost_id = ost_id;
+        // printf("%2d %s file %s First pwrite off=%lld OST %d\n",rank,__func__,fd->filename,off,first_ost_id);
+    }
+    else if (ost_id != first_ost_id) printf("%2d Error: %s pwrite offset=%lld len=%lld ost_id=%lld not same 1st ost %d\n",rank,__func__,off,len,ost_id,first_ost_id);
+}
 #ifdef WKL_DEBUG
     printf("%s line %d pwrite off=%lld len=%lld\n",__func__,__LINE__,off,len);
 printf("%s line %d: %s disp=%lld etype_size=%lld offset=%lld off=%lld count=%ld bufType_size=%d len=%lld\n",__func__,__LINE__,(file_ptr_type == ADIO_INDIVIDUAL)?"ADIO_INDIVIDUAL":"ADIO_EXPLICIT_OFFSET",fd->disp,fd->etype_size,offset,off,count,bufType_size,len);
-{
-int rank; MPI_Comm_rank(MPI_COMM_WORLD,&rank);
-static int first_stripe_id=-1;
-ADIO_Offset stripe_id = (off / fd->hints->striping_unit) % fd->hints->  cb_nodes;
-    if (first_stripe_id == -1) {
-        first_stripe_id = stripe_id;
-       printf("%2d First: %s file %s pwrite off=%lld len=%lld stripe %d\n"  ,rank,__func__,fd->filename,off,len,first_stripe_id);
-    }
-    else if (stripe_id != first_stripe_id) printf("%2d Error: %s pwrite offse  t=%lld len=%lld not same stripe %d\n",rank,__func__,off,len,first_stripe_id  );
-}
-else
+
     printf("%2d %s line %d pread off=%lld len=%lld\n",rank,__func__,__LINE__,off,len);
 #endif
 
