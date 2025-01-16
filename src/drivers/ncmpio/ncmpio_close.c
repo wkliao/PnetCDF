@@ -179,27 +179,28 @@ ncmpio_close(void *ncdp)
 
 #ifdef PNETCDF_PROFILING
 if (! NC_readonly(ncp)) {
-#define NTIMERS 11
+#define NTIMERS 16
+int i, j=6;
 double tt[NTIMERS],max_t[NTIMERS];
-tt[0] = ncp->aggr_time[0];
-tt[1] = ncp->aggr_time[1];
-tt[2] = ncp->aggr_time[2];
-tt[3] = ncp->aggr_time[3];
-tt[4] = ncp->aggr_time[4];
-tt[5] = ncp->aggr_time[5];
+for (i=0; i<NTIMERS; i++) tt[i] = 0;
+for (i=0; i<j; i++) tt[i] = ncp->aggr_time[i];
 if (ncp->adio_fh != NULL) {
-tt[6] = ncp->adio_fh->lustre_write_metrics[0];
-tt[7] = ncp->adio_fh->lustre_write_metrics[1];
-tt[8] = ncp->adio_fh->lustre_write_metrics[2];
-tt[9] = ncp->adio_fh->lustre_write_metrics[3];
-tt[10] = ncp->adio_fh->lustre_write_metrics[4];
+    for (j=0; i<NTIMERS; i++)
+        tt[i] = ncp->adio_fh->lustre_write_metrics[j++];
 }
-else tt[6] = tt[7] = tt[8] = tt[9] = tt[10]= 0;
 MPI_Reduce(tt, max_t, NTIMERS, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
 if (ncp->rank == 0) {
-    printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.2f nsort %8ld collw %5.2f pwrite %5.2f comm %5.2f nsends= %5ld nrecvs %5ld nprocs %d\n", __func__,ncp->num_aggrs_per_node,
-    max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
-    max_t[6], max_t[7], max_t[8], (long)max_t[9], (long)max_t[10], ncp->nprocs);
+    printf("%s: MAX intra-node %2d %.2f pwrite %5.2f comm %5.2f collw %5.2f nsends %5ld nrecvs %5ld nprocs %d (dtype=%.4f)\n",
+          __func__,ncp->num_aggrs_per_node,
+    max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4],
+    max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10], ncp->nprocs,max_t[11]);
+
+    printf("%s: MAX pwrite %5.2f comm %5.2f collw %5.2f nsends %5ld nrecvs %5ld r_amnt %.2f s_amnt %.2f MB r_count %ld s_count %ld\n",
+          __func__,
+    max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10], max_t[12]/1048576.0, max_t[13]/1048576.0, (long)max_t[14], (long)max_t[15]);
+
+    printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.2f nsort %8ld\n", __func__,ncp->num_aggrs_per_node,
+    max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5]);
 
     printf("excel: %.2f %8ld %5.2f %5.2f %5.2f %5ld %5ld\n",
     max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
