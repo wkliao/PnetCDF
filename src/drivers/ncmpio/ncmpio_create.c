@@ -121,8 +121,10 @@ ncmpio_create(MPI_Comm     comm,
         if (flag && strcasecmp(value, "true") == 0)
             use_mpi_io = 1;
     }
+/*
 if ((env_str = getenv("PNETCDF_USE_MPI_IO")) != NULL) use_mpi_io = (strcasecmp(env_str, "true") == 0);
 printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_io);
+*/
 
     if (use_mpi_io == 1)
         fstype = ADIO_FSTYPE_MPIIO;
@@ -454,6 +456,25 @@ if (rank == 0) {
         err = ncmpio_intra_node_aggr_init(ncp);
         if (err != NC_NOERR) return err;
     }
+
+#if 0
+/* print ranks and their node IDs */
+fflush(stdout);
+MPI_Barrier(ncp->comm);
+if (ncp->rank == 0) {
+    int i, prev=-1;
+    for (i=0; i<ncp->nprocs; i++) {
+        if (prev != ncp->node_ids[i]) {
+            printf("\nNode %d: rank =", ncp->node_ids[i]);
+            prev = ncp->node_ids[i];
+        }
+        printf(" %d", i);
+    }
+    printf("\n");
+}
+fflush(stdout);
+MPI_Barrier(ncp->comm);
+#endif
 
     if (ncp->node_ids != NULL) NCI_Free(ncp->node_ids);
 
