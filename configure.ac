@@ -1175,6 +1175,8 @@ dnl AC_CHECK_FUNCS([memset setlocale sqrt strchr strrchr strtol])
 dnl AC_CHECK_LIB([m], [tanh])
 dnl UD_CHECK_LIB_MATH
 
+AC_CHECK_HEADERS([unistd.h fcntl.h malloc.h stddef.h sys/types.h limits.h time.h dirent.h])
+
 dnl When using gcc based compiler with -ansi flag, AC_CHECK_FUNCS can still
 dnl find strdup, but AC_CHECK_DECL cannot. So we check with AC_CHECK_DECL
 dnl first and then check AC_CHECK_FUNCS.
@@ -1379,8 +1381,11 @@ AC_CHECK_FUNCS([MPI_Type_create_subarray_c \
                 MPI_Type_get_true_extent_c \
                 MPI_Type_get_envelope_c \
                 MPI_Type_get_contents_c \
+                MPI_Status_set_elements_x \
                 MPI_Bcast_c \
                 MPI_Get_count_c \
+                MPI_Isend_c \
+                MPI_Irecv_c \
                 MPI_Pack_c \
                 MPI_Unpack_c \
                 MPI_File_read_at_c \
@@ -1522,6 +1527,80 @@ dnl     UD_CHECK_MPI_DATATYPE(MPI_REAL4)		dnl first defined in MPI 1.0
 dnl     UD_CHECK_MPI_DATATYPE(MPI_REAL8)		dnl first defined in MPI 1.0
 dnl     UD_CHECK_MPI_DATATYPE(MPI_DOUBLE_PRECISION)	dnl first defined in MPI 1.0
 dnl fi
+
+#
+# Check for statfs (many) and specifically f_fstypename field (BSD)
+#
+AC_CHECK_HEADERS(sys/vfs.h sys/param.h sys/mount.h sys/statvfs.h sys/stat.h sys/type.h unistd.h)
+
+AC_CHECK_FUNCS([statvfs statfs stat])
+
+AC_CHECK_MEMBERS([struct statvfs.f_basetype,
+                  struct statfs.f_fstypename,
+                  struct statfs.f_type,
+                  struct stat.st_fstype],[],[],
+             AC_INCLUDES_DEFAULT
+             [#ifdef HAVE_SYS_VFS_H
+              #include <sys/vfs.h>
+              #endif
+              #ifdef HAVE_SYS_PARAM_H
+              #include <sys/param.h>
+              #endif
+              #ifdef HAVE_SYS_MOUNT_H
+              #include <sys/mount.h>
+              #endif
+              #ifdef HAVE_SYS_STATFS_H
+              #include <sys/statfs.h>
+              #endif
+              #ifdef HAVE_SYS_STAT_H
+              #include <sys/stat.h>
+              #endif
+              #ifdef HAVE_SYS_TYPE_H
+              #include <sys/type.h>
+              #endif
+              #ifdef HAVE_UNISTD_H
+              #include <unistd.h>
+              #endif
+              ])
+
+AC_CHECK_TYPE([blksize_t],[],[AC_DEFINE_UNQUOTED([blksize_t],[__blksize_t],[Provide blksize_t if not available]) ], [[
+               #ifdef HAVE_SYS_TYPES_H
+               #include <sys/types.h>
+               #endif
+               #ifdef HAVE_SYS_STAT_H
+               #include <sys/stat.h>
+               #endif
+               #ifdef HAVE_UNISTD_H
+               #include <unistd.h>
+               #endif]] )
+
+AC_CHECK_DECLS([pwrite])
+
+#
+# Verify presence of lustre/lustre_user.h
+#
+AC_ARG_ENABLE([lustre],
+    [AS_HELP_STRING([--(en/dis)lustre],
+                    [Enable/disable PnetCDF Lustre driver. @<:@default: auto@:>@])],
+    [has_lustre=${enableval}], [has_lustre=auto]
+)
+UD_MSG_DEBUG([has_lustre=$has_lustre])
+
+if test "x$has_lustre" != xno ; then
+    AC_CHECK_HEADERS([linux/lustre/lustre_user.h lustre/lustre_user.h], break)
+    if test x"$ac_cv_header_linux_lustre_lustre_user_h" = "xyes" -o x"$ac_cv_header_lustre_lustre_user_h" = "xyes" ; then
+        AC_DEFINE(HAVE_LUSTRE, 1, [Define for LUSTRE])
+        has_lustre=yes
+        LIBS="$LIBS -llustreapi"
+    else
+        has_lustre=no
+    fi
+fi
+if test "$MIMIC_LUSTRE" = yes ; then
+   AC_DEFINE(MIMIC_LUSTRE, 1, [Define for Hecking ROMIO to mimic LUSTRE])
+   has_lustre=yes
+fi
+AM_CONDITIONAL(HAVE_LUSTRE, [test x$has_lustre = xyes])
 
 AC_C_CHAR_UNSIGNED
 AC_C_BIGENDIAN
