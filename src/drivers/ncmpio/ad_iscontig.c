@@ -1,63 +1,13 @@
 /*
- * Copyright (C) by Argonne National Laboratory
- *     See COPYRIGHT in top-level directory
+ *  Copyright (C) 2025, Northwestern University
+ *  See COPYRIGHT notice in top-level directory.
  */
 
-#include "adio.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
-#if defined(ROMIO_INSIDE_MPICH) || defined(HAVE_MPIR_EXT_DATATYPE_ISCONTIG)
-
-/* MPICH also provides this routine */
-int MPIR_Ext_datatype_iscontig(MPI_Datatype datatype, int *flag);
-
-void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
-{
-    MPIR_Ext_datatype_iscontig(datatype, flag);
-
-    /* if the datatype is reported as contiguous, check if the true_lb is
-     * non-zero, and if so, mark the datatype as noncontiguous */
-    if (*flag) {
-        MPI_Aint true_extent, true_lb;
-
-        MPI_Type_get_true_extent(datatype, &true_lb, &true_extent);
-
-        if (true_lb > 0)
-            *flag = 0;
-    }
-}
-
-#elif (defined(MPIHP) && defined(HAVE_MPI_INFO))
-/* i.e. HPMPI 1.4 only */
-
-int hpmp_dtiscontig(MPI_Datatype datatype);
-
-void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
-{
-    *flag = hpmp_dtiscontig(datatype);
-}
-
-#elif (defined(MPISGI) && !defined(NO_MPI_SGI_type_is_contig))
-
-int MPI_SGI_type_is_contig(MPI_Datatype datatype);
-
-void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
-{
-    MPI_Aint displacement, extent;
-    MPI_Type_get_extent(datatype, &distplacement, &extent);
-
-    /* SGI's MPI_SGI_type_is_contig() returns true for indexed
-     * datatypes with holes at the beginning, which causes
-     * problems with ROMIO's use of this function.
-     */
-    *flag = MPI_SGI_type_is_contig(datatype) && (displacement == 0);
-}
-
-#elif defined(ROMIO_INSIDE_OMPI)
-
-/* void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag) is defined
- * and implemented in OpenMPI itself */
-
-#else
+#include <ncmpio_NC.h>
 
 void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 {
@@ -117,4 +67,3 @@ void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
     /* This function needs more work. It should check for contiguity
      * in other cases as well. */
 }
-#endif
