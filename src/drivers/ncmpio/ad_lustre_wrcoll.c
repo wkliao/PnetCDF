@@ -82,9 +82,28 @@ static void ADIOI_LUSTRE_W_Exchange_data(ADIO_File fd, const void *buf,
                                          disp_len_list *send_list,
                                          disp_len_list *recv_list,
                                          int *error_code);
+static
+int ADIOI_LUSTRE_Calc_aggregator(ADIO_File fd,
+                                 ADIO_Offset off,
+                                 ADIO_Offset *len)
+{
+    ADIO_Offset avail_bytes, stripe_id;
 
-/* ADIOI_LUSTRE_Calc_my_req() - calculates what portions of the read/write
- * requests of this process fall into the file domains of all I/O aggregators.
+    stripe_id = off / fd->hints->striping_unit;
+
+    avail_bytes = (stripe_id + 1) * fd->hints->striping_unit - off;
+    if (avail_bytes < *len) {
+        /* The request [off, off+len) has only [off, off+avail_bytes) part
+         * falling into aggregator's file domain */
+        *len = avail_bytes;
+    }
+    /* return the index to ranklist[] */
+    return (stripe_id % fd->hints->cb_nodes);
+}
+
+/*----< ADIOI_LUSTRE_Calc_my_req() >-----------------------------------------*/
+/* calculates what portions of the read/write requests of this process fall
+ * into the file domains of all I/O aggregators.
  *   IN: flat_fview: this rank's flattened write requests
  *       flat_fview.count: number of noncontiguous offset-length file requests
  *       flat_fview.off[flat_fview.count] file offsets of individual
@@ -664,15 +683,11 @@ fd->lustre_write_metrics[0] = MPI_Wtime();
             do_collect = 1;
         else if (nprocs == 1)
             do_collect = 0;
-        else if (large_indv_req && fd->hints->cb_nodes <= fd->hints->striping_factor)
+        else if (large_indv_req &&
+                 fd->hints->cb_nodes <= fd->hints->striping_factor)
             /* do independent write, if every rank's write range >
              * striping_range and writes are not interleaved in file space */
             do_collect = 0;
-        else
-            /* This ADIOI_LUSTRE_Docollect() calls MPI_Allreduce(), so all
-             * processes must participate.
-             */
-            do_collect = ADIOI_LUSTRE_Docollect(fd, flat_fview.count, flat_fview.len, nprocs);
     }
 
     /* If collective I/O is not necessary, use independent I/O */
