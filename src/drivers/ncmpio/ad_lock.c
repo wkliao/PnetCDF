@@ -1,10 +1,60 @@
 /*
- * Copyright (C) by Argonne National Laboratory
- *     See COPYRIGHT in top-level directory
+ *  Copyright (C) 2025, Northwestern University
+ *  See COPYRIGHT notice in top-level directory.
  */
 
-#include "adio.h"
-#include "lock_internal.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#include <fcntl.h>
+
+#include <ncmpio_NC.h>
+
+static
+const char *ADIOI_GEN_flock_cmd_to_string(int cmd)
+{
+    switch (cmd) {
+#ifdef F_GETLK64
+        case F_GETLK64:
+            return "F_GETLK64";
+#else
+        case F_GETLK:
+            return "F_GETLK";
+#endif
+#ifdef F_SETLK64
+        case F_SETLK64:
+            return "F_SETLK64";
+#else
+        case F_SETLK:
+            return "F_SETLK";
+#endif
+#ifdef F_SETLKW64
+        case F_SETLKW64:
+            return "F_SETLKW64";
+#else
+        case F_SETLKW:
+            return "F_SETLKW";
+#endif
+        default:
+            return "UNEXPECTED";
+    }
+}
+
+static
+const char *ADIOI_GEN_flock_type_to_string(int type)
+{
+    switch (type) {
+        case F_RDLCK:
+            return "F_RDLCK";
+        case F_WRLCK:
+            return "F_WRLCK";
+        case F_UNLCK:
+            return "F_UNLOCK";
+        default:
+            return "UNEXPECTED";
+    }
+}
 
 #ifdef ROMIO_NTFS
 /* This assumes that lock will always remain in the common directory and
