@@ -178,7 +178,7 @@ flat_mem += sizeof(ADIOI_Flatlist_node) + flat->count * 2 * sizeof(ADIO_Offset);
  * time something's added to flat's arrays, let's make sure they're big enough
  * and re-alloc if not.
  */
-static void flatlist_node_grow(ADIOI_Flatlist_node * flat, int idx)
+static void flatlist_node_grow(ADIOI_Flatlist_node * flat, MPI_Count idx)
 {
     if (idx >= flat->count) {
         ADIO_Offset *new_blocklens;
@@ -266,7 +266,7 @@ static ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 
 }
 
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
 static inline int downcast_i(MPI_Count count_value)
 {
     int int_value = (int) count_value;
@@ -286,7 +286,7 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
                               int *nints, int *nadds, int *ntypes,
                               int **ints, MPI_Aint ** adds, MPI_Datatype ** types)
 {
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count nints_c, nadds_c, ncnts_c, ntypes_c;
     int *ints_c;
     MPI_Aint *adds_c;

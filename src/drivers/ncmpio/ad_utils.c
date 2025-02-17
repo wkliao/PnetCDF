@@ -12,7 +12,7 @@
 int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner)
 {
     int ret;
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count ni, na, nc, nt;
     ret = MPI_Type_get_envelope_c(datatype, &ni, &na, &nc, &nt, combiner);
 #else
@@ -170,7 +170,7 @@ int ADIOI_Type_create_hindexed_x(MPI_Count count,
     }
 
     if (is_big) {
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
         ret = MPI_Type_create_struct_c(count, blocklens, array_of_displacements, types, newtype);
 #else
         CAST_INT32(MPI_Type_create_struct, count, blocklens, array_of_displacements, types, newtype);
@@ -179,7 +179,7 @@ int ADIOI_Type_create_hindexed_x(MPI_Count count,
             if (types[i] != oldtype)
                 MPI_Type_free(&(types[i]));
     } else {
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
         ret =
             MPI_Type_create_hindexed_c(count, blocklens, array_of_displacements, oldtype, newtype);
 #else

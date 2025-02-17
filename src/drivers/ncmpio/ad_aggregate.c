@@ -504,7 +504,7 @@ void ADIOI_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
             memcpy(others_req[i].offsets, my_req[i].offsets,
                    2 * my_req[i].count * sizeof(ADIO_Offset));
         else {
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
             MPI_Irecv_c(others_req[i].offsets, 2 * others_req[i].count,
                         ADIO_OFFSET, i, i + myrank, fd->comm, &requests[j++]);
 #else
@@ -517,7 +517,7 @@ void ADIOI_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
 
     for (i = 0; i < nprocs; i++) {
         if (my_req[i].count && i != myrank) {
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
             MPI_Isend_c(my_req[i].offsets, 2 * my_req[i].count,
                         ADIO_OFFSET, i, i + myrank, fd->comm, &requests[j++]);
 #else
@@ -647,7 +647,7 @@ void ADIOI_Icalc_others_req_main(ADIOI_NBC_Request * nbc_req, int *error_code)
     j = 0;
     for (i = 0; i < nprocs; i++) {
         if (others_req[i].count) {
-#if MPI_VERSION >= 4
+#ifdef MPI_VERSION >= 4
             MPI_Irecv_c(others_req[i].offsets, 2 * others_req[i].count,
                         ADIO_OFFSET, i, i + myrank, fd->comm, &vars->req2[j++]);
 #else
@@ -660,7 +660,7 @@ void ADIOI_Icalc_others_req_main(ADIOI_NBC_Request * nbc_req, int *error_code)
 
     for (i = 0; i < nprocs; i++) {
         if (my_req[i].count) {
-#if MPI_VERSION >= 4
+#ifdef MPI_VERSION >= 4
             MPI_Isend_c(my_req[i].offsets, 2 * my_req[i].count,
                         ADIO_OFFSET, i, i + myrank, fd->comm, &vars->req2[j++]);
 #else
