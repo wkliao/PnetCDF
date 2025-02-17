@@ -22,10 +22,9 @@
 #include <common.h>
 #include "ncmpio_NC.h"
 
-#include "pnc_lustre.h"
 
 
-/*----< PNC_File_close() >---------------------------------------------------*/
+/*----< PNC_File_sync() >----------------------------------------------------*/
 int PNC_File_sync(PNC_File fd)
 {
     int err = NC_NOERR;
@@ -141,7 +140,7 @@ static
 int PNC_Type_get_combiner(MPI_Datatype datatype, int *combiner)
 {
     int ret;
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count ni, na, nc, nt;
     ret = MPI_Type_get_envelope_c(datatype, &ni, &na, &nc, &nt, combiner);
 #else
@@ -607,7 +606,7 @@ void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag)
                 MPI_Aint *adds;
                 MPI_Count *cnts;
                 MPI_Datatype *types;
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count nints, nadds, ncnts, ntypes;
                 MPI_Type_get_envelope_c(datatype, &nints, &nadds, &ncnts, &ntypes, &combiner);
 #else
@@ -618,7 +617,7 @@ void PNC_Datatype_iscontig(MPI_Datatype datatype, int *flag)
                 adds = (MPI_Aint *) ADIOI_Malloc((nadds + 1) * sizeof(MPI_Aint));
                 cnts = (MPI_Count *) ADIOI_Malloc((ncnts + 1) * sizeof(MPI_Count));
                 types = (MPI_Datatype *) ADIOI_Malloc((ntypes + 1) * sizeof(MPI_Datatype));
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Type_get_contents_c(datatype, nints, nadds, ncnts, ntypes, ints, adds, cnts,
                                         types);
 #else
@@ -692,6 +691,7 @@ int PNC_File_set_view(PNC_File      fd,
     /* PnetCDF only uses etype = MPI_BYTE */
     fd->etype = etype;
 
+    PNC_Type_dispose(&fd->filetype);
     PNC_Type_ispredef(filetype, &is_predef);
     if (is_predef) {
         fd->filetype = filetype;
@@ -699,6 +699,7 @@ int PNC_File_set_view(PNC_File      fd,
     } else {
         MPI_Type_dup(filetype, &copy_filetype);
         MPI_Type_commit(&copy_filetype);
+
         fd->filetype = copy_filetype;
         PNC_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
@@ -717,7 +718,7 @@ int PNC_File_set_view(PNC_File      fd,
     /* reset MPI-IO file pointer to point to the first byte that can
      * be accessed in this view. */
 
-printf("%s line %d: filetype_is_contig=%d\n",__func__,__LINE__,(filetype_is_contig!=0));
+// printf("%s line %d: filetype_is_contig=%d\n",__func__,__LINE__,(filetype_is_contig!=0));
     if (filetype_is_contig)
         fd->fp_ind = disp;
     else {

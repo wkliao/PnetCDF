@@ -179,6 +179,7 @@ void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
         return;
     }
 
+
     /* We're going to perform aggregation of I/O.  Here we call
      * ADIOI_Calc_file_domains() to determine what processes will handle I/O
      * to what regions.  We pass nprocs_for_coll into this function; it is
@@ -759,8 +760,10 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
         actual_recved_bytes += recved_bytes;
     }
 
-#ifdef HAVE_STATUS_SET_BYTES
-    MPIR_Status_set_bytes(status, datatype, actual_recved_bytes);
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+    MPI_Status_set_elements_x(status, MPI_BYTE, actual_recved_bytes);
+#else
+    MPI_Status_set_elements(status, MPI_BYTE, actual_recved_bytes);
 #endif
 
     ADIOI_Free(curr_offlen_ptr);
@@ -815,7 +818,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
     if (buftype_is_contig) {
         for (i = 0; i < nprocs; i++) {
             if (recv_size[i]) {
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Irecv_c(((char *) buf) + buf_idx[i], recv_size[i],
                             MPI_BYTE, i, ADIOI_COLL_TAG(i, iter), fd->comm, requests + j);
 #else
@@ -836,7 +839,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
         j = 0;
         for (i = 0; i < nprocs; i++) {
             if (recv_size[i]) {
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Irecv_c(recv_buf[i], recv_size[i], MPI_BYTE, i,
                             ADIOI_COLL_TAG(i, iter), fd->comm, requests + j);
 #else
@@ -896,7 +899,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
         j = 0;
         for (i = 0; i < nprocs; i++) {
             if (recv_size[i]) {
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count count_recved;
                 MPI_Get_count_c(&statuses[j], MPI_BYTE, &count_recved);
 #else
