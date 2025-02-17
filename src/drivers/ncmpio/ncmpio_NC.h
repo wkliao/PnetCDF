@@ -22,6 +22,8 @@
 #define NC_DEFAULT_V_MINFREE 0
 #define NC_DEFAULT_R_ALIGN   4
 
+#include "pnc_lustre.h"
+
 #define FILE_ALIGNMENT_DEFAULT 512
 #define FILE_ALIGNMENT_LB      4
 
@@ -454,6 +456,8 @@ struct NC {
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double aggr_time;
 #endif
+    int is_lustre;
+    PNC_File pnc_fh;
 };
 
 #define NC_readonly(ncp)   fIsSet((ncp)->flags, NC_MODE_RDONLY)
@@ -490,12 +494,14 @@ ncmpio_NC_check_voffs(NC *ncp);
 typedef struct bufferinfo {
     MPI_Comm    comm;
     MPI_File    collective_fh;
+    PNC_File    pnc_fh;
     MPI_Offset  get_size; /* amount of file read n bytes so far */
     MPI_Offset  offset;   /* current read/write offset in the file */
     int         chunk;    /* chunk size for reading the header */
     int         version;  /* 1, 2, and 5 for CDF-1, 2, and 5 respectively */
     int         safe_mode;/* 0: disabled, 1: enabled */
     int         coll_mode;/* 0: independent, 1: collective */
+    int         is_lustre;
     char       *base;     /* beginning of read/write buffer */
     char       *pos;      /* current position in buffer */
     char       *end;      /* end position of buffer */
