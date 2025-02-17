@@ -78,7 +78,7 @@ void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
                 MPI_Aint *adds;
                 MPI_Count *cnts;
                 MPI_Datatype *types;
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count nints, nadds, ncnts, ntypes;
                 MPI_Type_get_envelope_c(datatype, &nints, &nadds, &ncnts, &ntypes, &combiner);
 #else
@@ -89,7 +89,7 @@ void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
                 adds = (MPI_Aint *) ADIOI_Malloc((nadds + 1) * sizeof(MPI_Aint));
                 cnts = (MPI_Count *) ADIOI_Malloc((ncnts + 1) * sizeof(MPI_Count));
                 types = (MPI_Datatype *) ADIOI_Malloc((ntypes + 1) * sizeof(MPI_Datatype));
-#if MPI_VERSION >= 4
+#ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Type_get_contents_c(datatype, nints, nadds, ncnts, ntypes, ints, adds, cnts,
                                         types);
 #else
