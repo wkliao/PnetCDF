@@ -176,9 +176,7 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
 
     MPI_Type_size_x(fd->filetype, &filetype_size);
     if (!filetype_size) {
-#ifdef HAVE_STATUS_SET_BYTES
-        MPIR_Status_set_bytes(status, datatype, 0);
-#endif
+        MPI_Status_set_elements(status, fd->filetype, 0);
         *error_code = MPI_SUCCESS;
         return;
     }
@@ -331,8 +329,10 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                 }
             }
             fd->fp_sys_posn = -1;       /* set it to null. */
-#ifdef HAVE_STATUS_SET_BYTES
-            MPIR_Status_set_bytes(status, datatype, bufsize);
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+            MPI_Status_set_elements_x(status, datatype, count);
+#else
+            MPI_Status_set_elements(status, datatype, count);
 #endif
             ADIOI_Free(writebuf);
             return;
@@ -498,10 +498,11 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
 
     fd->fp_sys_posn = -1;       /* set it to null. */
 
-#ifdef HAVE_STATUS_SET_BYTES
-    MPIR_Status_set_bytes(status, datatype, bufsize);
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+    MPI_Status_set_elements_x(status, datatype, count);
+#else
+    MPI_Status_set_elements(status, datatype, count);
+#endif
 /* This is a temporary way of filling in status. The right way is to
     keep track of how much data was actually written by ADIOI_BUFFERED_WRITE. */
-#endif
-
 }
