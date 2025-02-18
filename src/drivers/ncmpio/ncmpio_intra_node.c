@@ -169,13 +169,16 @@ qsort_off_len_buf(MPI_Aint num,
  * will be divided into groups. The number of groups is the number of
  * aggregators on that node. The rank IDs of each group must be established.
  *
- * 1. Find the affinity of each MPI process to the compute node.
+ * 1. Find the affinity of each MPI process to the compute node. This should
+ *    have been done from a call to ncmpii_construct_node_list() during
+ *    ncmpio_create() and ncmpio_open().
  * 2. Determine whether self process is an intra-node aggregator.
  * 3. For an aggregator, find the number of non-aggregators assigned to it and
  *    construct rank IDs of assigned non-aggregators.
  * 4. For a non-aggregator, find the rank ID of its assigned aggregator.
  *
- * This subroutine creates the followings.
+ * This subroutine should be called only once per file at ncmpio_create() or
+ * ncmpio_open(). It sets the following variables.
  *   ncp->my_aggr          rank ID of my aggregator
  *   ncp->num_nonaggrs     number of non-aggregators assigned to me
  *   ncp->nonaggr_ranks[]  rank IDs of assigned non-aggregators
@@ -191,16 +194,15 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     ncp->num_nonaggrs = 0;     /* number of non-aggregators assigned */
     ncp->nonaggr_ranks = NULL; /* ranks of assigned non-aggregators */
 
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncp->aggr_time = 0.0;
-#endif
-
     if (ncp->num_aggrs_per_node == 0 || ncp->num_aggrs_per_node == ncp->nprocs)
         /* disable intra-node aggregation */
         return NC_NOERR;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double timing = MPI_Wtime();
+    ncp->aggr_time[0] = ncp->aggr_time[1] = 0.0;
+    ncp->aggr_time[2] = ncp->aggr_time[3] = 0.0;
+    ncp->aggr_time[4] = 0.0;
 #endif
 
     /* allocate space for storing the rank IDs of non-aggregators assigned to
@@ -295,7 +297,7 @@ ncmpio_intra_node_aggr_init(NC *ncp)
      */
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncp->aggr_time = MPI_Wtime() - timing;
+    ncp->aggr_time[0] = MPI_Wtime() - timing;
 #endif
 
     return NC_NOERR;
@@ -722,7 +724,7 @@ intra_node_aggregation(NC           *ncp,
     MPI_File fh;
     MPI_Request *req=NULL;
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    double timing = MPI_Wtime();
+    double endT, startT = MPI_Wtime();
 #endif
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count bufLen;
@@ -1004,6 +1006,11 @@ intra_node_aggregation(NC           *ncp,
         NCI_Free(lengths);
     }
 
+#ifdef PNETCDF_PROFILING
+    endT = MPI_Wtime();
+    ncp->aggr_time[2] += endT - startT;
+#endif
+
     /* aggregator sorts the offset-length pairs, along with the buffer */
     if (ncp->rank == ncp->my_aggr && npairs > 0) {
 
@@ -1017,6 +1024,11 @@ intra_node_aggregation(NC           *ncp,
          * an increasing order
          */
         qsort_off_len_buf(npairs, offsets, lengths, bufAddr);
+
+#ifdef PNETCDF_PROFILING
+    endT = MPI_Wtime();
+    ncp->aggr_time[3] += endT - startT;
+#endif
 
         /* merge the overlapped buffer segments, skip the overlapped regions
          * for those with higher j indices (i.e. requests with lower j indices
@@ -1123,7 +1135,8 @@ intra_node_aggregation(NC           *ncp,
     }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncp->aggr_time += MPI_Wtime() - timing;
+    endT = MPI_Wtime();
+    ncp->aggr_time[4] += endT - startT;
 #endif
 
     if (ncp->rank != ncp->my_aggr) /* non-aggregator writes nothing */
@@ -1204,7 +1217,7 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
         NCI_Free(put_list);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncp->aggr_time += MPI_Wtime() - timing;
+    ncp->aggr_time[1] += MPI_Wtime() - timing;
 #endif
 
     err = intra_node_aggregation(ncp, num_pairs, offsets, lengths, bufLen,
@@ -1281,7 +1294,7 @@ ncmpio_intra_node_aggregation(NC               *ncp,
     status = err;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncp->aggr_time += MPI_Wtime() - timing;
+    ncp->aggr_time[1] += MPI_Wtime() - timing;
 #endif
 
     err = intra_node_aggregation(ncp, num_pairs, offsets, lengths, bufCount,

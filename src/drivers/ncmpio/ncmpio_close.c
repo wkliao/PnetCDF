@@ -172,6 +172,24 @@ ncmpio_close(void *ncdp)
     }
 #endif
 
+#ifdef PNETCDF_PROFILING
+if (! NC_readonly(ncp)) {
+double tt[8],max_t[8];
+tt[0] = ncp->aggr_time[0];
+tt[1] = ncp->aggr_time[1];
+tt[2] = ncp->aggr_time[2];
+tt[3] = ncp->aggr_time[3];
+tt[4] = ncp->aggr_time[4];
+tt[5] = ncp->adio_fh->lustre_write_metrics[0];
+tt[6] = ncp->adio_fh->lustre_write_metrics[1];
+tt[7] = ncp->adio_fh->lustre_write_metrics[2];
+MPI_Reduce(tt, max_t, 8, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
+if (ncp->rank == 0) printf("%s: MAX intra-node time %.4f %.4f %.4f %.4f %.4f coll time write=%.4f pwrite=%.4f all-to-many senders=%ld (nprocs=%d)\n", __func__,
+max_t[0], max_t[1], max_t[2], max_t[3], max_t[4],
+max_t[5], max_t[6], (long)max_t[7], ncp->nprocs);
+}
+#endif
+
     /* calling MPI_File_close() */
     err = ncmpio_close_files(ncp, 0);
     if (status == NC_NOERR) status = err;
