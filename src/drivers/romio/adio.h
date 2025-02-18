@@ -200,7 +200,7 @@ typedef struct {
     ADIOI_Hints *hints;     /* structure containing fs-indep. info values */
     MPI_Info info;
 
-double lustre_write_metrics[3];
+double lustre_write_metrics[4];
 } ADIO_FileD;
 
 typedef ADIO_FileD *ADIO_File;
