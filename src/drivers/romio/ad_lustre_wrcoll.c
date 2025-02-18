@@ -513,8 +513,9 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
 
     orig_fp = fd->fp_ind;
 
-fd->lustre_write_metrics[1] = fd->lustre_write_metrics[2] = 0;
-fd->lustre_write_metrics[0] = MPI_Wtime();
+#ifdef PNETCDF_PROFILING
+double curT = MPI_Wtime();
+#endif
 
     /* Using user buffer datatype, count, and fileview to construct a list of
      * starting file offsets and write lengths of this rank and store them in
@@ -859,10 +860,8 @@ static int wkl=0; if (wkl==0 && fd->disp>0) { printf("%s %d: --- SWITCH to indep
 #endif
     }
 
-#if defined(HAVE_LUSTRE) && !defined(MIMIC_LUSTRE)
-fd->lustre_write_metrics[0] = MPI_Wtime() - fd->lustre_write_metrics[0];
-double max_t[3]; MPI_Reduce(fd->lustre_write_metrics, max_t, 3, MPI_DOUBLE, MPI_MAX, 0, fd->comm);
-if (myrank == 0) printf("%s line %d: MAX lustre time write=%.4f pwrite=%.4f all-to-many senders=%ld (nprocs=%d)\n", __func__, __LINE__, max_t[0], max_t[1], (long)max_t[2], nprocs);
+#ifdef PNETCDF_PROFILING
+fd->lustre_write_metrics[0] += MPI_Wtime() - curT;
 #endif
 }
 
@@ -999,7 +998,9 @@ void commit_comm_phase(ADIO_File      fd,
     nreqs = 0;
 
     /* receiving part */
+#ifdef PNETCDF_PROFILING
 int nrecvs = 0;
+#endif
     if (fd->is_agg) {
         for (i = 0; i < nprocs; i++) {
             if (recv_list[i].count > 0) {
@@ -1021,7 +1022,9 @@ int nrecvs = 0;
                     MPI_Irecv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm,
                               &reqs[nreqs++]);
                 MPI_Type_free(&recvType);
+#ifdef PNETCDF_PROFILING
 nrecvs++;
+#endif
             }
         }
     }
@@ -1044,7 +1047,10 @@ nrecvs++;
             MPI_Type_free(&sendType);
         }
     }
-fd->lustre_write_metrics[2] = (fd->lustre_write_metrics[2] > nrecvs) ? fd->lustre_write_metrics[2] : nrecvs;
+
+#ifdef PNETCDF_PROFILING
+fd->lustre_write_metrics[2] = MAX(fd->lustre_write_metrics[2], nrecvs);
+#endif
 
     if (nreqs > 0)
         MPI_Waitall(nreqs, reqs, MPI_STATUSES_IGNORE);
