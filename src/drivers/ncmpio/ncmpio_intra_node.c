@@ -1128,7 +1128,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
-    ncp->aggr_time[2] += endT - startT;
+    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[2] += endT - startT;
     startT = endT;
 #endif
 
@@ -1197,8 +1197,10 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 
 #ifdef PNETCDF_PROFILING
         endT = MPI_Wtime();
-        ncp->aggr_time[3] += endT - startT;
-        ncp->aggr_time[5] = MAX(ncp->aggr_time[5], npairs);
+        if (ncp->rank == ncp->my_aggr) {
+            ncp->aggr_time[3] += endT - startT;
+            ncp->aggr_time[5] = MAX(ncp->aggr_time[5], npairs);
+        }
         startT = endT;
 #endif
 
@@ -1384,7 +1386,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("==== %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     endT = MPI_Wtime();
-    ncp->aggr_time[4] += endT - startT;
+    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[4] += endT - startT;
 #endif
 
     if (ncp->rank != ncp->my_aggr) { /* non-aggregator writes nothing */
@@ -1496,7 +1498,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         NCI_Free(put_list);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncp->aggr_time[1] += MPI_Wtime() - timing;
+    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[1] += MPI_Wtime() - timing;
 #endif
 
     err = intra_node_aggregation(ncp, is_incr, num_pairs, offsets, lengths,
@@ -1576,7 +1578,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
     status = err;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncp->aggr_time[1] += MPI_Wtime() - timing;
+    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[1] += MPI_Wtime() - timing;
 #endif
 
     err = intra_node_aggregation(ncp, is_incr, num_pairs, offsets, lengths,
