@@ -1026,7 +1026,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: max
 ncmpi_inq_malloc_max_size(&maxm); if (myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 
 #ifdef PNETCDF_PROFILING
-fd->lustre_write_metrics[0] += MPI_Wtime() - curT;
+if (fd->is_agg) fd->lustre_write_metrics[0] += MPI_Wtime() - curT;
 #endif
 }
 
@@ -1214,7 +1214,7 @@ nrecvs++;
     }
 
 #ifdef PNETCDF_PROFILING
-fd->lustre_write_metrics[2] = MAX(fd->lustre_write_metrics[2], nrecvs);
+fd->lustre_write_metrics[3] = MAX(fd->lustre_write_metrics[3], nrecvs);
 #endif
 
     if (nreqs > 0)
@@ -1622,8 +1622,16 @@ timing[5] += e_time - s_time;
 MPI_Barrier(fd->comm);
 s_time = MPI_Wtime();
 #endif
+
+#ifdef PNETCDF_PROFILING
+double curT = MPI_Wtime();
+#endif
             /* communication phase */
             commit_comm_phase(fd, send_list, recv_list);
+#ifdef PNETCDF_PROFILING
+if (fd->is_agg) fd->lustre_write_metrics[2] += MPI_Wtime() - curT;
+#endif
+
 #ifdef WKL_DEBUG
 e_time = MPI_Wtime();
 timing[1] += e_time - s_time;
