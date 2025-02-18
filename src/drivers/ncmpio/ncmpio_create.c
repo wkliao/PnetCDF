@@ -42,9 +42,9 @@ ncmpio_create(MPI_Comm     comm,
               MPI_Info     user_info, /* user's and env info combined */
               void       **ncpp)
 {
-    char *env_str, *filename, *mpi_name;
+    char *env_str, *filename, value[MPI_MAX_INFO_VAL + 1], *mpi_name;
     int rank, nprocs, mpiomode, err, mpireturn, default_format, file_exist=1;
-    int use_trunc=1, fstype;
+    int use_trunc=1, fstype, flag, use_mpi_io;
     MPI_File fh=MPI_FILE_NULL;
     MPI_Info info_used;
     NC *ncp=NULL;
@@ -115,8 +115,17 @@ ncmpio_create(MPI_Comm     comm,
 #endif
 
     /* If user explicitly want to use MPI-IO, then set fstype to ADIO_FSTYPE_MPIIO */
-    /* check file system type */
-    fstype = ADIO_FileSysType(path);
+    use_mpi_io = 0;
+    if (user_info != MPI_INFO_NULL) {
+        MPI_Info_get(user_info, "nc_use_mpi_io", MPI_MAX_INFO_VAL-1, value, &flag);
+        if (flag && strcasecmp(value, "true") == 0)
+            use_mpi_io = 1;
+    }
+    if (use_mpi_io == 1)
+        fstype = ADIO_FSTYPE_MPIIO;
+    else
+        /* check file system type */
+        fstype = ADIO_FileSysType(path);
 
     if (fIsSet(cmode, NC_NOCLOBBER)) {
         /* check if file exists: NC_EEXIST is returned if the file already
@@ -366,7 +375,6 @@ ncmpio_create(MPI_Comm     comm,
     /* set cb_nodes and construct the cb_node rank list */
     if (fstype != ADIO_FSTYPE_MPIIO) {
         int i;
-        char value[MPI_MAX_INFO_VAL + 1];
 
         if (fstype == ADIO_LUSTRE) {
             ADIO_Lustre_set_aggr_list(adio_fh, ncp->num_nodes, ncp->node_ids);
