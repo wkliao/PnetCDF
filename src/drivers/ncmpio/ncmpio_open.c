@@ -39,8 +39,8 @@ ncmpio_open(MPI_Comm     comm,
             MPI_Info     user_info, /* user's and env info combined */
             void       **ncpp)
 {
-    char *filename, *env_str;
-    int i, mpiomode, err, status=NC_NOERR, mpireturn, fstype;
+    char *filename, *env_str, value[MPI_MAX_INFO_VAL + 1];
+    int i, mpiomode, err, status=NC_NOERR, mpireturn, fstype, use_mpi_io, flag;
     MPI_File fh=MPI_FILE_NULL;
     MPI_Info info_used;
     NC *ncp=NULL;
@@ -60,8 +60,17 @@ ncmpio_open(MPI_Comm     comm,
     if (omode & NC_MMAP) DEBUG_RETURN_ERROR(NC_EINVAL_OMODE)
 
     /* If user explicitly want to use MPI-IO, then set fstype to ADIO_FSTYPE_MPIIO */
-    /* check file system type */
-    fstype = ADIO_FileSysType(path);
+    use_mpi_io = 0;
+    if (user_info != MPI_INFO_NULL) {
+        MPI_Info_get(user_info, "nc_use_mpi_io", MPI_MAX_INFO_VAL-1, value, &flag);
+        if (flag && strcasecmp(value, "true") == 0)
+            use_mpi_io = 1;
+    }
+    if (use_mpi_io == 1)
+        fstype = ADIO_FSTYPE_MPIIO;
+    else
+        /* check file system type */
+        fstype = ADIO_FileSysType(path);
 
     if (fstype != ADIO_FSTYPE_MPIIO) {
         adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
@@ -179,7 +188,6 @@ ncmpio_open(MPI_Comm     comm,
     /* set cb_nodes and construct the cb_node rank list */
     if (fstype != ADIO_FSTYPE_MPIIO) {
         int i;
-        char value[MPI_MAX_INFO_VAL + 1];
 
         if (fstype == ADIO_LUSTRE) {
             ADIO_Lustre_set_aggr_list(adio_fh, ncp->num_nodes, ncp->node_ids);
