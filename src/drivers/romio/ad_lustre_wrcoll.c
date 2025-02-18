@@ -7,6 +7,10 @@
 # include <config.h>
 #endif
 
+#ifdef DUMP_8_NODE_ALLTOMANY
+static int num_commit_comm_phase, *amt_sends, *amt_recvs;
+#endif
+
 static int debug=1;
 #include <adio.h>
 
@@ -1237,7 +1241,15 @@ MPI_Offset r_amnt=0;
             /* check if nothing to receive or if self */
             if (recv_list[i].count == 0 || i == rank) continue;
 
-for (j=0; j<recv_list[i].count; j++) r_amnt += recv_list[i].len[j];
+#ifdef DUMP_8_NODE_ALLTOMANY
+{ int j;
+MPI_Offset _amnt=0;
+for (j=0; j<recv_list[i].count; j++) _amnt += recv_list[i].len[j];
+r_amnt += _amnt;
+amt_recvs[num_commit_comm_phase * 1024 + i] = _amnt;
+}
+#endif
+
 max_r_amnt = MAX(max_r_amnt, r_amnt);
 max_r_count = MAX(max_r_count, recv_list[i].count);
 
@@ -1280,7 +1292,15 @@ MPI_Offset s_amnt=0;
         /* check if nothing to send or if self */
         if (send_list[i].count == 0 || i == fd->my_cb_nodes_index) continue;
 
-for (j=0; j<send_list[i].count; j++) s_amnt += send_list[i].len[j];
+#ifdef DUMP_8_NODE_ALLTOMANY
+{ int j;
+MPI_Offset _amnt=0;
+for (j=0; j<send_list[i].count; j++) _amnt += send_list[i].len[j];
+s_amnt += _amnt;
+amt_sends[num_commit_comm_phase*1024 + fd->hints->ranklist[i]] = _amnt;
+}
+#endif
+
 max_s_amnt = MAX(max_s_amnt, s_amnt);
 max_s_count = MAX(max_s_count, send_list[i].count);
 
@@ -1322,6 +1342,9 @@ fd->lustre_write_metrics[9] = MAX(fd->lustre_write_metrics[9], max_s_count);
         MPI_Waitall(nreqs, reqs, MPI_STATUSES_IGNORE);
 
     ADIOI_Free(reqs);
+#ifdef DUMP_8_NODE_ALLTOMANY
+num_commit_comm_phase++;
+#endif
 }
 
     /* clear send_list and recv_list for future reuse */
@@ -1432,6 +1455,14 @@ if (myrank == 0) printf("%s line %d: cb_nodes=%d striping_unit=%d step_size=%lld
 
 wkl_ntimes=ntimes;
 wkl_nbufs=nbufs;
+#ifdef DUMP_8_NODE_ALLTOMANY
+{
+num_commit_comm_phase=0;
+amt_sends=(int*)calloc(256*1024, sizeof(int));
+amt_recvs=(int*)calloc(256*1024, sizeof(int));
+}
+#endif
+
 #if 0
 /* for striping size 4M 8M and 64 OSTs, on 16 compute nodes, setting nbufs to 1 still yields large comm time */
 nbufs = 1;
@@ -1922,6 +1953,37 @@ fflush(stdout);
 }
 
 if (myrank == 0) printf("%s ---- %.4f %.4f %.4f %.4f %.4f %.4f\n",__func__,timing[0],timing[1],timing[2],timing[3],timing[4],timing[5]);
+#endif
+
+#ifdef DUMP_8_NODE_ALLTOMANY
+{
+int *all_sends=NULL, *all_recvs=NULL;
+if (myrank == 0) {
+    printf("ntimes=%d nbufs=%d num_commit_comm_phase=%d\n",ntimes,nbufs,num_commit_comm_phase);
+    all_sends = (int*) malloc(sizeof(int) * nprocs * num_commit_comm_phase*1024);
+    all_recvs = (int*) malloc(sizeof(int) * nprocs * num_commit_comm_phase*1024);
+}
+MPI_Gather(amt_sends, num_commit_comm_phase*1024, MPI_INT, all_sends, num_commit_comm_phase*1024, MPI_INT, 0, fd->comm);
+MPI_Gather(amt_recvs, num_commit_comm_phase*1024, MPI_INT, all_recvs, num_commit_comm_phase*1024, MPI_INT, 0, fd->comm);
+
+if (myrank == 0) {
+    int fd, *s_ptr, *r_ptr, len;
+    fd = open("amnt.dat", O_CREAT|O_RDWR, 0600);
+    len = num_commit_comm_phase*1024;
+    s_ptr = all_sends;
+    r_ptr = all_recvs;
+    for (i=0; i<nprocs; i++) {
+        write(fd, s_ptr, len*sizeof(int));
+        write(fd, r_ptr, len*sizeof(int));
+        s_ptr += len;
+        r_ptr += len;
+    }
+    close(fd);
+    free(all_sends);
+    free(all_recvs);
+}
+free(amt_sends); free(amt_recvs);
+}
 #endif
 }
 
