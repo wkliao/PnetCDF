@@ -251,7 +251,7 @@ file_create(ADIO_File fd,
 
     MPI_Comm_rank(fd->comm, &rank);
 
-static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\n%s line %d: ---------%s\n",__func__,__LINE__,fd->filename); wkl++; }
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\n%s line %d: %s ---------%s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
 
     amode = O_CREAT;
     if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
@@ -417,7 +417,7 @@ file_open(ADIO_File fd)
 
     MPI_Comm_rank(fd->comm, &rank);
 
-static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\n%s line %d: ---------%s\n",__func__,__LINE__,fd->filename); wkl++; }
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\n%s line %d: %s ---------%s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
 
     old_mask = umask(022);
     umask(old_mask);
