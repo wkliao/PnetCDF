@@ -915,6 +915,7 @@ printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
      * one compute node.
      */
     int orig_striping_unit = fd->hints->striping_unit;
+#if 0
     if (fd->hints->striping_factor >= fd->num_nodes * 2) {
         fd->hints->striping_unit *= (fd->hints->striping_factor / fd->num_nodes);
 
@@ -935,6 +936,7 @@ printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
                    __func__, __LINE__, orig_striping_unit, fd->hints->striping_unit);
 #endif
     }
+#endif
 
     /* my_req[cb_nodes] is an array of access info, one for each I/O
      * aggregator whose file domain has this rank's request.
@@ -1236,6 +1238,9 @@ nrecvs++;
     }
 
     /* send reqs */
+int nsends=0;
+for (i=0; i<fd->hints->cb_nodes; i++) if (send_list[i].count > 0) nsends++;
+
     for (i = 0; i < fd->hints->cb_nodes; i++) {
         if (send_list[i].count > 0) {
             /* combine reqs using new datatype */
@@ -1248,6 +1253,10 @@ nrecvs++;
 #endif
             MPI_Type_commit(&sendType);
 
+if (nsends <= fd->hints->cb_nodes / 4) // if (nsends <= fd->num_nodes / 2)
+            MPI_Isend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
+                       fd->comm, &reqs[nreqs++]);
+else
             MPI_Issend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
                        fd->comm, &reqs[nreqs++]);
             MPI_Type_free(&sendType);
@@ -1255,7 +1264,8 @@ nrecvs++;
     }
 
 #ifdef PNETCDF_PROFILING
-fd->lustre_write_metrics[3] = MAX(fd->lustre_write_metrics[3], nrecvs);
+fd->lustre_write_metrics[3] = MAX(fd->lustre_write_metrics[3], nsends);
+fd->lustre_write_metrics[4] = MAX(fd->lustre_write_metrics[4], nrecvs);
 #endif
 
     if (nreqs > 0)
@@ -1362,6 +1372,12 @@ s_time = MPI_Wtime();
 
     /* in case number of rounds is less than nbufs */
     nbufs = (ntimes < nbufs) ? (int)ntimes : nbufs;
+
+#if 0
+/* for striping size 4M 8M and 64 OSTs, on 16 compute nodes, setting nbufs to 1 still yields large comm time */
+nbufs = 1;
+if (myrank==0) printf("\n ---- %s %d: FORCE nbufs=1 ----\n\n",__func__,__LINE__);
+#endif
 
     /* off_list[m] is the starting file offset of this aggregator's write
      *     region in iteration m (file domain of iteration m). This offset
