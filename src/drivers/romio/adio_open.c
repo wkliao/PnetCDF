@@ -961,7 +961,7 @@ int ADIO_File_open(MPI_Comm    comm,
         if (err != NC_NOERR) goto err_out;
 
 #ifdef PNETCDF_PROFILING
-fd->lustre_write_metrics[0] = fd->lustre_write_metrics[1] = fd->lustre_write_metrics[2] = fd->lustre_write_metrics[3] = fd->lustre_write_metrics[4] = 0;
+{int i; for (i=0; i<10; i++) fd->lustre_write_metrics[i] = 0; }
 #endif
     }
     else {
