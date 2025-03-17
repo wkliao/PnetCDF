@@ -928,6 +928,11 @@ int ADIO_File_open(MPI_Comm    comm,
     char value[MPI_MAX_INFO_VAL + 1];
     int err, min_err;
 
+#ifdef WKL_DEBUG
+extern int first_ost_id;
+first_ost_id = -1;
+#endif
+
     fd->comm        = comm;
     fd->filename    = filename;  /* without file system type name prefix */
     fd->atomicity   = 0;
