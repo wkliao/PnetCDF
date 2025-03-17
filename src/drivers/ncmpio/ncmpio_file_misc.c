@@ -108,19 +108,24 @@ ncmpio_redef(void *ncdp)
     fSet(ncp->flags, NC_MODE_DEF);
 
     /* must reset fileview as header extent may later change in enddef() */
-    TRACE_IO(MPI_File_set_view, (ncp->collective_fh, 0, MPI_BYTE,
-                                 MPI_BYTE, "native", MPI_INFO_NULL));
-    if (mpireturn != MPI_SUCCESS) {
-        err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, MPI_INFO_NULL);
         DEBUG_ASSIGN_ERROR(status, err)
     }
-
-    if (ncp->independent_fh != MPI_FILE_NULL) {
-        TRACE_IO(MPI_File_set_view, (ncp->independent_fh, 0, MPI_BYTE,
+    else {
+        TRACE_IO(MPI_File_set_view, (ncp->collective_fh, 0, MPI_BYTE,
                                      MPI_BYTE, "native", MPI_INFO_NULL));
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
             DEBUG_ASSIGN_ERROR(status, err)
+        }
+        if (ncp->independent_fh != MPI_FILE_NULL) {
+            TRACE_IO(MPI_File_set_view, (ncp->independent_fh, 0, MPI_BYTE,
+                                         MPI_BYTE, "native", MPI_INFO_NULL));
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+                DEBUG_ASSIGN_ERROR(status, err)
+            }
         }
     }
 
