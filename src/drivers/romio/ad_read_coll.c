@@ -324,7 +324,6 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
             return;
         }
 
-// printf("reuse flat_file indices and blocklens to reduce memory footprint ---------- count=%lld\n",fd->flat_file->count);
         /* reuse flat_file indices and blocklens to reduce memory footprint */
         *offset_list_ptr = fd->flat_file->indices;
         *len_list_ptr = fd->flat_file->blocklens;
@@ -350,10 +349,10 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
     }
     MPI_Type_size_x(datatype, &buftype_size);
 
-if (fd->filetype != MPI_BYTE && buftype_size * bufcount != (filetype_size-offset)) printf("%s ---- buftype_size %lld * bufcount %ld != filetype_size %lld\n",__func__,buftype_size, bufcount, filetype_size);
-assert(filetype_size != 0);
-
-    if (!filetype_size) { /* This will never be true for PnetCDF. */
+    if (!filetype_size) {
+        /* This will never be true for PnetCDF, as PnetCDF checks zero-sized
+         * request and will not reach this subroutine
+         */
 #if 1
         *offset_list_ptr = NULL;
         *len_list_ptr = NULL;
@@ -473,7 +472,6 @@ assert(filetype_size != 0);
 
             /* abs. offset in bytes in the file */
             offset = disp + n_filetypes * (ADIO_Offset) filetype_extent + abs_off_in_filetype;
-// printf("++++++++ off=%lld filetype_size=%ld n_filetypes=%ld disp=%lld filetype_extent=%lld abs_off_in_filetype=%lld\n",offset,filetype_size,n_filetypes,disp, filetype_extent,abs_off_in_filetype);
         }
 
         /* calculate how much space to allocate for offset_list, len_list */
