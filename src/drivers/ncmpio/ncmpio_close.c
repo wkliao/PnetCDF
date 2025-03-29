@@ -178,72 +178,72 @@ ncmpio_close(void *ncdp)
 #endif
 
 #ifdef PNETCDF_PROFILING
-if (! NC_readonly(ncp)) {
+    if (! NC_readonly(ncp)) {
 #define NTIMERS 16
-int i, j=6;
-double tt[NTIMERS],max_t[NTIMERS];
-for (i=0; i<NTIMERS; i++) tt[i] = 0;
-for (i=0; i<j; i++) tt[i] = ncp->aggr_time[i];
-if (ncp->adio_fh != NULL) {
-    for (j=0; i<NTIMERS; i++)
-        tt[i] = ncp->adio_fh->lustre_write_metrics[j++];
-}
-MPI_Reduce(tt, max_t, NTIMERS, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
-if (ncp->rank == 0) {
-    printf("%s: MAX intra-node %2d %.2f pwrite %5.2f comm %5.2f collw %5.2f nsends %5ld nrecvs %5ld nprocs %d (dtype=%.4f)\n",
-          __func__,ncp->num_aggrs_per_node,
-    max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4],
-    max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10], ncp->nprocs,max_t[11]);
+        int i, j=6;
+        double tt[NTIMERS],max_t[NTIMERS];
+        for (i=0; i<NTIMERS; i++) tt[i] = 0;
+        for (i=0; i<j; i++) tt[i] = ncp->aggr_time[i];
+        if (ncp->adio_fh != NULL) {
+            for (j=0; i<NTIMERS; i++)
+                tt[i] = ncp->adio_fh->lustre_write_metrics[j++];
+        }
+        MPI_Reduce(tt, max_t, NTIMERS, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
+        if (ncp->rank == 0) {
+            printf("%s: MAX intra-node %2d %.2f pwrite %5.2f comm %5.2f collw %5.2f nsends %5ld nrecvs %5ld nprocs %d (dtype=%.4f)\n",
+                __func__,ncp->num_aggrs_per_node,
+                max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4],
+                max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10], ncp->nprocs,max_t[11]);
 
-    printf("%s: MAX pwrite %5.2f comm %5.2f collw %5.2f nsends %5ld nrecvs %5ld r_amnt %.2f s_amnt %.2f MB r_count %ld s_count %ld\n",
-          __func__,
-    max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10], max_t[12]/1048576.0, max_t[13]/1048576.0, (long)max_t[14], (long)max_t[15]);
+            printf("%s: MAX pwrite %5.2f comm %5.2f collw %5.2f nsends %5ld nrecvs %5ld r_amnt %.2f s_amnt %.2f MB r_count %ld s_count %ld\n",
+                __func__,
+                max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10], max_t[12]/1048576.0, max_t[13]/1048576.0, (long)max_t[14], (long)max_t[15]);
 
-    printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.2f nsort %8ld\n", __func__,ncp->num_aggrs_per_node,
-    max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5]);
+            printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.2f nsort %8ld\n", __func__,ncp->num_aggrs_per_node,
+                max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5]);
 
-    printf("excel: %.2f %8ld %5.2f %5.2f %5.2f %5ld %5ld\n",
-    max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
-    max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10]);
-}
+            printf("excel: %.2f %8ld %5.2f %5.2f %5.2f %5ld %5ld\n",
+                max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
+                max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10]);
+        }
 
-/* print if this rank is an MPI-IO aggregator, but not an intra-node aggregator */
-if (ncp->adio_fh != NULL &&
-    ncp->adio_fh->is_agg == 1  && /* this rank is an MPI-IO aggregator */
-    ncp->nonaggr_ranks != NULL && /* this rank is an intra-node I/O aggregator */
-    ncp->my_aggr != ncp->rank)    /* this rank's intra-node I/O aggregator is NOT self */
-printf("%s: rank %d is MPI-IO aggregator, but its intra-node aggregator is %d\n",__func__,ncp->rank,ncp->my_aggr);
+        /* print if this rank is an MPI-IO aggregator, but not an intra-node aggregator */
+        if (ncp->adio_fh != NULL &&
+            ncp->adio_fh->is_agg == 1  && /* this rank is an MPI-IO aggregator */
+            ncp->nonaggr_ranks != NULL && /* this rank is an intra-node I/O aggregator */
+            ncp->my_aggr != ncp->rank)    /* this rank's intra-node I/O aggregator is NOT self */
+            printf("%s: rank %d is MPI-IO aggregator, but its intra-node aggregator is %d\n",__func__,ncp->rank,ncp->my_aggr);
 #if 0
-/* print I/O aggregator ranks */
-if (ncp->rank == 0) {
-    char value[MPI_MAX_INFO_VAL + 1];
-    int valuelen=MPI_MAX_INFO_VAL, flag;
-    MPI_Info_get(ncp->mpiinfo, "aggr_list", valuelen, value, &flag);
-    printf("%s: aggr_list=%s\n",__func__,value);
-}
+        /* print I/O aggregator ranks */
+        if (ncp->rank == 0) {
+            char value[MPI_MAX_INFO_VAL + 1];
+            int valuelen=MPI_MAX_INFO_VAL, flag;
+            MPI_Info_get(ncp->mpiinfo, "aggr_list", valuelen, value, &flag);
+            printf("%s: aggr_list=%s\n",__func__,value);
+        }
 
-/* print intra-node I/O aggregator ranks */
-int do_io = (ncp->rank == ncp->my_aggr) ? 1 : 0;
-int *ina_ranks = (int*) malloc(sizeof(int) * ncp->nprocs);
-MPI_Gather(&do_io, 1, MPI_INT, ina_ranks, 1, MPI_INT, 0, ncp->comm);
-if (ncp->rank == 0) {
-    char *value=(char*)malloc(ncp->nprocs*6 + 1024);
-    int i, ina_nprocs = 0;
-    /* add hint "aggr_list", list of aggregators' rank IDs */
-    value[0] = '\0';
-    for (i=0; i<ncp->nprocs; i++) {
-        char str[16];
-        if (ina_ranks[i] == 0) continue;
-        ina_nprocs++;
-        snprintf(str, sizeof(str), " %d", i);
-        strcat(value, str);
-    }
-    printf("%s: ina_nprocs=%d intra-node aggr=%s\n",__func__,ina_nprocs,value);
-    free(value);
-}
-free(ina_ranks);
+        /* print intra-node I/O aggregator ranks */
+        int do_io = (ncp->rank == ncp->my_aggr) ? 1 : 0;
+        int *ina_ranks = (int*) malloc(sizeof(int) * ncp->nprocs);
+        MPI_Gather(&do_io, 1, MPI_INT, ina_ranks, 1, MPI_INT, 0, ncp->comm);
+        if (ncp->rank == 0) {
+            char *value=(char*)malloc(ncp->nprocs*6 + 1024);
+            int i, ina_nprocs = 0;
+            /* add hint "aggr_list", list of aggregators' rank IDs */
+            value[0] = '\0';
+            for (i=0; i<ncp->nprocs; i++) {
+                char str[16];
+                if (ina_ranks[i] == 0) continue;
+                ina_nprocs++;
+                snprintf(str, sizeof(str), " %d", i);
+                strcat(value, str);
+            }
+            printf("%s: ina_nprocs=%d intra-node aggr=%s\n",__func__,ina_nprocs,value);
+            free(value);
+        }
+        free(ina_ranks);
 #endif
-}
+   }
 #endif
 
     /* calling MPI_File_close() */
