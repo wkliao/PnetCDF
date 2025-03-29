@@ -1310,10 +1310,6 @@ max_s_count = MAX(max_s_count, send_list[i].count);
 #endif
         MPI_Type_commit(&sendType);
 
-if (0) // if (nsends <= fd->hints->cb_nodes / 4) // if (nsends <= fd->num_nodes / 2)
-        MPI_Isend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
-                   fd->comm, &reqs[nreqs++]);
-else
         MPI_Issend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
                    fd->comm, &reqs[nreqs++]);
         MPI_Type_free(&sendType);
