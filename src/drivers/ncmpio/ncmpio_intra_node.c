@@ -30,8 +30,6 @@
 # include <config.h>
 #endif
 
-static int debug = 1;
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>   /* strcmp() strdup() */
@@ -515,7 +513,7 @@ ncmpio_intra_node_aggr_init(NC *ncp)
         NCI_Free(ina_ranks);
     }
 
-if (debug && ncp->fstype != ADIO_FSTYPE_MPIIO) {
+if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
     int io_rank;
     printf("world rank %d ncp->adio_fh->ina_comm = %s\n", ncp->rank,
            (ncp->adio_fh->ina_comm == MPI_COMM_NULL) ? "MPI_COMM_NULL" : "NOT NULL");
@@ -1055,8 +1053,10 @@ intra_node_aggregation(NC           *ncp,
 #endif
     bufLen *= bufCount;
 
+#ifdef WKL_DEBUG
 MPI_Offset maxm;
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#endif
 
     /* First, tell aggregator how much to receive by sending:
      * (num_pairs and bufLen). The message size to be sent by this rank
@@ -1266,7 +1266,9 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
         lengths = NULL;
     }
 
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#ifdef WKL_DEBUG
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#endif
 
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
@@ -1336,7 +1338,9 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
                 /* qsort is an in-place sorting */
                 qsort_off_len_buf(npairs, offsets, lengths, bufAddr);
         }
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB sort=%s\n",__func__,__LINE__,(float)maxm/1048576.0, (do_sort)?((indv_sorted)?"HEAP":"QSORT"):"NO");
+#ifdef WKL_DEBUG
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB sort=%s\n",__func__,__LINE__,(float)maxm/1048576.0, (do_sort)?((indv_sorted)?"HEAP":"QSORT"):"NO");
+#endif
 
 #ifdef PNETCDF_PROFILING
         endT = MPI_Wtime();
@@ -1359,7 +1363,9 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
             recv_buf = (char*) NCI_Malloc(buf_count);
             wr_buf = (char*) NCI_Malloc(buf_count);
         }
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#ifdef WKL_DEBUG
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#endif
 
         /* First, pack self write data into front of the recv_buf */
         if (bufLen > 0) {
@@ -1570,7 +1576,9 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("==== %s line %d: 
     if (ncp->fstype == ADIO_FSTYPE_MPIIO && fileType != MPI_BYTE)
         MPI_Type_free(&fileType);
 
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#ifdef WKL_DEBUG
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#endif
 
     /* call MPI_File_write_at_all, which returns disp that should point to the
      * very file offset to be written
@@ -1583,7 +1591,9 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s 
     if (offsets != NULL) NCI_Free(offsets);
     if (lengths != NULL) NCI_Free(lengths);
 
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0); debug=0;
+#ifdef WKL_DEBUG
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#endif
     /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
         NCI_Free(ncp->adio_fh->flat_file);
@@ -1618,8 +1628,10 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
     double timing = MPI_Wtime();
 #endif
 
+#ifdef WKL_DEBUG
 MPI_Offset maxm;
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#endif
 
     /* currently supports write requests only */
     if (fIsSet(reqMode, NC_REQ_RD)) return NC_NOERR;
@@ -1706,8 +1718,10 @@ ncmpio_intra_node_aggregation(NC               *ncp,
     double timing = MPI_Wtime();
 #endif
 
+#ifdef WKL_DEBUG
 MPI_Offset maxm;
-ncmpi_inq_malloc_max_size(&maxm); if (debug && ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#endif
 
     /* currently supports write requests only */
     if (fIsSet(reqMode, NC_REQ_RD)) return NC_NOERR;
