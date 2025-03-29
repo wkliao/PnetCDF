@@ -121,8 +121,12 @@ ncmpio_create(MPI_Comm     comm,
         if (flag && strcasecmp(value, "true") == 0)
             use_mpi_io = 1;
     }
-if ((env_str = getenv("PNETCDF_USE_MPI_IO")) != NULL) use_mpi_io = (strcasecmp(env_str, "true") == 0);
+    if ((env_str = getenv("PNETCDF_USE_MPI_IO")) != NULL)
+        use_mpi_io = (strcasecmp(env_str, "true") == 0);
+
+#ifdef WKL_DEBUG
 if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_io);
+#endif
 
     if (use_mpi_io == 1)
         fstype = ADIO_FSTYPE_MPIIO;
@@ -422,7 +426,7 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
         }
         MPI_Info_set(info_used, "aggr_list", value);
 
-#if 0
+#ifdef WKL_DEBUG
 int rank; MPI_Comm_rank(comm, &rank);
 if (rank == 0) {
     int  i, nkeys;
@@ -463,7 +467,7 @@ if (rank == 0) {
         if (err != NC_NOERR) return err;
     }
 
-#if 0
+#ifdef WKL_DEBUG
 /* print ranks and their node IDs */
 fflush(stdout);
 MPI_Barrier(ncp->comm);
