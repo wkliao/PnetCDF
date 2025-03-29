@@ -779,10 +779,17 @@ int ADIO_Lustre_set_aggr_list(ADIO_File  fd,
     if (fd->hints->ranklist == NULL)
         return NC_ENOMEM;
 
-int block_assignment=0;
-char *env_str;
-if ((env_str = getenv("PNETCDF_USE_BLOCK_ASSIGN")) != NULL) block_assignment = (strcasecmp(env_str, "true") == 0);
-if (rank == 0) printf("xxxx %s %d: PNETCDF_USE_BLOCK_ASSIGN = %d\n",__func__,__LINE__,block_assignment);
+    int block_assignment=0;
+#ifdef TRY_AGGR_BLOCK_ASSIGNMENT
+    {
+        char *env_str;
+        if ((env_str = getenv("PNETCDF_USE_BLOCK_ASSIGN")) != NULL)
+            block_assignment = (strcasecmp(env_str, "true") == 0) ? 1 : 0;
+        if (rank == 0)
+            printf("xxxx %s %d: PNETCDF_USE_BLOCK_ASSIGN = %d\n",
+            __func__,__LINE__,block_assignment);
+    }
+#endif
 
     if (striping_factor <= num_nodes) {
         /* When number of OSTs is less than number of compute nodes, first
@@ -807,12 +814,16 @@ if (rank == 0) printf("xxxx %s %d: PNETCDF_USE_BLOCK_ASSIGN = %d\n",__func__,__L
                 int nranks_per_node = num_aggr / striping_factor;
                 /* front nodes may have 1 more to pick */
                 if (remain > 0 && j/node_stride < remain) nranks_per_node++;
-// printf("node %d pick %d ranks\n", j, nranks_per_node);
+#ifdef WKL_DEBUG
+                printf("node %d pick %d ranks\n", j, nranks_per_node);
+#endif
                 int rank_stride = nprocs_per_node[j] / nranks_per_node;
                 for (k=0; k<nranks_per_node; k++) {
                     /* Selecting rank IDs within node j with a stride */
                     fd->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
-                    // printf("aggr %d is node %d %dth rank %d\n", n,j,k, ranks_per_node[j][k*rank_stride]);
+#ifdef WKL_DEBUG
+                    printf("aggr %d is node %d %dth rank %d\n", n,j,k, ranks_per_node[j][k*rank_stride]);
+#endif
                     if (++n == num_aggr) {
                         j = num_nodes; /* break loop j */
                         break; /* loop k */
@@ -861,12 +872,16 @@ if (rank == 0) printf("xxxx %s %d: PNETCDF_USE_BLOCK_ASSIGN = %d\n",__func__,__L
             int n = 0;
             for (j=0; j<num_nodes; j++) {
                 /* j is the node ID */
-                // printf("node %d select %d ranks\n", j, naggr_per_node[j]);
+#ifdef WKL_DEBUG
+                printf("node %d select %d ranks\n", j, naggr_per_node[j]);
+#endif
                 int rank_stride = nprocs_per_node[j] / naggr_per_node[j];
-// try stride==1 seems no effect, rank_stride = 1;
+                /* try stride==1 seems no effect, rank_stride = 1; */
                 for (k=0; k<naggr_per_node[j]; k++) {
                     fd->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
-                    // printf("aggr %d is node %d %dth rank %d\n", n,j,k, ranks_per_node[j][k*rank_stride]);
+#ifdef WKL_DEBUG
+                    printf("aggr %d is node %d %dth rank %d\n", n,j,k, ranks_per_node[j][k*rank_stride]);
+#endif
                     if (++n == num_aggr) {
                         j = num_nodes; /* break loop j */
                         break; /* loop k */
@@ -880,7 +895,7 @@ if (rank == 0) printf("xxxx %s %d: PNETCDF_USE_BLOCK_ASSIGN = %d\n",__func__,__L
                 j = stripe_i % num_nodes; /* to select from node j */
                 k = nprocs_per_node[j] / naggr_per_node[j];
                 k *= idx_per_node[j];
-// try stride==1 seems no effect, k = idx_per_node[j];
+                /* try stride==1 seems no effect, k = idx_per_node[j]; */
                 idx_per_node[j]++;
                 assert(k < nprocs_per_node[j]);
                 fd->hints->ranklist[i] = ranks_per_node[j][k];
@@ -954,6 +969,10 @@ first_ost_id = -1;
     if (err != NC_NOERR)
         return err;
 
+#ifdef PNETCDF_PROFILING
+    { int i; for (i=0; i<10; i++) fd->lustre_write_metrics[i] = 0; }
+#endif
+
     if (fd->file_system != ADIO_FSTYPE_MPIIO) {
         /* For Lustre, determining the I/O aggregators and constructing ranklist
          * requires file stripe count, which can only be obtained after file is
@@ -964,10 +983,6 @@ first_ost_id = -1;
         else
             err = file_open(fd);
         if (err != NC_NOERR) goto err_out;
-
-#ifdef PNETCDF_PROFILING
-{int i; for (i=0; i<10; i++) fd->lustre_write_metrics[i] = 0; }
-#endif
     }
     else {
         err = NC_EFSTYPE;
