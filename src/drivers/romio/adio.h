@@ -202,7 +202,9 @@ typedef struct {
 
     MPI_Comm ina_comm; /* Communicator containing intra-node aggregators only */
 
-double lustre_write_metrics[10];
+#ifdef PNETCDF_PROFILING
+    double lustre_write_metrics[10];
+#endif
 } ADIO_FileD;
 
 typedef ADIO_FileD *ADIO_File;
