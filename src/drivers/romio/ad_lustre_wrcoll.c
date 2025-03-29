@@ -7,14 +7,17 @@
 # include <config.h>
 #endif
 
+#include <adio.h>
+
+static int use_alltoallw;
+
 #ifdef DUMP_8_NODE_ALLTOMANY
 static int num_commit_comm_phase, *amt_sends, *amt_recvs;
 #endif
 
+#ifdef WKL_DEBUG
 static int debug=1;
-#include <adio.h>
-
-static int use_alltoallw;
+#endif
 
 #ifdef HAVE_MPI_LARGE_COUNT
 #define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
@@ -638,9 +641,11 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
 double curT = MPI_Wtime();
 #endif
 
+#ifdef WKL_DEBUG
 double end_T, start_T = curT;
 MPI_Offset maxm;
 ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
+#endif
 
     /* Using user buffer datatype, count, and fileview to construct a list of
      * starting file offsets and write lengths of this rank and store them in
@@ -717,9 +722,11 @@ printf("--- offset=%lld flat_fview.count=%lld start_offset=%lld\n",offset,flat_f
 
     ADIOI_Type_ispredef(buftype, &is_btype_predef);
 
+#ifdef WKL_DEBUG
 end_T = MPI_Wtime();
 ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
+#endif
 
     /* flatten user buffer datatype, buftype */
     if (is_btype_predef) {
@@ -858,10 +865,11 @@ start_T = end_T;;
              * striping_range and writes are not interleaved in file space */
             do_collect = 0;
     }
+#ifdef WKL_DEBUG
 end_T = MPI_Wtime();
 ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
-
+#endif
 
     /* If collective I/O is not necessary, use independent I/O */
     if ((!do_collect && fd->hints->cb_write == ADIOI_HINT_AUTO) ||
@@ -896,13 +904,17 @@ if (do_collect == 0) printf("%s --- SWITCH to independent write !!!\n",__func__)
             if (free_flat_fview && flat_fview.count > 0)
                 ADIOI_Free(flat_fview.off);
 
+#ifdef WKL_DEBUG
 static int wkl=0; if (wkl==0 && count > 0 && fd->disp>0) { printf("xxxx %s %d: --- SWITCH to independent write ADIO_WriteContig fd->disp=%lld off=%lld !!!\n",__func__,__LINE__,fd->disp,off); wkl++; }
+#endif
 
             ADIO_WriteContig(fd, buf, count, buftype, file_ptr_type, off, status, error_code);
         } else {
             if (free_flat_fview && flat_fview.count > 0)
                 ADIOI_Free(flat_fview.off);
+#ifdef WKL_DEBUG
 printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
+#endif
 
             ADIO_WriteStrided(fd, buf, count, buftype, file_ptr_type, offset, status, error_code);
         }
@@ -912,6 +924,7 @@ printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
 
     /* Now we are using collective I/O (two-phase I/O strategy) */
 
+#ifdef ADJUST_STRIPING_UNIT
     /* adjust striping_unit when striping_factor is twice or more than the
      * number of compute nodes. Note cb_node is set to at least
      * striping_factor, if nprocs >= striping_factor. Adjustment below is to
@@ -921,7 +934,7 @@ printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
      * one compute node.
      */
     int orig_striping_unit = fd->hints->striping_unit;
-#if 0
+
     if (fd->hints->striping_factor >= fd->num_nodes * 2) {
         fd->hints->striping_unit *= (fd->hints->striping_factor / fd->num_nodes);
 
@@ -965,9 +978,11 @@ printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
     ADIOI_LUSTRE_Calc_my_req(fd, flat_fview, flat_bview.is_contig,
                              &my_req, buf_idx);
 
+#ifdef WKL_DEBUG
 end_T = MPI_Wtime();
 ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
+#endif
 
     /* Calculate the portions of all other ranks' requests fall into this
      * process's file domain (note only I/O aggregators are assigned file
@@ -977,9 +992,11 @@ start_T = end_T;;
      */
     ADIOI_LUSTRE_Calc_others_req(fd, my_req, &others_req);
 
+#ifdef WKL_DEBUG
 end_T = MPI_Wtime();
 ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
+#endif
 
     /* Two-phase I/O: first communication phase to exchange write data from all
      * processes to the I/O aggregators, followed by the write phase where only
@@ -1012,9 +1029,11 @@ start_T = end_T;;
                                     my_req, &flat_fview, min_st_loc,
                                     max_end_loc, buf_idx, error_code);
 
+#ifdef WKL_DEBUG
 end_T = MPI_Wtime();
 ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;
+#endif
 
     /* free all memory allocated */
     ADIOI_Free(others_req[0].offsets);
@@ -1027,8 +1046,10 @@ start_T = end_T;
     ADIOI_Free(my_req[0].offsets);
     ADIOI_Free(my_req);
 
+#ifdef ADJUST_STRIPING_UNIT
     /* restore the original striping_unit */
     fd->hints->striping_unit = orig_striping_unit;
+#endif
 
 /* TODO: If reusing flat_file's buffers, should we free them now? or lets caller do it */
 
@@ -1077,8 +1098,10 @@ start_T = end_T;
 #endif
     }
 
+#ifdef WKL_DEBUG
 end_T = MPI_Wtime();
 ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T); debug=0;
+#endif
 
 #ifdef PNETCDF_PROFILING
     if (fd->is_agg) fd->lustre_write_metrics[0] += MPI_Wtime() - curT;
@@ -1321,7 +1344,7 @@ for (j=0; j<recv_list[i].count; j++)
 #ifdef DUMP_8_NODE_ALLTOMANY
 {   int j;
     amt_sends[num_commit_comm_phase*1024 + fd->hints->ranklist[i]] = 0;
-    for (j=0; j<send_list[i].count; j++) _amnt += send_list[i].len[j];
+    for (j=0; j<send_list[i].count; j++)
         amt_sends[num_commit_comm_phase*1024 + fd->hints->ranklist[i]] += send_list[i].len[j];
 }
 #endif
@@ -1446,7 +1469,9 @@ s_time = MPI_Wtime();
     if ((max_end_loc - min_st_loc + 1) % step_size)
         ntimes++;
 
-if (myrank == 0) printf("%s line %d: cb_nodes=%d striping_unit=%d step_size=%lld min_st_loc=%lld max_end_loc=%lld ntimes=%lld\n",__func__,__LINE__,cb_nodes,striping_unit,step_size,min_st_loc,max_end_loc,ntimes);
+#ifdef WKL_DEBUG
+if (myrank == 0) printf("%s line %d: cb_nodes=%d striping_unit=%d step_size=%lld min_st_loc(down-aligned)=%lld max_end_loc=%lld ntimes=%lld\n",__func__,__LINE__,cb_nodes,striping_unit,step_size,min_st_loc,max_end_loc,ntimes);
+#endif
 
     /* collective buffer is divided into 'nbufs' sub-buffers. Each sub-buffer
      * is of size equal to Lustre stripe size. Write data of non-aggregators
@@ -1817,12 +1842,12 @@ s_time = e_time;
             ibuf = 0;
 
 #ifdef PNETCDF_PROFILING
-double curT = MPI_Wtime();
+            double curT = MPI_Wtime();
 #endif
             /* communication phase */
             commit_comm_phase(fd, send_list, recv_list);
 #ifdef PNETCDF_PROFILING
-if (fd->is_agg) fd->lustre_write_metrics[2] += MPI_Wtime() - curT;
+            if (fd->is_agg) fd->lustre_write_metrics[2] += MPI_Wtime() - curT;
 #endif
 
 #ifdef WKL_DEBUG
@@ -1954,6 +1979,7 @@ s_time = e_time;
             ADIOI_Free(recv_list[i].disp);
         ADIOI_Free(recv_list);
     }
+
 #ifdef WKL_DEBUG
 /* check any pending messages to be received */
 MPI_Status probe_st;
