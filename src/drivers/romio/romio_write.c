@@ -63,7 +63,8 @@ ADIO_Offset ost_id = (off / fd->hints->striping_unit) % fd->hints->striping_fact
         first_ost_id = ost_id;
         // printf("%2d %s file %s First pwrite off=%lld OST %d\n",rank,__func__,fd->filename,off,first_ost_id);
     }
-    else if (ost_id != first_ost_id) printf("%2d Error: %s pwrite offset=%lld len=%lld ost_id=%lld not same 1st ost %d\n",rank,__func__,off,len,ost_id,first_ost_id);
+    else if (ost_id != first_ost_id)
+        printf("%2d Error: %s pwrite offset=%lld len=%lld ost_id=%lld not same 1st ost %d\n",rank,__func__,off,len,ost_id,first_ost_id);
 }
     printf("%s line %d pwrite off=%lld len=%lld\n",__func__,__LINE__,off,len);
 printf("%s line %d: %s disp=%lld etype_size=%lld offset=%lld off=%lld count=%ld bufType_size=%d len=%lld\n",__func__,__LINE__,(file_ptr_type == ADIO_INDIVIDUAL)?"ADIO_INDIVIDUAL":"ADIO_EXPLICIT_OFFSET",fd->disp,fd->etype_size,offset,off,count,bufType_size,len);
@@ -72,7 +73,7 @@ printf("%s line %d: %s disp=%lld etype_size=%lld offset=%lld off=%lld count=%ld 
 #endif
 
 #ifdef PNETCDF_PROFILING
-double tt = MPI_Wtime();
+    double timing = MPI_Wtime();
 #endif
     p = (char *) buf;
     while (bytes_xfered < len) {
@@ -86,7 +87,7 @@ double tt = MPI_Wtime();
         p += err;
     }
 #ifdef PNETCDF_PROFILING
-fd->lustre_write_metrics[1] += MPI_Wtime() - tt;
+    fd->lustre_write_metrics[1] += MPI_Wtime() - timing;
 #endif
 
     if (file_ptr_type == ADIO_INDIVIDUAL)
@@ -132,8 +133,6 @@ int file_write(ADIO_File     fd,
     if (bufType_size == 0) return NC_NOERR;
 
     ADIOI_Datatype_iscontig(bufType, &buftype_is_contig);
-
-// printf("%s %d: flat_file = %s\n",__func__,__LINE__,(fd->flat_file == NULL)?"NULL":"NOT NULL");
 
     if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL)
         filetype_is_contig = (fd->flat_file->count <= 1);
@@ -225,7 +224,6 @@ int ADIO_File_write_at_all(ADIO_File     fh,
     if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
         st = NC_EPERM;
 
-// printf("%s %d: flat_file = %s\n",__func__,__LINE__,(fh->flat_file == NULL)?"NULL":"NOT NULL");
     if (fh->file_system == ADIO_LUSTRE)
         ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType,
                                    ADIO_EXPLICIT_OFFSET, offset, status, &err);
