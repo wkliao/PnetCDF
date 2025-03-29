@@ -1253,9 +1253,6 @@ amt_recvs[num_commit_comm_phase * 1024 + i] = _amnt;
 max_r_amnt = MAX(max_r_amnt, r_amnt);
 max_r_count = MAX(max_r_count, recv_list[i].count);
 
-if (recv_list[i].count == 1) {
-                MPI_Irecv(NULL+recv_list[i].disp[0], recv_list[i].len[0], MPI_BYTE, i, 0, fd->comm, &reqs[nreqs++]);
-} else {
             /* combine reqs using new datatype */
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Type_create_hindexed_c(recv_list[i].count, recv_list[i].len,
@@ -1276,7 +1273,6 @@ if (recv_list[i].count == 1) {
                 MPI_Irecv(MPI_BOTTOM, 1, recvType, i, 0, fd->comm,
                           &reqs[nreqs++]);
             MPI_Type_free(&recvType);
-}
 #ifdef PNETCDF_PROFILING
 nrecvs++;
 #endif
@@ -1304,9 +1300,6 @@ amt_sends[num_commit_comm_phase*1024 + fd->hints->ranklist[i]] = _amnt;
 max_s_amnt = MAX(max_s_amnt, s_amnt);
 max_s_count = MAX(max_s_count, send_list[i].count);
 
-if (send_list[i].count == 1) {
-        MPI_Issend(NULL+send_list[i].disp[0], send_list[i].len[0], MPI_BYTE, fd->hints->ranklist[i], 0, fd->comm, &reqs[nreqs++]);
-} else {
         /* combine reqs using new datatype */
 #ifdef HAVE_MPI_LARGE_COUNT
         MPI_Type_create_hindexed_c(send_list[i].count, send_list[i].len,
@@ -1324,7 +1317,6 @@ else
         MPI_Issend(MPI_BOTTOM, 1, sendType, fd->hints->ranklist[i], 0,
                    fd->comm, &reqs[nreqs++]);
         MPI_Type_free(&sendType);
-}
     }
 dtype_time = MPI_Wtime() - dtype_time;
 
