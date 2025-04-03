@@ -1281,9 +1281,9 @@ void commit_comm_phase(ADIO_File      fd,
 
     /* receiving part */
 #ifdef PNETCDF_PROFILING
-    int nrecvs=0, nsends=0;
-    MPI_Offset max_s_amnt=0, max_r_amnt=0, r_amnt=0, s_amnt=0;
-    MPI_Offset max_s_count=0, max_r_count=0;
+    /* recv buffer type profiling */
+    int nrecvs=0;
+    MPI_Offset max_r_amnt=0, max_r_count=0;
 #endif
 
     if (fd->is_agg && recv_list != NULL) {
@@ -1292,6 +1292,7 @@ void commit_comm_phase(ADIO_File      fd,
             if (recv_list[i].count == 0 || i == rank) continue;
 
 #ifdef PNETCDF_PROFILING
+            MPI_Offset r_amnt=0;
             for (j=0; j<recv_list[i].count; j++)
                 r_amnt += recv_list[i].len[j];
             max_r_amnt = MAX(max_r_amnt, r_amnt);
@@ -1330,11 +1331,18 @@ for (j=0; j<recv_list[i].count; j++)
     }
 
     /* send reqs */
+#ifdef PNETCDF_PROFILING
+    /* send buffer type profiling */
+    int nsends=0;
+    MPI_Offset max_s_amnt=0, max_s_count=0;
+#endif
+
     for (i = 0; i < fd->hints->cb_nodes; i++) {
         /* check if nothing to send or if self */
         if (send_list[i].count == 0 || i == fd->my_cb_nodes_index) continue;
 
 #ifdef PNETCDF_PROFILING
+        MPI_Offset s_amnt=0;
         for (j=0; j<send_list[i].count; j++)
             s_amnt += send_list[i].len[j];
         max_s_amnt = MAX(max_s_amnt, s_amnt);
@@ -1369,8 +1377,8 @@ for (j=0; j<recv_list[i].count; j++)
     fd->lustre_write_metrics[3] = MAX(fd->lustre_write_metrics[3], nsends);
     fd->lustre_write_metrics[4] = MAX(fd->lustre_write_metrics[4], nrecvs);
     fd->lustre_write_metrics[5] += dtype_time;
-    fd->lustre_write_metrics[6] = MAX(fd->lustre_write_metrics[6], r_amnt); // max_r_amnt);
-    fd->lustre_write_metrics[7] = MAX(fd->lustre_write_metrics[7], s_amnt); // max_s_amnt);
+    fd->lustre_write_metrics[6] = MAX(fd->lustre_write_metrics[6], max_r_amnt);
+    fd->lustre_write_metrics[7] = MAX(fd->lustre_write_metrics[7], max_s_amnt);
     fd->lustre_write_metrics[8] = MAX(fd->lustre_write_metrics[8], max_r_count);
     fd->lustre_write_metrics[9] = MAX(fd->lustre_write_metrics[9], max_s_count);
 #endif
