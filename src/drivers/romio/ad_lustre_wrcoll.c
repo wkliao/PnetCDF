@@ -15,6 +15,7 @@ static int use_alltoallw;
 static int num_commit_comm_phase, *amt_sends, *amt_recvs;
 #endif
 
+#define WKL_DEBUG
 #ifdef WKL_DEBUG
 static int debug=1;
 #endif
@@ -222,11 +223,12 @@ void ADIOI_LUSTRE_Calc_my_req(ADIO_File      fd,
      * makes flat_fview.off[] to be monotonically non-decreasing.
      */
 
+/*
 Alternative: especially for when flat_fview.count is large
 1 This rank's aggregate file access region is from start_offset to end_offset.
 2 start with the 1st aggregator ID and keep assign aggregator until next stripe.
   This can avoid too many calls to ADIOI_LUSTRE_Calc_aggregator()
-
+*/
 
     /* nelems will be the number of offset-length pairs for my_req[] */
     nelems = 0;
@@ -494,6 +496,7 @@ timing = MPI_Wtime();
      * Below use a threshold of 48, number of processes per compute node.
      */
     do_alltoallv = (fd->num_nodes > 0) ? (nprocs / fd->num_nodes > 48) : 0;
+do_alltoallv=0;
 
     if (do_alltoallv) {
         MPI_Offset *r_off_buf=NULL, *s_off_buf=NULL;
@@ -640,7 +643,7 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
      */
 
     int i, j, nprocs, myrank, old_error, tmp_error;
-    int do_collect = 0, is_btype_predef, free_flat_fview, do_ex_wr;
+    int do_collect = 1, is_btype_predef, free_flat_fview, do_ex_wr;
     ADIO_Offset orig_fp, start_offset, end_offset;
     ADIO_Offset min_st_loc = -1, max_end_loc = -1;
     Flat_list flat_fview;
@@ -745,7 +748,7 @@ printf("--- offset=%lld flat_fview.count=%lld start_offset=%lld\n",offset,flat_f
 
 #ifdef WKL_DEBUG
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (ADIOI_Calc_my_off_len)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (ADIOI_Calc_my_off_len flat_fview.count=%lld)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T, flat_fview.count);
 start_T = end_T;;
 #endif
 
@@ -805,10 +808,11 @@ start_T = end_T;;
             flat_bview.is_contig = 1;
     }
 
-    /* Check if collective write is actually necessary, if cb_write hint isn't
-     * disabled by users.
-     */
-    if (fd->hints->cb_write != ADIOI_HINT_DISABLE) {
+    if (fd->hints->cb_write == ADIOI_HINT_DISABLE) {
+        /* explicitly disabled by user */
+        do_collect = 0;
+    }
+    else {
         int is_interleaved;
         ADIO_Offset st_end[2], *st_end_all = NULL;
 
@@ -869,22 +873,33 @@ start_T = end_T;;
         }
         ADIOI_Free(st_end_all);
 
-        /* Two typical access patterns can benefit from collective write.
-         *   1) access file regions among all processes are interleaved, and
-         *   2) the individual request sizes are not too big, i.e. no bigger
-         *      than hint coll_threshold.  Large individual requests may cause
-         *      a high communication cost for redistributing requests to the
-         *      I/O aggregators.
-         */
-        if (is_interleaved > 0)
+        if (fd->hints->cb_write == ADIOI_HINT_ENABLE) {
+            /* explicitly enabled by user */
             do_collect = 1;
-        else if (nprocs == 1)
-            do_collect = 0;
-        else if (large_indv_req &&
-                 fd->hints->cb_nodes <= fd->hints->striping_factor)
-            /* do independent write, if every rank's write range >
-             * striping_range and writes are not interleaved in file space */
-            do_collect = 0;
+        }
+        else if (fd->hints->cb_write == ADIOI_HINT_AUTO) {
+            /* Check if collective write is actually necessary, only when
+             * cb_write hint is set to ADIOI_HINT_AUTO.
+             *
+             * Two typical access patterns can benefit from collective write.
+             *   1) access file regions of all processes are interleaved, and
+             *   2) the individual request sizes are not too big, i.e. no
+             *      bigger than hint coll_threshold.  Large individual requests
+             *      may cause a high communication cost for redistributing
+             *      requests to the I/O aggregators.
+             */
+            if (is_interleaved > 0)
+                do_collect = 1;
+            else if (nprocs == 1)
+                do_collect = 0;
+            else if (large_indv_req &&
+                     fd->hints->cb_nodes <= fd->hints->striping_factor)
+                /* do independent write, if every rank's write range >
+                 * striping_range and writes are not interleaved in file
+                 * space
+                 */
+                do_collect = 0;
+        }
     }
 #ifdef WKL_DEBUG
 end_T = MPI_Wtime();
@@ -893,8 +908,7 @@ start_T = end_T;;
 #endif
 
     /* If collective I/O is not necessary, use independent I/O */
-    if ((!do_collect && fd->hints->cb_write == ADIOI_HINT_AUTO) ||
-        fd->hints->cb_write == ADIOI_HINT_DISABLE) {
+    if (!do_collect) {
 
 #ifdef WKL_DEBUG
 if (do_collect == 0) printf("%s --- SWITCH to independent write !!!\n",__func__);
@@ -1007,7 +1021,7 @@ start_T = end_T;;
 
 #ifdef WKL_DEBUG
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (ADIOI_LUSTRE_Calc_my_req)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (ADIOI_LUSTRE_Calc_my_req flat_bview.count=%lld)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T, flat_bview.count);
 start_T = end_T;;
 #endif
 
@@ -1587,7 +1601,7 @@ if (myrank==0) printf("\n ---- %s %d: FORCE nbufs=1 ----\n\n",__func__,__LINE__)
      * ADIOI_LUSTRE_W_Exchange_data(). The received data is later copied over
      * to write_buf, whose contents will be written to file.
      */
-    if (end_loc >= 0) {
+    if (end_loc >= 0 && nbufs > 0) {
         /* Allocate displacement-length pair arrays, describing the recv buffer.
          * recv_list[i].count: number displacement-length pairs.
          * recv_list[i].len: length in bytes.
