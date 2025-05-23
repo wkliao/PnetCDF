@@ -780,7 +780,7 @@ write_NC(NC *ncp)
         }
         NCI_Free(buf);
     }
-    else if (fIsSet(ncp->flags, NC_HCOLL)) {
+    else if (is_coll) {
         /* other processes participate the collective call */
         for (i=0; i<ntimes; i++) {
             if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
