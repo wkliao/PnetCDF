@@ -126,7 +126,6 @@ typedef struct {
     int start_iodevice;
     char *cb_config_list;
     int *ranklist;
-    int num_osts;
 
     int cb_pfr;
     int min_fdomain_size;
@@ -135,6 +134,7 @@ typedef struct {
             int num_osts;
             int co_ratio;
             int coll_threshold;
+            int overstriping_ratio;
         } lustre;
     } fs_hints;
 } ADIOI_Hints;

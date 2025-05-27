@@ -534,39 +534,33 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
      * in fd->hints->ranklist, no matter its is open or create mode.
      */
     if (rank == 0) {
-        int set_layout = 0;
+        int set_user_layout = 0, overstriping_ratio;
+        int str_factor, str_unit, start_iodev;
 
-        ADIO_Offset str_factor = -1, str_unit = 0, start_iodev = -1;
-
-        /* In LUSTRE_SetInfo, these hints have been validated to be consistent
-         * among all processes.
+        /* In a call to ADIO_File_SetInfo() earlier, hints have been validated
+         * to be consistent among all processes.
          */
-        if (fd->info != MPI_INFO_NULL) {
-            int flag;
-            char value[MPI_MAX_INFO_VAL+1];
 
-            /* get striping information from user hints */
-            MPI_Info_get(fd->info, "striping_unit", MPI_MAX_INFO_VAL, value, &flag);
-            if (flag)
-                str_unit = atoll(value);
+        str_unit = fd->hints->striping_unit;
+        str_factor = fd->hints->striping_factor;
+        start_iodev = fd->hints->start_iodevice;
+        overstriping_ratio = fd->hints->fs_hints.lustre.overstriping_ratio;
 
-            MPI_Info_get(fd->info, "striping_factor", MPI_MAX_INFO_VAL, value, &flag);
-            if (flag)
-                str_factor = atoll(value);
+        /* when no file striping hint is set, their values are:
+         * fd->hints->striping_unit = 0;
+         * fd->hints->striping_factor = 0;
+         * fd->hints->start_iodevice = -1;
+         * fd->hints->fs_hints.lustre.overstriping_ratio = 1;
+         */
 
-            MPI_Info_get(fd->info, "start_iodevice", MPI_MAX_INFO_VAL, value, &flag);
-            if (flag)
-                start_iodev = atoll(value);
-
-            /* if user has set the file striping hints */
-            if ((str_factor > 0) || (str_unit > 0) || (start_iodev >= 0))
-                set_layout = 1;
-        }
+        /* if user has set the file striping hints */
+        if ((str_factor > 0) || (str_unit > 0) || (start_iodev >= 0) || (overstriping_ratio > 1))
+            set_user_layout = 1;
 
 #ifdef HAVE_LUSTRE
 /* query the total number of available OSTs in the pool.
         char **members, *buffer, *pool="scratch.original";
-        int list_size = 1024;
+        int list_size = 512;
 
         members = (char**)malloc(sizeof(char*) * list_size);
         buffer = (char*)calloc(list_size * 64, sizeof(char));
@@ -586,17 +580,50 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         uint64_t stripe_size;
         uint64_t start_iodevice;
 
-        if (set_layout) {
-            numOSTs = str_factor;
-            pattern = LLAPI_LAYOUT_RAID0;
-            stripe_count = str_factor;
-            stripe_size = str_unit;
-            start_iodevice = start_iodev;
+        if (set_user_layout) {
+            /* user has set striping hints, grant wish */
+
+            if ((str_factor == 0) || (str_unit == 0) || (start_iodev == -1) || (overstriping_ratio < 0)) {
+                /* one or more striping hints are not set, inherit stripings from the directory */
+                int dd;
+                char *dirc, *dname;
+                dirc = strdup(fd->filename);
+                dname = dirname(dirc);
+
+                dd = open(dname, O_RDONLY, 0600);
+
+                numOSTs = get_striping(dd, &pattern,
+                                           &stripe_count,
+                                           &stripe_size,
+                                           &start_iodevice);
+                close(dd);
+                free(dirc);
+            }
+
+            numOSTs = (str_factor == -1) ? numOSTs : str_factor;
+            if (overstriping_ratio > 1) {
+                pattern = LLAPI_LAYOUT_OVERSTRIPING;
+                stripe_count = numOSTs * overstriping_ratio;
+            }
+            else {
+                pattern = LLAPI_LAYOUT_RAID0;
+                stripe_count = numOSTs;
+            }
+            stripe_size = (str_unit == 0) ? stripe_size : str_unit;
+            start_iodevice = (start_iodev == -1) ? start_iodevice : start_iodev;
         }
         else {
+            /* user has not set file striping hints, use the followings:
+             * set pattern to LLAPI_LAYOUT_OVERSTRIPING
+             * set overstriping_ratio to 4
+             * set stripe_count to fd->num_nodes * overstriping_ratio
+             * set stripe_size to 1 MiB
+             */
             numOSTs = fd->num_nodes;
-            pattern = LLAPI_LAYOUT_RAID0;
-            stripe_count = fd->num_nodes; /* TODO: check max available OSTs */
+            if (numOSTs > 256) numOSTs = 256; /* TODO: check max available OSTs */
+            overstriping_ratio = 4;
+            pattern = LLAPI_LAYOUT_OVERSTRIPING;
+            stripe_count = numOSTs * overstriping_ratio;
             stripe_size = 1048576;
             start_iodevice = LLAPI_LAYOUT_DEFAULT;
         }
@@ -650,7 +677,8 @@ err_out:
     fd->hints->striping_unit   = stripin_info[0];
     fd->hints->striping_factor = stripin_info[1];
     fd->hints->start_iodevice  = stripin_info[2];
-    fd->hints->num_osts        = stripin_info[3];
+    fd->hints->fs_hints.lustre.num_osts = stripin_info[3];
+    fd->hints->fs_hints.lustre.overstriping_ratio = stripin_info[1] / stripin_info[3];
 
     if (rank > 0) { /* non-root processes */
         fd->fd_sys = open(fd->filename, O_RDWR, perm);
@@ -817,7 +845,7 @@ err_out:
     fd->hints->striping_unit   = stripin_info[0];
     fd->hints->striping_factor = stripin_info[1];
     fd->hints->start_iodevice  = stripin_info[2];
-    fd->hints->num_osts        = stripin_info[3];
+    fd->hints->fs_hints.lustre.num_osts = stripin_info[3];
 
     if (rank > 0) { /* non-root processes */
         fd->fd_sys = open(fd->filename, O_RDWR, perm);
@@ -902,7 +930,8 @@ err_out:
     fd->hints->striping_unit   = stripin_info[0];
     fd->hints->striping_factor = stripin_info[1];
     fd->hints->start_iodevice  = stripin_info[2];
-    fd->hints->num_osts        = stripin_info[3];
+    fd->hints->fs_hints.lustre.num_osts = stripin_info[3];
+    fd->hints->fs_hints.lustre.overstriping_ratio = stripin_info[1] / stripin_info[3];
 
     return err;
 }
@@ -1347,6 +1376,14 @@ first_ost_id = -1;
 
     snprintf(value, sizeof(value), "%d", fd->hints->start_iodevice);
     MPI_Info_set(fd->info, "start_iodevice", value);
+
+#ifdef HAVE_LUSTRE
+    snprintf(value, sizeof(value), "%d", fd->hints->fs_hints.lustre.num_osts);
+    MPI_Info_set(fd->info, "lustre_num_osts", value);
+
+    snprintf(value, sizeof(value), "%d", fd->hints->fs_hints.lustre.overstriping_ratio);
+    MPI_Info_set(fd->info, "lustre_overstriping_ratio", value);
+#endif
 
 err_out:
     MPI_Allreduce(&err, &min_err, 1, MPI_INT, MPI_MIN, comm);
