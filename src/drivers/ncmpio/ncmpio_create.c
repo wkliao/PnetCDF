@@ -46,9 +46,9 @@ ncmpio_create(MPI_Comm     comm,
     int rank, nprocs, mpiomode, err, mpireturn, default_format, file_exist=1;
     int use_trunc=1, fstype, flag, use_mpi_io;
     MPI_File fh=MPI_FILE_NULL;
-    MPI_Info info_used;
+    MPI_Info info_used=MPI_INFO_NULL;
     NC *ncp=NULL;
-    ADIO_File adio_fh=NULL;
+    ADIO_File adio_fh;
 
     *ncpp = NULL;
 
@@ -211,7 +211,6 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
                     else
                         ADIO_File_close(&adio_fh);
                     NCI_Free(adio_fh);
-                    adio_fh = NULL;
                 }
                 else {
                     TRACE_IO(MPI_File_open, (MPI_COMM_SELF, path, MPI_MODE_RDWR, MPI_INFO_NULL, &fh));
@@ -247,12 +246,6 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
         if (err != NC_NOERR) return err;
     }
 
-    if (fstype != ADIO_FSTYPE_MPIIO) {
-        adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
-        adio_fh->file_system = fstype;
-        adio_fh->ina_comm    = comm;
-    }
-
     /* allocate buffer for header object NC and initialize its contents */
     ncp = (NC*) NCI_Calloc(1, sizeof(NC));
     if (ncp == NULL) DEBUG_RETURN_ERROR(NC_ENOMEM)
@@ -264,23 +257,112 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
     ncp->rank     = rank;
     ncp->nprocs   = nprocs;
     ncp->mpiomode = mpiomode;
+    ncp->adio_fh  = NULL;
+    ncp->fstype   = fstype;
+    ncp->ncid     = ncid;
 
-    /* construct the list of compute nodes */
+    /* set the file format version based on the create mode, cmode */
+         if (fIsSet(cmode, NC_64BIT_DATA))   ncp->format = 5;
+    else if (fIsSet(cmode, NC_64BIT_OFFSET)) ncp->format = 2;
+    else {
+             if (default_format == NC_FORMAT_CDF5) ncp->format = 5;
+        else if (default_format == NC_FORMAT_CDF2) ncp->format = 2;
+        else                                       ncp->format = 1;
+    }
+
+    fSet(ncp->flags, NC_MODE_CREATE);
+    /* create automatically enter write mode */
+    fClr(ncp->flags, NC_MODE_RDONLY);
+    /* create automatically enter define mode */
+    fSet(ncp->flags, NC_MODE_DEF);
+    /* PnetCDF default mode is no fill */
+    fClr(ncp->flags, NC_MODE_FILL);
+
+    /* chunk size for reading header, set to default before check hints */
+    ncp->chunk = PNC_DEFAULT_CHUNKSIZE;
+
+    /* initialize unlimited_id as no unlimited dimension yet defined */
+    ncp->dims.unlimited_id = -1;
+
+    /* buffer to pack noncontiguous user buffers when calling wait() */
+    ncp->ibuf_size = PNC_DEFAULT_IBUF_SIZE;
+
+#ifdef PNETCDF_DEBUG
+    /* PNETCDF_DEBUG is set at configure time, which will be overwritten by
+     * the run-time environment variable PNETCDF_SAFE_MODE */
+    ncp->safe_mode = 1;
+#endif
+    /* If environment variable PNETCDF_SAFE_MODE is set to 1, then we perform
+     * a strict consistent test, i.e. arguments used in def_dim/def_var APIs
+     */
+    if ((env_str = getenv("PNETCDF_SAFE_MODE")) != NULL) {
+        if (*env_str == '0') ncp->safe_mode = 0;
+        else                 ncp->safe_mode = 1;
+        /* if PNETCDF_SAFE_MODE is set but without a value, *env_str can
+         * be '\0' (null character). In this case, safe_mode is enabled */
+    }
+
+    /* Check if intra-node aggregation is enabled. If yes, construct the list
+     * of compute nodes. Note intra-node aggregation needs node IDs to create a
+     * new MPI communicator consisting of all intra-node aggregators. Only
+     * intra-node aggregators will perform I/O in PnetCDF collective data mode.
+     * The new communicator will be used in the call to MPI_File_open().
+     */
+    ncp->num_aggrs_per_node = 0;
+    if (user_info != MPI_INFO_NULL) { /* check if enabled in user hint */
+        char value[MPI_MAX_INFO_VAL];
+        int  flag;
+        /* number of intra-node aggregators per compute node */
+        MPI_Info_get(user_info, "nc_num_aggrs_per_node", MPI_MAX_INFO_VAL-1,
+                     value, &flag);
+        if (flag) {
+            errno = 0;  /* errno must set to zero before calling atoi */
+            ncp->num_aggrs_per_node = atoi(value);
+            if (errno != 0 || ncp->num_aggrs_per_node < 0)
+                ncp->num_aggrs_per_node = 0;
+        }
+    }
+    /* when nrpocs == 1 is equivalent to disabling intra-node aggregation */
+    if (ncp->nprocs == 1) ncp->num_aggrs_per_node = 0;
+
+    /* construct a list of unique IDs of compute nodes allocated.
+     * ncp->node_ids[nprocs] contains node IDs of each rank
+     */
     ncp->node_ids = NULL;
-    if (fstype != ADIO_FSTYPE_MPIIO) {
+    if (fstype != ADIO_FSTYPE_MPIIO || ncp->num_aggrs_per_node != 0) {
         err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
         if (err != NC_NOERR) return err;
-        if (adio_fh != NULL) adio_fh->num_nodes = ncp->num_nodes;
     }
-    /* if using MPI-IO, then ncp->node_ids is of no use */
+
+    /* Determine whether to enable intra-node aggregation and set up all
+     * intra-node aggregation metadata.
+     * ncp->num_aggrs_per_node = 0, or non-zero indicates whether this feature
+     *     is disabled or enabled globally for all processes, respectively.
+     * ncp->my_aggr = -1 or >= 0 indicates whether aggregation is effectively
+     *     enabled for the aggregation group of this process.
+     * ncp->ina_comm will be created consisting of only intra-node aggregators,
+     *     which will be used when calling MPI_File_open().
+     * ncp->node_ids[] will be modified to contain the nodes IDs of intra-node
+     *     aggregators only, which will be passed to adio_fh.
+     */
+    ncp->my_aggr = -1;
+    ncp->ina_comm = MPI_COMM_NULL;
+    if (ncp->num_aggrs_per_node != 0) {
+        err = ncmpio_intra_node_aggr_init(ncp);
+        if (err != NC_NOERR) return err;
+        /* from now on, only the intra-node aggregators have work to do. */
+        comm = ncp->ina_comm;
+    }
+
+    if (comm == MPI_COMM_NULL) {
+        /* For those ranks not participating file I/O, set PnetCDF hints */
+        MPI_Info_create(&info_used);
+        ncmpio_set_pnetcdf_hints(ncp, user_info, info_used);
+        goto fn_exit;
+    }
 
     /* create file collectively -------------------------------------------- */
-    if (fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_open(comm, filename, mpiomode, user_info, adio_fh);
-        if (err != NC_NOERR)
-            return err;
-    }
-    else {
+    if (fstype == ADIO_FSTYPE_MPIIO) {
         TRACE_IO(MPI_File_open, (comm, path, mpiomode, user_info, &fh));
         if (mpireturn != MPI_SUCCESS) {
 #ifndef HAVE_ACCESS
@@ -312,52 +394,32 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
              * MPI_SUCCESS
              */
             errno = 0;
-    }
 
-    /* get the I/O hints used/modified by MPI-IO */
-    if (fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_get_info(adio_fh,  &info_used);
-        if (err != NC_NOERR) return err;
-    }
-    else {
+        /* Now the file has been successfully created */
+        ncp->collective_fh  = fh;
+        ncp->independent_fh = (nprocs == 1) ? fh : MPI_FILE_NULL;
+
+        /* get the I/O hints used/modified by MPI-IO */
         TRACE_IO(MPI_File_get_info, (fh, &info_used));
         if (mpireturn != MPI_SUCCESS)
             return ncmpii_error_mpi2nc(mpireturn, mpi_name);
     }
+    else { /* (fstype != ADIO_FSTYPE_MPIIO) */
+        adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
+        err = ADIO_File_open(comm, filename, mpiomode, user_info, adio_fh);
+        if (err != NC_NOERR)
+            return err;
 
-    /* Now the file has been successfully created */
-    ncp->collective_fh  = fh;
-    ncp->independent_fh = (nprocs > 1) ? MPI_FILE_NULL : fh;
-    ncp->fstype         = fstype;
-    ncp->adio_fh        = adio_fh;
+        adio_fh->file_system = fstype;
+        adio_fh->num_nodes = ncp->num_nodes;
 
-    /* set the file format version based on the create mode, cmode */
-         if (fIsSet(cmode, NC_64BIT_DATA))   ncp->format = 5;
-    else if (fIsSet(cmode, NC_64BIT_OFFSET)) ncp->format = 2;
-    else {
-             if (default_format == NC_FORMAT_CDF5) ncp->format = 5;
-        else if (default_format == NC_FORMAT_CDF2) ncp->format = 2;
-        else                                       ncp->format = 1;
+        /* get the I/O hints used/modified by MPI-IO */
+        err = ADIO_File_get_info(adio_fh,  &info_used);
+        if (err != NC_NOERR) return err;
+
+        /* Now the file has been successfully created */
+        ncp->adio_fh = adio_fh;
     }
-
-    fSet(ncp->flags, NC_MODE_CREATE);
-    /* create automatically enter write mode */
-    fClr(ncp->flags, NC_MODE_RDONLY);
-    /* create automatically enter define mode */
-    fSet(ncp->flags, NC_MODE_DEF);
-    /* PnetCDF default mode is no fill */
-    fClr(ncp->flags, NC_MODE_FILL);
-
-    ncp->ncid = ncid;
-
-    /* chunk size for reading header, set to default before check hints */
-    ncp->chunk = PNC_DEFAULT_CHUNKSIZE;
-
-    /* initialize unlimited_id as no unlimited dimension yet defined */
-    ncp->dims.unlimited_id = -1;
-
-    /* buffer to pack noncontiguous user buffers when calling wait() */
-    ncp->ibuf_size = PNC_DEFAULT_IBUF_SIZE;
 
     /* Extract PnetCDF specific I/O hints from user_info and set default hint
      * values into info_used. Note some MPI libraries, such as MPICH 3.3.1 and
@@ -365,29 +427,6 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
      * libraries.
      */
     ncmpio_set_pnetcdf_hints(ncp, user_info, info_used);
-
-    if (fstype != ADIO_FSTYPE_MPIIO &&
-        adio_fh->hints->cb_buffer_size < adio_fh->hints->striping_unit) {
-        /* collective buffer size must be at least file striping size */
-        adio_fh->hints->cb_buffer_size = adio_fh->hints->striping_unit;
-        sprintf(value, "%d", adio_fh->hints->cb_buffer_size);
-        MPI_Info_set(info_used, "cb_buffer_size", value);
-    }
-
-#ifdef PNETCDF_DEBUG
-    /* PNETCDF_DEBUG is set at configure time, which will be overwritten by
-     * the run-time environment variable PNETCDF_SAFE_MODE */
-    ncp->safe_mode = 1;
-#endif
-    /* If environment variable PNETCDF_SAFE_MODE is set to 1, then we perform
-     * a strict consistent test, i.e. arguments used in def_dim/def_var APIs
-     */
-    if ((env_str = getenv("PNETCDF_SAFE_MODE")) != NULL) {
-        if (*env_str == '0') ncp->safe_mode = 0;
-        else                 ncp->safe_mode = 1;
-        /* if PNETCDF_SAFE_MODE is set but without a value, *env_str can
-         * be '\0' (null character). In this case, safe_mode is enabled */
-    }
 
     /* set cb_nodes and construct the cb_node rank list */
     if (fstype != ADIO_FSTYPE_MPIIO) {
@@ -424,6 +463,13 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
         }
         MPI_Info_set(info_used, "aggr_list", value);
 
+        /* collective buffer size must be at least file striping size */
+        if (adio_fh->hints->cb_buffer_size < adio_fh->hints->striping_unit) {
+            adio_fh->hints->cb_buffer_size = adio_fh->hints->striping_unit;
+            sprintf(value, "%d", adio_fh->hints->cb_buffer_size);
+            MPI_Info_set(info_used, "cb_buffer_size", value);
+        }
+
 #ifdef WKL_DEBUG
 int rank; MPI_Comm_rank(comm, &rank);
 if (rank == 0) {
@@ -450,30 +496,18 @@ if (rank == 0) {
         else
             adio_fh->io_buf = NULL;
     }
-    ncp->mpiinfo = info_used; /* is not MPI_INFO_NULL */
-
-    /* determine whether to enable intra-node aggregation and set up all
-     * intra-node aggregation metadata.
-     * ncp->num_aggrs_per_node = 0, or non-zero indicates whether this feature
-     *     is disabled or enabled globally for all processes, respectively.
-     * ncp->my_aggr = -1 or >= 0 indicates whether aggregation is effectively
-     *     enabled for the aggregation group of this process.
-     */
-    ncp->my_aggr = -1;
-    if (ncp->num_aggrs_per_node != 0) {
-        err = ncmpio_intra_node_aggr_init(ncp);
-        if (err != NC_NOERR) return err;
-    }
 
 #ifdef WKL_DEBUG
 /* print ranks and their node IDs */
 fflush(stdout);
-MPI_Barrier(ncp->comm);
-if (ncp->rank == 0) {
+MPI_Barrier(comm);
+int ina_nprocs, ina_rank; MPI_Comm_size(comm, &ina_nprocs); MPI_Comm_rank(comm, &ina_rank);
+printf("%s at %d: Intra comm nprocs %d rank %d\n", __func__,__LINE__,ina_nprocs,ina_rank);
+if (ina_rank == 0) {
     int i, prev=-1;
-    for (i=0; i<ncp->nprocs; i++) {
+    for (i=0; i<ina_nprocs; i++) {
         if (prev != ncp->node_ids[i]) {
-            printf("\nNode %d: rank =", ncp->node_ids[i]);
+            printf("\n\t%s at %d: Node %d: rank =", __func__,__LINE__,ncp->node_ids[i]);
             prev = ncp->node_ids[i];
         }
         printf(" %d", i);
@@ -481,13 +515,17 @@ if (ncp->rank == 0) {
     printf("\n");
 }
 fflush(stdout);
-MPI_Barrier(ncp->comm);
+MPI_Barrier(comm);
 #endif
+
+fn_exit:
+    ncp->mpiinfo = info_used; /* is not MPI_INFO_NULL */
 
     if (ncp->node_ids != NULL) NCI_Free(ncp->node_ids);
 
     *ncpp = (void*)ncp;
 
+// printf("%s --------- line %d ----------------\n",__func__,__LINE__);
     return NC_NOERR;
 }
 
