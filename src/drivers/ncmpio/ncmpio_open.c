@@ -207,10 +207,7 @@ int rank; MPI_Comm_rank(comm, &rank); if (rank == 0) printf("xxxx %s %d: use_mpi
 
         if (fstype == ADIO_LUSTRE) {
             ADIO_Lustre_set_aggr_list(adio_fh, ncp->num_nodes, ncp->node_ids);
-
             MPI_Info_set(info_used, "romio_filesystem_type", "LUSTRE:");
-            sprintf(value, "%d", adio_fh->hints->num_osts);
-            MPI_Info_set(info_used, "lustre_num_osts", value);
         }
         else if (fstype == ADIO_UFS) {
             ADIO_GEN_set_aggr_list(adio_fh, ncp->num_nodes, ncp->node_ids);
