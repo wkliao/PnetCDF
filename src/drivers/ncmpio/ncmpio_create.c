@@ -265,6 +265,15 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
     ncp->nprocs   = nprocs;
     ncp->mpiomode = mpiomode;
 
+    /* construct the list of compute nodes */
+    ncp->node_ids = NULL;
+    if (fstype != ADIO_FSTYPE_MPIIO) {
+        err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
+        if (err != NC_NOERR) return err;
+        if (adio_fh != NULL) adio_fh->num_nodes = ncp->num_nodes;
+    }
+    /* if using MPI-IO, then ncp->node_ids is of no use */
+
     /* create file collectively -------------------------------------------- */
     if (fstype != ADIO_FSTYPE_MPIIO) {
         err = ADIO_File_open(comm, filename, mpiomode, user_info, adio_fh);
@@ -352,7 +361,7 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
 
     /* Extract PnetCDF specific I/O hints from user_info and set default hint
      * values into info_used. Note some MPI libraries, such as MPICH 3.3.1 and
-     * priors fail to preserve user hints that are not recognized by the MPI
+     * priors do not preserve user hints that are not recognized by the MPI
      * libraries.
      */
     ncmpio_set_pnetcdf_hints(ncp, user_info, info_used);
@@ -378,14 +387,6 @@ if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_
         else                 ncp->safe_mode = 1;
         /* if PNETCDF_SAFE_MODE is set but without a value, *env_str can
          * be '\0' (null character). In this case, safe_mode is enabled */
-    }
-
-    /* construct the list of compute nodes */
-    ncp->node_ids = NULL;
-    if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_FSTYPE_MPIIO) {
-        err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
-        if (err != NC_NOERR) return err;
-        if (adio_fh != NULL) adio_fh->num_nodes = ncp->num_nodes;
     }
 
     /* set cb_nodes and construct the cb_node rank list */

@@ -325,6 +325,345 @@ static int num_uniq_osts(int fd_sys)
 }
 #endif
 
+#if 1
+
+#ifdef HAVE_LUSTRE
+static
+int sort_ost_ids(struct llapi_layout *layout,
+                 uint64_t             stripe_count,
+                 uint64_t            *osts)
+{
+    uint64_t i, numOSTs;
+
+    for (i=0; i<stripe_count; i++) {
+        if (llapi_layout_ost_index_get(layout, i, &osts[i]) != 0)
+            printf("Error at line %d: llapi_layout_ost_index_get(%lu) (%s)\n",
+                   __LINE__,i,strerror(errno));
+    }
+    /* count the number of unique OST IDs. When Lustre overstriping is
+     * used, the unique OSTs may be less than stripe_count.
+     */
+    qsort(osts, stripe_count, sizeof(uint64_t), compare);
+    numOSTs = 0;
+    for (i=1; i<stripe_count; i++) {
+        if (osts[i] > osts[numOSTs]) osts[++numOSTs] = osts[i];
+    }
+
+    return (numOSTs + 1);
+}
+
+/*----< get_striping() >-----------------------------------------------------*/
+static uint64_t get_striping(int       fd,
+                             uint64_t *pattern,
+                             uint64_t *stripe_count,
+                             uint64_t *stripe_size,
+                             uint64_t *start_iodevice)
+{
+    int err;
+    struct llapi_layout *layout;
+    uint64_t *osts, numOSTs;
+
+    layout = llapi_layout_get_by_fd(fd, LLAPI_LAYOUT_GET_COPY);
+    if (layout == NULL) ERR("llapi_layout_get_by_fd")
+
+    err = llapi_layout_pattern_get(layout, pattern);
+    if (err != 0) ERR("llapi_layout_pattern_get")
+/*
+    if (*pattern == LLAPI_LAYOUT_DEFAULT)
+        printf("line %d: pattern is LLAPI_LAYOUT_DEFAULT\n",__LINE__);
+    else if (*pattern == LLAPI_LAYOUT_RAID0)
+        printf("line %d: pattern is LLAPI_LAYOUT_RAID0\n",__LINE__);
+    else if (*pattern == LLAPI_LAYOUT_MDT)
+        printf("line %d: pattern is LLAPI_LAYOUT_MDT\n",__LINE__);
+    else if (*pattern == LLAPI_LAYOUT_OVERSTRIPING)
+        printf("line %d: pattern is LLAPI_LAYOUT_OVERSTRIPING\n",__LINE__);
+    else if (*pattern == LLAPI_LAYOUT_SPECIFIC)
+        printf("line %d: pattern is LLAPI_LAYOUT_SPECIFIC\n",__LINE__);
+    else
+        printf("line %d: pattern is unknown\n",__LINE__);
+*/
+
+    /* obtain file striping count */
+    err = llapi_layout_stripe_count_get(layout, stripe_count);
+    if (err != 0) ERR("llapi_layout_stripe_count_get")
+
+/*
+    if (*stripe_count == LLAPI_LAYOUT_DEFAULT)
+        printf("%s at %d: stripe count is NOT SET %lu\n",__func__,__LINE__,*stripe_count);
+    else
+        printf("%s at %d: stripe count = %lu\n",__func__,__LINE__,*stripe_count);
+*/
+
+    /* obtain file striping unit size */
+    err = llapi_layout_stripe_size_get(layout, stripe_size);
+    if (err != 0) ERR("llapi_layout_stripe_size_get")
+
+/*
+    if (*stripe_size == LLAPI_LAYOUT_DEFAULT)
+        printf("%s at %d: stripe size is NOT SET %lu\n",__func__,__LINE__,*stripe_size);
+    else
+        printf("%s at %d: stripe size is %lu\n",__func__,__LINE__,*stripe_size);
+*/
+
+        /*
+         * /usr/include/linux/lustre/lustre_user.h
+         * The stripe size fields are shared for the extension size storage,
+         * however the extension size is stored in KB, not bytes.
+         *     #define SEL_UNIT_SIZE 1024llu
+         * Therefore, the default stripe_size is (SEL_UNIT_SIZE * 1024)
+         */
+
+    /* obtain all OST IDs */
+    osts = (uint64_t*) malloc(sizeof(uint64_t) * (*stripe_count));
+    if (llapi_layout_ost_index_get(layout, 0, &osts[0]) != 0) {
+
+        /* check if is a folder */
+        struct stat path_stat;
+        fstat(fd, &path_stat);
+        if (S_ISREG(path_stat.st_mode)) /* not a regular file */
+            printf("%s at %d: is a regular file\n",__func__,__LINE__);
+        else if (S_ISDIR(path_stat.st_mode))
+            printf("%s at %d: is a folder\n",__func__,__LINE__);
+        else
+            ERR("fstat")
+
+        *start_iodevice = LLAPI_LAYOUT_DEFAULT;
+        return *stripe_count;
+    }
+    printf("%s at %d:  osts[0]=%lu\n",__func__,__LINE__, osts[0]);
+    *start_iodevice = osts[0];
+
+    numOSTs = sort_ost_ids(layout, *stripe_count, osts);
+    assert(numOSTs <= *stripe_count);
+
+    free(osts);
+    llapi_layout_free(layout);
+
+    return numOSTs;
+}
+
+/*----< set_striping() >-----------------------------------------------------*/
+static int set_striping(const char *path,
+                        uint64_t    pattern,
+                        uint64_t    numOSTs,
+                        uint64_t    stripe_count,
+                        uint64_t    stripe_size,
+                        uint64_t    start_iodevice)
+{
+    int fd, err;
+
+    struct llapi_layout *layout = llapi_layout_alloc();
+    if (layout == NULL) ERR("llapi_layout_alloc")
+
+    printf("%s at %d: stripe_count = %lu\n",__func__,__LINE__,stripe_count);
+    err = llapi_layout_stripe_count_set(layout, stripe_count);
+    if (err != 0) ERR("llapi_layout_stripe_count_set")
+
+    printf("%s at %d: stripe_size = %lu\n",__func__,__LINE__,stripe_size);
+    err = llapi_layout_stripe_size_set(layout, stripe_size);
+    if (err != 0) ERR("llapi_layout_stripe_size_set")
+
+    if (pattern == LLAPI_LAYOUT_OVERSTRIPING) {
+        uint64_t i, ost_id;
+        for (i=0; i<stripe_count; i++) {
+            ost_id = i % numOSTs;
+            err = llapi_layout_ost_index_set(layout, i, ost_id);
+            if (err != 0) ERR("llapi_layout_ost_index_set")
+        }
+    }
+    else {
+        err = llapi_layout_ost_index_set(layout, 0, start_iodevice);
+        if (err != 0) ERR("llapi_layout_ost_index_set")
+    }
+
+    err = llapi_layout_pattern_set(layout, pattern);
+    if (err != 0) ERR("llapi_layout_pattern_set")
+
+    fd = llapi_layout_file_create(path, O_CREAT|O_RDWR, 0660, layout);
+    if (fd < 0) ERR("llapi_layout_file_create")
+
+{
+    void *lmdbuf = malloc(XATTR_SIZE_MAX);
+
+    err = ioctl(fd, LL_IOC_LOV_GETSTRIPE_NEW, lmdbuf);
+    if (err < 0) ERR("close")
+
+    uint64_t count = ((struct lov_user_md *)lmdbuf)->lmm_stripe_count;
+    printf("%s at %d: count = %lu\n",__func__,__LINE__,count);
+
+    free(lmdbuf);
+}
+
+    llapi_layout_free(layout);
+
+    return fd;
+}
+#endif
+
+/*----< file_create() >------------------------------------------------------*/
+/*   1. root creates the file
+ *   2. root sets and obtains striping info
+ *   3. root broadcasts striping info
+ *   4. non-root processes receive striping info from root
+ *   5. non-root processes opens the fie
+ */
+static int
+file_create(ADIO_File fd,
+            int       access_mode)
+{
+    int err=NC_NOERR, rank, amode, perm, old_mask;
+    int stripin_info[4] = {-1, -1, -1, -1};
+
+    MPI_Comm_rank(fd->comm, &rank);
+
+#ifdef PNETCDF_PROFILING
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",basename(__FILE__),__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+#endif
+
+    amode = O_CREAT;
+    if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
+
+    old_mask = umask(022);
+    umask(old_mask);
+    perm = old_mask ^ 0666;
+
+    /* root process creates the file first, followed by all processes open the
+     * file.
+     * For Lustre, we need to obtain file striping info (striping_factor,
+     * striping_unit, and num_osts) in order to select the I/O aggregators
+     * in fd->hints->ranklist, no matter its is open or create mode.
+     */
+    if (rank == 0) {
+        int set_layout = 0;
+
+        ADIO_Offset str_factor = -1, str_unit = 0, start_iodev = -1;
+
+        /* In LUSTRE_SetInfo, these hints have been validated to be consistent
+         * among all processes.
+         */
+        if (fd->info != MPI_INFO_NULL) {
+            int flag;
+            char value[MPI_MAX_INFO_VAL+1];
+
+            /* get striping information from user hints */
+            MPI_Info_get(fd->info, "striping_unit", MPI_MAX_INFO_VAL, value, &flag);
+            if (flag)
+                str_unit = atoll(value);
+
+            MPI_Info_get(fd->info, "striping_factor", MPI_MAX_INFO_VAL, value, &flag);
+            if (flag)
+                str_factor = atoll(value);
+
+            MPI_Info_get(fd->info, "start_iodevice", MPI_MAX_INFO_VAL, value, &flag);
+            if (flag)
+                start_iodev = atoll(value);
+
+            /* if user has set the file striping hints */
+            if ((str_factor > 0) || (str_unit > 0) || (start_iodev >= 0))
+                set_layout = 1;
+        }
+
+#ifdef HAVE_LUSTRE
+/* query the total number of available OSTs in the pool.
+        char **members, *buffer, *pool="scratch.original";
+        int list_size = 1024;
+
+        members = (char**)malloc(sizeof(char*) * list_size);
+        buffer = (char*)calloc(list_size * 64, sizeof(char));
+
+        int num_OSTs = llapi_get_poolmembers(pool, members, list_size, buffer, list_size * 64);
+        printf("Lustre pool %s has %d OSTs\n",pool, num_OSTs);
+        int i;
+        for (i=0; i<20; i++)
+            printf("member[%3d] %s\n",i,members[i]);
+        printf("member[%3d] %s\n",num_OSTs-1,members[num_OSTs-1]);
+        free(buffer);
+        free(members);
+*/
+        uint64_t numOSTs;
+        uint64_t pattern;
+        uint64_t stripe_count;
+        uint64_t stripe_size;
+        uint64_t start_iodevice;
+
+        if (set_layout) {
+            numOSTs = str_factor;
+            pattern = LLAPI_LAYOUT_RAID0;
+            stripe_count = str_factor;
+            stripe_size = str_unit;
+            start_iodevice = start_iodev;
+        }
+        else {
+            numOSTs = fd->num_nodes;
+            pattern = LLAPI_LAYOUT_RAID0;
+            stripe_count = fd->num_nodes; /* TODO: check max available OSTs */
+            stripe_size = 1048576;
+            start_iodevice = LLAPI_LAYOUT_DEFAULT;
+        }
+
+        fd->fd_sys = set_striping(fd->filename, pattern,
+                                                numOSTs,
+                                                stripe_count,
+                                                stripe_size,
+                                                start_iodevice);
+        if (fd->fd_sys < 0) {
+            fprintf(stderr,"%s line %d: rank %d fails to create and set striping file %s (%s)\n",
+                    __func__,__LINE__, rank, fd->filename, strerror(errno));
+            err = ncmpii_error_posix2nc("Lustre set striping");
+            goto err_out;
+        }
+
+        /* get Lustre file stripning */
+        numOSTs = get_striping(fd->fd_sys, &pattern,
+                                           &stripe_count,
+                                           &stripe_size,
+                                           &start_iodevice);
+
+        stripin_info[0] = stripe_size;
+        stripin_info[1] = stripe_count;
+        stripin_info[2] = start_iodevice;
+        stripin_info[3] = numOSTs;
+#else
+        fd->fd_sys = open(fd->filename, amode, perm);
+        if (fd->fd_sys == -1) {
+            fprintf(stderr,"%s line %d: rank %d fails to create file %s (%s)\n",
+                    __func__,__LINE__, rank, fd->filename, strerror(errno));
+            err = ncmpii_error_posix2nc("open");
+            goto err_out;
+        }
+#endif
+#if defined(MIMIC_LUSTRE)
+        stripin_info[0] = STRIPE_SIZE;
+        stripin_info[1] = STRIPE_COUNT;
+        stripin_info[2] = 0;
+        stripin_info[3] = STRIPE_COUNT;
+#endif
+    }
+err_out:
+    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
+    if (stripin_info[0] == -1) {
+        fprintf(stderr, "%s line %d: failed to create file %s\n", __func__,
+                __LINE__, fd->filename);
+        return err;
+    }
+
+    fd->hints->striping_unit   = stripin_info[0];
+    fd->hints->striping_factor = stripin_info[1];
+    fd->hints->start_iodevice  = stripin_info[2];
+    fd->hints->num_osts        = stripin_info[3];
+
+    if (rank > 0) { /* non-root processes */
+        fd->fd_sys = open(fd->filename, O_RDWR, perm);
+        if (fd->fd_sys == -1) {
+            fprintf(stderr,"%s line %d: rank %d failure to open file %s (%s)\n",
+                    __func__,__LINE__, rank, fd->filename, strerror(errno));
+            return ncmpii_error_posix2nc("ioctl");
+        }
+    }
+    return err;
+}
+#else
+
 /*----< file_create() >------------------------------------------------------*/
 /*   1. root creates the file
  *   2. root sets and obtains striping info
@@ -490,6 +829,7 @@ err_out:
     }
     return err;
 }
+#endif
 
 /*----< file_open() >--------------------------------------------------------*/
 /*   1. all processes open the file.
