@@ -300,7 +300,7 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
         *offset_list_ptr = NULL;
         *len_list_ptr = NULL;
         *start_offset_ptr = 0;
-        *end_offset_ptr = 0;
+        *end_offset_ptr = -1;
         *contig_access_count_ptr = 0;
         return;
     }
@@ -319,7 +319,7 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
             *offset_list_ptr = NULL;
             *len_list_ptr = NULL;
             *start_offset_ptr = 0;
-            *end_offset_ptr = 0;
+            *end_offset_ptr = -1;
             *contig_access_count_ptr = 0;
             return;
         }
@@ -329,7 +329,6 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
         *len_list_ptr = fd->flat_file->blocklens;
 
         *start_offset_ptr = offset;
-        *end_offset_ptr = 0;
         *end_offset_ptr = fd->flat_file->indices[fd->flat_file->count-1]
                         + fd->flat_file->blocklens[fd->flat_file->count-1] - 1;
 
@@ -357,7 +356,7 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
         *offset_list_ptr = NULL;
         *len_list_ptr = NULL;
         *start_offset_ptr = 0;
-        *end_offset_ptr = 0;
+        *end_offset_ptr = -1;
         *contig_access_count_ptr = 0;
         return;
 #else
