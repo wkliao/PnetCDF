@@ -465,8 +465,10 @@ static int set_striping(const char *path,
 
     if (pattern == LLAPI_LAYOUT_OVERSTRIPING) {
         uint64_t i, ost_id;
+        if (start_iodevice == LLAPI_LAYOUT_DEFAULT)
+            start_iodevice = 0;
         for (i=0; i<stripe_count; i++) {
-            ost_id = i % numOSTs;
+            ost_id = start_iodevice + (i % numOSTs);
             err = llapi_layout_ost_index_set(layout, i, ost_id);
             if (err != 0) ERR("llapi_layout_ost_index_set")
         }
