@@ -430,7 +430,7 @@ static uint64_t get_striping(int       fd,
         *start_iodevice = LLAPI_LAYOUT_DEFAULT;
         return *stripe_count;
     }
-    printf("%s at %d:  osts[0]=%lu\n",__func__,__LINE__, osts[0]);
+    // printf("%s at %d:  osts[0]=%lu\n",__func__,__LINE__, osts[0]);
     *start_iodevice = osts[0];
 
     numOSTs = sort_ost_ids(layout, *stripe_count, osts);
@@ -455,11 +455,11 @@ static int set_striping(const char *path,
     struct llapi_layout *layout = llapi_layout_alloc();
     if (layout == NULL) ERR("llapi_layout_alloc")
 
-    printf("%s at %d: stripe_count = %lu\n",__func__,__LINE__,stripe_count);
+    // printf("%s at %d: stripe_count = %lu\n",__func__,__LINE__,stripe_count);
     err = llapi_layout_stripe_count_set(layout, stripe_count);
     if (err != 0) ERR("llapi_layout_stripe_count_set")
 
-    printf("%s at %d: stripe_size = %lu\n",__func__,__LINE__,stripe_size);
+    // printf("%s at %d: stripe_size = %lu\n",__func__,__LINE__,stripe_size);
     err = llapi_layout_stripe_size_set(layout, stripe_size);
     if (err != 0) ERR("llapi_layout_stripe_size_set")
 
@@ -489,7 +489,7 @@ static int set_striping(const char *path,
     if (err < 0) ERR("close")
 
     uint64_t count = ((struct lov_user_md *)lmdbuf)->lmm_stripe_count;
-    printf("%s at %d: count = %lu\n",__func__,__LINE__,count);
+    // printf("%s at %d: count = %lu\n",__func__,__LINE__,count);
 
     free(lmdbuf);
 }
