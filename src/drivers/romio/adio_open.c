@@ -269,17 +269,17 @@ static int num_uniq_osts(int fd_sys)
     struct llapi_layout *layout;
     uint64_t i, stripe_count, stripe_size, *osts, numOSTs;
 
-    if ((xattr_val = calloc(1, xattr_size)) == NULL)
-        ERR("calloc")
+    if ((xattr_val = ADIOI_Calloc(1, xattr_size)) == NULL)
+        ERR("ADIOI_Calloc")
 
     xattr_size = fgetxattr(fd_sys, "lustre.lov", xattr_val, xattr_size);
     if (xattr_size == -1) {
-        free(xattr_val);
+        ADIOI_Free(xattr_val);
         ERR("fgetxattr")
     }
 
     layout = llapi_layout_get_by_xattr(xattr_val, xattr_size, 0);
-    free(xattr_val);
+    ADIOI_Free(xattr_val);
     if (layout == NULL) ERR("llapi_layout_get_by_xattr")
 
     /* obtain file striping count */
@@ -291,7 +291,7 @@ static int num_uniq_osts(int fd_sys)
     if (err != 0) ERR("llapi_layout_stripe_size_get")
 
     /* obtain all OST IDs */
-    osts = (uint64_t*) malloc(sizeof(uint64_t) * stripe_count);
+    osts = (uint64_t*) ADIOI_Malloc(sizeof(uint64_t) * stripe_count);
     for (i=0; i<stripe_count; i++) {
         uint64_t tmp_ost;
         if (llapi_layout_ost_index_get(layout, i, &tmp_ost) == -1)
@@ -318,7 +318,7 @@ static int num_uniq_osts(int fd_sys)
     }
     numOSTs++;
 
-    free(osts);
+    ADIOI_Free(osts);
     llapi_layout_free(layout);
 
     return numOSTs;
@@ -414,7 +414,7 @@ static uint64_t get_striping(int       fd,
          */
 
     /* obtain all OST IDs */
-    osts = (uint64_t*) malloc(sizeof(uint64_t) * (*stripe_count));
+    osts = (uint64_t*) ADIOI_Malloc(sizeof(uint64_t) * (*stripe_count));
     if (llapi_layout_ost_index_get(layout, 0, &osts[0]) != 0) {
 
         /* check if is a folder */
@@ -436,7 +436,7 @@ static uint64_t get_striping(int       fd,
     numOSTs = sort_ost_ids(layout, *stripe_count, osts);
     assert(numOSTs <= *stripe_count);
 
-    free(osts);
+    ADIOI_Free(osts);
     llapi_layout_free(layout);
 
     return numOSTs;
@@ -484,8 +484,9 @@ static int set_striping(const char *path,
     fd = llapi_layout_file_create(path, O_CREAT|O_RDWR, 0660, layout);
     if (fd < 0) ERR("llapi_layout_file_create")
 
+#if 0
 {
-    void *lmdbuf = malloc(XATTR_SIZE_MAX);
+    void *lmdbuf = ADIOI_Malloc(XATTR_SIZE_MAX);
 
     err = ioctl(fd, LL_IOC_LOV_GETSTRIPE_NEW, lmdbuf);
     if (err < 0) ERR("close")
@@ -493,8 +494,9 @@ static int set_striping(const char *path,
     uint64_t count = ((struct lov_user_md *)lmdbuf)->lmm_stripe_count;
     // printf("%s at %d: count = %lu\n",__func__,__LINE__,count);
 
-    free(lmdbuf);
+    ADIOI_Free(lmdbuf);
 }
+#endif
 
     llapi_layout_free(layout);
 
@@ -556,7 +558,8 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
          */
 
         /* if user has set the file striping hints */
-        if ((str_factor > 0) || (str_unit > 0) || (start_iodev >= 0) || (overstriping_ratio > 1))
+        if ((str_factor > 0) || (str_unit > 0) || (start_iodev >= 0) ||
+            (overstriping_ratio > 1))
             set_user_layout = 1;
 
 #ifdef HAVE_LUSTRE
@@ -564,8 +567,8 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         char **members, *buffer, *pool="scratch.original";
         int list_size = 512;
 
-        members = (char**)malloc(sizeof(char*) * list_size);
-        buffer = (char*)calloc(list_size * 64, sizeof(char));
+        members = (char**)ADIOI_Malloc(sizeof(char*) * list_size);
+        buffer = (char*)ADIOI_Calloc(list_size * 64, sizeof(char));
 
         int num_OSTs = llapi_get_poolmembers(pool, members, list_size, buffer, list_size * 64);
         printf("Lustre pool %s has %d OSTs\n",pool, num_OSTs);
@@ -573,8 +576,8 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         for (i=0; i<20; i++)
             printf("member[%3d] %s\n",i,members[i]);
         printf("member[%3d] %s\n",num_OSTs-1,members[num_OSTs-1]);
-        free(buffer);
-        free(members);
+        ADIOI_Free(buffer);
+        ADIOI_Free(members);
 */
         uint64_t numOSTs;
         uint64_t pattern;
@@ -585,11 +588,14 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         if (set_user_layout) {
             /* user has set striping hints, grant wish */
 
-            if ((str_factor == 0) || (str_unit == 0) || (start_iodev == -1) || (overstriping_ratio < 0)) {
-                /* one or more striping hints are not set, inherit stripings from the directory */
+            if ((str_factor == 0) || (str_unit == 0) || (start_iodev == -1) ||
+                (overstriping_ratio < 0)) {
+                /* one or more striping hints are not set, inherit stripings
+                 * from the directory
+                 */
                 int dd;
                 char *dirc, *dname;
-                dirc = strdup(fd->filename);
+                dirc = ADIOI_Strdup(fd->filename);
                 dname = dirname(dirc);
 
                 dd = open(dname, O_RDONLY, 0600);
@@ -599,7 +605,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
                                            &stripe_size,
                                            &start_iodevice);
                 close(dd);
-                free(dirc);
+                ADIOI_Free(dirc);
             }
 
             numOSTs = (str_factor == -1) ? numOSTs : str_factor;

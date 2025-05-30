@@ -544,7 +544,7 @@ void ADIOI_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
     }
 
     if (j) {
-#ifdef MPI_STATUSES_IGNORE
+#ifdef HAVE_MPI_STATUSES_IGNORE
         MPI_Waitall(j, requests, MPI_STATUSES_IGNORE);
 #else
         MPI_Status *statuses = (MPI_Status *) ADIOI_Malloc(j * sizeof(MPI_Status));

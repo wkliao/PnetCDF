@@ -609,7 +609,7 @@ else recv_amnt += 2 * others_req[i].count;
         }
 
         if (nreqs) {
-#ifdef MPI_STATUSES_IGNORE
+#ifdef HAVE_MPI_STATUSES_IGNORE
             MPI_Waitall(nreqs, requests, MPI_STATUSES_IGNORE);
 #else
             MPI_Status *statuses = (MPI_Status *)
@@ -1424,8 +1424,16 @@ for (j=0; j<recv_list[i].count; j++)
     fd->lustre_write_metrics[9] = MAX(fd->lustre_write_metrics[9], max_s_count);
 #endif
 
-    if (nreqs > 0)
+    if (nreqs > 0) {
+#ifdef HAVE_MPI_STATUSES_IGNORE
         MPI_Waitall(nreqs, reqs, MPI_STATUSES_IGNORE);
+#else
+        MPI_Status *statuses = (MPI_Status *)
+                               ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+        MPI_Waitall(nreqs, reqs, statuses);
+        ADIOI_Free(statuses);
+#endif
+    }
 
     ADIOI_Free(reqs);
 
