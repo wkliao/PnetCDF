@@ -827,11 +827,10 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
     if (self_recv_type != MPI_DATATYPE_NULL)
         MPI_Type_free(&self_recv_type);
 
-#ifdef MPI_STATUSES_IGNORE
+#ifdef HAVE_MPI_STATUSES_IGNORE
     statuses = MPI_STATUSES_IGNORE;
 #else
-    statuses = (MPI_Status *) ADIOI_Malloc((nreqs + 1) * sizeof(MPI_Status));
-    /* +1 to avoid a 0-size malloc */
+    statuses = (MPI_Status *) ADIOI_Malloc(nreqs * sizeof(MPI_Status));
 #endif
 
 #ifdef NEEDS_MPI_TEST
@@ -845,7 +844,7 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
 #ifdef AGGREGATION_PROFILE
     MPE_Log_event(5033, 0, NULL);
 #endif
-#ifndef MPI_STATUSES_IGNORE
+#ifndef HAVE_MPI_STATUSES_IGNORE
     ADIOI_Free(statuses);
 #endif
     ADIOI_Free(requests);

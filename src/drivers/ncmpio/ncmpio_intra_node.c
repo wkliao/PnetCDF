@@ -1079,7 +1079,14 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
             MPI_Irecv(msg + i*3, 3, MPI_AINT, ncp->nonaggr_ranks[i], 0,
                       ncp->comm, &req[nreqs++]);
 
+#ifdef HAVE_MPI_STATUSES_IGNORE
         mpireturn = MPI_Waitall(nreqs, req, MPI_STATUSES_IGNORE);
+#else
+        MPI_Status *statuses = (MPI_Status *)
+                               ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+        mpireturn = MPI_Waitall(nreqs, req, statuses);
+        ADIOI_Free(statuses);
+#endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn,"MPI_Waitall");
             /* return the first encountered error if there is any */
@@ -1185,7 +1192,14 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
             nreqs++;
         }
 #endif
+#ifdef HAVE_MPI_STATUSES_IGNORE
         mpireturn = MPI_Waitall(nreqs, req, MPI_STATUSES_IGNORE);
+#else
+        MPI_Status *statuses = (MPI_Status *)
+                               ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+        mpireturn = MPI_Waitall(nreqs, req, statuses);
+        ADIOI_Free(statuses);
+#endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn,"MPI_Waitall");
             /* return the first encountered error if there is any */
@@ -1407,7 +1421,14 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 #endif
                 ptr += msg[i*3 + 1];
             }
+#ifdef HAVE_MPI_STATUSES_IGNORE
             mpireturn = MPI_Waitall(nreqs, req, MPI_STATUSES_IGNORE);
+#else
+            MPI_Status *statuses = (MPI_Status *)
+                                   ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+            mpireturn = MPI_Waitall(nreqs, req, statuses);
+            ADIOI_Free(statuses);
+#endif
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn,"MPI_Waitall");
                 /* return the first encountered error if there is any */

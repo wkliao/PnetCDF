@@ -1030,7 +1030,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
     }
 
     /* wait on the sends */
-#ifdef MPI_STATUSES_IGNORE
+#ifdef HAVE_MPI_STATUSES_IGNORE
     MPI_Waitall(nprocs_send, requests + nprocs_recv, MPI_STATUSES_IGNORE);
 #else
     MPI_Waitall(nprocs_send, requests + nprocs_recv, statuses + nprocs_recv);

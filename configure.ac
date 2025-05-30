@@ -1526,6 +1526,24 @@ dnl     UD_CHECK_MPI_DATATYPE(MPI_REAL8)		dnl first defined in MPI 1.0
 dnl     UD_CHECK_MPI_DATATYPE(MPI_DOUBLE_PRECISION)	dnl first defined in MPI 1.0
 dnl fi
 
+AC_MSG_CHECKING([whether MPI_Waitall takes MPI_STATUSES_IGNORE])
+if test "x${GCC}" = xyes; then
+   saved_CFLAGS=${CFLAGS}
+   CFLAGS="-Werror -Wstringop-overflow=2"
+   AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <mpi.h>]],[[
+                      int count;
+                      MPI_Request *reqs;
+                      MPI_Waitall(count, reqs, MPI_STATUSES_IGNORE);
+      ]])], [MPI_STATUSES_IGNORE=yes], [MPI_STATUSES_IGNORE=no])
+   CFLAGS=${saved_CFLAGS}
+else
+   AC_CHECK_DECL([MPI_STATUSES_IGNORE], [MPI_STATUSES_IGNORE=yes], [MPI_STATUSES_IGNORE=no] [[#include <mpi.h>]])
+fi
+AC_MSG_RESULT([$MPI_STATUSES_IGNORE])
+if test "x$MPI_STATUSES_IGNORE" = xyes ; then
+   AC_DEFINE(HAVE_MPI_STATUSES_IGNORE, 1, [Whether MPI_Waitall takes argument MPI_STATUSES_IGNORE])
+fi
+
 #
 # Check for statfs (many) and specifically f_fstypename field (BSD)
 #
