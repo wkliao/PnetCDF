@@ -179,74 +179,95 @@ ncmpio_close(void *ncdp)
     }
 #endif
 
-#ifdef PNETCDF_PROFILING
-    if (! NC_readonly(ncp)) {
-#define NTIMERS 16
-        int i, j=6;
-        double tt[NTIMERS],max_t[NTIMERS];
-        for (i=0; i<NTIMERS; i++) tt[i] = 0;
-        for (i=0; i<j; i++) tt[i] = ncp->aggr_time[i];
-        if (ncp->adio_fh != NULL) {
-            for (j=0; i<NTIMERS; i++)
-                tt[i] = ncp->adio_fh->lustre_write_metrics[j++];
-        }
-        MPI_Reduce(tt, max_t, NTIMERS, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
-        if (ncp->rank == 0) {
-            double intra_t = max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4];
-            long nsends = (long)max_t[9], nrecvs =  (long)max_t[10], nsort = (long)max_t[5];
-            long r_count = (long)max_t[14], s_count = (long)max_t[15];
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    int i, j, ntimers;
+    double tt[16], max_t[16], put_time=0, get_time=0;
+    MPI_Offset sizes[16], max_sizes[16], max_npairs_put=0, max_npairs_get=0;
 
-            printf("%s: TWO-PHASE intra %5.2f pwrite %5.2f comm %5.2f collw %5.2f (dtype=%.4f)\n",
-                __func__, intra_t, max_t[7], max_t[8], max_t[6], max_t[11]);
-/*
-            printf("%s: intra-node %2d time %.2f %.2f %.2f %.2f %.2f = %.2f (nsort %8ld)\n",
-                    __func__,ncp->num_aggrs_per_node, max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], intra_t, nsort);
+    /* print intra-node aggregation timing breakdown */
+    if (ncp->num_aggrs_per_node > 0) {
+        j = 0;
+        for (i=0; i<6; i++) sizes[j++] = ncp->maxmem_put[i];
+        for (i=0; i<6; i++) sizes[j++] = ncp->maxmem_get[i];
+        sizes[12] = ncp->ina_npairs_put;
+        sizes[13] = ncp->ina_npairs_get;
 
-            printf("%s: TWO-PHASE comm nsends %5ld nrecvs %5ld r_amnt %.2f s_amnt %.2f MB r_count %ld s_count %ld\n",
-                __func__, nsends, nrecvs, max_t[12]/1048576.0, max_t[13]/1048576.0, r_count, s_count);
+        MPI_Allreduce(sizes, max_sizes, 14, MPI_OFFSET, MPI_MAX, ncp->comm);
+        max_npairs_put = max_sizes[12];
+        max_npairs_get = max_sizes[13];
 
-            printf("excel: %.2f %8ld %5.2f %5.2f %5.2f %5ld %5ld\n",
-                intra_t, nsort, max_t[7], max_t[8], max_t[6], nsends, nrecvs);
-*/
-        }
+        for (i=0; i<12; i++) tt[i] = (float)(max_sizes[i]) / 1048576.0; /* in MiB */
+        if (ncp->rank == 0 && max_npairs_put > 0)
+            printf("%s: INA put npairs=%lld mem=%.1f %.1f %.1f %.1f %.1f %.1f (MiB)\n",
+                   __func__, max_sizes[12], tt[0],tt[1],tt[2],tt[3],tt[4],tt[5]);
+        if (ncp->rank == 0 && max_npairs_get > 0)
+            printf("%s: INA get npairs=%lld mem=%.1f %.1f %.1f %.1f %.1f %.1f (MiB)\n",
+                   __func__, max_sizes[13], tt[6],tt[7],tt[8],tt[9],tt[10],tt[11]);
 
-        /* print if this rank is an MPI-IO aggregator, but not an intra-node aggregator */
-        if (ncp->adio_fh != NULL &&
-            ncp->adio_fh->is_agg == 1  && /* this rank is an MPI-IO aggregator */
-            ncp->nonaggr_ranks != NULL && /* this rank is an intra-node I/O aggregator */
-            ncp->my_aggr != ncp->rank)    /* this rank's intra-node I/O aggregator is NOT self */
-            printf("%s: rank %d is MPI-IO aggregator, but its intra-node aggregator is %d\n",__func__,ncp->rank,ncp->my_aggr);
-#if 0
-        /* print I/O aggregator ranks */
-        if (ncp->rank == 0) {
-            char value[MPI_MAX_INFO_VAL + 1];
-            int valuelen=MPI_MAX_INFO_VAL, flag;
-            MPI_Info_get(ncp->mpiinfo, "aggr_list", valuelen, value, &flag);
-            printf("%s: aggr_list=%s\n",__func__,value);
-        }
-
-        /* print intra-node I/O aggregator ranks */
-        int do_io = (ncp->rank == ncp->my_aggr) ? 1 : 0;
-        int *ina_ranks = (int*) malloc(sizeof(int) * ncp->nprocs);
-        MPI_Gather(&do_io, 1, MPI_INT, ina_ranks, 1, MPI_INT, 0, ncp->comm);
-        if (ncp->rank == 0) {
-            char *value=(char*)malloc(ncp->nprocs*6 + 1024);
-            int i, ina_nprocs = 0;
-            /* add hint "aggr_list", list of aggregators' rank IDs */
-            value[0] = '\0';
-            for (i=0; i<ncp->nprocs; i++) {
-                char str[16];
-                if (ina_ranks[i] == 0) continue;
-                ina_nprocs++;
-                snprintf(str, sizeof(str), " %d", i);
-                strcat(value, str);
+        if (max_npairs_put > 0) { /* put npairs > 0 */
+            put_time = ncp->ina_time_init + ncp->ina_time_flatten;
+            ntimers = 4;
+            for (i=0; i<ntimers; i++) {
+                tt[i]     = ncp->ina_time_put[i];
+                put_time += tt[i];
             }
-            printf("%s: ina_nprocs=%d intra-node aggr=%s\n",__func__,ina_nprocs,value);
-            free(value);
+            tt[ntimers]   = ncp->ina_time_init;
+            tt[ntimers+1] = ncp->ina_time_flatten;
+            tt[ntimers+2] = put_time;
+
+            MPI_Reduce(tt, max_t, ntimers+3, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
+            put_time = max_t[ntimers+2];
+            if (ncp->rank == 0)
+                printf("%s: INA put %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f = %5.2f\n",
+                __func__, max_t[ntimers],max_t[ntimers+1],max_t[0],max_t[1],max_t[2],max_t[3],put_time);
         }
-        free(ina_ranks);
-#endif
-   }
+        if (max_npairs_get > 0) { /* get npairs > 0 */
+            get_time = ncp->ina_time_init + ncp->ina_time_flatten;
+            ntimers = 4;
+            for (i=0; i<ntimers; i++) {
+                tt[i]     = ncp->ina_time_get[i];
+                get_time += tt[i];
+            }
+            tt[ntimers]   = ncp->ina_time_init;
+            tt[ntimers+1] = ncp->ina_time_flatten;
+            tt[ntimers+2] = get_time;
+
+            MPI_Reduce(tt, max_t, ntimers+3, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
+            if (ncp->rank == 0)
+                printf("%s: INA get %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f = %5.2f\n",
+                __func__, max_t[ntimers],max_t[ntimers+1],max_t[0],max_t[1],max_t[2],max_t[3],max_t[ntimers+2]);
+        }
+    }
+    else if (ncp->rank == 0)
+        printf("%s: INA is disabled\n",__func__);
+
+    /* print two-phase I/O timing breakdown */
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        if (max_npairs_put > 0) { /* put npairs > 0 */
+            ntimers = 12;
+            for (i=0; i<ntimers; i++) tt[i] = 0;
+            if (ncp->adio_fh != NULL) {
+                for (i=0; i<ntimers; i++)
+                    tt[i] = ncp->adio_fh->coll_write[i];
+            }
+            MPI_Reduce(tt, max_t, ntimers, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
+            if (ncp->rank == 0)
+                printf("%s: TWO-PHASE put intra %5.2f init %5.2f pwrite %5.2f post %5.2f comm %5.2f collw %5.2f ntimes %d\n",
+                   __func__, put_time, max_t[1], max_t[2], max_t[4], max_t[3], max_t[0], (int)(max_t[11]));
+        }
+        if (max_npairs_get > 0) { /* get npairs > 0 */
+            ntimers = 12;
+            for (i=0; i<ntimers; i++) tt[i] = 0;
+            if (ncp->adio_fh != NULL) {
+                for (i=0; i<ntimers; i++)
+                    tt[i] = ncp->adio_fh->coll_read[i];
+            }
+            MPI_Reduce(tt, max_t, ntimers, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
+            if (ncp->rank == 0)
+                printf("%s: TWO-PHASE get intra %5.2f init %5.2f pread %5.2f post %5.2f wait %5.2f collr %5.2f ntimes %d\n",
+                    __func__, get_time, max_t[1], max_t[2], max_t[4], max_t[3], max_t[0], (int)(max_t[11]));
+        }
+    }
 #endif
 
     /* calling MPI_File_close() */
