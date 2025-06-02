@@ -267,8 +267,8 @@ err_check:
         xtype    = MPI_BYTE;
     }
 
-    if (fIsSet(reqMode, NC_REQ_COLL) && ncp->my_aggr >= 0 && ncp->nprocs > 1) {
-        /* intra-node write aggregation must be in collective mode */
+    if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
+        /* intra-node aggregation must be in collective mode */
         void *wbuf = (nbytes == 0) ?  NULL : xbuf;
         err = ncmpio_intra_node_aggregation(ncp, NC_REQ_WR, varp, start, count,
                                             stride, nelems, xtype, wbuf);
@@ -414,10 +414,19 @@ get_varm(NC               *ncp,
      * el_size:  size of itype
      * buftype_is_contig: whether buftype is contiguous
      */
-    err = ncmpii_buftype_decode(varp->ndims, varp->xtype, count, bufcount,
-                                buftype, &itype, &el_size, &bnelems,
-                                &nbytes, &buftype_is_contig);
-    if (err != NC_NOERR) goto err_check;
+    if (varp == NULL) { /* zero-sized request */
+        itype = MPI_BYTE;
+        el_size = 0;
+        bnelems = 0;
+        nbytes = 0;
+        buftype_is_contig = 0;
+    }
+    else {
+        err = ncmpii_buftype_decode(varp->ndims, varp->xtype, count, bufcount,
+                                    buftype, &itype, &el_size, &bnelems,
+                                    &nbytes, &buftype_is_contig);
+        if (err != NC_NOERR) goto err_check;
+    }
     xtype_is_contig = buftype_is_contig;
 
     if (buftype == MPI_DATATYPE_NULL) { /* buftype and bufcount are ignored */
@@ -504,50 +513,60 @@ err_check:
         nbytes   = 0;
         nelems   = 0;
     }
-    else {
-        /* Create the filetype for this request and calculate the beginning
-         * file offset for this request. If this request is contiguous in file,
-         * then set filetype == MPI_BYTE. Otherwise filetype will be an MPI
-         * derived data type.
-         */
-        err = ncmpio_filetype_create_vars(ncp, varp, start, count, stride,
-                                          &offset, &filetype, NULL);
-        if (err != NC_NOERR) {
-            filetype = MPI_BYTE;
-            xtype    = MPI_BYTE;
-            nbytes   = 0;
-            nelems   = 0;
-            if (status == NC_NOERR) status = err;
-        }
-    }
 
-    /* TODO: if record variables are too big (so big that we cannot store the
-     * stride between records in an MPI_Aint, for example) then we will
-     * have to process this one record at a time.
-     */
-
-    fh = ncp->independent_fh;
-    coll_indep = NC_REQ_INDEP;
-    if (ncp->nprocs > 1 && fIsSet(reqMode, NC_REQ_COLL)) {
-        fh = ncp->collective_fh;
-        coll_indep = NC_REQ_COLL;
-    }
-
-    /* MPI_File_set_view is collective */
-    err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
-    if (err != NC_NOERR) {
-        nelems = 0; /* skip this request */
+    if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
+        /* intra-node aggregation must be in collective mode */
+        void *rbuf = (nbytes == 0) ?  NULL : xbuf;
+        err = ncmpio_intra_node_aggregation(ncp, NC_REQ_RD, varp, start, count,
+                                            stride, nelems, xtype, rbuf);
         if (status == NC_NOERR) status = err;
     }
-    if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
+    else {
+        if (nbytes > 0) {
+            /* Create the filetype for this request and calculate the beginning
+             * file offset for this request. If this request is contiguous in
+             * file, then set filetype == MPI_BYTE. Otherwise filetype will be
+             * an MPI derived data type.
+             */
+            err = ncmpio_filetype_create_vars(ncp, varp, start, count, stride,
+                                              &offset, &filetype, NULL);
+            if (err != NC_NOERR) {
+                filetype = MPI_BYTE;
+                xtype    = MPI_BYTE;
+                nbytes   = 0;
+                nelems   = 0;
+                if (status == NC_NOERR) status = err;
+            }
+        }
 
-    /* xtype is the element data type (MPI primitive type) in xbuf to be
-     * read from the variable defined in file. Note xbuf will contain data read
-     * from the file and hence is in the external data type.
-     */
-    err = ncmpio_read_write(ncp, NC_REQ_RD, coll_indep, offset, nelems, xtype,
-                            xbuf, xtype_is_contig);
-    if (status == NC_NOERR) status = err;
+        /* TODO: if record variables are too big (so big that we cannot store
+         * the stride between records in an MPI_Aint, for example) then we will
+         * have to process this one record at a time.
+         */
+
+        fh = ncp->independent_fh;
+        coll_indep = NC_REQ_INDEP;
+        if (ncp->nprocs > 1 && fIsSet(reqMode, NC_REQ_COLL)) {
+            fh = ncp->collective_fh;
+            coll_indep = NC_REQ_COLL;
+        }
+
+        /* MPI_File_set_view is collective */
+        err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
+        if (err != NC_NOERR) {
+            nelems = 0; /* skip this request */
+            if (status == NC_NOERR) status = err;
+        }
+        if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
+
+        /* xtype is the element data type (MPI primitive type) in xbuf to be
+         * read from the variable defined in file. Note xbuf will contain data
+         * read from the file and hence is in the external data type.
+         */
+        err = ncmpio_read_write(ncp, NC_REQ_RD, coll_indep, offset, nelems,
+                                xtype, xbuf, xtype_is_contig);
+        if (status == NC_NOERR) status = err;
+    }
 
     if (nelems > 0) {
         /* unpack xbuf into user buffer, buf */
@@ -608,8 +627,9 @@ ncmpio_$1_var(void             *ncdp,
          * write, they still need to participate the communication part of the
          * intra-node aggregation operation.
          */
-        ifelse(`$1',`put',`if (ncp->my_aggr >= 0)
-            return $1_varm(ncp, NULL, NULL, NULL, NULL, imap, NULL, 0, buftype, reqMode);')
+        if (ncp->num_aggrs_per_node > 0)
+            return $1_varm(ncp, NULL, NULL, NULL, NULL, imap, NULL, 0,
+                           buftype, reqMode);
 
         /* this collective API has a zero-length request */
         return ncmpio_getput_zero_req(ncp, reqMode);
