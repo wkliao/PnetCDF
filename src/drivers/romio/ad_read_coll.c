@@ -111,6 +111,8 @@ void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
     }
 #endif
 
+    int free_flat_fview = (fd->filetype != MPI_DATATYPE_NULL);
+
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
@@ -161,7 +163,7 @@ void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
         || (!interleave_count && (fd->hints->cb_read == ADIOI_HINT_AUTO))) {
         /* don't do aggregation */
         if (fd->hints->cb_read != ADIOI_HINT_DISABLE) {
-            ADIOI_Free(offset_list);
+            if (free_flat_fview) ADIOI_Free(offset_list);
             ADIOI_Free(st_offsets);
         }
 
@@ -249,7 +251,7 @@ void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
     ADIOI_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
     ADIOI_Free_others_req(nprocs, count_others_req_per_proc, others_req);
 
-    ADIOI_Free(offset_list);
+    if (free_flat_fview) ADIOI_Free(offset_list);
     ADIOI_Free(st_offsets);
     ADIOI_Free(fd_start);
 }
@@ -324,7 +326,11 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
             return;
         }
 
-        /* reuse flat_file indices and blocklens to reduce memory footprint */
+        /* When PnetCDF's intra-node aggregation is enabled, the fileview's
+         * flattened offset-length pairs, fd->flat_file->indices and
+         * fd->flat_file->blockens, have been populated in PnetCDF's
+         * subroutines, which can be reused here to avoid repeated datatype
+         * flattened work and reduce memory footprint */
         *offset_list_ptr = fd->flat_file->indices;
         *len_list_ptr = fd->flat_file->blocklens;
 
