@@ -1047,7 +1047,7 @@ req_commit(NC  *ncp,
     if (do_write > 0) {
 
         if (ncp->my_aggr >= 0 && coll_indep == NC_REQ_COLL && ncp->nprocs > 1)
-            /* intra-node write aggregation must be in collective mode */
+            /* intra-node aggregation must be in collective mode */
             err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_WR,
                                                       num_w_reqs, put_list,
                                                       newnumrecs);
@@ -1058,8 +1058,14 @@ req_commit(NC  *ncp,
     }
 
     if (do_read > 0) {
-        err = wait_getput(ncp, num_r_reqs, get_list, NC_REQ_RD, coll_indep,
-                          newnumrecs);
+        if (ncp->my_aggr >= 0 && coll_indep == NC_REQ_COLL && ncp->nprocs > 1)
+            /* intra-node aggregation must be in collective mode */
+            err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_RD,
+                                                      num_r_reqs, get_list,
+                                                      newnumrecs);
+        else
+            err = wait_getput(ncp, num_r_reqs, get_list, NC_REQ_RD, coll_indep,
+                              newnumrecs);
         get_list = NULL; /* has been freed in wait_getput() */
     }
 
