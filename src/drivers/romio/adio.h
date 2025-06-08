@@ -282,12 +282,16 @@ int ADIO_GEN_set_aggr_list(ADIO_File fd, int num_nodes, int *node_ids);
 void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                 MPI_Datatype datatype, int file_ptr_type, ADIO_Offset offset,
                 ADIO_Status *status, int *error_code);
-#define ADIO_WriteStrided ADIOI_LUSTRE_WriteStrided
 
 void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
                 MPI_Aint count, MPI_Datatype buftype, int file_ptr_type,
                 ADIO_Offset offset, ADIO_Status *status, int *error_code);
 
+
+void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
+                            MPI_Datatype datatype, int file_ptr_type,
+                            ADIO_Offset offset, ADIO_Status *status,
+                            int *error_code);
 
 void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                 MPI_Datatype buftype, int file_ptr_type, ADIO_Offset offset,

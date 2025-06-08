@@ -28,6 +28,7 @@ C_SRCS = romio_misc.c \
          ad_read_coll.c \
          ad_read_str_naive.c \
          ad_write_coll.c \
+         ad_write_str.c \
          ad_write_str_naive.c \
          ad_subarray.c \
          ad_darray.c \
