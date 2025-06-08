@@ -39,6 +39,10 @@ for i in ${check_PROGRAMS} ; do
            export PNETCDF_HINTS=
         fi
         if test "$intra_aggr" = 1 ; then
+           if [[ "$i" == "vard"* ]] ; then
+              # vard APIs are not supported when intra-node agggregation is enabled
+              continue
+           fi
            export PNETCDF_HINTS="${PNETCDF_HINTS};nc_num_aggrs_per_node=2"
         fi
         export PNETCDF_SAFE_MODE=$j
