@@ -150,7 +150,7 @@ int get_var_and_verify(int ncid,
 /*----< main() >------------------------------------------------------------*/
 int main(int argc, char **argv) {
 
-    char         filename[256];
+    char         filename[256], *hint_value;
     int          i, j, err, ncid, varid0, varid1, varid2, dimids[2], nerrs=0;
     int          rank, nprocs, blocklengths[2], **buf, *bufptr;
     int          array_of_sizes[2], array_of_subsizes[2], array_of_starts[2];
@@ -180,6 +180,19 @@ int main(int argc, char **argv) {
         sprintf(cmd_str, "*** TESTING C   %s for vard put and get ", basename(argv[0]));
         printf("%-66s ------ ", cmd_str); fflush(stdout);
         free(cmd_str);
+    }
+
+    /* Skip test when intra-node aggregation is enabled, as vard APIs are not
+     * supported.
+     */
+    if (inq_env_hint("nc_num_aggrs_per_node", &hint_value)) {
+        if (atoi(hint_value) > 0) {
+            free(hint_value);
+            if (rank == 0) printf(SKIP_STR);
+            MPI_Finalize();
+            return 0;
+        }
+        free(hint_value);
     }
 
     /* construct various MPI derived data types */
