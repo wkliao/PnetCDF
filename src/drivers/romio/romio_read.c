@@ -49,6 +49,11 @@ int ADIO_ReadContig(ADIO_File     fd,
         off = offset;
         // off = fd->disp + fd->etype_size * offset;
 
+// int rank; MPI_Comm_rank(MPI_COMM_WORLD,&rank); printf("%s at %d: pread off=%lld len=%lld\n",__func__,__LINE__,off,len);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    double timing = MPI_Wtime();
+#endif
     p = (char *) buf;
     while (bytes_xfered < len) {
         r_count = len - bytes_xfered;
@@ -60,6 +65,9 @@ int ADIO_ReadContig(ADIO_File     fd,
         bytes_xfered += err;
         p += err;
     }
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    fd->coll_read[2] += MPI_Wtime() - timing;
+#endif
 
     if (file_ptr_type == ADIO_INDIVIDUAL)
         fd->fp_ind += bytes_xfered;
@@ -104,11 +112,21 @@ int file_read(ADIO_File     fd,
     if (bufType_size == 0) return NC_NOERR;
 
     ADIOI_Datatype_iscontig(bufType, &buftype_is_contig);
-    ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+
+    /* when fd->filetype == MPI_DATATYPE_NULL, this is called from INA */
+    if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL) {
+        filetype_is_contig = (fd->flat_file->count <= 1);
+        if (fd->flat_file->count > 0)
+            offset = fd->flat_file->indices[0];
+    }
+    else if (fd->filetype == MPI_BYTE)
+        filetype_is_contig = 1;
+    else
+        ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     if (buftype_is_contig && filetype_is_contig) {
-        MPI_Aint wcount = (MPI_Aint)count * bufType_size;
-        err = ADIO_ReadContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
+        MPI_Aint rcount = (MPI_Aint)count * bufType_size;
+        err = ADIO_ReadContig(fd, buf, rcount, MPI_BYTE, file_ptr_type,
                               offset, status, NULL);
     }
     else {
@@ -136,6 +154,8 @@ int ADIO_File_read_at(ADIO_File     fh,
 {
     int err = NC_NOERR;
 
+    ADIOI_Assert(fh != NULL);
+
     if (count == 0) return NC_NOERR;
 
     if (count < 0) return NC_ENEGATIVECNT;
@@ -150,7 +170,7 @@ int ADIO_File_read_at(ADIO_File     fh,
 }
 
 /*----< ADIO_File_read() >---------------------------------------------------*/
-/* This is an independent call. */
+/* This is an independent call. Note PnetCDF never calls this subroutine. */
 int ADIO_File_read(ADIO_File     fh,
                    void         *buf,
                    int           count,
@@ -158,6 +178,8 @@ int ADIO_File_read(ADIO_File     fh,
                    MPI_Status   *status)
 {
     int err = NC_NOERR;
+
+    ADIOI_Assert(fh != NULL);
 
     if (count == 0) return NC_NOERR;
 
@@ -185,6 +207,8 @@ int ADIO_File_read_at_all(ADIO_File     fh,
 {
     int err, st=NC_NOERR;
 
+    ADIOI_Assert(fh != NULL);
+
     if (count < 0) st = NC_ENEGATIVECNT;
 
     /* PnetCDF has only 2 modes: read-only and read-write */
@@ -199,7 +223,7 @@ int ADIO_File_read_at_all(ADIO_File     fh,
 }
 
 /*----< ADIO_File_read_all() >----------------------------------------------*/
-/* This is a collective call. */
+/* This is a collective call. Note PnetCDF never calls this subroutine. */
 int ADIO_File_read_all(ADIO_File     fh,
                        void         *buf,
                        int           count,
@@ -207,6 +231,8 @@ int ADIO_File_read_all(ADIO_File     fh,
                        MPI_Status   *status)
 {
     int err, st=NC_NOERR;
+
+    ADIOI_Assert(fh != NULL);
 
     if (count < 0) st = NC_ENEGATIVECNT;
 
