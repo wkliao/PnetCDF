@@ -9,10 +9,6 @@
 
 #include "adio.h"
 
-#ifdef AGGREGATION_PROFILE
-#include "mpe.h"
-#endif
-
 /* prototypes of functions used for collective writes only. */
 static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
                                  datatype, int nprocs, int myrank,
@@ -99,18 +95,12 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
 #endif
     int old_error, tmp_error;
 
-#if 0
-    if (fd->hints->cb_pfr != ADIOI_HINT_DISABLE) {
-        /* Cast away const'ness as the below function is used for read
-         * and write */
-        ADIOI_IOStridedColl(fd, (char *) buf, count, ADIOI_WRITE, datatype,
-                            file_ptr_type, offset, status, error_code);
-        return;
-    }
-#endif
-
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+double curT = MPI_Wtime();
+#endif
 
 /* the number of processes that actually perform I/O, nprocs_for_coll,
  * is stored in the hints off the ADIO_File structure
@@ -158,6 +148,10 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
                 ADIOI_Free(offset_list);
             ADIOI_Free(st_offsets);
         }
+        if (count == 0) {
+            *error_code = MPI_SUCCESS;
+            return;
+        }
 
         fd->fp_ind = orig_fp;
         if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL)
@@ -169,13 +163,19 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
 
         if (buftype_is_contig && filetype_is_contig) {
             if (file_ptr_type == ADIO_EXPLICIT_OFFSET) {
-                off = fd->disp + offset;
+                if (fd->filetype == MPI_DATATYPE_NULL)
+                    /* intra-node aggregation has flattened the fileview and
+                     * temporarily set fd->filetype to MPI_DATATYPE_NULL
+                     */
+                    off = (fd->flat_file->count) ? fd->flat_file->indices[0] : 0;
+                else
+                    off = fd->disp + offset;
                 ADIO_WriteContig(fd, buf, count, datatype,
                                  ADIO_EXPLICIT_OFFSET, off, status, error_code);
             } else
                 ADIO_WriteContig(fd, buf, count, datatype, ADIO_INDIVIDUAL, 0, status, error_code);
         } else
-            ADIO_WriteStrided(fd, buf, count, datatype, file_ptr_type, offset, status, error_code);
+            ADIOI_GEN_WriteStrided(fd, buf, count, datatype, file_ptr_type, offset, status, error_code);
 
         return;
     }
@@ -209,6 +209,10 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
                           nprocs, myrank, &count_others_req_procs, &count_others_req_per_proc,
                           &others_req);
 
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fd->is_agg) fd->coll_write[1] += MPI_Wtime() - curT;
+#endif
+
 /* exchange data and write in sizes of no more than coll_bufsize. */
     /* Cast away const'ness for the below function */
     ADIOI_Exch_and_write(fd, (char *) buf, datatype, nprocs, myrank,
@@ -233,22 +237,12 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
 
     /* optimization: if only one process performing i/o, we can perform
      * a less-expensive Bcast  */
-#ifdef ADIOI_MPE_LOGGING
-    MPE_Log_event(ADIOI_MPE_postwrite_a, 0, NULL);
-#endif
     if (fd->hints->cb_nodes == 1)
         MPI_Bcast(error_code, 1, MPI_INT, fd->hints->ranklist[0], fd->comm);
     else {
         tmp_error = *error_code;
         MPI_Allreduce(&tmp_error, error_code, 1, MPI_INT, MPI_MAX, fd->comm);
     }
-#ifdef ADIOI_MPE_LOGGING
-    MPE_Log_event(ADIOI_MPE_postwrite_b, 0, NULL);
-#endif
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5012, 0, NULL);
-#endif
-
     if ((old_error != MPI_SUCCESS) && (old_error != MPI_ERR_IO))
         *error_code = old_error;
 
@@ -273,8 +267,8 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
 #endif
     }
 
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5013, 0, NULL);
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fd->is_agg) fd->coll_write[0] += MPI_Wtime() - curT;
 #endif
 }
 
@@ -361,6 +355,10 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
     }
 
     MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fd->comm);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    fd->coll_write[11] = MAX(fd->coll_write[11], max_ntimes);
+#endif
 
     write_buf = fd->io_buf;
 
@@ -583,6 +581,10 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
     ADIO_Offset *srt_off = NULL;
     static char myname[] = "ADIOI_W_EXCHANGE_DATA";
 
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+double curT = MPI_Wtime();
+#endif
+
 /* exchange recv_size info so that each process knows how much to
    send to whom. */
 
@@ -742,9 +744,6 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
 /* post sends. if buftype_is_contig, data can be directly sent from
    user buf at location given by buf_idx. else use send_buf. */
 
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5032, 0, NULL);
-#endif
     if (buftype_is_contig) {
         j = 0;
         for (i = 0; i < nprocs; i++)
@@ -833,6 +832,11 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
     statuses = (MPI_Status *) ADIOI_Malloc(nreqs * sizeof(MPI_Status));
 #endif
 
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fd->is_agg) fd->coll_write[4] += MPI_Wtime() - curT;
+    curT = MPI_Wtime();
+#endif
+
 #ifdef NEEDS_MPI_TEST
     i = 0;
     while (!i)
@@ -840,10 +844,10 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
 #else
     MPI_Waitall(nreqs, requests, statuses);
 #endif
-
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5033, 0, NULL);
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fd->is_agg) fd->coll_write[3] += MPI_Wtime() - curT;
 #endif
+
 #ifndef HAVE_MPI_STATUSES_IGNORE
     ADIOI_Free(statuses);
 #endif
