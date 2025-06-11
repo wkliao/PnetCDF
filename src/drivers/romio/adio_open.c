@@ -523,7 +523,7 @@ file_create(ADIO_File fd,
 // int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank); printf("%s at %d: world_rank=%d local rank=%d ---- calling POSIX open()\n",__func__,__LINE__,world_rank,rank);
 
 #ifdef PNETCDF_PROFILING
-static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\nxxxx %s line %d: %s ---------%s\n",basename(__FILE__),__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\nxxxx %s line %d: %s ---------%s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
 #endif
 
     amode = O_CREAT;
@@ -535,11 +535,15 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
 
     /* root process creates the file first, followed by all processes open the
      * file.
-     * For Lustre, we need to obtain file striping info (striping_factor,
-     * striping_unit, and num_osts) in order to select the I/O aggregators
-     * in fd->hints->ranklist, no matter its is open or create mode.
      */
-    if (rank == 0) {
+    if (rank > 0) goto err_out;
+
+    if (fd->file_system == ADIO_LUSTRE) {
+        /* For Lustre, we need to obtain file striping info (striping_factor,
+         * striping_unit, and num_osts) in order to select the I/O aggregators
+         * in fd->hints->ranklist, no matter its is open or create mode.
+         */
+
 #ifdef HAVE_LUSTRE
         int set_user_layout = 0, overstriping_ratio;
         int str_factor, str_unit, start_iodev;
@@ -660,7 +664,8 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         stripin_info[1] = stripe_count;
         stripin_info[2] = start_iodevice;
         stripin_info[3] = numOSTs;
-#else
+
+#elif defined(MIMIC_LUSTRE)
         fd->fd_sys = open(fd->filename, amode, perm);
         if (fd->fd_sys == -1) {
             fprintf(stderr,"%s line %d: rank %d fails to create file %s (%s)\n",
@@ -668,19 +673,26 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
             err = ncmpii_error_posix2nc("open");
             goto err_out;
         }
-#endif
-#if defined(MIMIC_LUSTRE)
         stripin_info[0] = STRIPE_SIZE;
         stripin_info[1] = STRIPE_COUNT;
         stripin_info[2] = 0;
         stripin_info[3] = STRIPE_COUNT;
 #endif
     }
+    else {
+        fd->fd_sys = open(fd->filename, amode, perm);
+        if (fd->fd_sys == -1) {
+            fprintf(stderr,"%s line %d: rank %d fails to create file %s (%s)\n",
+                    __func__,__LINE__, rank, fd->filename, strerror(errno));
+            err = ncmpii_error_posix2nc("open");
+            goto err_out;
+        }
+    }
 
 err_out:
     MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
-    if (stripin_info[0] == -1) {
-        fprintf(stderr, "%s line %d: failed to create file %s\n", __func__,
+    if (fd->file_system == ADIO_LUSTRE && stripin_info[0] == -1) {
+        fprintf(stderr, "%s line %d: failed to create Lustre file %s\n", __func__,
                 __LINE__, fd->filename);
         return err;
     }
@@ -688,8 +700,10 @@ err_out:
     fd->hints->striping_unit   = stripin_info[0];
     fd->hints->striping_factor = stripin_info[1];
     fd->hints->start_iodevice  = stripin_info[2];
-    fd->hints->fs_hints.lustre.num_osts = stripin_info[3];
-    fd->hints->fs_hints.lustre.overstriping_ratio = stripin_info[1] / stripin_info[3];
+    if (fd->file_system == ADIO_LUSTRE) {
+        fd->hints->fs_hints.lustre.num_osts = stripin_info[3];
+        fd->hints->fs_hints.lustre.overstriping_ratio = stripin_info[1] / stripin_info[3];
+    }
 
     if (rank > 0) { /* non-root processes */
         fd->fd_sys = open(fd->filename, O_RDWR, perm);
@@ -883,7 +897,7 @@ file_open(ADIO_File fd)
     MPI_Comm_rank(fd->comm, &rank);
 
 #ifdef PNETCDF_PROFILING
-static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",basename(__FILE__),__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
 #endif
 
     old_mask = umask(022);
