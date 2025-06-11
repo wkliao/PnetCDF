@@ -181,9 +181,14 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         filetype_size = 0;
         for (n=0; n<fd->flat_file->count; n++)
             filetype_size += fd->flat_file->blocklens[n];
-        filetype_extent = fd->flat_file->indices[fd->flat_file->count-1]
-                        + fd->flat_file->blocklens[fd->flat_file->count-1]
-                        - fd->flat_file->indices[0];
+        if (fd->flat_file->count > 0) {
+            n = fd->flat_file->count - 1;
+            filetype_extent = fd->flat_file->indices[n]
+                            + fd->flat_file->blocklens[n]
+                            - fd->flat_file->indices[0];
+        }
+        else
+            filetype_extent = 0;
     }
     else if (fd->filetype == MPI_BYTE) {
         filetype_is_contig = 1;
@@ -286,11 +291,6 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
             st_index = i;       /* starting index in flat_file->indices[] */
             offset += disp + (ADIO_Offset) n_filetypes *filetype_extent;
         } else {
-
-            if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL)
-                /* fd->flat_file contains byte offsets not based on fileview */
-                offset -= fd->flat_file->indices[0];
-
             n_etypes_in_filetype = filetype_size;
             n_filetypes = offset / n_etypes_in_filetype;
             etype_in_filetype = offset % n_etypes_in_filetype;
@@ -308,7 +308,6 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                 }
             }
 
-// printf("offset=%lld filetype_size=%ld n_filetypes=%ld filetype_extent=%ld abs_off_in_filetype=%lld\n", offset,filetype_size,n_filetypes, filetype_extent, abs_off_in_filetype);
             /* abs. offset in bytes in the file */
             offset = disp + (ADIO_Offset) n_filetypes *filetype_extent + abs_off_in_filetype;
         }
