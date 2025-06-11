@@ -1241,9 +1241,8 @@ ncmpi_inq_file_format(const char *filename,
                     __func__,__LINE__,filename);
         DEBUG_RETURN_ERROR(NC_EFILE)
     }
-    if (close(fd) == -1) {
+    if (close(fd) == -1)
         DEBUG_RETURN_ERROR(NC_EFILE)
-    }
 
     if (memcmp(signature, cdf_signature, 3) == 0) {
              if (signature[3] == 5)  *formatp = NC_FORMAT_CDF5;
