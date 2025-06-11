@@ -71,6 +71,11 @@ getput_vard(NC               *ncp,
     int type_size;
 #endif
 
+    if (ncp->num_aggrs_per_node > 0) {
+        fprintf(stderr, "PnetCDF vard APIs are not supported when intra-node agggregation is enabled\n");
+        return NC_ENOTSUPPORT;
+    }
+
 #ifdef ENABLE_SUBFILING
     /* call a separate routine if variable is stored in subfiles */
     if (varp->num_subfiles > 1) {
