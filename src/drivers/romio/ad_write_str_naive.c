@@ -52,7 +52,11 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
         ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
         MPI_Type_size_x(fd->filetype, &filetype_size);
         if (!filetype_size) {
-            MPI_Status_set_elements(status, fd->filetype, 0);
+#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
+            MPI_Status_set_elements_x(status, MPI_BYTE, 0);
+#else
+            MPI_Status_set_elements(status, MPI_BYTE, 0);
+#endif
             *error_code = MPI_SUCCESS;
             return;
         }
@@ -65,7 +69,10 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
 
     bufsize = buftype_size * count;
 
-    /* contiguous in buftype and filetype is handled elsewhere */
+    /* Contiguous both in buftype and filetype should have been handled in a
+     * call to ADIO_WriteContig() earlier.
+     */
+    ADIOI_Assert(!(buftype_is_contig && filetype_is_contig));
 
     if (!buftype_is_contig && filetype_is_contig) {
         int b_count;
