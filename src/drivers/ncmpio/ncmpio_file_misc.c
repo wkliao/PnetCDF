@@ -109,18 +109,31 @@ ncmpio_redef(void *ncdp)
 
     /* must reset fileview as header extent may later change in enddef() */
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        /* When intra-node aggregation is enabled, non-aggregators' adio_fh is
+         * NULL.
+         */
+        if (ncp->adio_fh == NULL) return NC_NOERR;
+
         err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         DEBUG_ASSIGN_ERROR(status, err)
     }
     else {
-        TRACE_IO(MPI_File_set_view, (ncp->collective_fh, 0, MPI_BYTE,
-                                     MPI_BYTE, "native", MPI_INFO_NULL));
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            DEBUG_ASSIGN_ERROR(status, err)
-        }
+        /* When intra-node aggregation (INA) is enabled, non-aggregators'
+         * collective_fh is MPI_FILE_NULL. However, independent_fh may not be
+         * MPI_FILE_NULL, as INA is disabled in independent mode, which use
+         * independent_fh.
+         */
         if (ncp->independent_fh != MPI_FILE_NULL) {
             TRACE_IO(MPI_File_set_view, (ncp->independent_fh, 0, MPI_BYTE,
+                                         MPI_BYTE, "native", MPI_INFO_NULL));
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+                DEBUG_ASSIGN_ERROR(status, err)
+            }
+        }
+
+        if (ncp->collective_fh != MPI_FILE_NULL) {
+            TRACE_IO(MPI_File_set_view, (ncp->collective_fh, 0, MPI_BYTE,
                                          MPI_BYTE, "native", MPI_INFO_NULL));
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
@@ -156,7 +169,54 @@ ncmpio_begin_indep_data(void *ncdp)
     /* raise independent flag */
     fSet(ncp->flags, NC_MODE_INDEP);
 
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) return NC_NOERR;
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        /* When using PnetCDF's ADIO driver, there are 2 scenarios:
+         * 1. When intra-node aggregation (INA) is enabled, at the end of
+         *    ncmpi_create/ncmpi_open, non-aggregators' adio_fh are NULL. Thus
+         *    switching to independent data mode, we can re-use adio_fh to
+         *    store file handler of file opened with MPI_COMM_SELF. Note
+         *    whether adio_fh is NULL or not does not tell whether INA is
+         *    enabled or not.
+         * 2. When INA is disabled, all ranks calls ADIO_File_open() and thus
+         *    adio_fh should not be NULL. In other word, this scenario should
+         *    not reach here at all. Because PnetCDF's ADIO driver relaxes
+         *    File_setview subroutine to be able to called independently, the
+         *    same adio_fh can be used for both collective and independent I/O
+         *    APIs. Note we cannot re-used adio_fh for the above scenario 1,
+         *    because in the collective data mode, all ranks must participate
+         *    each collective I/O call,
+         */
+        int err;
+        char *filename;
+
+        if (ncp->adio_fh != NULL) /* this rank must be an INA aggregator */
+            return NC_NOERR;
+
+        filename = ncmpii_remove_file_system_type_prefix(ncp->path);
+
+        ncp->adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
+        ncp->adio_fh->file_system = ncp->fstype;
+        ncp->adio_fh->num_nodes = 1;
+        ncp->adio_fh->node_ids = (int*) NCI_Malloc(sizeof(int));
+        ncp->adio_fh->node_ids[0] = 0;
+
+        err = ADIO_File_open(MPI_COMM_SELF, filename, ncp->mpiomode,
+                             ncp->mpiinfo, ncp->adio_fh);
+        if (err != NC_NOERR)
+            return err;
+
+        /* get the I/O hints used/modified by MPI-IO */
+        err = ADIO_File_get_info(ncp->adio_fh, &ncp->mpiinfo);
+        if (err != NC_NOERR) return err;
+
+        /* Add PnetCDF hints into ncp->mpiinfo */
+        ncmpio_hint_set(ncp, ncp->mpiinfo);
+
+        NCI_Free(ncp->adio_fh->node_ids);
+        ncp->adio_fh->node_ids = NULL;
+
+        return NC_NOERR;
+    }
 
     /* PnetCDF's default mode is collective. MPI file handle, collective_fh,
      * will never be MPI_FILE_NULL. We must use a separate MPI file handle
@@ -172,6 +232,14 @@ ncmpio_begin_indep_data(void *ncdp)
                                  &ncp->independent_fh));
         if (mpireturn != MPI_SUCCESS)
             return ncmpii_error_mpi2nc(mpireturn, mpi_name);
+
+        /* get the I/O hints used/modified by MPI-IO */
+        mpireturn = MPI_File_get_info(ncp->independent_fh, &ncp->mpiinfo);
+        if (mpireturn != MPI_SUCCESS)
+            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
+
+        /* Copy MPI-IO hints into ncp->mpiinfo */
+        ncmpio_hint_set(ncp, ncp->mpiinfo);
     }
     return NC_NOERR;
 }
