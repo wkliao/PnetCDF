@@ -425,12 +425,21 @@ hdr_fetch(bufferinfo *gbp) {
         gbp->offset += readLen;
     }
     else if (gbp->coll_mode == 1) { /* collective read */
-        /* other processes participate the collective call */
+        /* Other ranks participate the collective call with a zero-sized
+         * request.
+         */
         if (gbp->fstype != ADIO_FSTYPE_MPIIO) {
-            err = ADIO_File_read_at_all(gbp->adio_fh,  0, NULL,
-                                       0, MPI_BYTE, &mpistatus);
+            if (gbp->adio_fh != NULL)
+                /* adio_fh is NULL for non-aggregators when intra-node
+                 * aggregation is enabled.
+                 */
+                err = ADIO_File_read_at_all(gbp->adio_fh,  0, NULL,
+                                            0, MPI_BYTE, &mpistatus);
         }
-        else {
+        else if (gbp->collective_fh != NULL) {
+            /* collective_fh is NULL for non-aggregators when intra-node
+             * aggregation is enabled.
+             */
             TRACE_IO(MPI_File_read_at_all, (gbp->collective_fh, 0, NULL,
                                             0, MPI_BYTE, &mpistatus));
             if (mpireturn != MPI_SUCCESS) {
