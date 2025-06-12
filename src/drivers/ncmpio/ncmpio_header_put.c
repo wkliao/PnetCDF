@@ -565,11 +565,15 @@ int ncmpio_write_header(NC *ncp)
 
             if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
                 if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+                    if (ncp->adio_fh == NULL) continue;
+
                     err = ADIO_File_write_at_all(ncp->adio_fh, offset, buf_ptr, writeLen,
                                                 MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
                 }
                 else {
+                    if (fh == MPI_FILE_NULL) continue;
+
                     TRACE_IO(MPI_File_write_at_all, (fh, offset, buf_ptr, writeLen,
                                                      MPI_BYTE, &mpistatus));
                     if (mpireturn != MPI_SUCCESS) {
@@ -585,11 +589,15 @@ int ncmpio_write_header(NC *ncp)
             }
             else { /* header independent write */
                 if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+                    if (ncp->adio_fh == NULL) continue;
+
                     err = ADIO_File_write_at(ncp->adio_fh, offset, buf_ptr, writeLen,
                                             MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
                 }
                 else {
+                    if (fh == MPI_FILE_NULL) continue;
+
                     TRACE_IO(MPI_File_write_at, (fh, offset, buf_ptr, writeLen,
                                                  MPI_BYTE, &mpistatus));
                     if (mpireturn != MPI_SUCCESS) {
@@ -635,6 +643,8 @@ int ncmpio_write_header(NC *ncp)
         /* collective write: other processes participate the collective call */
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
             for (i=0; i<ntimes; i++) {
+                if (ncp->adio_fh == NULL) continue;
+
                 err = ADIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
@@ -642,6 +652,8 @@ int ncmpio_write_header(NC *ncp)
         }
         else {
             for (i=0; i<ntimes; i++) {
+                if (fh == MPI_FILE_NULL) continue;
+
                 TRACE_IO(MPI_File_write_at_all, (fh, 0, NULL, 0, MPI_BYTE, &mpistatus));
                 if (mpireturn != MPI_SUCCESS) {
                     err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
@@ -651,7 +663,6 @@ int ncmpio_write_header(NC *ncp)
                     }
                 }
             }
->>>>>>> 8b74bd18 (check and use Lustre subroutines)
         }
     }
 
