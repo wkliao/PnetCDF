@@ -239,14 +239,14 @@ move_file_block(NC         *ncp,
         memset(&mpistatus, 0, sizeof(MPI_Status));
 
         /* read from file at off_from for amount of chunk_size */
+        err = NC_NOERR;
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-            err = NC_NOERR;
             if (do_coll)
-                err = ADIO_File_read_at_all(ncp->adio_fh, off_from, buf, chunk_size,
-                                            MPI_BYTE, &mpistatus);
+                err = ADIO_File_read_at_all(ncp->adio_fh, off_from, buf,
+                                            chunk_size, MPI_BYTE, &mpistatus);
             else if (chunk_size > 0)
-                err = ADIO_File_read_at(ncp->adio_fh, off_from, buf, chunk_size,
-                                            MPI_BYTE, &mpistatus);
+                err = ADIO_File_read_at(ncp->adio_fh, off_from, buf,
+                                            chunk_size, MPI_BYTE, &mpistatus);
             if (err != NC_NOERR) {
                 if (status == NC_NOERR)
                     status = err;
@@ -316,7 +316,7 @@ move_file_block(NC         *ncp,
                                              get_count /* NOT bufcount */,
                                              MPI_BYTE, &mpistatus);
             else if (get_count > 0)
-                err = ADIO_File_write_at_all(ncp->adio_fh, off_to, buf,
+                err = ADIO_File_write_at(ncp->adio_fh, off_to, buf,
                                              get_count /* NOT bufcount */,
                                              MPI_BYTE, &mpistatus);
             if (err != NC_NOERR) {
@@ -649,7 +649,7 @@ static int
 write_NC(NC *ncp)
 {
     char *mpi_name;
-    int status=NC_NOERR, mpireturn, err, is_coll;
+    int status=NC_NOERR, mpireturn, err, is_coll=0;
     MPI_Offset i, header_wlen, ntimes;
     MPI_File fh;
     MPI_Status mpistatus;
@@ -659,8 +659,15 @@ write_NC(NC *ncp)
     /* Depending on whether NC_HCOLL is set, writing file header can be done
      * through either MPI collective or independent write call.
      * When * ncp->nprocs == 1, ncp->collective_fh == ncp->independent_fh
+     * For those ranks participating the collective MPI write call, their
+     * is_coll is set to 1, otherwise 0.
      */
-    is_coll = (ncp->nprocs > 1 && fIsSet(ncp->flags, NC_HCOLL)) ? 1 : 0;
+    if (fIsSet(ncp->flags, NC_HCOLL)) {
+        if (ncp->num_aggrs_per_node > 0)
+            is_coll = (ncp->ina_nprocs > 1 && ncp->rank == ncp->my_aggr);
+        else
+            is_coll = (ncp->nprocs > 1);
+    }
     fh = ncp->collective_fh;
 
     /* In NC_begins(), root's ncp->xsz and ncp->begin_var, root's header
@@ -1581,7 +1588,8 @@ ncmpio__enddef(void       *ncdp,
 
     /* first sync header objects in memory across all processes, and then root
      * writes the header to file. Note safe_mode error check will be done in
-     * write_NC() */
+     * write_NC().
+     */
     status = write_NC(ncp);
 
     /* we should continue to exit define mode, even if header is inconsistent
