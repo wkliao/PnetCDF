@@ -645,19 +645,37 @@ ncmpio_file_set_view(const NC     *ncp,
 
 // printf("%s line %d: filetype = %s\n",__func__,__LINE__,(filetype == MPI_DATATYPE_NULL)?"NULL":"NOT NULL");
 
-    if (filetype == MPI_DATATYPE_NULL) { /* from intra_node_aggregation() */
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO && filetype == MPI_DATATYPE_NULL) {
+        /* When PnetCDF's internal ADIO driver is used and this is called from
+         * intra_node_aggregation() which passes MPI_DATATYPE_NULL in argument
+         * filetype to help this subroutine to tell this is called from
+         * intra_node_aggregation(). In this case, this rank's fileview has
+         * already been flattened into offset-length pairs which can directly
+         * be used by the ADIO driver.
+         *
+         * Note when this subroutine is not called from
+         * intra_node_aggregation(), i.e. intra-node aggregation is disabled,
+         * this rank's fileview may not be flattened and both offsets and
+         * lengths are NULL.
+         */
 
-        /* fd->flat_file should have need free by the callback of MPI_Type_free() */
+        /* By this time, fd->flat_file should have need free by the callback of
+         * MPI_Type_free(), i.e. previous round of PnetCDF I/O operation.
+         */
         ncp->adio_fh->flat_file = NULL;
 
         /* mark this as called from intra_node_aggregation() */
         ncp->adio_fh->filetype = MPI_DATATYPE_NULL;
 
-        /* Note: The passed-in offsets and lengths are not based on MPI-IO
-         * fileview. They are flattened byte offsets and sizes.
+        /* Note: The passed-in offsets and lengths are not relative to any
+         * MPI-IO fileview. They are flattened byte offsets and sizes.
          */
-        *disp = (npairs > 0) ? offsets[0] : 0;
+        *disp = 0;
 
+        /* Pass the already flattened offsets and lengths to ADIO driver as a
+         * flattened file type struct. This is avoid repeaated work of
+         * constructing and flattening the same datatype.
+         */
         return ADIO_File_set_view(ncp->adio_fh, 0, filetype, npairs, offsets, lengths);
     }
 
