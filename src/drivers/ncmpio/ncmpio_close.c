@@ -64,20 +64,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
 
     assert(ncp != NULL); /* this should never occur */
 
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-
-        /* When intra-node aggregation is disabled, all ranks have a non-NULL
-         * ncp->adio_fh. When intra-node aggregation is enabled, only the
-         * aggregators have a non-NULL ncp->adio_fh.
-         */
-        if (ncp->num_aggrs_per_node == 0 || ncp->ina_comm != MPI_COMM_NULL)
-            err = ADIO_File_close(&ncp->adio_fh);
-
-        NCI_Free(ncp->adio_fh);
-        ncp->adio_fh = NULL;
-        if (err != NC_NOERR) return err;
-    }
-    else {
+    if (ncp->fstype == ADIO_FSTYPE_MPIIO) {
         if (ncp->independent_fh != MPI_FILE_NULL) {
             TRACE_IO(MPI_File_close, (&ncp->independent_fh));
             if (mpireturn != MPI_SUCCESS)
@@ -85,14 +72,23 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
         }
 
         if (ncp->nprocs > 1 && ncp->collective_fh != MPI_FILE_NULL) {
+            /* when ncp->nprocs == 1, collective_fh == independent_fh */
             TRACE_IO(MPI_File_close, (&ncp->collective_fh));
             if (mpireturn != MPI_SUCCESS)
                 return ncmpii_error_mpi2nc(mpireturn, mpi_name);
         }
     }
-
-    if (ncp->ina_comm != MPI_COMM_NULL)
-        MPI_Comm_free(&ncp->ina_comm);
+    else {
+        /* When intra-node aggregation is enabled, only aggregators have a
+         * non-NULL ncp->adio_fh and non-aggregators has adio_fh == NULL.
+         */
+        if (ncp->adio_fh != NULL) {
+            err = ADIO_File_close(&ncp->adio_fh);
+            NCI_Free(ncp->adio_fh);
+            ncp->adio_fh = NULL;
+            if (err != NC_NOERR) return err;
+        }
+    }
 
     if (doUnlink) {
         /* called from ncmpi_abort, if the file is being created and is still
@@ -111,6 +107,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
         if (ncp->nprocs > 1)
             MPI_Barrier(ncp->comm);
     }
+
     return NC_NOERR;
 }
 
@@ -311,6 +308,10 @@ ncmpio_close(void *ncdp)
         }
         if (ncp->nprocs > 1) MPI_Barrier(ncp->comm);
     }
+
+    /* free the intra-node aggregation communicator */
+    if (ncp->ina_comm != MPI_COMM_NULL)
+        MPI_Comm_free(&ncp->ina_comm);
 
     /* free up space occupied by the header metadata */
     ncmpio_free_NC(ncp);
