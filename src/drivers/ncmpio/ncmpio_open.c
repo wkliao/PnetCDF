@@ -40,148 +40,89 @@ ncmpio_open(MPI_Comm     comm,
             void       **ncpp)
 {
     char *filename, *env_str, value[MPI_MAX_INFO_VAL + 1], *mpi_name;
-    int i, mpiomode, err, status=NC_NOERR, mpireturn, fstype, use_mpi_io, flag;
+    int i, rank, nprocs, mpiomode, err, status=NC_NOERR, mpireturn, flag;
     MPI_File fh=MPI_FILE_NULL;
-    MPI_Info info_used;
     NC *ncp=NULL;
-    ADIO_File adio_fh=NULL;
 
     *ncpp = NULL;
 
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &nprocs);
+
     /* Note path's validity and omode consistency have been checked in
-     * ncmpi_open() in src/dispatchers/file.c and
-     * path consistency will be done in MPI_File_open */
+     * ncmpi_open() in src/dispatchers/file.c and path consistency will be done
+     * in MPI_File_open.
+     */
 
     /* First, check whether omode is valid or supported ---------------------*/
+
     /* NC_DISKLESS is not supported yet */
     if (omode & NC_DISKLESS) DEBUG_RETURN_ERROR(NC_EINVAL_OMODE)
 
     /* NC_MMAP is not supported yet */
     if (omode & NC_MMAP) DEBUG_RETURN_ERROR(NC_EINVAL_OMODE)
 
-    /* If user explicitly want to use MPI-IO, then set fstype to ADIO_FSTYPE_MPIIO */
-    use_mpi_io = 0;
-    if (user_info != MPI_INFO_NULL) {
-        MPI_Info_get(user_info, "nc_use_mpi_io", MPI_MAX_INFO_VAL-1, value, &flag);
-        if (flag && strcasecmp(value, "true") == 0)
-            use_mpi_io = 1;
-    }
-    if ((env_str = getenv("PNETCDF_USE_MPI_IO")) != NULL)
-        use_mpi_io = (strcasecmp(env_str, "true") == 0);
+    /* allocate buffer for header object NC and initialize its contents */
+    ncp = (NC*) NCI_Calloc(1, sizeof(NC));
+    if (ncp == NULL) DEBUG_RETURN_ERROR(NC_ENOMEM)
+
+    *ncpp = (void*)ncp;
+
+    ncp->ncid     = ncid;
+    ncp->comm     = comm;     /* reuse comm duplicated in dispatch layer */
+    ncp->rank     = rank;
+    ncp->nprocs   = nprocs;
+
+    /* Extract hints from user_info. Two hints must be extracted now in order
+     * to continue:
+     * nc_use_mpi_io: whether to user MPI-IO or PnetCDF's ADIO driver.
+     * nc_num_aggrs_per_node: number of processes per node to be aggregators.
+     *
+     * ncp->fstype will be set in ncmpio_hint_extract().
+     */
+    ncmpio_hint_extract(ncp, user_info);
+
+    if (ncp->fstype == ADIO_FSTYPE_CHECK)
+        /* Check file system type. If the given file does not exist, check its
+         * folder. Currently PnetCDF's ADIO drivers support Lustre
+         * (ADIO_LUSTRE) and Unix File System (ADIO_UFS).
+         */
+        ncp->fstype = ADIO_FileSysType(path);
 
 #ifdef WKL_DEBUG
-int rank; MPI_Comm_rank(comm, &rank); if (rank == 0) printf("xxxx %s %d: use_mpi_io = %d\n",__func__,__LINE__,use_mpi_io);
+if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == ADIO_FSTYPE_MPIIO)? "ADIO_FSTYPE_MPIIO" : (ncp->fstype == ADIO_LUSTRE) ? "ADIO_LUSTRE" : "ADIO_UFS");
 #endif
 
-    if (use_mpi_io == 1)
-        fstype = ADIO_FSTYPE_MPIIO;
-    else
-        /* check file system type */
-        fstype = ADIO_FileSysType(path);
-
-    if (fstype != ADIO_FSTYPE_MPIIO) {
-        adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
-        adio_fh->file_system = fstype;
-        adio_fh->ina_comm    = comm;
-    }
-
-    /* remove the file system type prefix name if there is any.  For example,
+    /* Remove the file system type prefix name if there is any. For example,
      * when path = "lustre:/home/foo/testfile.nc", remove "lustre:" to make
      * filename pointing to "/home/foo/testfile.nc", so it can be used in POSIX
      * access() below
      */
     filename = ncmpii_remove_file_system_type_prefix(path);
 
-#if 0 && defined(HAVE_ACCESS)
-    if (mpiomode == MPI_MODE_RDONLY) { /* file should already exit */
-        int rank, file_exist;
-        MPI_Comm_rank(comm, &rank);
-        if (rank == 0) {
-            if (access(filename, F_OK) == 0) file_exist = 1;
-            else                             file_exist = 0;
-        }
-        TRACE_COMM(MPI_Bcast)(&file_exist, 1, MPI_INT, 0, comm);
-        if (!file_exist) DEBUG_RETURN_ERROR(NC_ENOENT)
-    }
-#endif
+    ncp->path    = path;  /* reuse path duplicated in dispatch layer */
+    ncp->adio_fh = NULL;
+    ncp->iomode  = omode;
 
-    /* path's validity and omode consistency have been checked in ncmpi_open()
-     * in src/dispatchers/file.c */
+    ncp->collective_fh  = MPI_FILE_NULL;
+    ncp->independent_fh = MPI_FILE_NULL;
 
-    /* allocate buffer for header object NC */
-    ncp = (NC*) NCI_Calloc(1, sizeof(NC));
-    if (ncp == NULL) DEBUG_RETURN_ERROR(NC_ENOMEM)
-
-    MPI_Comm_rank(comm, &ncp->rank);
-    MPI_Comm_size(comm, &ncp->nprocs);
-    ncp->comm   = comm;  /* reuse comm duplicated in dispatch layer */
-    ncp->path   = path;  /* reuse path duplicated in dispatch layer */
-    ncp->iomode = omode;
-    ncp->ina_comm = MPI_COMM_NULL;
-
-    /* open file collectively ---------------------------------------------- */
+    /* Setting file open mode in mpiomode which may later be needed in
+     * ncmpi_begin_indep_data() to open file for independent data mode.
+     */
     mpiomode = fIsSet(omode, NC_WRITE) ? MPI_MODE_RDWR : MPI_MODE_RDONLY;
     ncp->mpiomode = mpiomode;
 
-    if (fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_open(comm, filename, mpiomode, user_info, adio_fh);
-        if (err != NC_NOERR) return err;
-    }
-    else {
-        TRACE_IO(MPI_File_open, (comm, path, mpiomode, user_info, &fh));
-        if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
-    }
-
-    /* Now the file has been successfully opened */
-    ncp->collective_fh  = fh;
-    ncp->independent_fh = (ncp->nprocs > 1) ? MPI_FILE_NULL : fh;
-    ncp->fstype         = fstype;
-    ncp->adio_fh        = adio_fh;
-
-    /* get the file info used/modified by MPI-IO */
-    if (fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_get_info(adio_fh, &info_used);
-        if (err != NC_NOERR) return err;
-    }
-    else {
-        TRACE_IO(MPI_File_get_info, (fh, &info_used));
-        if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
-    }
-
-    /* Now the file has been successfully opened */
-
     /* PnetCDF default fill mode is no fill */
     fClr(ncp->flags, NC_MODE_FILL);
+
+    /* set read-only mode */
     if (!fIsSet(omode, NC_WRITE)) fSet(ncp->flags, NC_MODE_RDONLY);
-
-    ncp->ncid = ncid;
-
-    /* chunk size for reading header (set default before check hints) */
-    ncp->chunk = PNC_DEFAULT_CHUNKSIZE;
-
-    /* buffer to pack noncontiguous user buffers when calling wait() */
-    ncp->ibuf_size = PNC_DEFAULT_IBUF_SIZE;
-
-    /* Extract PnetCDF specific I/O hints from user_info and set default hint
-     * values into info_used. Note some MPI libraries, such as MPICH 3.3.1 and
-     * priors fail to preserve user hints that are not recogniozed by the MPI
-     * libraries.
-     */
-    ncmpio_set_pnetcdf_hints(ncp, user_info, info_used);
-
-    if (fstype != ADIO_FSTYPE_MPIIO &&
-        adio_fh->hints->cb_buffer_size < adio_fh->hints->striping_unit) {
-        /* collective buffer size must be at least file striping size */
-        adio_fh->hints->cb_buffer_size = adio_fh->hints->striping_unit;
-        sprintf(value, "%d", adio_fh->hints->cb_buffer_size);
-        MPI_Info_set(info_used, "cb_buffer_size", value);
-    }
 
 #ifdef PNETCDF_DEBUG
     /* PNETCDF_DEBUG is set at configure time, which will be overwritten by
-     * the run-time environment variable PNETCDF_SAFE_MODE */
+     * the run-time environment variable PNETCDF_SAFE_MODE.
+     */
     ncp->safe_mode = 1;
 #endif
     /* If environment variable PNETCDF_SAFE_MODE is set to 1, then we perform
@@ -190,95 +131,160 @@ int rank; MPI_Comm_rank(comm, &rank); if (rank == 0) printf("xxxx %s %d: use_mpi
     if ((env_str = getenv("PNETCDF_SAFE_MODE")) != NULL) {
         if (*env_str == '0') ncp->safe_mode = 0;
         else                 ncp->safe_mode = 1;
-        /* if PNETCDF_SAFE_MODE is set but without a value, *env_str can
-         * be '\0' (null character). In this case, safe_mode is enabled */
+        /* If PNETCDF_SAFE_MODE is set but without a value, *env_str can
+         * be '\0' (null character). In this case, safe_mode is enabled.
+         */
     }
 
-    /* construct the list of compute nodes */
+    /* Construct a list of unique IDs of compute nodes allocated to this job
+     * and save it in ncp->node_ids[nprocs], which contains node IDs of each
+     * rank. The node IDs are used either when intra-node aggregation is
+     * enabled or when using PnetCDF's ADIO driver.
+     *
+     * When intra-node aggregation is enabled, node IDs are used to create a
+     * new MPI communicator consisting of the intra-node aggregators only. The
+     * communicator will be used to call file open in MPI-IO or PnetCDF's ADIO
+     * driver. This means only intra-node aggregators will perform file I/O in
+     * PnetCDF collective put and get operations.
+     */
     ncp->node_ids = NULL;
-    if (ncp->num_aggrs_per_node != 0 || fstype != ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO || ncp->num_aggrs_per_node != 0) {
         err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
         if (err != NC_NOERR) return err;
-        if (adio_fh != NULL) adio_fh->num_nodes = ncp->num_nodes;
+
+        /* When the total number of aggregators >= number of processes, disable
+         * intra-node aggregation.
+         */
+        if (ncp->num_aggrs_per_node * ncp->num_nodes >= ncp->nprocs)
+            ncp->num_aggrs_per_node = 0;
     }
 
-    /* set cb_nodes and construct the cb_node rank list */
-    if (fstype != ADIO_FSTYPE_MPIIO) {
-        int i;
-
-        if (fstype == ADIO_LUSTRE) {
-            ADIO_Lustre_set_aggr_list(adio_fh, ncp->num_nodes, ncp->node_ids);
-            MPI_Info_set(info_used, "romio_filesystem_type", "LUSTRE:");
-        }
-        else if (fstype == ADIO_UFS) {
-            ADIO_GEN_set_aggr_list(adio_fh, ncp->num_nodes, ncp->node_ids);
-            MPI_Info_set(info_used, "romio_filesystem_type", "UFS:");
-        }
-        else
-            return NC_EFSTYPE;
-
-        /* set file striping hints */
-        sprintf(value, "%d", adio_fh->hints->cb_nodes);
-        MPI_Info_set(info_used, "cb_nodes", value);
-
-        /* add hint "aggr_list", list of aggregators' rank IDs */
-        value[0] = '\0';
-        for (i=0; i<adio_fh->hints->cb_nodes; i++) {
-            char str[16];
-            if (i == 0)
-                snprintf(str, sizeof(str), "%d", adio_fh->hints->ranklist[i]);
-            else
-                snprintf(str, sizeof(str), " %d", adio_fh->hints->ranklist[i]);
-            if (strlen(value) + strlen(str) >= MPI_MAX_INFO_VAL-5) {
-                strcat(value, " ...");
-                break;
-            }
-            strcat(value, str);
-        }
-        MPI_Info_set(info_used, "aggr_list", value);
-
-#ifdef WKL_DEBUG
-int rank; MPI_Comm_rank(comm, &rank);
-if (rank == 0) {
-    int  i, nkeys;
-    MPI_Info_get_nkeys(info_used, &nkeys);
-    printf("%s line %d: MPI File Info: nkeys = %d\n",__func__,__LINE__,nkeys);
-    for (i=0; i<nkeys; i++) {
-        char key[MPI_MAX_INFO_KEY], value[MPI_MAX_INFO_VAL];
-        int  valuelen, flag;
-
-        MPI_Info_get_nthkey(info_used, i, key);
-        MPI_Info_get_valuelen(info_used, key, &valuelen, &flag);
-        MPI_Info_get(info_used, key, valuelen+1, value, &flag);
-        printf("MPI File Info: [%2d] key = %25s, value = %s\n",i,key,value);
-    }
-}
-#endif
-        /* collective buffer is used only by I/O aggregators only */
-        if (adio_fh->is_agg) {
-            adio_fh->io_buf = ADIOI_Calloc(1, adio_fh->hints->cb_buffer_size);
-            if (adio_fh->io_buf == NULL)
-                return NC_ENOMEM;
-        }
-        else
-            adio_fh->io_buf = NULL;
-    }
-    ncp->mpiinfo = info_used; /* is not MPI_INFO_NULL */
-
-    /* determine whether to enable intra-node aggregation and set up all
-     * intra-node aggregation metadata.
-     * ncp->num_aggrs_per_node = 0, or non-zero indicates whether this feature
-     *     is disabled or enabled globally for all processes, respectively.
-     * ncp->my_aggr = -1 or >= 0 indicates whether aggregation is effectively
-     *     enabled for the aggregation group of this process.
+    /* ncp->num_aggrs_per_node = 0, or > 0 indicates whether this feature
+     * is disabled or enabled globally for all processes.
      */
     ncp->my_aggr = -1;
-    if (ncp->num_aggrs_per_node != 0) {
+    ncp->ina_comm = MPI_COMM_NULL;
+    ncp->ina_nprocs = 0;
+    ncp->ina_rank = -1;
+    ncp->ina_node_list = NULL;
+    if (ncp->num_aggrs_per_node > 0) {
+        /* Divide all ranks into groups. Each group is assigned with one
+         * intra-node aggregator. The following metadata related to intra-node
+         * aggregation will be set up.
+         * ncp->my_aggr is the aggregator's rank ID of this group. When ==
+         *     ncp->rank, this rank is an aggregator.
+         * ncp->num_nonaggrs is the number of non-aggregators assigned to this
+         *     rank (an aggregator)
+         * ncp->ina_comm will be created consisting of only intra-node
+         *     aggregators, which will be used when calling MPI_File_open().
+         *     For non-aggregator, ncp->ina_comm == MPI_COMM_NULL.
+         * ncp->node_ids[] will be modified to contain the nodes IDs of
+         *     intra-node aggregators only, which will be passed to adio_fh.
+         */
         err = ncmpio_intra_node_aggr_init(ncp);
+        if (err != NC_NOERR) return err;
+
+        /* As non-aggregators will not perform any file I/O, we now can replace
+         * comm with ina_comm. Same for nprocs.
+         */
+        comm = ncp->ina_comm;
+        nprocs = ncp->ina_nprocs;
+
+        /* For non-aggregators, comm is MPI_COMM_NULL. As the remaining task of
+         * this subroutine is to open the file and obtain the file handler,
+         * non-aggregators can skip.
+         */
+        if (comm == MPI_COMM_NULL) {
+            MPI_Info_create(&ncp->mpiinfo);
+            goto fn_exit;
+        }
+    }
+
+    /* open file collectively ---------------------------------------------- */
+    if (ncp->fstype == ADIO_FSTYPE_MPIIO) {
+        TRACE_IO(MPI_File_open)(comm, path, mpiomode, user_info, &fh);
+        if (mpireturn != MPI_SUCCESS)
+            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
+
+        /* Now the file has been successfully opened */
+        ncp->collective_fh  = fh;
+        ncp->independent_fh = (nprocs > 1) ? MPI_FILE_NULL : fh;
+
+        /* get the I/O hints used/modified by MPI-IO */
+        mpireturn = MPI_File_get_info(fh, &ncp->mpiinfo);
+        if (mpireturn != MPI_SUCCESS)
+            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
+    }
+    else {
+        /* When ncp->fstype != ADIO_FSTYPE_MPIIO, use PnetCDF's ADIO driver */
+        ncp->adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
+        ncp->adio_fh->file_system = ncp->fstype;
+        ncp->adio_fh->num_nodes   = ncp->num_nodes;
+        ncp->adio_fh->node_ids    = ncp->node_ids;
+
+        err = ADIO_File_open(comm, filename, mpiomode, user_info, ncp->adio_fh);
+        if (err != NC_NOERR) return err;
+
+        /* Now the file has been successfully opened, obtain the I/O hints
+         * used/modified by ADIO driver.
+         */
+        err = ADIO_File_get_info(ncp->adio_fh, &ncp->mpiinfo);
         if (err != NC_NOERR) return err;
     }
 
-    if (ncp->node_ids != NULL) NCI_Free(ncp->node_ids);
+    /* Copy MPI-IO hints into ncp->mpiinfo */
+    ncmpio_hint_set(ncp, ncp->mpiinfo);
+
+fn_exit:
+    if (ncp->num_aggrs_per_node > 0) {
+        /* When intra-node aggregation is enabled, it is necessary to make sure
+         * non-aggregators obtain consistent values of file striping hints.
+         *
+         * non-aggregator do not have hints returned from MPI_File_get_info()
+         */
+        int striping_info[2];
+        if (ncp->rank == 0) {
+            MPI_Info_get(ncp->mpiinfo, "striping_unit", MPI_MAX_INFO_VAL-1,
+                         value, &flag);
+            striping_info[0] = 0;
+            if (flag) {
+                errno = 0;  /* errno must set to zero before calling strtoll */
+                striping_info[0] = (int)strtol(value,NULL,10);
+                if (errno != 0) striping_info[0] = 0;
+            }
+
+            MPI_Info_get(ncp->mpiinfo, "striping_factor", MPI_MAX_INFO_VAL-1,
+                         value, &flag);
+            striping_info[1] = 0;
+            if (flag) {
+                errno = 0;  /* errno must set to zero before calling strtoll */
+                striping_info[1] = (int)strtol(value,NULL,10);
+                if (errno != 0) striping_info[1] = 0;
+            }
+        }
+
+        MPI_Bcast(striping_info, 2, MPI_INT, 0, ncp->comm);
+
+        if (ncp->my_aggr != ncp->rank) {
+            sprintf(value, "%d", striping_info[0]);
+            MPI_Info_set(ncp->mpiinfo, "striping_unit", value);
+            sprintf(value, "%d", striping_info[1]);
+            MPI_Info_set(ncp->mpiinfo, "striping_factor", value);
+        }
+    }
+
+    /* ina_node_list is no longer needed */
+    if (ncp->ina_node_list != NULL) {
+        NCI_Free(ncp->ina_node_list);
+        ncp->ina_node_list = NULL;
+    }
+    /* node_ids is no longer needed */
+    if (ncp->node_ids != NULL) {
+        NCI_Free(ncp->node_ids);
+        ncp->node_ids = NULL;
+    }
+    if (ncp->adio_fh != NULL)
+        ncp->adio_fh->node_ids = NULL;
 
     /* read header from file into NC object pointed by ncp -------------------*/
     err = ncmpio_hdr_get_NC(ncp);
@@ -333,8 +339,6 @@ if (rank == 0) {
     for (i=0; i<ncp->vars.ndefined; i++)
         ncp->vars.value[i]->attrs.hash_size = ncp->hash_size_attr;
 #endif
-
-    *ncpp = (void*)ncp;
 
     return status;
 }
