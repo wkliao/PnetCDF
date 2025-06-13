@@ -36,8 +36,13 @@ ncmpio_file_sync(NC *ncp) {
     char *mpi_name;
     int mpireturn;
 
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO)
+    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        if (ncp->adio_fh == NULL)
+            return NC_NOERR;
         return ADIO_File_sync(ncp->adio_fh);
+    }
+
+    /* the remaining of this subroutine are for when using MPI-IO */
 
     if (ncp->independent_fh != MPI_FILE_NULL) {
         TRACE_IO(MPI_File_sync, (ncp->independent_fh));
@@ -47,11 +52,16 @@ ncmpio_file_sync(NC *ncp) {
     /* when nprocs == 1, ncp->collective_fh == ncp->independent_fh */
     if (ncp->nprocs == 1) return NC_NOERR;
 
-    /* ncp->collective_fh is never MPI_FILE_NULL as collective mode is
-     * default in PnetCDF */
-    TRACE_IO(MPI_File_sync, (ncp->collective_fh));
-    if (mpireturn != MPI_SUCCESS)
-        return ncmpii_error_mpi2nc(mpireturn, mpi_name);
+    /* When intra-node aggregation is enabled, non-aggregator's
+     * ncp->collective_fh is always MPI_FILE_NULL. When disabled,
+     * ncp->collective_fh on all ranks is never MPI_FILE_NULL as collective
+     * mode is default in PnetCDF.
+     */
+    if (ncp->collective_fh != MPI_FILE_NULL) {
+        TRACE_IO(MPI_File_sync, (ncp->collective_fh));
+        if (mpireturn != MPI_SUCCESS)
+            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
+    }
 
     /* Barrier is not necessary ...
     TRACE_COMM(MPI_Barrier)(ncp->comm);
@@ -63,7 +73,7 @@ ncmpio_file_sync(NC *ncp) {
 #define NC_NUMRECS_OFFSET 4
 
 /*----< ncmpio_write_numrecs() >---------------------------------------------*/
-/* root process writes the new record number into file.
+/* Only root process writes the new record number into file.
  * This function is called by:
  * 1. ncmpio_sync_numrecs
  * 2. collective nonblocking wait API, if the new number of records is bigger
@@ -77,19 +87,31 @@ ncmpio_write_numrecs(NC         *ncp,
     MPI_File fh;
     MPI_Status mpistatus;
 
-    if (!fIsSet(ncp->flags, NC_HCOLL) && ncp->rank > 0)
-        /* Only root process writes numrecs in file */
-        return NC_NOERR;
-
-    /* return now if there is no record variabled defined */
+    /* return now if there is no record variable defined */
     if (ncp->vars.num_rec_vars == 0) return NC_NOERR;
 
+    /* When intra-node aggregation is enabled, non-aggregators do not
+     * participate any collective calls below.
+     */
+    if (ncp->num_aggrs_per_node > 0 && ncp->rank != ncp->my_aggr)
+        return NC_NOERR;
+
+    /* If not requiring all MPI-IO calls to be collective, non-root processes
+     * can return now. This is because only root process writes numrecs to the
+     * file header.
+     */
+    if (!fIsSet(ncp->flags, NC_HCOLL) && ncp->rank > 0)
+        return NC_NOERR;
+
+    /* select the right file handler based on the current data mode */
     fh = ncp->independent_fh;
     if (ncp->nprocs > 1 && !NC_indep(ncp))
         fh = ncp->collective_fh;
 
+    /* If collective MPI-IO is required for all MPI-IO calls, then all non-root
+     * processes participate the collective write call with zero-size requests.
+     */
     if (ncp->rank > 0 && fIsSet(ncp->flags, NC_HCOLL)) {
-        /* other processes participate the collective call */
         if (ncp->fstype != ADIO_FSTYPE_MPIIO)
             ADIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
         else
@@ -124,6 +146,12 @@ ncmpio_write_numrecs(NC         *ncp,
          * Thus we initialize it above to work around.
          */
         memset(&mpistatus, 0, sizeof(MPI_Status));
+
+        if (ncp->num_aggrs_per_node > 0 && ncp->rank != ncp->my_aggr)
+            /* When intra-node aggregation is enabled, non-aggregators do not
+             * participate the collective call.
+             */
+            return NC_NOERR;
 
         /* root's file view always includes the entire file header */
         if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1) {
