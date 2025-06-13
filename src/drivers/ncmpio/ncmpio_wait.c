@@ -57,6 +57,12 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
     MPI_Status mpistatus;
     MPI_File fh;
 
+    /* When intra-node aggregation is enabled, non-aggregators do not access
+     * the file.
+     */
+    if (ncp->num_aggrs_per_node > 0 && ncp->rank != ncp->my_aggr)
+        return NC_NOERR;
+
     /* do nothing if this came from an independent API */
     if (fIsSet(reqMode, NC_REQ_INDEP)) return NC_NOERR;
 
@@ -852,7 +858,7 @@ extract_reqs(NC      *ncp,
                     req_ids[i] == ncp->put_lead_list[j].id) {
                     memcpy(put_list_ptr,
                            ncp->put_list + ncp->put_lead_list[j].nonlead_off,
-                           ncp->put_lead_list[j].nonlead_num * sizeof(NC_req));
+                           sizeof(NC_req) * ncp->put_lead_list[j].nonlead_num);
                     put_list_ptr += ncp->put_lead_list[j].nonlead_num;
                     req_ids[i] = NC_REQ_NULL;
                     break;
@@ -865,7 +871,7 @@ extract_reqs(NC      *ncp,
                     req_ids[i] == ncp->get_lead_list[j].id) {
                     memcpy(get_list_ptr,
                            ncp->get_list + ncp->get_lead_list[j].nonlead_off,
-                           ncp->get_lead_list[j].nonlead_num * sizeof(NC_req));
+                           sizeof(NC_req) * ncp->get_lead_list[j].nonlead_num);
                     get_list_ptr += ncp->get_lead_list[j].nonlead_num;
                     req_ids[i] = NC_REQ_NULL;
                     break;
@@ -1045,8 +1051,7 @@ req_commit(NC  *ncp,
     /* carry out writes and reads separately (writes first) */
 
     if (do_write > 0) {
-
-        if (ncp->my_aggr >= 0 && coll_indep == NC_REQ_COLL && ncp->nprocs > 1)
+        if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
             /* intra-node aggregation must be in collective mode */
             err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_WR,
                                                       num_w_reqs, put_list,
@@ -1058,7 +1063,7 @@ req_commit(NC  *ncp,
     }
 
     if (do_read > 0) {
-        if (ncp->my_aggr >= 0 && coll_indep == NC_REQ_COLL && ncp->nprocs > 1)
+        if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
             /* intra-node aggregation must be in collective mode */
             err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_RD,
                                                       num_r_reqs, get_list,
