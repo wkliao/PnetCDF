@@ -152,6 +152,22 @@ fill_var_rec(NC         *ncp,
     MPI_Status mpistatus;
     MPI_Datatype bufType;
 
+    /* When intra-node aggregation is enabled, use the communicator consisting
+     * of aggregators in comm, nprocs, and rank. Non-aggregators do not
+     * participate the fill operation.
+     */
+    MPI_Comm comm = ncp->comm;
+    int nprocs = ncp->nprocs;
+    int rank = ncp->rank;
+    if (ncp->num_aggrs_per_node > 0) {
+        if (ncp->my_aggr != ncp->rank)
+            return NC_NOERR;
+
+        comm = ncp->ina_comm;
+        nprocs = ncp->ina_nprocs;
+        rank = ncp->ina_rank;
+    }
+
     if (varp->ndims == 0) /* scalar variable */
         var_len = 1;
     else if (varp->ndims == 1 && IS_RECVAR(varp))
@@ -162,14 +178,14 @@ fill_var_rec(NC         *ncp,
         var_len = varp->dsizes[0];
 
     /* divide total number of elements of this variable among all processes */
-    count = var_len / ncp->nprocs;
-    start = count * ncp->rank;
-    if (ncp->rank < var_len % ncp->nprocs) {
-        start += ncp->rank;
+    count = var_len / nprocs;
+    start = count * rank;
+    if (rank < var_len % nprocs) {
+        start += rank;
         count++;
     }
     else {
-        start += var_len % ncp->nprocs;
+        start += var_len % nprocs;
     }
 
     /* allocate buffer space */
@@ -189,7 +205,7 @@ fill_var_rec(NC         *ncp,
         offset += ncp->recsize * recno;
     offset += start * varp->xsz;
 
-    /* when ncp->nprocs == 1, we keep I/O mode in independent mode at all time */
+    /* when nprocs == 1, we keep I/O mode in independent mode at all time */
     fh = ncp->collective_fh;
 
     /* make the entire file visible */
@@ -219,7 +235,7 @@ fill_var_rec(NC         *ncp,
 #endif
 
     /* write to variable collectively */
-    if (ncp->nprocs > 1) {
+    if (nprocs > 1) {
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
             err = ADIO_File_write_at_all(ncp->adio_fh, offset, buf, (int)count, bufType,
                                         &mpistatus);
@@ -274,9 +290,9 @@ fill_var_rec(NC         *ncp,
          * First, find the max numrecs among all processes.
          */
         MPI_Offset max_numrecs=recno+1;
-        if (ncp->nprocs > 1) {
+        if (nprocs > 1) {
             TRACE_COMM(MPI_Allreduce)(MPI_IN_PLACE, &max_numrecs, 1, MPI_OFFSET,
-                                      MPI_MAX, ncp->comm);
+                                      MPI_MAX, comm);
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn, "MPI_Allreduce");
                 if (status == NC_NOERR) status = err;
@@ -407,6 +423,20 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     MPI_Aint *offset;
 #endif
 
+    /* When intra-node aggregation is enabled, use the communicator consisting
+     * of aggregators in comm, nprocs, and rank. Non-aggregators do not
+     * participate the fill operation.
+     */
+    int nprocs = ncp->nprocs;
+    int rank = ncp->rank;
+    if (ncp->num_aggrs_per_node > 0) {
+        if (ncp->my_aggr != ncp->rank)
+            return NC_NOERR;
+
+        nprocs = ncp->ina_nprocs;
+        rank = ncp->ina_rank;
+    }
+
     /* find the starting vid for newly added variables */
     start_vid = 0;
     nrecs = 0;  /* the current number of records */
@@ -423,12 +453,14 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
      * variables' fill modes and overwrite local's if an inconsistency is found
      * Note ncp->vars.ndefined is already made consistent by this point.
      */
-    if (ncp->nprocs > 1) {
+    MPI_Comm comm = (ncp->num_aggrs_per_node > 0) ? ncp->ina_comm : ncp->comm;
+
+    if (nprocs > 1) {
         for (i=start_vid; i<ncp->vars.ndefined; i++)
             noFill[i-start_vid] = (char)(ncp->vars.value[i]->no_fill);
 
         TRACE_COMM(MPI_Bcast)(noFill, (ncp->vars.ndefined - start_vid),
-                              MPI_BYTE, 0, ncp->comm);
+                              MPI_BYTE, 0, comm);
         if (mpireturn != MPI_SUCCESS)
             return ncmpii_error_mpi2nc(mpireturn, "MPI_Bcast");
 
@@ -453,9 +485,9 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     nsegs = (size_t)(ncp->vars.ndefined + ncp->vars.num_rec_vars * nrecs);
     count  = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * nsegs);
 #ifdef HAVE_MPI_LARGE_COUNT
-    offset = (MPI_Count*)   NCI_Malloc(sizeof(MPI_Count) * nsegs);
+    offset = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * nsegs);
 #else
-    offset = (MPI_Aint*)   NCI_Malloc(sizeof(MPI_Aint) * nsegs);
+    offset = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nsegs);
 #endif
 
     /* calculate each segment's offset and count */
@@ -472,14 +504,14 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
         else                  var_len = varp->dsizes[0];
 
         /* divide evenly total number of variable's elements among processes */
-        count[j] = var_len / ncp->nprocs;
-        start = count[j] * ncp->rank;
-        if (ncp->rank < var_len % ncp->nprocs) {
-            start += ncp->rank;
+        count[j] = var_len / nprocs;
+        start = count[j] * rank;
+        if (rank < var_len % nprocs) {
+            start += rank;
             count[j]++;
         }
         else
-            start += var_len % ncp->nprocs;
+            start += var_len % nprocs;
 
         /* calculate the starting file offset */
         start *= varp->xsz;
@@ -509,14 +541,14 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
             else                  var_len = varp->dsizes[1];
 
             /* divide total number of variable's elements among all processes */
-            count[j] = var_len / ncp->nprocs;
-            start = count[j] * ncp->rank;
-            if (ncp->rank < var_len % ncp->nprocs) {
-                start += ncp->rank;
+            count[j] = var_len / nprocs;
+            start = count[j] * rank;
+            if (rank < var_len % nprocs) {
+                start += rank;
                 count[j]++;
             }
             else
-                start += var_len % ncp->nprocs;
+                start += var_len % nprocs;
 
             /* calculate the starting file offset */
             start *= varp->xsz;
@@ -688,7 +720,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     }
 
     /* write to variable collectively */
-    if (ncp->nprocs > 1) {
+    if (nprocs > 1) {
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
             err = ADIO_File_write_at_all(ncp->adio_fh, 0, buf, (int)buf_len, bufType,
                                         &mpistatus);
