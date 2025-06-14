@@ -3,31 +3,40 @@
  *  See COPYRIGHT notice in top-level directory.
  *
  * This file contains the implementation of intra-node aggregation feature,
- * which is designed for the I/O patterns that contain many noncontiguous
- * requests interleaved among processes, and spreading across a wide range of
- * file space. It is particularly useful when the number of MPI processes
- * allocated to a compute node is large.
+ * which is designed to improve performance for I/O patterns that contain many
+ * noncontiguous requests interleaved among processes, with a wide aggregate
+ * access region on each process that involves file stripes responsible by
+ * almost all the file servers. By reducing the number of processes per node
+ * to participate MPI-IO operations, this feature can effectively reduce the
+ * communication contention, particularly often happened to jobs that run a
+ * large the number of MPI processes per compute node.
  *
- * This feature is enabled by setting the PnetCDF hint 'nc_num_aggrs_per_node'
- * to a positive integral value indicating the desired number of processes per
- * compute node to be selected as the intra-node I/O aggregators. Each process
- * is assigned a unique aggregator. The non-aggregators send their requests to
- * the assigned aggregators, and then the aggregators make MPI-IO requests to
- * the file.
+ * Users can enable this feature by setting the PnetCDF I/O hint named
+ * 'nc_num_aggrs_per_node' to a positive integral value, indicating the desired
+ * number of processes per compute node to be selected as the intra-node I/O
+ * aggregators. Processes running on the same node are divided into groups.
+ * The process with the lowest rank ID is selected as the I/O aggregator of
+ * that group. Non-aggregators send their requests to their aggregators, and
+ * then the aggregators make I/O requests to the file, i.e. only aggregators
+ * make MPI-IO calls.
  *
- * Such strategy can effectively reduce communication congestion due to many
- * pending asynchronous messages produced in the collective write inside of
- * MPI-IO.
+ * Because communication within a node can be achieved by memory copy operation
+ * and thus its cost is expected to be much lower than the inter-node
+ * communication, this feature can effectively reduce the communication
+ * congestion or exhaustion of message queues, due to many pending asynchronous
+ * messages produced in the two-phase I/O, the strategy used to implement
+ * MPI collective I/O.
  *
- * The concept of intra-node request aggregation is based on the paper:
+ * The concept of intra-node request aggregation and its performance results
+ * are presented in the following paper.
  * Q. Kang, S. Lee, K. Hou, R. Ross, A. Agrawal, A. Choudhary, and W. Liao.
  * Improving MPI Collective I/O for High Volume Non-Contiguous Requests With
  * Intra-Node Aggregation. IEEE Transactions on Parallel and Distributed
- * Systems (TPDS), 31(11):2682-2695, November 2020.
+ * Systems, 31(11):2682-2695, November 2020.
  */
 
 #ifdef HAVE_CONFIG_H
-# include <config.h>
+#include <config.h>
 #endif
 
 #include <stdio.h>
@@ -41,16 +50,21 @@
 #include <common.h>
 #include "ncmpio_NC.h"
 
+/* swap values of x and y */
+#define SWAP1(x, y, tmp) { tmp = x ; x = y; y = tmp ; }
+
 #ifdef HAVE_MPI_LARGE_COUNT
+/* swap elements of arrays x, y, and corresponding lengths and bufAddr */
 #define SWAP(offsets, lengths, bufAddr, x, y) { \
     MPI_Count aint; \
     MPI_Count cint; \
     MPI_Count d0 = (x) - offsets; \
     MPI_Count d1 = (y) - offsets; \
     if (d0 != d1) { \
-        cint = *(x) ; *(x) = *(y) ; *(y) = cint ; \
-        cint = lengths[d0] ; lengths[d0] = lengths[d1] ; lengths[d1] = cint ; \
-        aint = bufAddr[d0] ; bufAddr[d0] = bufAddr[d1] ; bufAddr[d1] = aint ; \
+        SWAP1(*(x), *(y), cint); \
+        SWAP1(lengths[d0], lengths[d1], cint); \
+        if (bufAddr != NULL) \
+            SWAP1(bufAddr[d0], bufAddr[d1], aint); \
     } \
 }
 #else
@@ -60,9 +74,10 @@
     MPI_Offset d0 = (x) - offsets; \
     MPI_Offset d1 = (y) - offsets; \
     if (d0 != d1) { \
-        aint = *(x) ; *(x) = *(y) ; *(y) = aint ; \
-        int4 = lengths[d0] ; lengths[d0] = lengths[d1] ; lengths[d1] = int4 ; \
-        aint = bufAddr[d0] ; bufAddr[d0] = bufAddr[d1] ; bufAddr[d1] = aint ; \
+        SWAP1(*(x), *(y), aint); \
+        SWAP1(lengths[d0], lengths[d1], int4); \
+        if (bufAddr != NULL) \
+            SWAP1(bufAddr[d0], bufAddr[d1], aint); \
     } \
 }
 #endif
@@ -72,9 +87,9 @@
                       ((*(b) > *(c)) ? (b) : ((*(a) < *(c)) ? (a) : (c))))
 
 /*----< qsort_off_len_buf() >------------------------------------------------*/
-/* Sort three arrays of offsets, lengths, and buffer addresses based on the
- * increasing order of offsets. This code is based on the qsort routine from
- * Bentley & McIlroy's "Engineering a Sort Function".
+/* Sort three arrays of offsets, lengths, and buffer addresses based on array
+ * offsets into an increasing order. This code is based on the qsort routine
+ * from Bentley & McIlroy's "Engineering a Sort Function".
  */
 static void
 qsort_off_len_buf(MPI_Aint    num,
@@ -154,7 +169,8 @@ qsort_off_len_buf(MPI_Aint    num,
         if ((r = pd - pc) > 1) {
             /* Iterate rather than recursively call self to save stack space */
             lengths = lengths + (num - r);
-            bufAddr = bufAddr + (num - r);
+            if (bufAddr != NULL)
+                bufAddr = bufAddr + (num - r);
             offsets = pn - r;
             num = r;
         }
@@ -163,6 +179,7 @@ qsort_off_len_buf(MPI_Aint    num,
     }
 }
 
+/*----< heap_merge() >-------------------------------------------------------*/
 /* Heapify(a, i, heapsize); Algorithm from Cormen et al. pg. 143 modified for a
  * heap with smallest element at root. The recursion has been removed so that
  * there are no function calls. Function calls are too expensive.
@@ -198,7 +215,7 @@ void heap_merge(int              nprocs,
     int i, j, heapsize, l, r, k, smallest;
     size_t sum;
 
-    /* This heap_merge is not in-plance, taking too much memory footprint */
+    /* This heap_merge is not in-place, taking too much memory footprint */
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *srt_off = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * nelems);
     MPI_Count *srt_len = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * nelems);
@@ -206,7 +223,10 @@ void heap_merge(int              nprocs,
     MPI_Aint *srt_off = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nelems);
     int      *srt_len = (int*)      NCI_Malloc(sizeof(int)      * nelems);
 #endif
-    MPI_Aint *srt_addr = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nelems);
+    MPI_Aint *srt_addr = NULL;
+
+    if (bufAddr != NULL)
+        srt_addr = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nelems);
 
     a = (heap_struct *) NCI_Calloc(nprocs, sizeof(heap_struct));
 
@@ -218,12 +238,14 @@ void heap_merge(int              nprocs,
             /* each of a[j].off_list is already sorted */
             a[j].off_list = offsets + sum;
             a[j].len_list = blklens + sum;
-            a[j].addr_list = bufAddr + sum;
+            if (bufAddr != NULL)
+                a[j].addr_list = bufAddr + sum;
             sum += count[i];
             a[j].count = count[i];
             j++;
         }
     }
+    nprocs = j; /* some count[i] may be zero */
 
 #define SWAP_HEAP(x, y, tmp) { tmp = x ; x = y ; y = tmp ; }
 
@@ -262,7 +284,8 @@ void heap_merge(int              nprocs,
         /* extract smallest element from heap, i.e. the root */
         srt_off[i] = a[0].off_list[0];
         srt_len[i] = a[0].len_list[0];
-        srt_addr[i] = a[0].addr_list[0];
+        if (bufAddr != NULL)
+            srt_addr[i] = a[0].addr_list[0];
         a[0].count--;
 
         if (!a[0].count) {
@@ -271,7 +294,8 @@ void heap_merge(int              nprocs,
         } else {
             a[0].off_list++;
             a[0].len_list++;
-            a[0].addr_list++;
+            if (bufAddr != NULL)
+                a[0].addr_list++;
         }
 
         /* Heapify(a, 0, heapsize); */
@@ -302,78 +326,80 @@ void heap_merge(int              nprocs,
     memcpy(offsets, srt_off, sizeof(MPI_Offset) * nelems);
     memcpy(blklens, srt_len, sizeof(int)        * nelems);
 #endif
-    memcpy(bufAddr, srt_addr, sizeof(MPI_Aint) * nelems);
+    if (bufAddr != NULL)
+        memcpy(bufAddr, srt_addr, sizeof(MPI_Aint) * nelems);
 
     NCI_Free(a);
-    NCI_Free(srt_addr);
+    if (bufAddr != NULL) NCI_Free(srt_addr);
     NCI_Free(srt_len);
     NCI_Free(srt_off);
 }
 
 
 /*----< ncmpio_intra_node_aggr_init() >--------------------------------------*/
-/* When intra-node write aggregation is enabled, processes on the same node
- * will be divided into groups. The number of groups is the number of
- * aggregators on that node, i.e. there is one aggregator per group. The rank
- * IDs of processes belong to the same group must be established.
+/* When intra-node write aggregation is enabled, this subroutine initializes
+ * the metadata to be used for intra-node communication and I/O requests.
  *
- * Note this subroutine must be called before MPI_File_open().
+ * Processes on the same node will first be divided into groups. A process with
+ * the lowest rank ID in a group is selected as the aggregator. Only the
+ * aggregators call the MPI-IO functions to perform I/O to the file. Thus, this
+ * subroutine must be called before MPI_File_open() and should be called only
+ * once at ncmpio_create() or ncmpio_open().
  *
- * 1. Find the affinity of each MPI process to its compute node. This should
- *    have been done from a call to ncmpii_construct_node_list() during
- *    ncmpio_create() and ncmpio_open().
- * 2. Determine whether self process is an intra-node aggregator.
+ * The subroutine performs the following tasks.
+ * 1. Make use of the affinity of each MPI process to its compute node,
+ *    represented by ncp->num_nodes and ncp->node_ids[]. These two member of
+ *    ncp should have been set from a call to ncmpii_construct_node_list()
+ *    earlier during ncmpio_create() and ncmpio_open().
+ *    + ncp->num_nodes is the number of unique compute nodes.
+ *    + ncp->node_ids[ncp->nprocs] contains node IDs for all processes.
+ * 2. Divide processes into groups, select aggregators, and determine whether
+ *    self process is an intra-node aggregator.
+ *    + ncp->my_aggr is rank ID of my aggregator.
+ *    + if (ncp->my_aggr == ncp->rank) then this rank is an aggregator.
  * 3. For an aggregator, find the number of non-aggregators assigned to it and
- *    construct a list of rank IDs of non-aggregators assigned to it.
+ *    construct a list of rank IDs of non-aggregators of its group.
+ *    + ncp->num_nonaggrs is the number of non-aggregators in its group.
  * 4. For a non-aggregator, find the rank ID of its assigned aggregator.
- *
- * This subroutine should be called only once per file at ncmpio_create() or
- * ncmpio_open(). It sets the following variables.
- *   ncp->my_aggr          rank ID of my aggregator
- *   ncp->num_nonaggrs     number of non-aggregators assigned to this rank
- *   ncp->nonaggr_ranks[]  rank IDs of assigned non-aggregators
+ *    + ncp->my_aggr is rank ID of my aggregator.
+ *    + ncp->nonaggr_ranks[] contains the rank IDs of assigned non-aggregators.
+ * 5. Create a new MPI communicator consisting of only the aggregators only.
+ *    Obtain the rank ID and total process number of the new communicator.
+ *    + ncp->ina_comm contains the aggregators across all nodes.
+ *    + ncp->ina_nprocs is the number of processes in intra-node communicator.
+ *    + ncp->ina_rank is this process's rank ID in intra-node communicator.
  */
 int
 ncmpio_intra_node_aggr_init(NC *ncp)
 {
-    int i, naggrs_my_node;
+    int i, j, mpireturn, do_io, ina_nprocs, naggrs_my_node, first_rank;
     int my_rank_index, *ranks_my_node, my_node_id, nprocs_my_node;
 
-    /* initialize parameters of local-node aggregation */
+#ifdef PNETCDF_PROFILING
+    double timing = MPI_Wtime();
+    ncp->ina_init = ncp->ina_flatten = 0.0;
+    for (i=0; i<5; i++) ncp->ina_write[i] = ncp->ina_read[i] = 0;
+#endif
+
+    /* initialize parameters of intra-node aggregation */
     ncp->my_aggr = -1;         /* rank ID of my aggregator */
     ncp->num_nonaggrs = 0;     /* number of non-aggregators assigned */
     ncp->nonaggr_ranks = NULL; /* ranks of assigned non-aggregators */
 
-    /* Here, ncp->num_aggrs_per_node must be > 0, because checking if
-     * ncp->num_aggrs_per_node == 0  has been done before entering this
-     * subroutine.
+    /* Note that ill value of ncp->num_aggrs_per_node has been checked before
+     * entering this subroutine. Thus ncp->num_aggrs_per_node must be > 0.
      */
-    assert(ncp->num_aggrs_per_node > 0);
-
-    /* check ill value of num_aggrs_per_node */
-    if (ncp->num_aggrs_per_node * ncp->num_nodes >= ncp->nprocs)
-        /* disable intra-node aggregation */
-        return NC_NOERR;
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    double timing = MPI_Wtime();
-    ncp->aggr_time[0] = ncp->aggr_time[1] = 0.0;
-    ncp->aggr_time[2] = ncp->aggr_time[3] = 0.0;
-    ncp->aggr_time[4] = ncp->aggr_time[5] = 0.0;
-#endif
 
     /* ncp->node_ids[] has been established in ncmpii_construct_node_list()
      * called in ncmpio_create() or ncmpio_open() before entering this
-     * subroutine.
-     * my_node_id is this rank's node ID.
+     * subroutine. my_node_id is this rank's node ID.
      */
     my_node_id = ncp->node_ids[ncp->rank];
 
-    /* Set the following variables:
-     *   nprocs_my_node: the number of processes in my nodes
-     *   ranks_my_node[]: rank IDs of all processes in my node.
-     *   my_rank_index: points to ranks_my_node[] where
-     *       ranks_my_node[my_rank_index] == ncp->rank
+    /* nprocs_my_node:  the number of processes in my nodes
+     * ranks_my_node[]: rank IDs of all processes in my node.
+     * my_rank_index:   points to ranks_my_node[] where
+     *                  ranks_my_node[my_rank_index] == ncp->rank
      */
     ranks_my_node = (int*) NCI_Malloc(sizeof(int) * ncp->nprocs);
     my_rank_index = -1;
@@ -391,147 +417,95 @@ ncmpio_intra_node_aggr_init(NC *ncp)
 
     /* Make sure number of aggregators in my node <= nprocs_my_node. In some
      * cases, the number of processes allocated to the last few nodes can be
-     * less than the ones before them.
+     * less than others.
      */
     naggrs_my_node = MIN(ncp->num_aggrs_per_node, nprocs_my_node);
 
-    /* For the aggregation group this rank belongs to, calculate the number of
-     * non-aggregators assigned to this group's aggregator, ncp->num_nonaggrs.
-     * Note ncp->num_nonaggrs includes self rank.
+    /* For each aggregation group, calculate the number of non-aggregators,
+     * ncp->num_nonaggrs. Note ncp->num_nonaggrs includes self rank.
      */
     ncp->num_nonaggrs = nprocs_my_node / naggrs_my_node;
     if (nprocs_my_node % naggrs_my_node) ncp->num_nonaggrs++;
 
-    /* Set the number of non-aggregators assigned to this rank. For the last
-     * group, make sure it does not go beyond nprocs_my_node.
+    /* Adjust the number of non-aggregators for the last group of each node,
+     * to make sure it does not go beyond nprocs_my_node.
      */
-    int first_rank = my_rank_index - my_rank_index % ncp->num_nonaggrs;
+    first_rank = my_rank_index - my_rank_index % ncp->num_nonaggrs;
     ncp->num_nonaggrs = MIN(ncp->num_nonaggrs, nprocs_my_node - first_rank);
 
-    if (ncp->num_nonaggrs <= 1) {
-        /* Disable aggregation if the number of non-aggregators assigned to
-         * this aggregator is 1. Note num_nonaggrs includes self rank. It is
-         * possible for aggregation to be enabled or disabled on different
-         * groups (thus also among different nodes).
+    /* Assign the first rank as the intra-node aggregator of this group and
+     * set the rank ID of my aggregator for each process.
+     */
+    ncp->my_aggr = ranks_my_node[first_rank];
+
+    if (ncp->num_nonaggrs == 1) {
+        /* When the number of processes in this group is 1, the aggregation
+         * is not performed. Note num_nonaggrs includes self rank.
          *
-         * Use whether ncp->my_aggr < 0 to tell if aggregation is disabled or
-         * enabled.
+         * Note this does not mean intra-node aggregation is disabled. The
+         * indicator of whether intra-node aggregation is enabled or disabled
+         * is ncp->num_aggrs_per_node, whose value should be consistent across
+         * all processes. It is possible for some groups containing only one
+         * process, in which the aggregation is not necessarily performed
+         * within that group.
          */
-        ncp->my_aggr = -1;
+        assert(ncp->my_aggr == ncp->rank);
     }
-    else { /* num_nonaggrs > 1 */
-        /* Construct ncp->nonaggr_ranks[], the rank IDs of non-aggregators
-         * assigned in this group.  Note ncp->nonaggr_ranks[] will be freed
-         * when closing the file, if allocated.
+    else if (ncp->my_aggr == ncp->rank) { /* ncp->num_nonaggrs > 1 */
+        /* Construct ncp->nonaggr_ranks[], the rank IDs of non-aggregators of
+         * this group. Note ncp->nonaggr_ranks[], if malloc-ed, will only be
+         * freed when closing the file.
          */
         ncp->nonaggr_ranks = (int*)NCI_Malloc(sizeof(int) * ncp->num_nonaggrs);
 
         memcpy(ncp->nonaggr_ranks, ranks_my_node + first_rank,
                sizeof(int) * ncp->num_nonaggrs);
-
-        /* Assign the first rank as the intra-node aggregator of this group */
-        ncp->my_aggr = ncp->nonaggr_ranks[0];
-
-#if 0
-        /* It is no longer necessary to make intra-node aggregators also as
-         * MPI-IO aggregators, because we later construct a new MPI
-         * communicator consisting only the intra-node aggregators and pass it
-         * to MPI_File_open(). It means only the intra-node aggregators have
-         * non-zero sized data to do I/O.
-         */
-        if (ncp->fstype != ADIO_FSTYPE_MPIIO && ncp->adio_fh != NULL) {
-            /* Check if the aggregator is also an MPI-IO aggregator. If not,
-             * change it to the first MPI-IO aggregator in the group. Note that
-             * binary search cannot be used, because the MPI rank IDs of all
-             * MPI-IO aggregators, ncp->adio_fh->hints->ranklist[], may not be
-             * sorted in an increasing order. On the other hand, rank IDs in
-             * ranks_my_node[], rank IDs of this rank's intra-node group, are
-             * in an increasing order.
-             *
-             * Note MPI ranks allocated to compute nodes are set at the run
-             * time. Two common allocation methods are block (consecutive IDs
-             * on a node) and cyclic (round-robin over all nodes). Both result
-             * in MPI rank IDs allocated to each compute node in an increasing
-             * order.
-             */
-            int j, cb_nodes = ncp->adio_fh->hints->cb_nodes;
-            int *ranklist = ncp->adio_fh->hints->ranklist;
-
-            for (i=0; i<ncp->num_nonaggrs; i++) {
-                for (j=0; j<cb_nodes; j++) {
-                    if (ncp->nonaggr_ranks[i] == ranklist[j])
-                        break; /* found */
-                }
-                if (j < cb_nodes) {
-                    if (i > 0) {
-                        /* change intra-node aggregator */
-                        ncp->my_aggr = ncp->nonaggr_ranks[i];
-                        /* swap aggregator's rank with nonaggr_ranks[0] */
-                        int tmp = ncp->nonaggr_ranks[0];
-                        ncp->nonaggr_ranks[0] = ncp->my_aggr;
-                        ncp->nonaggr_ranks[i] = tmp;
-                    }
-                    break;
-                }
-            }
-        }
-#endif
-        if (ncp->my_aggr != ncp->rank) {
-            /* free ncp->nonaggr_ranks as it is used by aggregators only */
-            NCI_Free(ncp->nonaggr_ranks);
-            ncp->nonaggr_ranks = NULL;
-        }
     }
     NCI_Free(ranks_my_node);
 
-    /* Note when ncp->my_aggr < 0, it does not mean this rank will not write to
-     * the file. It just means intra-node aggregation is disabled for this
-     * rank. This rank may still have data to write to the file.
-     */
-
-    /* Now only the intra-node aggregators have non-zero sized data to do I/O.
-     * We can create a new MPI communicator consisting of all intra-node
-     * aggregators and use it to call MPI_File_open().
+    /* Next step is to construct a new MPI communicator consisting of all
+     * intra-node aggregators. It will later be used to call MPI_File_open(),
+     * so that only aggregators call MPI-IO functions to access the file.
      *
-     * When using the internal ADIO driver, we also must create a new node_ids
-     * based on the new communicator and pass it to PnetCDF's internal ADIO
-     * file handler, ncp->adio_fh, so to avoid repeating the work of
-     * constructing the node_ids again. If using MPI-IO driver, then ROMIO will
-     * do this internally again anyway.
+     * When using the PnetCDF's internal ADIO driver, we can pass a list of
+     * node_ids of the new communicator to the ADIO file handler, ncp->adio_fh,
+     * so to prevent the driver from the repeated work of constructing the list
+     * of node IDs, node_ids. If using MPI-IO driver, then ROMIO will do this
+     * internally again anyway.
      */
 
-    /* create a new MPI communicator containing intra-node aggregators */
-    int j, do_io, ina_nprocs, *ina_ranks;
-    MPI_Group origin_group, ina_group;
+    do_io = (ncp->my_aggr == ncp->rank) ? 1 : 0;
 
-    do_io = 0;
-    if (ncp->my_aggr == -1 || ncp->my_aggr == ncp->rank)
-        do_io = 1;
+    /* construct an array containing ranks of aggregators */
+    ncp->ina_node_list = (int*) NCI_Malloc(sizeof(int) * ncp->nprocs);
+    TRACE_COMM(MPI_Allgather)(&do_io, 1, MPI_INT, ncp->ina_node_list, 1,
+                              MPI_INT,ncp->comm);
 
-    /* construct an array of ranks that access to file */
-    ina_ranks = (int*) NCI_Malloc(sizeof(int) * ncp->nprocs);
-    MPI_Allgather(&do_io, 1, MPI_INT, ina_ranks, 1, MPI_INT, ncp->comm);
+    /* Calculate the total number of intra-node aggregators */
+    for (ina_nprocs=0, i=0; i<ncp->nprocs; i++)
+        if (ncp->ina_node_list[i]) ina_nprocs++;
 
-    /* node_ids[] can be two kinds (nodes=3, nprocs=10, num_aggrs_per_node=2)
+    /* Construct ncp->node_ids[] and ncp->ina_node_list[]. Their contents
+     * depend on the layout of MPI process allocation to the compute nodes.
+     * The common layouts can be two kinds:
+     *   + cyclic - MPI ranks are assigned to nodes round-robin-ly,
+     *   + block - MPI ranks are assigned to a node and then move on to next.
+     *
+     * Below uses an example of nodes=3, nprocs=10, * num_aggrs_per_node=2.
+     * ncp->node_ids[] should be
      *     block  process allocation: 0,0,0,0,1,1,1,2,2,2
      *     cyclic process allocation: 0,1,2,0,1,2,0,1,2,0
-     * Accordingly, ina_ranks[] can be two kinds
+     * Accordingly, ncp->ina_node_list[] can be two kinds
      *     block  process allocation: 1,0,1,0,1,0,1,1,0,1
      *     cyclic process allocation: 1,1,1,0,0,0,1,1,1,0
      */
 
-    /* calculate number of intra-node aggregators, the ones that will access to
-     * the file
+    /* ncp->node_ids[]: node IDs of processes in the new MPI communicator.
+     * ncp->ina_node_list[]: the rank IDs of the new MPI communicator.
      */
-    for (ina_nprocs=0, i=0; i<ncp->nprocs; i++)
-        if (ina_ranks[i]) ina_nprocs++;
-
-// if (ncp->nprocs==4) printf("%s at %d: ina_nprocs=%d ina_ranks=%d %d %d %d\n", __func__,__LINE__,ina_nprocs, ina_ranks[0],ina_ranks[1],ina_ranks[2],ina_ranks[3]);
-
-    /* construct the rank IDs of the new MPI communicator, ina_ranks[] */
     for (j=0,i=0; i<ncp->nprocs; i++) {
-        if (ina_ranks[i]) {
-            ina_ranks[j] = i;
+        if (ncp->ina_node_list[i]) {
+            ncp->ina_node_list[j] = i;
             /* Modify ncp->node_ids[] to store the node IDs of the processes in
              * the new communicator. Note ncp->node_ids[] from now on is used
              * by PnetCDF's ADIO driver only.
@@ -541,46 +515,64 @@ ncmpio_intra_node_aggr_init(NC *ncp)
         }
     }
 
-    /* create a new communicator containing only ranks that access to file */
-    MPI_Comm_group(ncp->comm, &origin_group);
-    MPI_Group_incl(origin_group, ina_nprocs, ina_ranks, &ina_group);
-    MPI_Comm_create(ncp->comm, ina_group, &ncp->ina_comm);
-    MPI_Group_free(&ina_group);
-    MPI_Group_free(&origin_group);
-    NCI_Free(ina_ranks);
+    /* Make MPI calls to create a new communicator. */
+    MPI_Group origin_group, ina_group;
+    TRACE_COMM(MPI_Comm_group)(ncp->comm, &origin_group);
+    if (mpireturn != MPI_SUCCESS)
+        return ncmpii_error_mpi2nc(mpireturn, "MPI_Comm_group");
+    TRACE_COMM(MPI_Group_incl)(origin_group, ina_nprocs, ncp->ina_node_list, &ina_group);
+    if (mpireturn != MPI_SUCCESS)
+        return ncmpii_error_mpi2nc(mpireturn, "MPI_Group_incl");
+    TRACE_COMM(MPI_Comm_create)(ncp->comm, ina_group, &ncp->ina_comm);
+    if (mpireturn != MPI_SUCCESS)
+        return ncmpii_error_mpi2nc(mpireturn, "MPI_Comm_create");
+    TRACE_COMM(MPI_Group_free)(&ina_group);
+    if (mpireturn != MPI_SUCCESS)
+        return ncmpii_error_mpi2nc(mpireturn, "MPI_Group_free");
+    TRACE_COMM(MPI_Group_free)(&origin_group);
+    if (mpireturn != MPI_SUCCESS)
+        return ncmpii_error_mpi2nc(mpireturn, "MPI_Group_free");
 
-#ifdef WKL_DEBUG
-int io_rank;
-printf("%s at %d: world rank %d ncp->ina_comm = %s\n", __func__,__LINE__,ncp->rank, (ncp->ina_comm == MPI_COMM_NULL) ? "MPI_COMM_NULL" : "NOT NULL");
+    /* Non-aggregators will have ncp->ina_comm set to MPI_COMM_NULL */
+    if (ncp->ina_comm == MPI_COMM_NULL) {
+        ncp->ina_nprocs = 0;
+        ncp->ina_rank = -1;
+    }
+    else {
+        MPI_Comm_size(ncp->ina_comm, &ncp->ina_nprocs);
+        MPI_Comm_rank(ncp->ina_comm, &ncp->ina_rank);
+    }
 
-if (ncp->ina_comm != MPI_COMM_NULL)
-        MPI_Comm_rank(ncp->ina_comm, &io_rank);
-else
-        io_rank = -1;
-printf("%s at %d: World rank = %d I/O comm rank = %d\n", __func__,__LINE__,ncp->rank, io_rank);
-#endif
-
-    /* TODO: For automatically determine Whether to enable intra-node write
-     * aggregation, this should be done right before each collective write
-     * call.
-     *   1. obtain hint cb_noddes, and striping_unit
+    /* TODO: automatically determine whether or not to enable intra-node
+     * aggregation.
+     *
+     * The ideal case is it can be determined right before each collective
+     * write call, because only at that time, the communication pattern is
+     * known. If the pattern can cause contention, then enable it. Otherwise,
+     * disable it.
+     *
+     * Such mechanism may depends on the followings.
+     *   1. MPI-IO hint cb_noddes, and striping_unit
      *   2. calculate aggregate access region
-     * In each round of two-phase I/O, when the number of senders to each
-     * cb_nodes is very large, then intra-node aggregation should be enabled.
-     * Average of all nprocs_per_node may be a factor for determining whether
-     * to enable intra-node aggregation. It indicates whether the high number
-     * of processes are allocated on the same node.
+     *   3. If the number of senders to each cb_nodes is very large, then
+     *      intra-node aggregation should be enabled.
+     *   4. Average of nprocs_per_node across all processes may be a factor for
+     *      determining whether to enable intra-node aggregation. It indicates
+     *      whether the high number of processes are allocated on the same
+     *      node.
      */
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncp->aggr_time[0] = MPI_Wtime() - timing;
+    ncp->ina_init = MPI_Wtime() - timing;
 #endif
 
     return NC_NOERR;
 }
 
 /*----< flatten_subarray() >-------------------------------------------------*/
-/* flatten a subarray request into a list of offset-length pairs */
+/* Flatten a subarray request, specified by start[], count[], and stride[] into
+ * a list of file offset-length pairs, offsets[] and lengths[].
+ */
 static int
 flatten_subarray(int                ndim,       /* number of dimensions */
                  int                el_size,    /* array element size */
@@ -671,12 +663,26 @@ flatten_subarray(int                ndim,       /* number of dimensions */
         subarray_len *= count[ndim];
     }
 
+    /* check if the list can be coalesced */
+    for (i=0, j=1; j<*npairs; j++) {
+        if (offsets[i] + lengths[i] == offsets[j])
+            lengths[i] += lengths[j];
+        else {
+            i++;
+            if (i < j) {
+                offsets[i] = offsets[j];
+                lengths[i] = lengths[j];
+            }
+        }
+    }
+    *npairs = i + 1;
+
     return NC_NOERR;
 }
 
-/*----< flatten_req() >-----------------------------------------------------*/
-/* flatten one write request into offset-length pairs.
- * offsets and lengths are allocated here and need to be freed by the caller
+/*----< flatten_req() >------------------------------------------------------*/
+/* Flatten one subarray request into offset-length pairs. Arrays offsets and
+ * lengths are allocated in this subroutine and need to be freed by the caller.
  */
 static int
 flatten_req(NC                *ncp,
@@ -789,15 +795,21 @@ flatten_req(NC                *ncp,
     if (ones != NULL)
         NCI_Free(ones);
 
+    /* num_pairs may be less than originally calculated, because offset-length
+     * pairs are coalesced in the call to flatten_subarray().
+     */
+    *num_pairs = idx;
+
     return err;
 }
 
 /*----< flatten_reqs() >-----------------------------------------------------*/
-/* flatten all write requests into offset-length pairs.
- * offsets and lengths are allocated here and need to be freed by the caller
+/* Flatten multiple subarray requests into file offset-length pairs. Arrays
+ * offsets and lengths are allocated here and need to be freed by the caller.
  */
 static int
 flatten_reqs(NC            *ncp,
+             int            reqMode,   /* IN: NC_REQ_RD or NC_REQ_WR */
              int            num_reqs,  /* IN: # requests */
              const NC_req  *reqs,      /* [num_reqs] requests */
              int           *is_incr,   /* OUT: are offsets incrementing */
@@ -820,60 +832,17 @@ flatten_reqs(NC            *ncp,
     /* Count the number off-len pairs from reqs[], so we can malloc a
      * contiguous memory space for storing off-len pairs
      */
-#if 1
     for (i=0; i<num_reqs; i++) {
         /* reqs[i].npairs is the number of offset-length pairs of this request,
          * calculated in ncmpio_igetput_varm() and igetput_varn()
          */
         *num_pairs += reqs[i].npairs;
-        ndims = ncp->put_lead_list[reqs[i].lead_off].varp->ndims;
-        max_ndims = MAX(max_ndims, ndims);
-    }
-#else
-    for (i=0; i<num_reqs; i++) {
-        NC_lead_req *lead = ncp->put_lead_list + reqs[i].lead_off;
-        ndims = lead->varp->ndims;
-        max_ndims = MAX(max_ndims, ndims);
-        if (ndims > 0) {
-            start  = reqs[i].start;
-            count  = start + ndims;
-            stride = count + ndims;
-        }
+        if (fIsSet(reqMode, NC_REQ_WR))
+            ndims = ncp->put_lead_list[reqs[i].lead_off].varp->ndims;
         else
-            start = count = stride = NULL;
-
-        /* for record variable, each reqs[] is within a record */
-        if (IS_RECVAR(lead->varp)) {
-            ndims--;
-            start++;
-            count++;
-            stride++;
-        }
-        if (fIsSet(lead->flag, NC_REQ_STRIDE_NULL)) stride = NULL;
-
-        if (ndims < 0) continue;
-        if (ndims == 0) {  /* 1D record variable */
-            (*num_pairs)++;
-            continue;
-        }
-        num = 1;
-        if (stride != NULL && stride[ndims-1] > 1)
-            num = count[ndims-1];  /* count of last dimension */
-        for (j=0; j<ndims-1; j++)
-            num *= count[j];  /* all count[] except the last dimension */
-
-        (*num_pairs) += num;
+            ndims = ncp->get_lead_list[reqs[i].lead_off].varp->ndims;
+        max_ndims = MAX(max_ndims, ndims);
     }
-
-MPI_Aint nn = 0;
-int wkl=0;
-    for (i=0; i<num_reqs; i++) {
-        nn += reqs[i].npairs;
-// if (reqs[i].npairs > 1 && wkl == 0) { printf("reqs[%d].npairs=%ld > 1\n",i,reqs[i].npairs); wkl++; }
-    }
-if (nn != *num_pairs) printf("%s %d -------- num_reqs=%d num_pairs=%ld nn=%ld\n",__func__,__LINE__,num_reqs,(*num_pairs),nn);
-// wkl=0;
-#endif
 
     /* now we can allocate a contiguous memory space for the off-len pairs */
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -896,7 +865,11 @@ if (nn != *num_pairs) printf("%s %d -------- num_reqs=%d num_pairs=%ld nn=%ld\n"
     /* now re-run the loop to fill in the off-len pairs */
     for (i=0; i<num_reqs; i++) {
         MPI_Offset var_begin;
-        NC_lead_req *lead = ncp->put_lead_list + reqs[i].lead_off;
+        NC_lead_req *lead;
+        if (fIsSet(reqMode, NC_REQ_WR))
+            lead = ncp->put_lead_list + reqs[i].lead_off;
+        else
+            lead = ncp->get_lead_list + reqs[i].lead_off;
 
         /* The case when reqs[i] contains only one offset-length pair has been
          * specially handled to in ncmpio_igetput_varm() and igetput_varn()
@@ -954,10 +927,6 @@ if (nn != *num_pairs) printf("%s %d -------- num_reqs=%d num_pairs=%ld nn=%ld\n"
                          &num,            /* OUT: number of off-len pairs */
                          *offsets + idx,  /* OUT: array of offsets */
                          *lengths + idx); /* OUT: array of lengths */
-/*
-if (num > 1 && wkl == 0) { printf("---------------------- num=%ld > 1\n",num); wkl++; }
-if ((*offsets)[idx] != reqs[i].offset_start && wkl == 0) {printf("---------------------- offsets[idx=%ld] %lld != reqs[i=%d].offset_start %lld\n",idx, (*offsets)[idx], i, reqs[i].offset_start); wkl++; }
-*/
 
         /* check if (*offsets)[] are in an increasing order */
         for (j=0; j<num; j++) {
@@ -970,8 +939,17 @@ if ((*offsets)[idx] != reqs[i].offset_start && wkl == 0) {printf("--------------
     }
     NCI_Free(ones);
 
+    /* num_pairs may be less than originally calculated, because offset-length
+     * pairs are coalesced in the call to flatten_subarray().
+     */
+    *num_pairs = idx;
+
     for (i=0; i<num_reqs; i++) {
-        NC_lead_req *lead = ncp->put_lead_list + reqs[i].lead_off;
+        NC_lead_req *lead;
+        if (fIsSet(reqMode, NC_REQ_WR))
+            lead = ncp->put_lead_list + reqs[i].lead_off;
+        else
+            lead = ncp->get_lead_list + reqs[i].lead_off;
         if (fIsSet(lead->flag, NC_REQ_TO_FREE)) {
             NCI_Free(lead->start);
             lead->start = NULL;
@@ -982,11 +960,13 @@ if ((*offsets)[idx] != reqs[i].offset_start && wkl == 0) {printf("--------------
 }
 
 /*----< construct_buf_type() >-----------------------------------------------*/
-/* construct an MPI derived datatype for I/O buffers from the request list, by
- * concatenate all buffers.
+/* Construct an MPI derived datatype for I/O buffers from multiple requests
+ * described in the request list, reqs, by concatenate memory addresses of all
+ * buffers.
  */
 static int
 construct_buf_type(const NC     *ncp,
+                   int           reqMode,   /* IN: NC_REQ_RD or NC_REQ_WR */
                    int           num_reqs,  /* IN: # requests */
                    const NC_req *reqs,      /* IN: [num_reqs] requests */
                    MPI_Aint     *bufLen,    /* OUT: buffer size in bytes */
@@ -1012,7 +992,10 @@ construct_buf_type(const NC     *ncp,
         disps[i] = addr;
 
         /* blocklens[] in bytes */
-        lead = ncp->put_lead_list + reqs[i].lead_off;
+        if (fIsSet(reqMode, NC_REQ_WR))
+            lead = ncp->put_lead_list + reqs[i].lead_off;
+        else
+            lead = ncp->get_lead_list + reqs[i].lead_off;
         blocklens[i] = reqs[i].nelems * lead->varp->xsz;
 
         *bufLen += blocklens[i];
@@ -1053,7 +1036,11 @@ construct_buf_type(const NC     *ncp,
 
 /*----< ina_collect_md() >---------------------------------------------------*/
 /* Within each intra-node aggregation group, the aggregator collects request
- * metadata from the non-aggregators.
+ * metadata from the non-aggregators into meta, including:
+ *   1. the number of offset-length pairs on each non-aggregator
+ *   2. offsets array of each non-aggregator
+ *   3. lengths array of each non-aggregator
+ *   4. npairs is the total number of offset-length pairs of this group.
  */
 static
 int ina_collect_md(NC          *ncp,
@@ -1072,20 +1059,20 @@ int ina_collect_md(NC          *ncp,
     MPI_Aint num_pairs=meta[0];
 
     /* Aggregator collects each non-aggregator's num_pairs and bufLen */
-    if (ncp->rank == ncp->my_aggr) {
+    if (ncp->my_aggr == ncp->rank) {
 
         req = (MPI_Request*)NCI_Malloc(sizeof(MPI_Request) * ncp->num_nonaggrs);
         nreqs = 0;
         for (i=1; i<ncp->num_nonaggrs; i++)
-            MPI_Irecv(meta + i*3, 3, MPI_AINT, ncp->nonaggr_ranks[i], 0,
-                      ncp->comm, &req[nreqs++]);
+            TRACE_COMM(MPI_Irecv)(meta + i*3, 3, MPI_AINT,
+                       ncp->nonaggr_ranks[i], 0, ncp->comm, &req[nreqs++]);
 
 #ifdef HAVE_MPI_STATUSES_IGNORE
-        mpireturn = MPI_Waitall(nreqs, req, MPI_STATUSES_IGNORE);
+        TRACE_COMM(MPI_Waitall)(nreqs, req, MPI_STATUSES_IGNORE);
 #else
         MPI_Status *statuses = (MPI_Status *)
                                ADIOI_Malloc(nreqs * sizeof(MPI_Status));
-        mpireturn = MPI_Waitall(nreqs, req, statuses);
+        TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
         ADIOI_Free(statuses);
 #endif
         if (mpireturn != MPI_SUCCESS) {
@@ -1095,12 +1082,12 @@ int ina_collect_md(NC          *ncp,
         }
     }
     else /* non-aggregator */
-        MPI_Send(meta, 3, MPI_AINT, ncp->my_aggr, 0, ncp->comm);
+        TRACE_COMM(MPI_Send)(meta, 3, MPI_AINT, ncp->my_aggr, 0, ncp->comm);
 
     /* Secondly, aggregators collect offset-length pairs from all its
      * non-aggregators
      */
-    if (ncp->rank == ncp->my_aggr) {
+    if (ncp->my_aggr == ncp->rank) {
         MPI_Datatype recvType;
 
         /* calculate the total number of offset-length pairs to receive */
@@ -1119,7 +1106,7 @@ int ina_collect_md(NC          *ncp,
         if (*npairs > num_pairs) {
             /* realloc to store all pairs in a contiguous buffer */
             *offsets = (MPI_Offset*) NCI_Realloc(*offsets, *npairs * sizeof(MPI_Offset));
-            *lengths = (int*) NCI_Realloc(*lengths, *npairs * sizeof(int));
+            *lengths = (int*)        NCI_Realloc(*lengths, *npairs * sizeof(int));
         }
 #endif
 
@@ -1157,8 +1144,8 @@ int ina_collect_md(NC          *ncp,
                 }
             }
             /* post to receive offset-length pairs from non-aggregators */
-            MPI_Irecv_c(MPI_BOTTOM, 1, recvType, ncp->nonaggr_ranks[i],
-                        0, ncp->comm, &req[nreqs]);
+            TRACE_COMM(MPI_Irecv_c)(MPI_BOTTOM, 1, recvType,
+                       ncp->nonaggr_ranks[i], 0, ncp->comm, &req[nreqs]);
             MPI_Type_free(&recvType);
 
             disps[0] = MPI_Aint_add(disps[0], bklens[0]);
@@ -1170,12 +1157,12 @@ int ina_collect_md(NC          *ncp,
         MPI_Aint aint, disps[2];
 
         MPI_Get_address(*offsets, &aint);
-        disps[0] = MPI_Aint_add(aint, sizeof(MPI_Aint) * meta[0]);
+        disps[0] = MPI_Aint_add(aint, sizeof(MPI_Offset) * meta[0]);
         MPI_Get_address(*lengths, &aint);
         disps[1] = MPI_Aint_add(aint, sizeof(int) * meta[0]);
         for (i=1; i<ncp->num_nonaggrs; i++) {
             if (meta[i*3] == 0) continue;
-            bklens[0] = meta[i*3] * sizeof(MPI_Aint);
+            bklens[0] = meta[i*3] * sizeof(MPI_Offset);
             bklens[1] = meta[i*3] * sizeof(int);
             mpireturn = MPI_Type_create_hindexed(2, bklens, disps, MPI_BYTE,
                                                  &recvType);
@@ -1193,8 +1180,8 @@ int ina_collect_md(NC          *ncp,
                 }
             }
             /* post to receive offset-length pairs from non-aggregators */
-            MPI_Irecv(MPI_BOTTOM, 1, recvType, ncp->nonaggr_ranks[i],
-                      0, ncp->comm, &req[nreqs]);
+            TRACE_COMM(MPI_Irecv)(MPI_BOTTOM, 1, recvType,
+                       ncp->nonaggr_ranks[i], 0, ncp->comm, &req[nreqs]);
             MPI_Type_free(&recvType);
 
             disps[0] = MPI_Aint_add(disps[0], bklens[0]);
@@ -1203,11 +1190,11 @@ int ina_collect_md(NC          *ncp,
         }
 #endif
 #ifdef HAVE_MPI_STATUSES_IGNORE
-        mpireturn = MPI_Waitall(nreqs, req, MPI_STATUSES_IGNORE);
+        TRACE_COMM(MPI_Waitall)(nreqs, req, MPI_STATUSES_IGNORE);
 #else
         MPI_Status *statuses = (MPI_Status *)
                                ADIOI_Malloc(nreqs * sizeof(MPI_Status));
-        mpireturn = MPI_Waitall(nreqs, req, statuses);
+        TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
         ADIOI_Free(statuses);
 #endif
         if (mpireturn != MPI_SUCCESS) {
@@ -1249,7 +1236,8 @@ int ina_collect_md(NC          *ncp,
                 if (status == NC_NOERR) status = err;
             }
         }
-        MPI_Send_c(MPI_BOTTOM, 1, sendType, ncp->my_aggr, 0, ncp->comm);
+        TRACE_COMM(MPI_Send_c)(MPI_BOTTOM, 1, sendType, ncp->my_aggr, 0,
+                               ncp->comm);
         MPI_Type_free(&sendType);
 #else
         int bklens[2];
@@ -1274,7 +1262,8 @@ int ina_collect_md(NC          *ncp,
                 if (status == NC_NOERR) status = err;
             }
         }
-        MPI_Send(MPI_BOTTOM, 1, sendType, ncp->my_aggr, 0, ncp->comm);
+        TRACE_COMM(MPI_Send)(MPI_BOTTOM, 1, sendType, ncp->my_aggr, 0,
+                             ncp->comm);
         MPI_Type_free(&sendType);
 #endif
     }
@@ -1286,8 +1275,7 @@ int ina_collect_md(NC          *ncp,
 
 /*----< ina_put() >----------------------------------------------------------*/
 /* This collective subroutine implements the intra-node aggregation for write
- * operations.
- * offsets and lengths will be freed when return.
+ * operations. Arrays offsets and lengths will be freed when return.
  */
 static
 int ina_put(NC           *ncp,
@@ -1328,7 +1316,8 @@ MPI_Offset maxm;
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #endif
 
-    /* Firstly, aggregators collect metadata from non-aggregators ------------*
+    /* Firstly, aggregators collect metadata from non-aggregators.
+     *
      * This rank tells its aggregator how much metadata to receive from this
      * rank, by sending: the number of offset-length pairs (num_pairs) and user
      * buffer size in bytes (bufLen). This message size to be sent by this rank
@@ -1345,9 +1334,13 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
     meta[1] = bufLen;
     meta[2] = is_incr;
 
-    /* Each aggregator first collects metadata about the number of
-     * offset-length pairs, size of write request, and whether the offsets are
-     * in an incremental order.  from non-aggregators assigned to it.
+    /* Each aggregator first collects metadata about its offset-length pairs,
+     * size of write request, and whether the offsets are in an incremental
+     * order. The aggregator will gather these metadata from non-aggregators
+     * assigned to it.
+     * For write operation, keeping the original offset-length pairs is not
+     * necessary, as they will later be sorted and coalesced before calling
+     * MPI-IO.
      */
     err = ina_collect_md(ncp, meta, &offsets, &lengths, &npairs);
     if (err != NC_NOERR) goto fn_exit;
@@ -1360,10 +1353,12 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         void *buf_ptr = (buf == NULL) ? MPI_BOTTOM : buf;
 #ifdef HAVE_MPI_LARGE_COUNT
         MPI_Count num = (buf == NULL) ? 1 : bufCount;
-        MPI_Send_c(buf_ptr, num, bufType, ncp->my_aggr, 0, ncp->comm);
+        TRACE_COMM(MPI_Send_c)(buf_ptr, num, bufType, ncp->my_aggr, 0,
+                               ncp->comm);
 #else
         int num = (buf == NULL) ? 1 : bufCount;
-        MPI_Send(buf_ptr, num, bufType, ncp->my_aggr, 0, ncp->comm);
+        TRACE_COMM(MPI_Send)(buf_ptr, num, bufType, ncp->my_aggr, 0,
+                             ncp->comm);
 #endif
         NCI_Free(offsets);
         NCI_Free(lengths);
@@ -1377,15 +1372,19 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
-    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[2] += endT - startT;
+    if (ncp->rank == ncp->my_aggr) ncp->ina_write[0] += endT - startT;
     startT = endT;
 #endif
 
-    /* MPI-IO requires the flattened file offsets of a fileview to be in a
-     * monotonic non-decreasing order.
+    /* MPI-IO has the following requirements about filetype.
+     * 1. The (flattened) displacements (of a filetype) are not required to be
+     *    distinct, but they cannot be negative, and they must be monotonically
+     *    non-decreasing.
+     * 2. If the file is opened for writing, neither the etype nor the filetype
+     *    is permitted to contain overlapping regions.
      */
     if (ncp->rank == ncp->my_aggr && npairs > 0) {
-        /* Now the aggregator has received all offset-length pairs from
+        /* Now the aggregator has received all offset-length pairs from its
          * non-aggregators. At first, check if qsort is necessary. Find the
          * first non-aggregator with non-zero pairs whose offsets are not
          * already sorted.
@@ -1393,22 +1392,23 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         int do_sort=0, indv_sorted=1;
 
         for (i=-1,j=0; j<ncp->num_nonaggrs; j++) {
-            if (i == -1 && meta[j*3] > 0) /* find 1st one whose num_pairs > 0 */
+            if (i == -1 && meta[j*3] > 0) /* find 1st whose num_pairs > 0 */
                 i = j;
-            if (meta[j*3+2] == 0) { /* non-aggregator j's offsets are not sorted */
+            if (meta[j*3+2] == 0) { /* j's offsets are not sorted */
                 indv_sorted = 0;
                 do_sort = 1;
                 break;
             }
         }
-        /* i is the first non-aggregator whose num_pairs > 0
+        /* i is the first non-aggregator whose num_pairs > 0, and
          * j is the first non-aggregator whose is_incr is false
          */
 
         if (i >= 0 && indv_sorted == 1) {
             /* This is when all non-aggregators' offsets are individually
              * sorted. We still need to check if offsets are interleaved among
-             * all non-aggregators to determine whether a sorting is needed.
+             * all non-aggregators to determine whether a sorting of all
+             * offset-length pairs is necessary.
              */
             if (meta[i*3+2] == 0) /* first non-zero offsets are not sorted */
                 do_sort = 1;
@@ -1477,8 +1477,8 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 #ifdef PNETCDF_PROFILING
         endT = MPI_Wtime();
         if (ncp->rank == ncp->my_aggr) {
-            ncp->aggr_time[3] += endT - startT;
-            ncp->aggr_time[5] = MAX(ncp->aggr_time[5], npairs);
+            ncp->ina_write[1] += endT - startT;
+            ncp->ina_write[4] = MAX(ncp->ina_write[4], npairs);
         }
         startT = endT;
 #endif
@@ -1489,7 +1489,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 
         /* Allocate receive buffer and write buffer. Once write data from
          * non-aggregators have received into recv_buf, recv_buf is packed into
-         * wr_buf. wr_buf is used when calling MPI-IO to write to file.
+         * wr_buf. Then, wr_buf is used when calling MPI-IO to write to file.
          */
         if (buf_count > 0) {
             recv_buf = (char*) NCI_Malloc(buf_count);
@@ -1525,6 +1525,13 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
             }
         }
 
+#ifdef PNETCDF_PROFILING
+        endT = MPI_Wtime();
+        if (ncp->rank == ncp->my_aggr)
+            ncp->ina_write[2] += endT - startT;
+        startT = endT;
+#endif
+
         /*
          * TODO, define a datatype to combine sends of offset-length pairs with
          * the write data into a single send call.
@@ -1537,20 +1544,20 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
             for (i=1; i<ncp->num_nonaggrs; i++) {
                 if (meta[i*3 + 1] == 0) continue;
 #ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Irecv_c(ptr, meta[i*3 + 1], MPI_BYTE, ncp->nonaggr_ranks[i],
-                            0, ncp->comm, &req[nreqs++]);
+                TRACE_COMM(MPI_Irecv_c)(ptr, meta[i*3 + 1], MPI_BYTE,
+                           ncp->nonaggr_ranks[i], 0, ncp->comm, &req[nreqs++]);
 #else
-                MPI_Irecv(ptr, meta[i*3 + 1], MPI_BYTE, ncp->nonaggr_ranks[i],
-                          0, ncp->comm, &req[nreqs++]);
+                TRACE_COMM(MPI_Irecv)(ptr, meta[i*3 + 1], MPI_BYTE,
+                           ncp->nonaggr_ranks[i], 0, ncp->comm, &req[nreqs++]);
 #endif
                 ptr += meta[i*3 + 1];
             }
 #ifdef HAVE_MPI_STATUSES_IGNORE
-            mpireturn = MPI_Waitall(nreqs, req, MPI_STATUSES_IGNORE);
+            TRACE_COMM(MPI_Waitall)(nreqs, req, MPI_STATUSES_IGNORE);
 #else
             MPI_Status *statuses = (MPI_Status *)
                                    ADIOI_Malloc(nreqs * sizeof(MPI_Status));
-            mpireturn = MPI_Waitall(nreqs, req, statuses);
+            TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
             ADIOI_Free(statuses);
 #endif
             if (mpireturn != MPI_SUCCESS) {
@@ -1672,7 +1679,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
             offsets = NULL;
             lengths = NULL;
         }
-    }
+    } /* if (ncp->rank == ncp->my_aggr && npairs > 0) */
 
     NCI_Free(meta);
     if (ncp->rank == ncp->my_aggr)
@@ -1681,7 +1688,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("==== %s line %d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     endT = MPI_Wtime();
-    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[4] += endT - startT;
+    if (ncp->rank == ncp->my_aggr) ncp->ina_write[3] += endT - startT;
 #endif
 
     /* Only aggregators call MPI-IO functions to write data to the file.
@@ -1698,14 +1705,15 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("==== %s line %d: 
         disp = 0;
         saved_fileType = ncp->adio_fh->filetype;
 
-        /* When using internal Lustre driver, a call to ncmpio_file_set_view()
-         * will pass offsets[] and lengths[] to ADIO_File_set_view() to be
-         * reused as flattened fileType. This can avoid re-create a datatype
-         * and re-flattening it. See ADIOI_Calc_my_off_len()
+        /* When using PnetCDF's internal ADIO driver, a call to
+         * ncmpio_file_set_view() will pass offsets[] and lengths[] to
+         * ADIO_File_set_view() to be reused as flattened fileType. This can
+         * avoid re-create an MPI datatype and re-flattening it. See such
+         * adaptation in ADIOI_Calc_my_off_len()
          *
-         * Use MPI_DATATYPE_NULL to indicate this setting of fileview comes
-         * from intra-node aggregation, so the ADIO subroutines can reuse
-         * offsets[] and lengths[] and avoid freeing them.
+         * Here we use MPI_DATATYPE_NULL to tell ADIO_File_set_view() that it
+         * is called from the intra-node aggregation subroutine, so the ADIO
+         * subroutines can reuse offsets[] and lengths[].
          */
         fileType = MPI_DATATYPE_NULL;
     }
@@ -1713,8 +1721,8 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("==== %s line %d: 
     /* Set the MPI-IO fileview (this is a collective call). This call returns
      * disp which points to the very first file offset to be written.
      */
-    err = ncmpio_file_set_view(ncp, fh, &disp, fileType, npairs,
-                               offsets, lengths);
+    err = ncmpio_file_set_view(ncp, fh, &disp, fileType, npairs, offsets,
+                               lengths);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
         buf_count = 0;
@@ -1726,7 +1734,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("==== %s line %d: 
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #endif
 
-    /* call MPI_File_write_at_all */
+    /* call MPI_File_write_at_all or ADIO_File_write_at_all */
     err = ncmpio_read_write(ncp, NC_REQ_WR, NC_REQ_COLL, disp, buf_count,
                             MPI_BYTE, wr_buf, 1);
     if (status == NC_NOERR) status = err;
@@ -1751,10 +1759,41 @@ fn_exit:
     return status;
 }
 
+static
+size_t bin_search(
+#ifdef HAVE_MPI_LARGE_COUNT
+                  MPI_Count key, MPI_Count *base,
+#else
+                  MPI_Offset key, MPI_Offset *base,
+#endif
+                  size_t nmemb)
+{
+    size_t low, high;
+
+    if (nmemb == 1)
+        return (base[0] <= key) ? 0 : -1;
+
+    if (base[0] <= key && key < base[1])
+        return 0;
+
+    low = 0;
+    high = nmemb - 1;
+
+    while (low <= high) {
+        size_t mid = low + (high - low) / 2;
+        if (base[mid] == key)
+            return mid;
+        if (base[mid] < key)
+            low = mid + 1;
+        else
+            high = mid - 1;
+    }
+    return (low - 1);
+}
+
 /*----< ina_get() >----------------------------------------------------------*/
 /* This collective subroutine implements the intra-node aggregation for read
- * operations.
- * offsets and lengths will be freed when return.
+ * operations. Arrays offsets and lengths will be freed when return.
  */
 static
 int ina_get(NC           *ncp,
@@ -1772,8 +1811,9 @@ int ina_get(NC           *ncp,
             void         *buf)      /* user buffer */
 {
     int i, j, err, mpireturn, status=NC_NOERR, nreqs;
-    char *send_buf=NULL, *rd_buf = NULL;
-    MPI_Aint npairs=0, *meta=NULL, *count=NULL, *bufAddr=NULL;
+    int do_sort=0, indv_sorted=1;
+    char *rd_buf = NULL;
+    MPI_Aint npairs=0, max_npairs, *meta=NULL, *count=NULL;
     MPI_Offset disp=0, buf_count=0;
     MPI_Datatype saved_fileType, fileType=MPI_BYTE;
     MPI_File fh;
@@ -1782,10 +1822,11 @@ int ina_get(NC           *ncp,
     double endT, startT = MPI_Wtime();
 #endif
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count bufLen;
+    MPI_Count bufLen, *orig_offsets=NULL, *orig_lengths=NULL;
     MPI_Type_size_c(bufType, &bufLen);
 #else
-    int bufLen;
+    MPI_Offset *orig_offsets=NULL;
+    int bufLen, *orig_lengths=NULL;
     MPI_Type_size(bufType, &bufLen);
 #endif
     bufLen *= bufCount;
@@ -1795,7 +1836,8 @@ MPI_Offset maxm;
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #endif
 
-    /* Firstly, aggregators collect metadata from non-aggregators ------------*
+    /* Firstly, aggregators collect metadata from non-aggregators.
+     *
      * This rank tells its aggregator how much metadata to receive from this
      * rank, by sending: the number of offset-length pairs (num_pairs) and user
      * buffer size in bytes (bufLen). This message size to be sent by this rank
@@ -1812,12 +1854,32 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
     meta[1] = bufLen;
     meta[2] = is_incr;
 
-    /* Each aggregator first collects metadata about the number of
-     * offset-length pairs, size of write request, and whether the offsets are
-     * in an incremental order.  from non-aggregators assigned to it.
+    /* Each aggregator first collects metadata about its offset-length pairs,
+     * size of read request, and whether the offsets are in an incremental
+     * order. The aggregator will gather these metadata from non-aggregators
+     * assigned to it.
+     * For read operation, the original offsets and lengths must be kept,
+     * because the sorting and coalescing later will mess up the original order
+     * of offsets and lengths. The original ones are needed to construct a
+     * datatype when an aggregator sends read data to its non-aggregators.
      */
     err = ina_collect_md(ncp, meta, &offsets, &lengths, &npairs);
     if (err != NC_NOERR) goto fn_exit;
+
+    if (ncp->rank == ncp->my_aggr) {
+        /* duplicate to keep a copy of the original offset-length pairs */
+#ifdef HAVE_MPI_LARGE_COUNT
+        orig_offsets = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * npairs);
+        orig_lengths = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * npairs);
+        memcpy(orig_offsets, offsets, sizeof(MPI_Count) * npairs);
+        memcpy(orig_lengths, lengths, sizeof(MPI_Count) * npairs);
+#else
+        orig_offsets = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * npairs);
+        orig_lengths = (int*)        NCI_Malloc(sizeof(int) * npairs);
+        memcpy(orig_offsets, offsets, sizeof(MPI_Offset) * npairs);
+        memcpy(orig_lengths, lengths, sizeof(int) * npairs);
+#endif
+    }
 
     if (ncp->rank != ncp->my_aggr && num_pairs > 0) {
         /* For read operation, the non-aggregators now can start receiving
@@ -1827,50 +1889,50 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         void *buf_ptr = (buf == NULL) ? MPI_BOTTOM : buf;
 #ifdef HAVE_MPI_LARGE_COUNT
         MPI_Count num = (buf == NULL) ? 1 : bufCount;
-        MPI_Recv_c(buf_ptr, num, bufType, ncp->my_aggr, 0, ncp->comm, &st);
+        TRACE_COMM(MPI_Recv_c)(buf_ptr, num, bufType, ncp->my_aggr, 0,
+                               ncp->comm, &st);
 #else
         int num = (buf == NULL) ? 1 : bufCount;
-        MPI_Recv(buf_ptr, num, bufType, ncp->my_aggr, 0, ncp->comm), &st;
+        TRACE_COMM(MPI_Recv)(buf_ptr, num, bufType, ncp->my_aggr, 0,
+                             ncp->comm, &st);
 #endif
-printf("%s at %d: bufCount=%lld num=%lld\n",__func__,__LINE__,bufCount,num);
         NCI_Free(offsets);
         NCI_Free(lengths);
         offsets = NULL;
         lengths = NULL;
     }
 
-    /* Non-aggregators are now done. Below is for aggregators which must call
-     * MPI-IO functions to read data from the file. Non-aggregators do not
-     * participate MPI-IO calls.
-     */
+    /* Non-aggregators are now done. */
     if (ncp->rank != ncp->my_aggr)
         goto fn_exit;
+
+    /* Below are tasks for aggregators only, which must call MPI-IO functions
+     * to read data from the file. Non-aggregators do not participate MPI-IO
+     * calls.
+     */
 
 #ifdef WKL_DEBUG
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #endif
 
-#ifdef PNETCDF_PROFILING
-    endT = MPI_Wtime();
-    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[2] += endT - startT;
-    startT = endT;
-#endif
-
-    /* MPI-IO requires the flattened file offsets of a fileview to be in a
-     * monotonic non-decreasing order.
+    /* MPI-IO has the following requirements about filetype.
+     * 1. The (flattened) displacements (of a filetype) are not required to be
+     *    distinct, but they cannot be negative, and they must be monotonically
+     *    non-decreasing.
+     * 2. If the file is opened for writing, neither the etype nor the filetype
+     *    is permitted to contain overlapping regions.
      */
     if (npairs > 0) {
         /* Now the aggregator has received all offset-length pairs from
-         * non-aggregators. At first, check if qsort is necessary. Find the
-         * first non-aggregator with non-zero pairs whose offsets are not
-         * already sorted.
+         * non-aggregators.
+         *
+         * At first, check if qsort is necessary. Find the first non-aggregator
+         * with non-zero pairs whose offsets are not already sorted.
          */
-        int do_sort=0, indv_sorted=1;
-
         for (i=-1,j=0; j<ncp->num_nonaggrs; j++) {
-            if (i == -1 && meta[j*3] > 0) /* find 1st one whose num_pairs > 0 */
+            if (i == -1 && meta[j*3] > 0) /* find 1st whose num_pairs > 0 */
                 i = j;
-            if (meta[j*3+2] == 0) { /* non-aggregator j's offsets are not sorted */
+            if (meta[j*3+2] == 0) { /* j's offsets are not sorted */
                 indv_sorted = 0;
                 do_sort = 1;
                 break;
@@ -1913,7 +1975,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
              * one single sorted offset list. Note count will be used in
              * heap_merge()
              */
-            count = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * ncp->num_nonaggrs);
+            count = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint)* ncp->num_nonaggrs);
             for (i=0; i<ncp->num_nonaggrs; i++) count[i] = meta[i*3];
         }
 
@@ -1921,67 +1983,79 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
          * buffer used to read from file and the buffer used to send read data
          * to non-aggregator.
          */
-        bufAddr = (MPI_Aint*)NCI_Malloc(sizeof(MPI_Aint) * npairs);
-        bufAddr[0] = 0;
-        for (i=1; i<npairs; i++)
-            bufAddr[i] = bufAddr[i-1] + lengths[i-1];
-
         if (do_sort) {
-            /* sort offsets, lengths, bufAddr altogether, based on offsets into
-             * an increasing order
+            /* sort offsets and lengths together, based on offsets into an
+             * increasing order
              */
             if (indv_sorted) {
                 /* heap-merge of already sorted individual lists is much faster
                  * than qsort.  However, it has a much bigger memory footprint.
                  */
                 heap_merge(ncp->num_nonaggrs, count, npairs, offsets, lengths,
-                           bufAddr);
+                           NULL);
                 NCI_Free(count);
             }
             else
                 /* As some individual offsets are not sorted, we cannot use
                  * heap_merge().  Note qsort is an in-place sorting.
                  */
-                qsort_off_len_buf(npairs, offsets, lengths, bufAddr);
+                qsort_off_len_buf(npairs, offsets, lengths, NULL);
         }
 #ifdef WKL_DEBUG
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB sort=%s\n",__func__,__LINE__,(float)maxm/1048576.0, (do_sort)?((indv_sorted)?"HEAP":"QSORT"):"NO");
 #endif
 
 #ifdef PNETCDF_PROFILING
-        endT = MPI_Wtime();
-        if (ncp->rank == ncp->my_aggr) {
-            ncp->aggr_time[3] += endT - startT;
-            ncp->aggr_time[5] = MAX(ncp->aggr_time[5], npairs);
-        }
-        startT = endT;
+        if (ncp->rank == ncp->my_aggr)
+            ncp->ina_read[4] = MAX(ncp->ina_read[4], npairs);
 #endif
 
-        /* calculate the total amount to be read by this aggregator */
-        for (buf_count=0,i=0; i<ncp->num_nonaggrs; i++)
-            buf_count += meta[i*3 + 1];
+        /* Coalesce the offset-length pairs and calculate the total amount to
+         * be read by this aggregator.
+         */
+        buf_count = (npairs > 0) ? lengths[0] : 0;
+        for (i=0, j=1; j<npairs; j++) {
+            if (offsets[i] + lengths[i] >= offsets[j]) {
+                /* coalesce j into i */
+                MPI_Offset end_off = offsets[j] + lengths[j];
+                if (offsets[i] + lengths[i] < end_off) {
+                    lengths[i] = end_off - offsets[i];
+                    buf_count += offsets[i] + lengths[i] - offsets[j];
+                }
+                /* else: j is entirely covered by i */
+            }
+            else { /* j and i are not overlapped */
+                buf_count += lengths[j];
+                i++;
+                if (i < j) {
+                    offsets[i] = offsets[j];
+                    lengths[i] = lengths[j];
+                }
+            }
+        }
+        /* update npairs after coalesce */
+        npairs = i+1;
 
         /* Allocate read buffer and send buffer. Once data are read from file
-         * into rd_buf, rd_buf is unpacked into send_buf for each
-         * non-aggregator. send_buf will be used to send the read request data
-         * to non-aggregators.
+         * into rd_buf, it is unpacked into send_buf for each non-aggregator.
+         * send_buf will be directly used to send the read request data to
+         * non-aggregators, without extra malloc.
          */
-        if (buf_count > 0) {
-            send_buf = (char*) NCI_Malloc(buf_count);
+        if (buf_count > 0)
             rd_buf = (char*) NCI_Malloc(buf_count);
-        }
+
 #ifdef WKL_DEBUG
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #endif
 
         if (ncp->fstype == ADIO_FSTYPE_MPIIO) {
             /* When using MPI-IO, we need to create a fileType to set the file
-             * view. The fileType is constructed based on the offset-length
-             * pairs.
+             * view before read. The fileType is constructed based on the
+             * offset-length pairs.
              */
             if (npairs == 1) {
-                /* Need not create fileType if reading from a contiguous space,
-                 * as when fileType is MPI_BYTE, ncmpio_file_set_view() will
+                /* Need not create fileType if reading from a contiguous space
+                 * (when fileType is MPI_BYTE), ncmpio_file_set_view() will
                  * make the entire file visible.
                  */
                 disp = offsets[0];
@@ -2024,19 +2098,20 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
     /* intra-node aggregation only takes effect in collective data mode */
     fh = ncp->collective_fh;
 
-    /* Preserve fd->filetype previously used */
+    /* Save fd->filetype previously used and will restore it later. */
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
         disp = 0;
         saved_fileType = ncp->adio_fh->filetype;
 
-        /* When using internal Lustre driver, a call to ncmpio_file_set_view()
-         * will pass offsets[] and lengths[] to ADIO_File_set_view() to be
-         * reused as flattened fileType. This can avoid re-create a datatype
-         * and re-flattening it. See ADIOI_Calc_my_off_len()
+        /* When using PnetCDF's internal ADIO driver, a call to
+         * ncmpio_file_set_view() will pass offsets[] and lengths[] to
+         * ADIO_File_set_view() to be reused as flattened fileType. This can
+         * avoid re-create an MPI datatype and re-flattening it. See such
+         * adaptation in ADIOI_Calc_my_off_len()
          *
-         * Use MPI_DATATYPE_NULL to indicate this setting of fileview comes
-         * from intra-node aggregation, so the ADIO subroutines can reuse
-         * offsets[] and lengths[] and avoid freeing them.
+         * Here we use MPI_DATATYPE_NULL to tell ADIO_File_set_view() that it
+         * is called from the intra-node aggregation subroutine, so the ADIO
+         * subroutines can reuse offsets[] and lengths[].
          */
         fileType = MPI_DATATYPE_NULL;
     }
@@ -2057,6 +2132,11 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #endif
 
+#ifdef PNETCDF_PROFILING
+    endT = MPI_Wtime();
+    if (ncp->rank == ncp->my_aggr) ncp->ina_read[0] += endT - startT;
+#endif
+
     /* call MPI_File_read_at_all */
     err = ncmpio_read_write(ncp, NC_REQ_RD, NC_REQ_COLL, disp, buf_count,
                             MPI_BYTE, rd_buf, 1);
@@ -2065,6 +2145,11 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 #ifdef WKL_DEBUG
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #endif
+
+#ifdef PNETCDF_PROFILING
+    startT = MPI_Wtime();
+#endif
+
     /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
         NCI_Free(ncp->adio_fh->flat_file);
@@ -2074,104 +2159,222 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         ncp->adio_fh->filetype = saved_fileType;
     }
 
+    /* If sorting has been performed, the orders of offsets[] and lengths[] may
+     * no longer be the same as the original ones. We use binary search to find
+     * the aggregated offset-length pair containing each non-aggregator's
+     * offset-length pair to construct a send buffer datatype, a view layout to
+     * the read buffer, rd_buf, so the data can be directly sent from
+     * rd_buf, without copying it to a separate buffer.
+     */
+
+    /* First, copy data for self rank, also the aggregator. Note offsets[] is
+     * in an incremental order.
+     */
+    int buftype_is_contig;
+    char *ptr, *tmp_buf;
+
+    /* Check if this rank's user buftype is contiguous. If not, a temporary
+     * buffer is allocated and the read data is copied over, before unpacking
+     * it to user's buffer.
+     */
+    ADIOI_Datatype_iscontig(bufType, &buftype_is_contig);
+
+    if (buf != NULL && buftype_is_contig)
+        ptr = buf;
+    else if (bufLen > 0)
+        ptr = tmp_buf = (char*) NCI_Malloc(bufLen);
+
+    size_t m=0, k, scan_off=0;
+    for (j=0; j<num_pairs; j++) {
+        /* Find the offset-length pair in rd_buf containing this pair */
+        if (!is_incr) m = 0;
+        k = bin_search(orig_offsets[j], &offsets[m], npairs-m);
+        assert(k >= 0); /* k returned from bin_search is relative to m */
+        k += m;
+
+        /* When is_incr is 1, the orig_offsets[] are in an incremental order,
+         * we can continue binary search using the index from the previous
+         * search.  When is_incr is 0, the orig_offsets[] are NOT in an
+         * incremental order, we must do binary search on the entire offsets[].
+         */
+        if (!is_incr) scan_off = 0;
+        for (; m<k; m++)
+            scan_off += lengths[m];
+
+        /* Note orig_offsets[j] and lengths[j] must entirely covered by
+         * offsets[k] and lengths[k], because offsets[] and lengths[]
+         * have been coalesced.
+         */
+
+        memcpy(ptr, rd_buf + (scan_off + orig_offsets[j] - offsets[k]),
+                    orig_lengths[j]);
+        ptr += orig_lengths[j];
+    }
+
+    /* unpack read data to user read buffer */
+    if (bufLen > 0 && (buf == NULL || !buftype_is_contig)) {
+
+        void *buf_ptr = (buf == NULL) ? MPI_BOTTOM : buf;
+#ifdef HAVE_MPI_LARGE_COUNT
+        MPI_Count pos=0;
+        MPI_Count num = (buf == NULL) ? 1 : bufCount;
+        MPI_Unpack_c(tmp_buf, bufLen, &pos, buf_ptr, num, bufType, MPI_COMM_SELF);
+#else
+        int pos=0;
+        int num = (buf == NULL) ? 1 : bufCount;
+        MPI_Unpack(tmp_buf, bufLen, &pos, buf_ptr, num, bufType, MPI_COMM_SELF);
+#endif
+        NCI_Free(tmp_buf);
+    }
+
+#ifdef PNETCDF_PROFILING
+    endT = MPI_Wtime();
+    if (ncp->rank == ncp->my_aggr) ncp->ina_read[1] += endT - startT;
+    startT = endT;
+#endif
+
+    /* allocate array_of_blocklengths[] and array_of_displacements[] */
+    for (max_npairs=0, i=1; i<ncp->num_nonaggrs; i++)
+        max_npairs = MAX(meta[3*i], max_npairs);
+
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Count *blks = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * max_npairs);
+    MPI_Count *disps = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * max_npairs);
+#else
+    int *blks = (int*) NCI_Malloc(sizeof(int) * max_npairs);
+    MPI_Aint *disps = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * max_npairs);
+#endif
+
+    /* Now, send data to each non-aggregator */
+    nreqs = 0;
+    MPI_Offset off_start = num_pairs;
+    for (i=1; i<ncp->num_nonaggrs; i++) {
+        /* populate disps[] and blks[] */
+        MPI_Aint remote_num_pairs = meta[3*i];
+        MPI_Aint remote_is_incr = meta[3*i+2];
+
+        if (remote_num_pairs == 0) continue; /* zero sized request */
+
+#ifdef HAVE_MPI_LARGE_COUNT
+        MPI_Count *off = orig_offsets + off_start;
+        MPI_Count *len = orig_lengths + off_start;
+#else
+        MPI_Offset *off = orig_offsets + off_start;
+        int        *len = orig_lengths + off_start;
+#endif
+        m = 0;
+        scan_off = 0;
+        for (j=0; j<remote_num_pairs; j++) {
+            MPI_Aint addr;
+
+            /* Find the offset-length pair in rd_buf containing this pair */
+            if (!remote_is_incr) m = 0;
+
+            k = bin_search(off[j], &offsets[m], npairs-m);
+            assert(k >= 0); /* k returned from bin_search is relative to m */
+            k += m;
+            assert(offsets[k] <= off[j] && off[j] < offsets[k] + lengths[k]);
+
+            /* When is_incr is 1, the orig_offsets[] are in an incremental
+             * order, we can continue binary search using the index from the
+             * previous search.  When is_incr is 0, the orig_offsets[] are NOT
+             * in an incremental order, we must do binary search on the entire
+             * offsets[].
+             */
+            if (!remote_is_incr) scan_off = 0;
+            for (; m<k; m++)
+                scan_off += lengths[m];
+            /* Note orig_offsets[j] and lengths[j] must entirely covered by
+             * offsets[k] and lengths[k], because offsets[] and lengths[] have
+             * been coalesced.
+             */
+            ptr = rd_buf + (scan_off + off[j] - offsets[k]);
+            MPI_Get_address(ptr, &addr);
+            disps[j] = addr;
+            blks[j] = len[j];
+        }
+        off_start += remote_num_pairs;
+
+        /* Construct a send buffer MPI datatype */
+        MPI_Datatype sendType;
+#ifdef HAVE_MPI_LARGE_COUNT
+        mpireturn = MPI_Type_create_hindexed_c(remote_num_pairs, blks, disps,
+                                               MPI_BYTE, &sendType);
+#else
+        mpireturn = MPI_Type_create_hindexed(remote_num_pairs, blks, disps,
+                                             MPI_BYTE, &sendType);
+#endif
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_create_hindexed");
+            /* return the first encountered error if there is any */
+            if (status == NC_NOERR) status = err;
+        }
+        else {
+            MPI_Type_commit(&sendType);
+
+#ifdef HAVE_MPI_LARGE_COUNT
+            TRACE_COMM(MPI_Isend_c)(MPI_BOTTOM, 1, sendType,
+                       ncp->nonaggr_ranks[i], 0, ncp->comm, &req[nreqs++]);
+#else
+            TRACE_COMM(MPI_Isend)(MPI_BOTTOM, 1, sendType,
+                       ncp->nonaggr_ranks[i], 0, ncp->comm, &req[nreqs++]);
+#endif
+            MPI_Type_free(&sendType);
+        }
+    }
+#ifdef PNETCDF_PROFILING
+    endT = MPI_Wtime();
+    if (ncp->rank == ncp->my_aggr) ncp->ina_read[2] += endT - startT;
+    startT = endT;
+#endif
+
+#ifdef HAVE_MPI_STATUSES_IGNORE
+    TRACE_COMM(MPI_Waitall)(nreqs, req, MPI_STATUSES_IGNORE);
+#else
+    MPI_Status *statuses = (MPI_Status *)
+                           ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+    TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
+    ADIOI_Free(statuses);
+#endif
+    if (mpireturn != MPI_SUCCESS) {
+        err = ncmpii_error_mpi2nc(mpireturn,"MPI_Waitall");
+        /* return the first encountered error if there is any */
+        if (status == NC_NOERR) status = err;
+    }
+    NCI_Free(blks);
+    NCI_Free(disps);
+
     /* offsets[] and lengths[] are used in ADIO read subroutines as flattened
      * filetype. They cannot be freed before the I/O is done.
      */
     if (offsets != NULL) NCI_Free(offsets);
     if (lengths != NULL) NCI_Free(lengths);
 
-    if (npairs > 0) {
-        /* Unpack rd_buf, data read from file, into send_buf, to be sent to
-         * non-aggregators.
-         */
-        char *ptr = rd_buf;
-        if (npairs > 0) {
-            memcpy(send_buf + bufAddr[0], ptr, lengths[0]);
-            ptr += lengths[0];
-        }
-        for (i=0, j=1; j<npairs; j++) {
-            memcpy(send_buf + bufAddr[j], ptr, lengths[j]);
-            ptr += lengths[j];
-        }
-        NCI_Free(bufAddr);
-        NCI_Free(rd_buf);
-
-        /* First, for self rank, unpack read data into self's buf */
-        if (bufLen > 0) {
-            int is_predef;
-            if (bufType == MPI_DATATYPE_NULL)
-                is_predef = 0;
-            else
-                ADIOI_Type_ispredef(bufType, &is_predef);
-
-            if (is_predef)
-                memcpy(buf, send_buf, bufLen);
-            else {
-                void *outbuf = (buf == NULL) ? MPI_BOTTOM : buf;
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count position=0;
-                MPI_Count outcount = (buf == NULL) ? 1 : bufCount;
-                MPI_Unpack_c(send_buf, bufLen, &position, outbuf, outcount,
-                             bufType, MPI_COMM_SELF);
-#else
-                int position=0;
-                int outcount = (buf == NULL) ? 1 : bufCount;
-                MPI_Unpack(send_buf, bufLen, &position, outbuf, outcount,
-                           bufType, MPI_COMM_SELF);
-#endif
-            }
-        }
-
-        /* send read data to non-aggregators */
-        ptr = send_buf + bufLen;
-        nreqs = 0;
-        for (i=1; i<ncp->num_nonaggrs; i++) {
-            if (meta[i*3 + 1] == 0) continue;
-#ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Isend_c(ptr, meta[i*3 + 1], MPI_BYTE, ncp->nonaggr_ranks[i],
-                        0, ncp->comm, &req[nreqs++]);
-#else
-            MPI_Isend(ptr, meta[i*3 + 1], MPI_BYTE, ncp->nonaggr_ranks[i],
-                      0, ncp->comm, &req[nreqs++]);
-#endif
-            ptr += meta[i*3 + 1];
-        }
-#ifdef HAVE_MPI_STATUSES_IGNORE
-        mpireturn = MPI_Waitall(nreqs, req, MPI_STATUSES_IGNORE);
-#else
-        MPI_Status *statuses = (MPI_Status *)
-                               ADIOI_Malloc(nreqs * sizeof(MPI_Status));
-        mpireturn = MPI_Waitall(nreqs, req, statuses);
-        ADIOI_Free(statuses);
-#endif
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn,"MPI_Waitall");
-            /* return the first encountered error if there is any */
-            if (status == NC_NOERR) status = err;
-        }
-        NCI_Free(send_buf);
-    }
-
 #ifdef PNETCDF_PROFILING
     endT = MPI_Wtime();
-    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[4] += endT - startT;
+    if (ncp->rank == ncp->my_aggr) ncp->ina_read[3] += endT - startT;
 #endif
 
 fn_exit:
-    if (meta != NULL) NCI_Free(meta);
+    if (rd_buf != NULL) NCI_Free(rd_buf);
+    if (orig_lengths != NULL) NCI_Free(orig_lengths);
+    if (orig_offsets != NULL) NCI_Free(orig_offsets);
     if (req != NULL) NCI_Free(req);
+    if (meta != NULL) NCI_Free(meta);
 
     return status;
 }
 
 /*----< ncmpio_intra_node_aggregation_nreqs() >------------------------------*/
-/* This subroutine is a collective call, and is to handle non-blocking APIs,
- * which contain requests to one or more variable.
- * reqMode: NC_REQ_RD for read request and NC_REQ_WR for write.
- * num_reqs: number of elements in array req_list.
- * req_list[]: stores pending requests from non-blocking API calls, which is
- *     used to construct file offset-length pairs and user buffer datatype.
- * newnumrecs: number of new records
+/* This subroutine is a collective call, which handles PnetCDF's requests made
+ * from non-blocking APIs, which contain multiple requests to one or more
+ * variable. The input arguments are described below.
+ *    reqMode: NC_REQ_RD for read request and NC_REQ_WR for write.
+ *    num_reqs: number of elements in array req_list.
+ *    req_list[]: stores pending requests from non-blocking API calls, which is
+ *                used to construct file offset-length pairs and user buffer
+ *                datatype.
+ *    newnumrecs: number of new records
  */
 int
 ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
@@ -2199,7 +2402,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 #endif
 
     /* ensure the intra-node aggregation is enabled in this rank's group */
-    assert(ncp->my_aggr >= 0);
+    assert(ncp->num_aggrs_per_node > 0);
 
     /* construct file offset-length pairs
      *     num_pairs: total number of off-len pairs
@@ -2208,8 +2411,8 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
      *     is_incr:   whether offsets are incremental
      */
     if (num_reqs > 0)
-        flatten_reqs(ncp, num_reqs, req_list, &is_incr, &num_pairs, &offsets,
-                     &lengths);
+        flatten_reqs(ncp, reqMode, num_reqs, req_list, &is_incr, &num_pairs,
+                     &offsets, &lengths);
     else
         num_pairs = 0;
 
@@ -2217,7 +2420,8 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
      * bufLen is the buffer size in bytes
      */
     if (num_reqs > 0) {
-        construct_buf_type(ncp, num_reqs, req_list, &bufLen, &bufType);
+        construct_buf_type(ncp, reqMode, num_reqs, req_list, &bufLen,
+                           &bufType);
         bufLen = 1;
     }
     else
@@ -2230,7 +2434,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         NCI_Free(req_list);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[1] += MPI_Wtime() - timing;
+    if (ncp->rank == ncp->my_aggr) ncp->ina_flatten += MPI_Wtime() - timing;
 #endif
 
     /* perform intra-node aggregation */
@@ -2269,16 +2473,17 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 }
 
 /*----< ncmpio_intra_node_aggregation() >------------------------------------*/
-/* This subroutine is a collective call, and is to handle blocking APIs, which
- * contain requests to only one variable.
- * reqMode: NC_REQ_RD for read request and NC_REQ_WR for write.
- * varp: pointer to the variable struct.
- * start[]: starting offsets
- * count[]: counts along each dimension
- * stride[]: stride along each dimension
- * bufCount: number of bufType in the user buffer, pointed by buf
- * bufType: MPI derived datatype describing user buffer layout
- * buf: pointer to the user buffer
+/* This subroutine is a collective call, which to handles a single request made
+ * by blocking APIs, which involves only one variable. Below describe the
+ * subroutine arguments.
+ *    reqMode: NC_REQ_RD for read request and NC_REQ_WR for write.
+ *    varp: pointer to the variable struct.
+ *    start[]: starting offsets
+ *    count[]: counts along each dimension
+ *    stride[]: stride along each dimension
+ *    bufCount: number of bufType in the user buffer, pointed by buf
+ *    bufType: MPI derived datatype describing user buffer layout
+ *    buf: pointer to the user buffer
  */
 int
 ncmpio_intra_node_aggregation(NC               *ncp,
@@ -2309,7 +2514,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
 #endif
 
     /* ensure the intra-node aggregation is enabled in this rank's group */
-    assert(ncp->my_aggr >= 0);
+    assert(ncp->num_aggrs_per_node > 0);
 
     if (buf == NULL) { /* zero-length request */
         /* This rank must still participate intra_node_aggregation() to tell
@@ -2331,14 +2536,15 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
                       &offsets, &lengths);
     if (err != NC_NOERR) {
         num_pairs = 0;
-        if (offsets != NULL)
-            NCI_Free(offsets);
+        if (offsets != NULL) NCI_Free(offsets);
         offsets = NULL;
+        if (lengths != NULL) NCI_Free(lengths);
+        lengths = NULL;
     }
     status = err;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (ncp->rank == ncp->my_aggr) ncp->aggr_time[1] += MPI_Wtime() - timing;
+    if (ncp->rank == ncp->my_aggr) ncp->ina_flatten += MPI_Wtime() - timing;
 #endif
 
     /* perform intra-node aggregation */
