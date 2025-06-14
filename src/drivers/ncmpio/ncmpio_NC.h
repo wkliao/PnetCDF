@@ -446,7 +446,7 @@ struct NC {
     const char   *path;     /* file name */
     struct NC    *old;      /* contains the previous NC during redef. */
 
-    /* Below are used for intra-node aggregation */
+    /* Below are used for intra-node aggregation (INA) */
     MPI_Comm      ina_comm;  /* communicator of only intra-node aggregators */
     int           ina_nprocs;/* number of processes in intra-node communicator */
     int           ina_rank;  /* rank ID in intra-node communicator */
@@ -459,8 +459,17 @@ struct NC {
     int  my_aggr;            /* rank ID of my aggregator */
     int  num_nonaggrs;       /* number of non-aggregators assigned */
     int *nonaggr_ranks;      /* ranks of assigned non-aggregators */
+    int *ina_node_list;      /* rank IDs of INA aggregators */
+
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    double aggr_time[6];
+    double ina_time_init;
+    double ina_time_flatten;
+    double ina_time_put[5];
+    double ina_time_get[5];
+    size_t ina_npairs_put;
+    size_t ina_npairs_get;
+    size_t maxmem_put[6];
+    size_t maxmem_get[6];
 #endif
 };
 
@@ -634,7 +643,10 @@ ncmpio_close_files(NC *ncp, int doUnlink);
 
 /* Begin defined in ncmpio_utils.c ------------------------------------------*/
 extern void
-ncmpio_set_pnetcdf_hints(NC *ncp, MPI_Info user_info, MPI_Info info_used);
+ncmpio_hint_extract(NC *ncp, MPI_Info info);
+
+extern void
+ncmpio_hint_set(NC *ncp, MPI_Info info);
 
 extern int
 ncmpio_NC_check_name(const char *name, int file_ver);
