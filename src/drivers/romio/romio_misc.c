@@ -297,7 +297,7 @@ ADIO_File_SetInfo(ADIO_File fd,
 
         fd->hints->cb_config_list = NULL;
 
-        /* for Lustre, default is set in construct_aggr_list() */
+        /* for Lustre, default is set in construct_cb_node_list() */
         if (fd->file_system != ADIO_LUSTRE) {
             /* number of processes that perform I/O in collective I/O */
             snprintf(value, MPI_MAX_INFO_VAL + 1, "%d", nprocs);
@@ -407,7 +407,7 @@ ADIO_File_SetInfo(ADIO_File fd,
              * cb_nodes in the set_view case */
             ADIOI_Info_check_and_install_int(fd, users_info, "cb_nodes",
                                              &(fd->hints->cb_nodes));
-            /* for Lustre, default is set in construct_aggr_list() */
+            /* for Lustre, default is set in construct_cb_node_list() */
             if (fd->file_system != ADIO_LUSTRE &&
                 (fd->hints->cb_nodes <= 0 || fd->hints->cb_nodes > nprocs)) {
                 /* can't ask for more aggregators than mpi processes, though it
@@ -529,14 +529,14 @@ err_check:
 }
 
 /*----< ADIO_File_set_view() >-----------------------------------------------*/
-/* For PnetCDF, this subroutine is always an independent call.
+/* For PnetCDF, this subroutine can become an independent call, because PnetCDF
+ * only use the followings.
+ *   Argument etype is always MPI_BYTE.
+ *   Argument datarep is always "native".
+ *   Argument info is always MPI_INFO_NULL.
  *
- * Note PnetCDF calls MPI_File_set_view() only using the followings.
- * Argument etype is always MPI_BYTE.
- * Argument datarep is always "native".
- * Argument info is always MPI_INFO_NULL. When info is MPI_INFO_NULL, this
- * subroutine is an independent call, because there is no need to check hint
- * consistency among all processes.
+ * This subroutine can be an independent call, because there is no need to
+ * check the consistency of any of the above arguments among all processes.
  */
 int ADIO_File_set_view(ADIO_File     fd,
                        MPI_Offset    disp,
@@ -569,9 +569,12 @@ int ADIO_File_set_view(ADIO_File     fd,
         /* mark this request comes from intra_node_aggregation() */
         fd->filetype = MPI_DATATYPE_NULL;
 
-        /* Note: PnetCDF uses only ADIO_EXPLICIT_OFFSET. In addition, the
-         * passed-in offsets and lengths are not based on MPI-IO fileview. They
-         * are flattened byte offsets and sizes.
+        /* Note: PnetCDF uses only ADIO_EXPLICIT_OFFSET. Thus, fp_ind can be
+         * removed.
+         *
+         * In addition, when called from INA subroutines, the passed-in offsets
+         * and lengths are not based on MPI-IO fileview. They are flattened
+         * byte offsets and sizes.
          */
         fd->disp = 0;
         fd->fp_ind = 0;
