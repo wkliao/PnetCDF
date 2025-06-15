@@ -54,6 +54,7 @@
 #define ADIO_UFS           152    /* Unix file system */
 #define ADIO_LUSTRE        163    /* Lustre */
 #define ADIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
+#define ADIO_FSTYPE_CHECK  0      /* Use PnetCDF ADIO drivers */
 
 #if 1
 #define ADIOI_Strdup NCI_Strdup
@@ -127,7 +128,6 @@ typedef struct {
     char *cb_config_list;
     int *ranklist;
 
-    int cb_pfr;
     int min_fdomain_size;
     union {
         struct {
@@ -172,6 +172,7 @@ typedef struct {
     int fd_sys;             /* system file descriptor */
     int num_nodes;          /* number of unique compute nodes from
                              * MPI_Get_processor_name() */
+    int *node_ids;          /* [nprocs] node IDs of each rank */
     int access_mode;        /* Access mode (sequential, append, etc.),
                              * possibly modified to deal with
                              * data sieving or deferred open */
@@ -202,8 +203,9 @@ typedef struct {
 
     MPI_Comm ina_comm; /* Communicator containing intra-node aggregators only */
 
-#ifdef PNETCDF_PROFILING
-    double lustre_write_metrics[10];
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    double coll_write[12];
+    double coll_read[12];
 #endif
 } ADIO_FileD;
 
@@ -275,9 +277,6 @@ int ADIOI_Type_ispredef(MPI_Datatype datatype, int *flag);
 int ADIOI_Type_dispose(MPI_Datatype * datatype);
 
 ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype);
-
-int ADIO_Lustre_set_aggr_list(ADIO_File fd, int num_nodes, int *node_ids);
-int ADIO_GEN_set_aggr_list(ADIO_File fd, int num_nodes, int *node_ids);
 
 void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                 MPI_Datatype datatype, int file_ptr_type, ADIO_Offset offset,
