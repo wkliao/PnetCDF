@@ -23,7 +23,6 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
     ADIO_Offset n_filetypes, etype_in_filetype;
     ADIO_Offset abs_off_in_filetype = 0;
     MPI_Count bufsize, filetype_size, buftype_size, size_in_filetype;
-    ADIO_Offset etype_size;
     MPI_Aint lb, filetype_extent, buftype_extent;
     int buf_count, buftype_is_contig, filetype_is_contig;
     ADIO_Offset userbuf_off;
@@ -45,7 +44,6 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
     MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
     MPI_Type_size_x(buftype, &buftype_size);
     MPI_Type_get_extent(buftype, &lb, &buftype_extent);
-    etype_size = fd->etype_size;
 
     ADIOI_Assert((buftype_size * count) == ((ADIO_Offset) buftype_size * (ADIO_Offset) count));
     bufsize = buftype_size * count;
@@ -58,7 +56,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
 
         flat_buf = ADIOI_Flatten_and_find(buftype);
 
-        off = (file_ptr_type == ADIO_INDIVIDUAL) ? fd->fp_ind : fd->disp + etype_size * offset;
+        off = (file_ptr_type == ADIO_INDIVIDUAL) ? fd->fp_ind : fd->disp + offset;
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -122,7 +120,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
          *
          */
 
-        flat_file = ADIOI_Flatten_and_find(fd->filetype);
+        flat_file = fd->flat_file;
         disp = fd->disp;
 
         if (file_ptr_type == ADIO_INDIVIDUAL) {
@@ -147,10 +145,10 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                 }
             }
         } else {
-            n_etypes_in_filetype = filetype_size / etype_size;
+            n_etypes_in_filetype = filetype_size;
             n_filetypes = offset / n_etypes_in_filetype;
             etype_in_filetype = (int) (offset % n_etypes_in_filetype);
-            size_in_filetype = (unsigned) etype_in_filetype *(unsigned) etype_size;
+            size_in_filetype = (unsigned) etype_in_filetype;
 
             sum = 0;
             for (f_index = 0; f_index < flat_file->count; f_index++) {
