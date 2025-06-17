@@ -139,52 +139,15 @@ typedef struct {
     } fs_hints;
 } ADIOI_Hints;
 
-typedef struct {
-    MPI_Comm comm;          /* communicator indicating who called open */
-    const char *filename;
-    int file_system;        /* type of file system */
-
-    int fd_sys;             /* system file descriptor */
-    int num_nodes;          /* number of unique compute nodes from
-                             * MPI_Get_processor_name() */
-    int access_mode;        /* Access mode (sequential, append, etc.),
-                             * possibly modified to deal with
-                             * data sieving or deferred open */
-
-    int is_open;            /* no_indep_rw, 0: not open yet 1: is open */
-    ADIO_Offset fp_ind;     /* individual file pointer (in bytes) */
-
-    ADIO_Offset disp;       /* file displacement */
-    MPI_Datatype etype;     /* element datatype */
-    MPI_Datatype filetype;  /* file type set in fileview */
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count etype_size;
-    MPI_Count ftype_size;
-    MPI_Count ftype_extent;
-#else
-    int etype_size;
-    int ftype_size;
-    MPI_Aint ftype_extent;
-#endif
-
-    int atomicity;          /* true=atomic, false=nonatomic */
-    char *io_buf;           /* two-phase buffer allocated out of i/o path */
-    int is_agg;             /* bool: if I am an aggregator */
-    int my_cb_nodes_index;  /* my index into cb_config_list. -1 if N/A */
-    ADIOI_Hints *hints;     /* structure containing fs-indep. info values */
-    MPI_Info info;
-
-double lustre_write_metrics[3];
-} ADIO_FileD;
-
-typedef ADIO_FileD *ADIO_File;
-typedef ADIO_FileD *ADIO_File;
-
 typedef struct ADIOI_Fl_node {
-    MPI_Datatype type;
     MPI_Count count;            /* no. of contiguous blocks */
-    ADIO_Offset *blocklens;     /* array of contiguous block lengths (bytes) */
-    ADIO_Offset *indices;       /* array of byte offsets of each block */
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Count *indices;   /* array of byte offsets of each block */
+    MPI_Count *blocklens; /* array of contiguous block lengths (bytes) */
+#else
+    MPI_Offset *indices;  /* array of byte offsets of each block */
+    int        *blocklens;/* array of contiguous block lengths (bytes) */
+#endif
     /* the type processing code in ROMIO loops through the flattened
      * representation to tile file views.  so, we cannot simply indicate a
      * lower bound and upper bound with entries here -- those are instead
@@ -202,9 +165,51 @@ typedef struct ADIOI_Fl_node {
 } ADIOI_Flatlist_node;
 
 typedef struct {
+    MPI_Comm comm;          /* communicator indicating who called open */
+    const char *filename;
+    int file_system;        /* type of file system */
+
+    int fd_sys;             /* system file descriptor */
+    int num_nodes;          /* number of unique compute nodes from
+                             * MPI_Get_processor_name() */
+    int access_mode;        /* Access mode (sequential, append, etc.),
+                             * possibly modified to deal with
+                             * data sieving or deferred open */
+
+    int is_open;            /* no_indep_rw, 0: not open yet 1: is open */
+    ADIO_Offset fp_ind;     /* individual file pointer (in bytes) */
+
+    ADIO_Offset disp;       /* file displacement */
+    MPI_Datatype filetype;  /* file type set in fileview */
+                            /* etype in fileview is always MPI_BYTE in PnetCDF */
+#if 0
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Count ftype_size;
+    MPI_Count ftype_extent;
+#else
+    int ftype_size;
+    MPI_Aint ftype_extent;
+#endif
+#endif
+    ADIOI_Flatlist_node *flat_file; /* flattern filetype */
+
+    int atomicity;          /* true=atomic, false=nonatomic */
+    char *io_buf;           /* two-phase buffer allocated out of i/o path */
+    int is_agg;             /* bool: if I am an aggregator */
+    int my_cb_nodes_index;  /* my index into cb_config_list. -1 if N/A */
+    ADIOI_Hints *hints;     /* structure containing fs-indep. info values */
+    MPI_Info info;
+
+double lustre_write_metrics[3];
+} ADIO_FileD;
+
+typedef ADIO_FileD *ADIO_File;
+typedef ADIO_FileD *ADIO_File;
+
+typedef struct {
     ADIO_Offset *offsets;       /* array of offsets */
+#ifdef HAVE_MPI_LARGE_COUNT
     ADIO_Offset *lens;          /* array of lengths */
-#if 1
     MPI_Count *mem_ptrs;        /* array of pointers. used in the read/write
                                  * phase to indicate where the data
                                  * is stored in memory
@@ -212,8 +217,9 @@ typedef struct {
                                  * types with _c versions */
     MPI_Count count;            /* size of above arrays */
 #else
+    int      *lens;          /* array of lengths */
     MPI_Aint *mem_ptrs;
-    size_t count;
+    size_t    count;
 #endif
 } ADIOI_Access;
 
@@ -307,7 +313,12 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
 
 void ADIOI_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount, MPI_Datatype
                 datatype, int file_ptr_type, ADIO_Offset offset,
-                ADIO_Offset **offset_list_ptr, ADIO_Offset **len_list_ptr,
+                ADIO_Offset **offset_list_ptr,
+#ifdef HAVE_MPI_LARGE_COUNT
+                ADIO_Offset **len_list_ptr,
+#else
+                int **len_list_ptr,
+#endif
                 ADIO_Offset *start_offset_ptr, ADIO_Offset *end_offset_ptr,
                 MPI_Count *contig_access_count_ptr);
 
@@ -317,7 +328,12 @@ void ADIOI_Calc_file_domains(ADIO_Offset * st_offsets,
                 ADIO_Offset **fd_end_ptr, int min_fd_size,
                 ADIO_Offset *fd_size_ptr, int striping_unit);
 void ADIOI_Calc_my_req(ADIO_File fd, ADIO_Offset * offset_list,
-                ADIO_Offset *len_list, MPI_Count contig_access_count,
+#ifdef HAVE_MPI_LARGE_COUNT
+                ADIO_Offset *len_list,
+#else
+                int *len_list,
+#endif
+                MPI_Count contig_access_count,
                 ADIO_Offset min_st_offset, ADIO_Offset *fd_start,
                 ADIO_Offset *fd_end, ADIO_Offset fd_size, int nprocs,
                 MPI_Count *count_my_req_procs_ptr,
