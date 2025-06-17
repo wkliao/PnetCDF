@@ -791,12 +791,11 @@ int ADIO_File_open(MPI_Comm    comm,
     fd->comm        = comm;
     fd->filename    = filename;  /* without file system type name prefix */
     fd->atomicity   = 0;
-    fd->etype       = MPI_BYTE;
-    fd->etype_size  = 1;
     fd->filetype    = MPI_BYTE;
-    fd->ftype_size  = 1;
+    // fd->ftype_size  = 1;
     fd->is_open     = 0;
     fd->access_mode = amode;
+    fd->flat_file   = NULL;
 
     /* create and initialize info object */
     fd->hints = (ADIOI_Hints*) ADIOI_Calloc(1, sizeof(ADIOI_Hints));
@@ -810,6 +809,8 @@ int ADIO_File_open(MPI_Comm    comm,
         return err;
 
     /* collective buffer */
+/* should this buffer be allocated at I/O aggregators only? */
+
     fd->io_buf = ADIOI_Calloc(1, fd->hints->cb_buffer_size);
     if (fd->io_buf == NULL) {
         err = NC_ENOMEM;
@@ -882,8 +883,7 @@ int ADIO_File_close(ADIO_File *fh)
         MPI_Info_free(&((*fh)->info));
     if ((*fh)->io_buf != NULL)
         ADIOI_Free((*fh)->io_buf);
-    if ((*fh)->filetype != MPI_BYTE)
-        ADIOI_Type_dispose(&(*fh)->filetype);
+    ADIOI_Type_dispose(&(*fh)->filetype);
 
     if (ADIOI_Flattened_type_keyval != MPI_KEYVAL_INVALID) {
         MPI_Type_free_keyval(&ADIOI_Flattened_type_keyval);
