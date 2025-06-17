@@ -224,8 +224,14 @@ int ADIO_FileSysType(const char *filename);
 int ADIO_File_open(MPI_Comm comm, const char *filename, int amode,
                 MPI_Info info, ADIO_File fh);
 int ADIO_File_close(ADIO_File *fh);
-int ADIO_File_set_view(ADIO_File fh, MPI_Offset disp, MPI_Datatype etype,
-                MPI_Datatype filetype, char *datarep, MPI_Info info);
+int ADIO_File_set_view(ADIO_File fh, MPI_Offset disp, MPI_Datatype filetype,
+                MPI_Aint npairs,
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Count *offsets, MPI_Count *lengths
+#else
+                MPI_Offset *offsets, int *lengths
+#endif
+);
 int ADIO_File_sync(ADIO_File fh);
 int ADIO_File_delete(const char *filename);
 int ADIO_File_set_size(ADIO_File fh, MPI_Offset size);

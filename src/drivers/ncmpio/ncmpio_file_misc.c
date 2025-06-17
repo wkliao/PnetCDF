@@ -109,7 +109,7 @@ ncmpio_redef(void *ncdp)
 
     /* must reset fileview as header extent may later change in enddef() */
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, MPI_INFO_NULL);
+        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         DEBUG_ASSIGN_ERROR(status, err)
     }
     else {
