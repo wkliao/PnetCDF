@@ -305,7 +305,7 @@ err_check:
         }
 
         /* MPI_File_set_view is collective */
-        err = ncmpio_file_set_view(ncp, fh, &offset, filetype);
+        err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
         if (err != NC_NOERR) {
             nelems = 0; /* skip this request */
             if (status == NC_NOERR) status = err;
@@ -534,7 +534,7 @@ err_check:
     }
 
     /* MPI_File_set_view is collective */
-    err = ncmpio_file_set_view(ncp, fh, &offset, filetype);
+    err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
     if (err != NC_NOERR) {
         nelems = 0; /* skip this request */
         if (status == NC_NOERR) status = err;
