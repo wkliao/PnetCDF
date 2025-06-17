@@ -172,7 +172,7 @@ ncmpio_close(void *ncdp)
     }
 #endif
 
-#ifdef PNETCDF_PROFILING
+#if 0 // #ifdef PNETCDF_PROFILING
 if (! NC_readonly(ncp)) {
 double tt[9],max_t[9];
 tt[0] = ncp->aggr_time[0];
