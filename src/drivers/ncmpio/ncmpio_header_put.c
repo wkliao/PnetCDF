@@ -604,18 +604,26 @@ int ncmpio_write_header(NC *ncp)
                 }
             }
 
-            if (err == NC_NOERR) {
+            if (err == NC_NOERR && writeLen > 0) {
                 /* update the number of bytes written since file open.
                  * Because each MPI write writes no more than NC_MAX_INT,
                  * calling MPI_Get_count() is sufficient. No need to call
                  * MPI_Get_count_c()
                  */
-                int put_size;
-                mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_size);
-                if (mpireturn != MPI_SUCCESS || put_size == MPI_UNDEFINED)
-                    ncp->put_size += ncp->xsz;
-                else
+                int put_count;
+                mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_count);
+                if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
+                    /* partial write: in this case MPI_Get_elements() is
+                     * supposed to be called to obtain the number of type map
+                     * elements actually written in order to calculate the true
+                     * write amount. Below skips this step and simply ignore
+                     * the partial write. See an example usage of
+                     * MPI_Get_count() in Example 5.12 from MPI standard
+                     * document.
+                     */
                     ncp->put_size += writeLen;
+                else
+                    ncp->put_size += put_count;
             }
             offset  += writeLen;
             buf_ptr += writeLen;
