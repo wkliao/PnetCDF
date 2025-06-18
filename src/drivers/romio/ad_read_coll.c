@@ -746,10 +746,17 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
                 /* TODO: proper error return */
                 return;
             }
-            int actual_size;
-            MPI_Get_count(&read_status, MPI_BYTE, &actual_size);
-            if (actual_size < size) {
-                size = actual_size;
+            int mpireturn, get_count;
+            mpireturn = MPI_Get_count(&read_status, MPI_BYTE, &get_count);
+            if (mpireturn != MPI_SUCCESS || get_count == MPI_UNDEFINED) {
+                /* partial read: in this case MPI_Get_elements() is supposed to
+                 * be called to obtain the number of type map elements actually
+                 * read in order to calculate the true read amount. Below skips
+                 * this step and simply ignore the partial read. See an example
+                 * usage of MPI_Get_count() in Example 5.12 from MPI standard
+                 * document.
+                 */
+                size = get_count;
                 /* TODO: need abort the further rounds */
             }
         }
