@@ -141,6 +141,7 @@ ncmpio_read_write(NC           *ncp,
             xbuf = NCI_Malloc((size_t)req_size);
         }
 
+        err = NC_NOERR;
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
             if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
                 err = ADIO_File_read_at_all(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
@@ -182,33 +183,41 @@ ncmpio_read_write(NC           *ncp,
                         DEBUG_RETURN_ERROR(err)
                     }
                 }
->>>>>>> 8b74bd18 (check and use Lustre subroutines)
             }
         }
-        else {
+        if (err == NC_NOERR) {
             /* update the number of bytes read since file open */
+#ifdef HAVE_MPI_TYPE_SIZE_C
+            MPI_Count xbuf_type_size;
+            /* MPI_Type_size_c is introduced in MPI 4.0 */
+            MPI_Type_size_c(xbuf_type, &xbuf_type_size);
+#elif defined(HAVE_MPI_TYPE_SIZE_X)
+            MPI_Count xbuf_type_size;
+            /* MPI_Type_size_x is introduced in MPI 3.0 */
+            MPI_Type_size_x(xbuf_type, &xbuf_type_size);
+#else
+            int xbuf_type_size;
+            MPI_Type_size(xbuf_type, &xbuf_type_size);
+#endif
+
 #ifdef HAVE_MPI_GET_COUNT_C
-            MPI_Count get_size;
-            MPI_Get_count_c(&mpistatus, MPI_BYTE, &get_size);
-            ncp->get_size += get_size;
+            MPI_Count get_count;
+            mpireturn = MPI_Get_count_c(&mpistatus, xbuf_type, &get_count);
 #else
-            int get_size;
-            mpireturn = MPI_Get_count(&mpistatus, xbuf_type, &get_size);
-            if (mpireturn != MPI_SUCCESS || get_size == MPI_UNDEFINED)
-                ncp->get_size += req_size;
-            else {
-#ifdef HAVE_MPI_TYPE_SIZE_X
-                /* MPI_Type_size_x is introduced in MPI 3.0 */
-                mpireturn = MPI_Type_size_x(xbuf_type, &btype_size);
-#else
-                mpireturn = MPI_Type_size(xbuf_type, &btype_size);
+            int get_count;
+            mpireturn = MPI_Get_count(&mpistatus, xbuf_type, &get_count);
 #endif
-                if (mpireturn != MPI_SUCCESS || get_size == MPI_UNDEFINED)
-                    ncp->get_size += req_size;
-                else
-                    ncp->get_size += btype_size * get_size;
-            }
-#endif
+            if (mpireturn != MPI_SUCCESS || get_count == MPI_UNDEFINED)
+                /* partial read: in this case MPI_Get_elements() is supposed to
+                 * be called to obtain the number of type map elements actually
+                 * read in order to calculate the true read amount. Below skips
+                 * this step and simply ignore the partial read. See an example
+                 * usage of MPI_Get_count() in Example 5.12 from MPI standard
+                 * document.
+                 */
+                ncp->get_size += xbuf_type_size * get_count;
+            else
+                ncp->get_size += xbuf_type_size * xlen;
         }
         if (xbuf != buf) { /* unpack contiguous xbuf to noncontiguous buf */
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -296,6 +305,7 @@ ncmpio_read_write(NC           *ncp,
             }
         }
 
+        err = NC_NOERR;
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
             if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
                 err = ADIO_File_write_at_all(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
@@ -339,30 +349,39 @@ ncmpio_read_write(NC           *ncp,
                 }
             }
         }
-        else {
+        if (err == NC_NOERR) {
             /* update the number of bytes written since file open */
+#ifdef HAVE_MPI_TYPE_SIZE_C
+            MPI_Count xbuf_type_size;
+            /* MPI_Type_size_c is introduced in MPI 4.0 */
+            MPI_Type_size_c(xbuf_type, &xbuf_type_size);
+#elif defined(HAVE_MPI_TYPE_SIZE_X)
+            MPI_Count xbuf_type_size;
+            /* MPI_Type_size_x is introduced in MPI 3.0 */
+            MPI_Type_size_x(xbuf_type, &xbuf_type_size);
+#else
+            int xbuf_type_size;
+            MPI_Type_size(xbuf_type, &xbuf_type_size);
+#endif
+
 #ifdef HAVE_MPI_GET_COUNT_C
-            MPI_Count put_size;
-            MPI_Get_count_c(&mpistatus, MPI_BYTE, &put_size);
-            ncp->put_size += put_size;
+            MPI_Count put_count;
+            mpireturn = MPI_Get_count_c(&mpistatus, xbuf_type, &put_count);
 #else
-            int put_size;
-            mpireturn = MPI_Get_count(&mpistatus, xbuf_type, &put_size);
-            if (mpireturn != MPI_SUCCESS || put_size == MPI_UNDEFINED)
-                ncp->put_size += req_size;
-            else {
-#ifdef HAVE_MPI_TYPE_SIZE_X
-                /* MPI_Type_size_x is introduced in MPI 3.0 */
-                mpireturn = MPI_Type_size_x(xbuf_type, &btype_size);
-#else
-                mpireturn = MPI_Type_size(xbuf_type, &btype_size);
+            int put_count;
+            mpireturn = MPI_Get_count(&mpistatus, xbuf_type, &put_count);
 #endif
-                if (mpireturn != MPI_SUCCESS || put_size == MPI_UNDEFINED)
-                    ncp->put_size += req_size;
-                else
-                    ncp->put_size += btype_size * put_size;
-            }
-#endif
+            if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
+                /* partial write: in this case MPI_Get_elements() is supposed
+                 * to be called to obtain the number of type map elements
+                 * actually written in order to calculate the true write
+                 * amount. Below skips this step and simply ignore the partial
+                 * write. See an example usage of MPI_Get_count() in Example
+                 * 5.12 from MPI standard document.
+                 */
+                ncp->put_size += xbuf_type_size * put_count;
+            else
+                ncp->put_size += xbuf_type_size * xlen;
         }
         if (xbuf != buf) NCI_Free(xbuf);
         if (xbuf_type != buf_type && xbuf_type != MPI_BYTE)
