@@ -388,7 +388,6 @@ struct NC {
     struct NC    *ncp_sf;       /* ncp of subfile */
     MPI_Comm      comm_sf;      /* subfile MPI communicator */
 #endif
-    int           striping_unit; /* stripe size of the file */
     int           chunk;       /* chunk size for reading header, one chunk at a time */
     MPI_Offset    v_align;     /* alignment of the beginning of fixed-size variables */
     MPI_Offset    r_align;     /* file alignment for record variable section */
@@ -448,6 +447,9 @@ struct NC {
     struct NC    *old;      /* contains the previous NC during redef. */
 
     /* Below are used for intra-node aggregation */
+    MPI_Comm      ina_comm;  /* communicator of only intra-node aggregators */
+    int           ina_nprocs;/* number of processes in intra-node communicator */
+    int           ina_rank;  /* rank ID in intra-node communicator */
     int  num_aggrs_per_node; /* number of aggregators per compute node. Set
                                 through a user hint. 0 to disable the
                                 intra-node aggregation, -1 to let PnetCDF to
