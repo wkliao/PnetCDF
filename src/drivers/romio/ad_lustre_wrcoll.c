@@ -15,7 +15,7 @@ static int use_alltoallw;
 static int num_commit_comm_phase, *amt_sends, *amt_recvs;
 #endif
 
-#define WKL_DEBUG
+// #define WKL_DEBUG
 #ifdef WKL_DEBUG
 static int debug=1;
 #endif
@@ -654,6 +654,8 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
+// int world_nprocs,world_rank; MPI_Comm_size(MPI_COMM_WORLD,&world_nprocs);MPI_Comm_rank(MPI_COMM_WORLD, &world_rank); printf("%s at %d: world (nprocs=%d rank=%d) local(nprocs=%d rank=%d)\n",__func__,__LINE__,world_nprocs,world_rank,nprocs,myrank);
+
     orig_fp = fd->fp_ind;
 
 #ifdef PNETCDF_PROFILING
@@ -951,7 +953,7 @@ static int wkl=0; if (wkl==0 && count > 0 && fd->disp>0) { printf("xxxx %s %d: -
 printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
 #endif
 
-            ADIO_WriteStrided(fd, buf, count, buftype, file_ptr_type, offset, status, error_code);
+            ADIOI_LUSTRE_WriteStrided(fd, buf, count, buftype, file_ptr_type, offset, status, error_code);
         }
 
         return;
