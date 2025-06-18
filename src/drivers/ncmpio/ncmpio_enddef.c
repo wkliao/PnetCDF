@@ -211,7 +211,7 @@ move_file_block(NC         *ncp,
 
     /* move the data section starting from its tail toward its beginning */
     while (nbytes > 0) {
-        int chunk_size, get_size=0;
+        int chunk_size, get_count=0, put_count;
 
         if (mv_amnt == p_units) {
             /* each rank moves amount of chunk_size */
@@ -250,11 +250,8 @@ move_file_block(NC         *ncp,
             if (err != NC_NOERR) {
                 if (status == NC_NOERR)
                     status = err;
-                get_size = 0;
-            }
-            else if (chunk_size > 0) {
-                MPI_Get_count(&mpistatus, MPI_BYTE, &get_size);
-                ncp->get_size += get_size;
+                get_count = 0;
+                /* No update to ncp->get_size */
             }
         }
         else {
@@ -268,23 +265,34 @@ move_file_block(NC         *ncp,
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
                 if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EREAD)
-                get_size = 0;
+                get_count = 0;
+                /* No update to ncp->get_size */
             }
-            else if (chunk_size > 0) {
-                /* for zero-length read, MPI_Get_count may report incorrect
-                 * result for some MPICH version, due to the uninitialized
-                 * MPI_Status object passed to MPI-IO calls. Thus we initialize
-                 * it above to work around. See MPICH ticket:
-                 * https://trac.mpich.org/projects/mpich/ticket/2332
-                 *
-                 * Update the number of bytes read since file open. Because
-                 * each rank reads and writes no more than one chunk_size at a
-                 * time and chunk_size is < NC_MAX_INT, it is OK to call
-                 * MPI_Get_count, instead of MPI_Get_count_c.
+        }
+        if (err == NC_NOERR && chunk_size > 0) {
+            /* for zero-length read, MPI_Get_count may report incorrect result
+             * for some MPICH version, due to the uninitialized MPI_Status
+             * object passed to MPI-IO calls. Thus we initialize it above to
+             * work around. See MPICH ticket:
+             * https://trac.mpich.org/projects/mpich/ticket/2332
+             *
+             * Update the number of bytes read since file open. Because each
+             * rank reads and writes no more than one chunk_size at a time and
+             * chunk_size is < NC_MAX_INT, it is OK to call MPI_Get_count,
+             * instead of MPI_Get_count_c.
+             */
+            mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &get_count);
+            if (mpireturn != MPI_SUCCESS || get_count == MPI_UNDEFINED)
+                /* partial read: in this case MPI_Get_elements() is supposed to
+                 * be called to obtain the number of type map elements actually
+                 * read in order to calculate the true read amount. Below skips
+                 * this step and simply ignore the partial read. See an example
+                 * usage of MPI_Get_count() in Example 5.12 from MPI standard
+                 * document.
                  */
-                MPI_Get_count(&mpistatus, MPI_BYTE, &get_size);
-                ncp->get_size += get_size;
-            }
+                ncp->get_size += chunk_size;
+            else
+                ncp->get_size += get_count;
         }
 
         /* to prevent from one rank's write run faster than other's read */
@@ -297,36 +305,23 @@ move_file_block(NC         *ncp,
          */
         memset(&mpistatus, 0, sizeof(MPI_Status));
 
-        /* Write to new location at off_to for amount of get_size. Assuming the
+        /* Write to new location at off_to for amount of get_count. Assuming the
          * call to MPI_Get_count() above returns the actual amount of data read
-         * from the file, i.e. get_size.
+         * from the file, i.e. get_count.
          */
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
             err = NC_NOERR;
             if (do_coll)
                 err = ADIO_File_write_at_all(ncp->adio_fh, off_to, buf,
-                                             get_size /* NOT bufcount */,
+                                             get_count /* NOT bufcount */,
                                              MPI_BYTE, &mpistatus);
-            else if (get_size > 0)
+            else if (get_count > 0)
                 err = ADIO_File_write_at_all(ncp->adio_fh, off_to, buf,
-                                             get_size /* NOT bufcount */,
+                                             get_count /* NOT bufcount */,
                                              MPI_BYTE, &mpistatus);
             if (err != NC_NOERR) {
                 if (status == NC_NOERR)
                     status = err;
-            }
-            else if (get_size > 0) {
-                /* update the number of bytes written since file open. Because
-                 * each rank reads and writes no more than one chunk_size at a
-                 * time and chunk_size is < NC_MAX_INT, it is OK to call
-                 * MPI_Get_count, instead of MPI_Get_count_c.
-                 */
-                int put_size;
-                mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_size);
-                if (mpireturn != MPI_SUCCESS || put_size == MPI_UNDEFINED)
-                    ncp->put_size += get_size; /* or chunk_size */
-                else
-                    ncp->put_size += put_size;
             }
         }
         else {
@@ -335,7 +330,7 @@ move_file_block(NC         *ncp,
                 TRACE_IO(MPI_File_write_at_all, (fh, off_to, buf,
                                                  get_size /* NOT chunk_size */,
                                                  MPI_BYTE, &mpistatus));
-            else if (get_size > 0)
+            else if (get_count > 0)
                 TRACE_IO(MPI_File_write_at, (fh, off_to, buf,
                                              get_size /* NOT chunk_size */,
                                              MPI_BYTE, &mpistatus));
@@ -344,14 +339,25 @@ move_file_block(NC         *ncp,
                 if (status == NC_NOERR && err == NC_EFILE)
                     DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
             }
-            else if (get_size > 0) {
-                int put_size;
-                mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_size);
-                if (mpireturn != MPI_SUCCESS || put_size == MPI_UNDEFINED)
-                    ncp->put_size += get_size; /* or chunk_size */
-                else
-                    ncp->put_size += put_size;
-            }
+        }
+        if (err == NC_NOERR && get_count > 0) {
+            /* update the number of bytes written since file open. Because each
+             * rank reads and writes no more than one chunk_size at a time and
+             * chunk_size is < NC_MAX_INT, it is OK to call MPI_Get_count,
+             * instead of MPI_Get_count_c.
+             */
+            mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_count);
+            if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
+                /* partial write: in this case MPI_Get_elements() is supposed
+                 * to be called to obtain the number of type map elements
+                 * actually written in order to calculate the true write
+                 * amount. Below skips this step and simply ignore the partial
+                 * write. See an example usage of MPI_Get_count() in Example
+                 * 5.12 from MPI standard document.
+                 */
+                ncp->put_size += get_count;
+            else
+                ncp->put_size += put_count;
         }
 
         /* move on to the next round */
@@ -762,17 +768,25 @@ write_NC(NC *ncp)
                         err = NC_NOERR;
                 }
             }
-            if (err == NC_NOERR) {
+            if (err == NC_NOERR && bufCount > 0) {
                 /* Update the number of bytes read since file open.
                  * Because each rank writes no more than NC_MAX_INT at a time,
                  * it is OK to call MPI_Get_count, instead of MPI_Get_count_c.
                  */
-                int put_size;
-                mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_size);
-                if (mpireturn != MPI_SUCCESS || put_size == MPI_UNDEFINED)
+                int put_count;
+                mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_count);
+                if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
+                    /* partial write: in this case MPI_Get_elements() is
+                     * supposed to be called to obtain the number of type map
+                     * elements actually written in order to calculate the true
+                     * write amount. Below skips this step and simply ignore
+                     * the partial write. See an example usage of
+                     * MPI_Get_count() in Example 5.12 from MPI standard
+                     * document.
+                     */
                     ncp->put_size += bufCount;
                 else
-                    ncp->put_size += put_size;
+                    ncp->put_size += put_count;
             }
             offset  += bufCount;
             buf_ptr += bufCount;
@@ -1383,26 +1397,28 @@ ncmpio__enddef(void       *ncdp,
     if (ncp->r_align == 0) ncp->r_align = 4;
     else                   ncp->r_align = D_RNDUP(ncp->r_align, 4);
 
-    /* reflect the hint changes to the MPI info object, so the user can inquire
-     * what the true hint values are being used
-     */
-    sprintf(value, OFFFMT, ncp->v_align);
-    MPI_Info_set(ncp->mpiinfo, "nc_var_align_size", value);
-    sprintf(value, OFFFMT, ncp->r_align);
-    MPI_Info_set(ncp->mpiinfo, "nc_record_align_size", value);
+    if (ncp->mpiinfo != MPI_INFO_NULL) {
+        /* reflect the hint changes to the MPI info object, so the user can
+         * inquire what the true hint values are being used
+         */
+        sprintf(value, OFFFMT, ncp->v_align);
+        MPI_Info_set(ncp->mpiinfo, "nc_var_align_size", value);
+        sprintf(value, OFFFMT, ncp->r_align);
+        MPI_Info_set(ncp->mpiinfo, "nc_record_align_size", value);
 
 #ifdef ENABLE_SUBFILING
-    sprintf(value, "%d", ncp->num_subfiles);
-    MPI_Info_set(ncp->mpiinfo, "nc_num_subfiles", value);
-    if (ncp->num_subfiles > 1) {
-        /* TODO: should return subfile-related msg when there's an error */
-        err = ncmpio_subfile_partition(ncp);
-        CHECK_ERROR(err)
-    }
+        sprintf(value, "%d", ncp->num_subfiles);
+        MPI_Info_set(ncp->mpiinfo, "nc_num_subfiles", value);
+        if (ncp->num_subfiles > 1) {
+            /* TODO: should return subfile-related msg when there's an error */
+            err = ncmpio_subfile_partition(ncp);
+            CHECK_ERROR(err)
+        }
 #else
-    MPI_Info_set(ncp->mpiinfo, "pnetcdf_subfiling", "disable");
-    MPI_Info_set(ncp->mpiinfo, "nc_num_subfiles", "0");
+        MPI_Info_set(ncp->mpiinfo, "pnetcdf_subfiling", "disable");
+        MPI_Info_set(ncp->mpiinfo, "nc_num_subfiles", "0");
 #endif
+    }
 
     /* check whether sizes of all variables are legal */
     err = ncmpio_NC_check_vlens(ncp);
