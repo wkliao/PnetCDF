@@ -117,6 +117,7 @@ int rank; MPI_Comm_rank(comm, &rank); if (rank == 0) printf("xxxx %s %d: use_mpi
     ncp->comm   = comm;  /* reuse comm duplicated in dispatch layer */
     ncp->path   = path;  /* reuse path duplicated in dispatch layer */
     ncp->iomode = omode;
+    ncp->ina_comm = MPI_COMM_NULL;
 
     /* open file collectively ---------------------------------------------- */
     mpiomode = fIsSet(omode, NC_WRITE) ? MPI_MODE_RDWR : MPI_MODE_RDONLY;
