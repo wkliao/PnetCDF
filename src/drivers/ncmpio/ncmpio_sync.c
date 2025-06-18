@@ -165,12 +165,19 @@ ncmpio_write_numrecs(NC         *ncp,
              * calling MPI_Get_count() is sufficient. No need to call
              * MPI_Get_count_c()
              */
-            int put_size;
-            mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_size);
-            if (mpireturn != MPI_SUCCESS || put_size == MPI_UNDEFINED)
+            int put_count;
+            mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_count);
+            if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
+                /* partial write: in this case MPI_Get_elements() is supposed
+                 * to be called to obtain the number of type map elements
+                 * actually written in order to calculate the true write
+                 * amount. Below skips this step and simply ignore the partial
+                 * write. See an example usage of MPI_Get_count() in Example
+                 * 5.12 from MPI standard document.
+                 */
                 ncp->put_size += len;
             else
-                ncp->put_size += put_size;
+                ncp->put_size += put_count;
         }
     }
     return NC_NOERR;
