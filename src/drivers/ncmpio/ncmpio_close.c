@@ -60,16 +60,18 @@ ncmpio_free_NC(NC *ncp)
 int
 ncmpio_close_files(NC *ncp, int doUnlink) {
     char *mpi_name;
-    int err, mpireturn;
+    int err=NC_NOERR, mpireturn=MPI_SUCCESS;
 
     assert(ncp != NULL); /* this should never occur */
 
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_close(&ncp->adio_fh);
 
-        if (ncp->adio_fh->ina_comm != MPI_COMM_NULL &&
-            ncp->adio_fh->ina_comm != ncp->comm)
-            MPI_Comm_free(&ncp->adio_fh->ina_comm);
+        /* When intra-node aggregation is disabled, all ranks have a non-NULL
+         * ncp->adio_fh. When intra-node aggregation is enabled, only the
+         * aggregators have a non-NULL ncp->adio_fh.
+         */
+        if (ncp->num_aggrs_per_node == 0 || ncp->ina_comm != MPI_COMM_NULL)
+            err = ADIO_File_close(&ncp->adio_fh);
 
         NCI_Free(ncp->adio_fh);
         ncp->adio_fh = NULL;
@@ -88,6 +90,9 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
                 return ncmpii_error_mpi2nc(mpireturn, mpi_name);
         }
     }
+
+    if (ncp->ina_comm != MPI_COMM_NULL)
+        MPI_Comm_free(&ncp->ina_comm);
 
     if (doUnlink) {
         /* called from ncmpi_abort, if the file is being created and is still
