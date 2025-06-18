@@ -72,7 +72,7 @@ printf("%s line %d: %s disp=%lld offset=%lld off=%lld count=%ld bufType_size=%d 
     printf("%2d %s line %d pread off=%lld len=%lld\n",rank,__func__,__LINE__,off,len);
 #endif
 
-#ifdef PNETCDF_PROFILING
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double timing = MPI_Wtime();
 #endif
     p = (char *) buf;
@@ -86,8 +86,8 @@ printf("%s line %d: %s disp=%lld offset=%lld off=%lld count=%ld bufType_size=%d 
         bytes_xfered += err;
         p += err;
     }
-#ifdef PNETCDF_PROFILING
-    fd->lustre_write_metrics[1] += MPI_Wtime() - timing;
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    fd->coll_write[2] += MPI_Wtime() - timing;
 #endif
 
     if (file_ptr_type == ADIO_INDIVIDUAL)
@@ -134,8 +134,12 @@ int file_write(ADIO_File     fd,
 
     ADIOI_Datatype_iscontig(bufType, &buftype_is_contig);
 
-    if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL)
+    /* when fd->filetype == MPI_DATATYPE_NULL, this is called from INA */
+    if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL) {
         filetype_is_contig = (fd->flat_file->count <= 1);
+        if (fd->flat_file->count > 0)
+            offset = fd->flat_file->indices[0];
+    }
     else if (fd->filetype == MPI_BYTE)
         filetype_is_contig = 1;
     else
@@ -146,8 +150,11 @@ int file_write(ADIO_File     fd,
         err = ADIO_WriteContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
                                offset, status, NULL);
     }
+    else if (fd->file_system == ADIO_LUSTRE)
+        ADIOI_LUSTRE_WriteStrided(fd, buf, count, bufType, file_ptr_type,
+                                  offset, status, &err);
     else
-        ADIO_WriteStrided(fd, buf, count, bufType, file_ptr_type,
+        ADIOI_GEN_WriteStrided(fd, buf, count, bufType, file_ptr_type,
                                offset, status, &err);
     if (err != MPI_SUCCESS)
         err = ncmpii_error_mpi2nc(err, __func__);
@@ -169,6 +176,8 @@ int ADIO_File_write_at(ADIO_File     fh,
                        MPI_Status   *status)
 {
     int err = NC_NOERR;
+
+    ADIOI_Assert(fh != NULL);
 
     if (count == 0) return NC_NOERR;
 
@@ -193,6 +202,8 @@ int ADIO_File_write(ADIO_File     fh,
 {
     int err = NC_NOERR;
 
+    ADIOI_Assert(fh != NULL);
+
     if (count == 0) return NC_NOERR;
 
     if (count < 0) return NC_ENEGATIVECNT;
@@ -210,7 +221,7 @@ int ADIO_File_write(ADIO_File     fh,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int ADIO_File_write_at_all(ADIO_File     fh,
+int ADIO_File_write_at_all(ADIO_File    fh,
                           MPI_Offset    offset,
                           const void   *buf,
                           int           count,
@@ -218,6 +229,8 @@ int ADIO_File_write_at_all(ADIO_File     fh,
                           MPI_Status   *status)
 {
     int err, st=NC_NOERR;
+
+    ADIOI_Assert(fh != NULL);
 
     if (count < 0) st = NC_ENEGATIVECNT;
 
@@ -241,13 +254,15 @@ int ADIO_File_write_at_all(ADIO_File     fh,
 
 /*----< ADIO_File_write_all() >----------------------------------------------*/
 /* This is a collective call. */
-int ADIO_File_write_all(ADIO_File     fh,
+int ADIO_File_write_all(ADIO_File    fh,
                        const void   *buf,
                        int           count,
                        MPI_Datatype  bufType,
                        MPI_Status   *status)
 {
     int err, st=NC_NOERR;
+
+    ADIOI_Assert(fh != NULL);
 
     if (count < 0) st = NC_ENEGATIVECNT;
 
