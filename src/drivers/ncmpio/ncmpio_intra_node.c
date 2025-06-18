@@ -314,20 +314,23 @@ void heap_merge(int              nprocs,
 /*----< ncmpio_intra_node_aggr_init() >--------------------------------------*/
 /* When intra-node write aggregation is enabled, processes on the same node
  * will be divided into groups. The number of groups is the number of
- * aggregators on that node. The rank IDs of each group must be established.
+ * aggregators on that node, i.e. there is one aggregator per group. The rank
+ * IDs of processes belong to the same group must be established.
  *
- * 1. Find the affinity of each MPI process to the compute node. This should
+ * Note this subroutine must be called before MPI_File_open().
+ *
+ * 1. Find the affinity of each MPI process to its compute node. This should
  *    have been done from a call to ncmpii_construct_node_list() during
  *    ncmpio_create() and ncmpio_open().
  * 2. Determine whether self process is an intra-node aggregator.
  * 3. For an aggregator, find the number of non-aggregators assigned to it and
- *    construct rank IDs of assigned non-aggregators.
+ *    construct a list of rank IDs of non-aggregators assigned to it.
  * 4. For a non-aggregator, find the rank ID of its assigned aggregator.
  *
  * This subroutine should be called only once per file at ncmpio_create() or
  * ncmpio_open(). It sets the following variables.
  *   ncp->my_aggr          rank ID of my aggregator
- *   ncp->num_nonaggrs     number of non-aggregators assigned to me
+ *   ncp->num_nonaggrs     number of non-aggregators assigned to this rank
  *   ncp->nonaggr_ranks[]  rank IDs of assigned non-aggregators
  */
 int
@@ -341,8 +344,14 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     ncp->num_nonaggrs = 0;     /* number of non-aggregators assigned */
     ncp->nonaggr_ranks = NULL; /* ranks of assigned non-aggregators */
 
-    if (ncp->num_aggrs_per_node == 0 ||
-        ncp->num_aggrs_per_node * ncp->num_nodes >= ncp->nprocs)
+    /* Here, ncp->num_aggrs_per_node must be > 0, because checking if
+     * ncp->num_aggrs_per_node == 0  has been done before entering this
+     * subroutine.
+     */
+    assert(ncp->num_aggrs_per_node > 0);
+
+    /* check ill value of num_aggrs_per_node */
+    if (ncp->num_aggrs_per_node * ncp->num_nodes >= ncp->nprocs)
         /* disable intra-node aggregation */
         return NC_NOERR;
 
@@ -353,21 +362,18 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     ncp->aggr_time[4] = ncp->aggr_time[5] = 0.0;
 #endif
 
-    /* allocate space for storing the rank IDs of non-aggregators assigned to
-     * this rank. Note ncp->nonaggr_ranks[] will be freed when closing the
-     * file, if allocated.
+    /* ncp->node_ids[] has been established in ncmpii_construct_node_list()
+     * called in ncmpio_create() or ncmpio_open() before entering this
+     * subroutine.
+     * my_node_id is this rank's node ID.
      */
-    ncp->num_nonaggrs = ncp->nprocs / ncp->num_aggrs_per_node + 1;
-    ncp->nonaggr_ranks = (int*) NCI_Malloc(sizeof(int) * ncp->num_nonaggrs);
-
-    /* ncp->node_ids[] has been established in ncmpii_construct_node_list() */
-    /* my_node_id is this rank's node ID */
     my_node_id = ncp->node_ids[ncp->rank];
 
-    /* nprocs_my_node: the number of processes in my nodes
-     * ranks_my_node[]: rank IDs of all processes in my node.
-     * my_rank_index points to ranks_my_node[] where
-     * ranks_my_node[my_rank_index] == ncp->rank
+    /* Set the following variables:
+     *   nprocs_my_node: the number of processes in my nodes
+     *   ranks_my_node[]: rank IDs of all processes in my node.
+     *   my_rank_index: points to ranks_my_node[] where
+     *       ranks_my_node[my_rank_index] == ncp->rank
      */
     ranks_my_node = (int*) NCI_Malloc(sizeof(int) * ncp->nprocs);
     my_rank_index = -1;
@@ -381,14 +387,17 @@ ncmpio_intra_node_aggr_init(NC *ncp)
         }
     }
     assert(my_rank_index >= 0);
-
     /* Now, ranks_my_node[my_rank_index] == ncp->rank */
 
-    /* make sure number of aggregators in my node <= nprocs_my_node */
+    /* Make sure number of aggregators in my node <= nprocs_my_node. In some
+     * cases, the number of processes allocated to the last few nodes can be
+     * less than the ones before them.
+     */
     naggrs_my_node = MIN(ncp->num_aggrs_per_node, nprocs_my_node);
 
-    /* calculate the number of non-aggregators assigned to an aggregator.
-     * Note num_nonaggrs includes self.
+    /* For the aggregation group this rank belongs to, calculate the number of
+     * non-aggregators assigned to this group's aggregator, ncp->num_nonaggrs.
+     * Note ncp->num_nonaggrs includes self rank.
      */
     ncp->num_nonaggrs = nprocs_my_node / naggrs_my_node;
     if (nprocs_my_node % naggrs_my_node) ncp->num_nonaggrs++;
@@ -400,10 +409,10 @@ ncmpio_intra_node_aggr_init(NC *ncp)
     ncp->num_nonaggrs = MIN(ncp->num_nonaggrs, nprocs_my_node - first_rank);
 
     if (ncp->num_nonaggrs <= 1) {
-        /* disable aggregation if the number of non-aggregators assigned to
-         * this aggregator is 1. Note num_nonaggrs includes self. It is
-         * possible for aggregation enabled or disabled on different nodes and
-         * even different aggregation groups on the same node.
+        /* Disable aggregation if the number of non-aggregators assigned to
+         * this aggregator is 1. Note num_nonaggrs includes self rank. It is
+         * possible for aggregation to be enabled or disabled on different
+         * groups (thus also among different nodes).
          *
          * Use whether ncp->my_aggr < 0 to tell if aggregation is disabled or
          * enabled.
@@ -411,30 +420,40 @@ ncmpio_intra_node_aggr_init(NC *ncp)
         ncp->my_aggr = -1;
     }
     else { /* num_nonaggrs > 1 */
-        /* copy the rank IDs over to ncp->nonaggr_ranks[], which contains rank
-         * IDs of MPI processes assigned in this group.
+        /* Construct ncp->nonaggr_ranks[], the rank IDs of non-aggregators
+         * assigned in this group.  Note ncp->nonaggr_ranks[] will be freed
+         * when closing the file, if allocated.
          */
+        ncp->nonaggr_ranks = (int*)NCI_Malloc(sizeof(int) * ncp->num_nonaggrs);
+
         memcpy(ncp->nonaggr_ranks, ranks_my_node + first_rank,
                sizeof(int) * ncp->num_nonaggrs);
 
-        /* assign the first rank as an intra-node aggregator of this group */
+        /* Assign the first rank as the intra-node aggregator of this group */
         ncp->my_aggr = ncp->nonaggr_ranks[0];
 
+#if 0
+        /* It is no longer necessary to make intra-node aggregators also as
+         * MPI-IO aggregators, because we later construct a new MPI
+         * communicator consisting only the intra-node aggregators and pass it
+         * to MPI_File_open(). It means only the intra-node aggregators have
+         * non-zero sized data to do I/O.
+         */
         if (ncp->fstype != ADIO_FSTYPE_MPIIO && ncp->adio_fh != NULL) {
-            /* check if the aggregator is also an MPI-IO aggregator. If not,
-            * change it to the first MPI-IO aggregator in the group. Note that
-            * binary search cannot be used, because the MPI rank IDs of all
-            * MPI-IO aggregators, ncp->adio_fh->hints->ranklist[], may not be
-            * sorted in an increasing order. On the other hand, rank IDs in
-            * ranks_my_node[], rank IDs of this rank's intra-node group, are in
-            * an increasing order.
-            *
-            * Note MPI ranks allocated to compute nodes are set at the run
-            * time. Two common allocation methods are block (consecutive IDs on
-            * a node) and cyclic (round-robin over all nodes). Both result in
-            * MPI rank IDs allocated to each compute node in an increasing
-            * order.
-            */
+            /* Check if the aggregator is also an MPI-IO aggregator. If not,
+             * change it to the first MPI-IO aggregator in the group. Note that
+             * binary search cannot be used, because the MPI rank IDs of all
+             * MPI-IO aggregators, ncp->adio_fh->hints->ranklist[], may not be
+             * sorted in an increasing order. On the other hand, rank IDs in
+             * ranks_my_node[], rank IDs of this rank's intra-node group, are
+             * in an increasing order.
+             *
+             * Note MPI ranks allocated to compute nodes are set at the run
+             * time. Two common allocation methods are block (consecutive IDs
+             * on a node) and cyclic (round-robin over all nodes). Both result
+             * in MPI rank IDs allocated to each compute node in an increasing
+             * order.
+             */
             int j, cb_nodes = ncp->adio_fh->hints->cb_nodes;
             int *ranklist = ncp->adio_fh->hints->ranklist;
 
@@ -456,74 +475,89 @@ ncmpio_intra_node_aggr_init(NC *ncp)
                 }
             }
         }
+#endif
+        if (ncp->my_aggr != ncp->rank) {
+            /* free ncp->nonaggr_ranks as it is used by aggregators only */
+            NCI_Free(ncp->nonaggr_ranks);
+            ncp->nonaggr_ranks = NULL;
+        }
     }
     NCI_Free(ranks_my_node);
-
-    if (ncp->my_aggr != ncp->rank) {
-        /* free ncp->nonaggr_ranks as it is used by aggregators only */
-        NCI_Free(ncp->nonaggr_ranks);
-        ncp->nonaggr_ranks = NULL;
-    }
 
     /* Note when ncp->my_aggr < 0, it does not mean this rank will not write to
      * the file. It just means intra-node aggregation is disabled for this
      * rank. This rank may still have data to write to the file.
      */
 
-#ifdef NOT_YET
-/* NOTE: using a communicator for intra-node aggregators does NOT work, because
- * cb_nodes may not be the intra-node aggregator and communication in 2-phase
- * I/O needs all cb_nodes to participate.
- */
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        /* create a new MPI communicator containing intra-node aggregators */
-        int j, do_io, ina_nprocs, *ina_ranks;
-        MPI_Group origin_group, ina_group;
+    /* Now only the intra-node aggregators have non-zero sized data to do I/O.
+     * We can create a new MPI communicator consisting of all intra-node
+     * aggregators and use it to call MPI_File_open().
+     *
+     * When using the internal ADIO driver, we also must create a new node_ids
+     * based on the new communicator and pass it to PnetCDF's internal ADIO
+     * file handler, ncp->adio_fh, so to avoid repeating the work of
+     * constructing the node_ids again. If using MPI-IO driver, then ROMIO will
+     * do this internally again anyway.
+     */
 
-        assert(ncp->adio_fh != NULL);
+    /* create a new MPI communicator containing intra-node aggregators */
+    int j, do_io, ina_nprocs, *ina_ranks;
+    MPI_Group origin_group, ina_group;
 
-        do_io = 0;
-        if (ncp->my_aggr == -1) /* intra-node aggregation is disabled */
-            do_io = 1;
-        else if (ncp->my_aggr == ncp->rank)
-            do_io = 1;
+    do_io = 0;
+    if (ncp->my_aggr == -1 || ncp->my_aggr == ncp->rank)
+        do_io = 1;
 
-        /* construct an arry of ranks that access to file */
-        ina_ranks = (int*) NCI_Malloc(sizeof(int) * ncp->nprocs);
-        MPI_Allgather(&do_io, 1, MPI_INT, ina_ranks, 1, MPI_INT, ncp->comm);
+    /* construct an array of ranks that access to file */
+    ina_ranks = (int*) NCI_Malloc(sizeof(int) * ncp->nprocs);
+    MPI_Allgather(&do_io, 1, MPI_INT, ina_ranks, 1, MPI_INT, ncp->comm);
 
-        /* calculate number of processes that will access to the file */
-        for (ina_nprocs=0, i=0; i<ncp->nprocs; i++)
-            if (ina_ranks[i]) ina_nprocs++;
+    /* node_ids[] can be two kinds (nodes=3, nprocs=10, num_aggrs_per_node=2)
+     *     block  process allocation: 0,0,0,0,1,1,1,2,2,2
+     *     cyclic process allocation: 0,1,2,0,1,2,0,1,2,0
+     * Accordingly, ina_ranks[] can be two kinds
+     *     block  process allocation: 1,0,1,0,1,0,1,1,0,1
+     *     cyclic process allocation: 1,1,1,0,0,0,1,1,1,0
+     */
 
-// printf("ina_nprocs=%d ina_ranks=%d %d %d\n",ina_nprocs, ina_ranks[0],ina_ranks[1],ina_ranks[2]);
+    /* calculate number of intra-node aggregators, the ones that will access to
+     * the file
+     */
+    for (ina_nprocs=0, i=0; i<ncp->nprocs; i++)
+        if (ina_ranks[i]) ina_nprocs++;
 
-        /* construct an arry of rank IDs that access to file */
-        for (j=0,i=0; i<ncp->nprocs; i++)
-            if (ina_ranks[i]) ina_ranks[j++] = i;
+// if (ncp->nprocs==4) printf("%s at %d: ina_nprocs=%d ina_ranks=%d %d %d %d\n", __func__,__LINE__,ina_nprocs, ina_ranks[0],ina_ranks[1],ina_ranks[2],ina_ranks[3]);
 
-// printf("ina_nprocs=%d ina_ranks=%d %d\n",ina_nprocs, ina_ranks[0],ina_ranks[1]);
-
-        /* create a new communicator containing only ranks that access to file */
-        MPI_Comm_group(ncp->comm, &origin_group);
-        MPI_Group_incl(origin_group, ina_nprocs, ina_ranks, &ina_group);
-        MPI_Comm_create(ncp->comm, ina_group, &ncp->adio_fh->ina_comm);
-        MPI_Group_free(&ina_group);
-        MPI_Group_free(&origin_group);
-        NCI_Free(ina_ranks);
+    /* construct the rank IDs of the new MPI communicator, ina_ranks[] */
+    for (j=0,i=0; i<ncp->nprocs; i++) {
+        if (ina_ranks[i]) {
+            ina_ranks[j] = i;
+            /* Modify ncp->node_ids[] to store the node IDs of the processes in
+             * the new communicator. Note ncp->node_ids[] from now on is used
+             * by PnetCDF's ADIO driver only.
+             */
+            ncp->node_ids[j] = ncp->node_ids[i];
+            j++;
+        }
     }
 
-if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-    int io_rank;
-    printf("world rank %d ncp->adio_fh->ina_comm = %s\n", ncp->rank,
-           (ncp->adio_fh->ina_comm == MPI_COMM_NULL) ? "MPI_COMM_NULL" : "NOT NULL");
+    /* create a new communicator containing only ranks that access to file */
+    MPI_Comm_group(ncp->comm, &origin_group);
+    MPI_Group_incl(origin_group, ina_nprocs, ina_ranks, &ina_group);
+    MPI_Comm_create(ncp->comm, ina_group, &ncp->ina_comm);
+    MPI_Group_free(&ina_group);
+    MPI_Group_free(&origin_group);
+    NCI_Free(ina_ranks);
 
-    if (ncp->adio_fh->ina_comm != MPI_COMM_NULL)
-        MPI_Comm_rank(ncp->adio_fh->ina_comm, &io_rank);
-    else
+#ifdef WKL_DEBUG
+int io_rank;
+printf("%s at %d: world rank %d ncp->ina_comm = %s\n", __func__,__LINE__,ncp->rank, (ncp->ina_comm == MPI_COMM_NULL) ? "MPI_COMM_NULL" : "NOT NULL");
+
+if (ncp->ina_comm != MPI_COMM_NULL)
+        MPI_Comm_rank(ncp->ina_comm, &io_rank);
+else
         io_rank = -1;
-    printf("World rank = %d I/O comm rank = %d\n",ncp->rank, io_rank);
-}
+printf("%s at %d: World rank = %d I/O comm rank = %d\n", __func__,__LINE__,ncp->rank, io_rank);
 #endif
 
     /* TODO: For automatically determine Whether to enable intra-node write
@@ -1058,9 +1092,9 @@ MPI_Offset maxm;
 ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d: maxm=%.2f MB\n",__func__,__LINE__,(float)maxm/1048576.0);
 #endif
 
-    /* First, tell aggregator how much to receive by sending:
-     * (num_pairs and bufLen). The message size to be sent by this rank
-     * is num_pairs * 2 * sizeof(MPI_Offset) + bufLen
+    /* First, this rank tells its aggregator how much data it will receive from
+     * this rank, by sending: (num_pairs and bufLen). The message size to be
+     * sent by this rank is num_pairs * 2 * sizeof(MPI_Offset) + bufLen
      */
     if (ncp->rank == ncp->my_aggr)
         msg = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * ncp->num_nonaggrs * 3);
@@ -1560,15 +1594,13 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("==== %s line %d: 
     if (ncp->rank == ncp->my_aggr) ncp->aggr_time[4] += endT - startT;
 #endif
 
-    if (ncp->rank != ncp->my_aggr) { /* non-aggregator writes nothing */
-        buf_count = 0;
-        npairs = 0;
-    }
-
-    /* Only aggregators writes non-zero sized of data to the file. The
-     * non-aggregators participate the collective write call with zero-length
-     * write requests.
+    /* Only aggregators call MPI-IO functions to write data to the file.
+     * Non-aggregators do not participate MPI-IO calls.
      */
+    if (ncp->rank != ncp->my_aggr)
+        goto fn_exit;
+
+    /* intra-node aggregation only take effect in collective data mode */
     fh = ncp->collective_fh;
 
     /* Preserve fd->filetype previously used */
@@ -1624,6 +1656,7 @@ ncmpi_inq_malloc_max_size(&maxm); if (ncp->rank == 0)  printf("xxxx %s line %4d:
         ncp->adio_fh->filetype = saved_fileType;
     }
 
+fn_exit:
     return status;
 }
 
