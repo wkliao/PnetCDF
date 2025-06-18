@@ -520,8 +520,10 @@ file_create(ADIO_File fd,
 
     MPI_Comm_rank(fd->comm, &rank);
 
+// int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank); printf("%s at %d: world_rank=%d local rank=%d ---- calling POSIX open()\n",__func__,__LINE__,world_rank,rank);
+
 #ifdef PNETCDF_PROFILING
-static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",basename(__FILE__),__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("\nxxxx %s line %d: %s ---------%s\n",basename(__FILE__),__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
 #endif
 
     amode = O_CREAT;
@@ -538,6 +540,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
      * in fd->hints->ranklist, no matter its is open or create mode.
      */
     if (rank == 0) {
+#ifdef HAVE_LUSTRE
         int set_user_layout = 0, overstriping_ratio;
         int str_factor, str_unit, start_iodev;
 
@@ -562,7 +565,6 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
             (overstriping_ratio > 1))
             set_user_layout = 1;
 
-#ifdef HAVE_LUSTRE
 /* query the total number of available OSTs in the pool.
         char **members, *buffer, *pool="scratch.original";
         int list_size = 512;
@@ -674,6 +676,7 @@ static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (r
         stripin_info[3] = STRIPE_COUNT;
 #endif
     }
+
 err_out:
     MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
     if (stripin_info[0] == -1) {
