@@ -391,24 +391,34 @@ hdr_fetch(bufferinfo *gbp) {
             }
         }
 
-        if (err == NC_NOERR) {
+        if (err == NC_NOERR && readLen > 0) {
             /* Obtain the actual read amount. It may be smaller than readLen,
              * when the remaining file size is smaller than read chunk size.
              * Because each MPI File_read reads amount of readLen bytes, and
              * readLen <= read chunk size which is <= NC_MAX_INT, calling
              * MPI_Get_count() is sufficient. No need to call MPI_Get_count_c()
              */
-            int get_size;
-            MPI_Get_count(&mpistatus, MPI_BYTE, &get_size);
-            gbp->get_size += get_size;
+            int get_count;
+            mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &get_count);
+            if (mpireturn != MPI_SUCCESS || get_count == MPI_UNDEFINED)
+                /* partial read: in this case MPI_Get_elements() is supposed to
+                 * be called to obtain the number of type map elements actually
+                 * read in order to calculate the true read amount. Below skips
+                 * this step and simply ignore the partial read. See an example
+                 * usage of MPI_Get_count() in Example 5.12 from MPI standard
+                 * document.
+                 */
+                gbp->get_size += readLen;
+            else
+                gbp->get_size += get_count;
 
             /* If actual read amount is shorter than readLen, then we zero-out
              * the remaining buffer. This is because the MPI_Bcast below
              * broadcasts a buffer of a fixed size, gbp->chunk. Without zeroing
              * out, valgrind will complain about the uninitialized values.
              */
-            if (get_size < readLen)
-                memset(readBuf + get_size, 0, readLen - get_size);
+            if (get_count < readLen)
+                memset(readBuf + get_count, 0, readLen - get_count);
         }
         /* only root process reads file header, keeps track of current read
          * file pointer location */
