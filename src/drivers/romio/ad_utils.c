@@ -18,9 +18,10 @@
 int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner)
 {
     int ret;
+
+    ADIOI_Assert(datatype != MPI_DATATYPE_NULL);
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count ni, na, nc, nt;
-assert(datatype != MPI_DATATYPE_NULL);
     ret = MPI_Type_get_envelope_c(datatype, &ni, &na, &nc, &nt, combiner);
 #else
     int ni, na, nt;
