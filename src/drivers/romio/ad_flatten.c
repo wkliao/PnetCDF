@@ -96,15 +96,15 @@ ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
         MPI_Count num_iovs, actual;
 
         MPIX_Type_iov_len(datatype, type_size, &num_iovs, &actual);
-        assert(num_iovs > 0);
-        assert(actual == type_size);
+        ADIOI_Assert(num_iovs > 0);
+        ADIOI_Assert(actual == type_size);
 
         MPIX_Iov *iovs;
         iovs = ADIOI_Malloc(num_iovs * sizeof(MPIX_Iov));
-        assert(iovs);
+        ADIOI_Assert(iovs);
 
         MPIX_Type_iov(datatype, 0, iovs, num_iovs, &actual);
-        assert(actual == num_iovs);
+        ADIOI_Assert(actual == num_iovs);
 
         /* copy to flatlist */
         flat = ADIOI_Malloc(sizeof(ADIOI_Flatlist_node));
@@ -287,6 +287,8 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
                               int *nints, int *nadds, int *ntypes,
                               int **ints, MPI_Aint ** adds, MPI_Datatype ** types)
 {
+    ADIOI_Assert(datatype != MPI_DATATYPE_NULL);
+
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count nints_c, nadds_c, ncnts_c, ntypes_c;
     int *ints_c;
@@ -294,7 +296,6 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
     MPI_Count *cnts_c;
     MPI_Datatype *types_c;
 
-assert(datatype != MPI_DATATYPE_NULL);
     MPI_Type_get_envelope_c(datatype, &nints_c, &nadds_c, &ncnts_c, &ntypes_c, combiner);
 
     ints_c = (int *) ADIOI_Malloc((nints_c + 1) * sizeof(int));
