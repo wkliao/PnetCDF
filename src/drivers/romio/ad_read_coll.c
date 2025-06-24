@@ -14,9 +14,6 @@
 #ifdef MPL_USE_DBG_LOGGING
 #define RDCOLL_DEBUG 1
 #endif
-#ifdef AGGREGATION_PROFILE
-#include "mpe.h"
-#endif
 
 /* prototypes of functions used for collective reads only. */
 static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
@@ -103,18 +100,14 @@ void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
 #endif
     MPI_Aint *buf_idx = NULL;
 
-#if 0
-    if (fd->hints->cb_pfr != ADIOI_HINT_DISABLE) {
-        ADIOI_IOStridedColl(fd, buf, count, ADIOI_READ, datatype,
-                            file_ptr_type, offset, status, error_code);
-        return;
-    }
-#endif
-
     int free_flat_fview = (fd->filetype != MPI_DATATYPE_NULL);
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+double curT = MPI_Wtime();
+#endif
 
     /* number of aggregators, cb_nodes, is stored in the hints */
     nprocs_for_coll = fd->hints->cb_nodes;
@@ -270,6 +263,10 @@ buf_idx[0],buf_idx[1]);
                           nprocs, myrank, &count_others_req_procs, &count_others_req_per_proc,
                           &others_req);
 
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fd->is_agg) fd->coll_read[1] += MPI_Wtime() - curT;
+#endif
+
     /* read data in sizes of no more than ADIOI_Coll_bufsize,
      * communicate, and fill user buf.
      */
@@ -286,6 +283,10 @@ buf_idx[0],buf_idx[1]);
     if (free_flat_fview) ADIOI_Free(offset_list);
     ADIOI_Free(st_offsets);
     ADIOI_Free(fd_start);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fd->is_agg) fd->coll_read[0] += MPI_Wtime() - curT;
+#endif
 }
 
 void ADIOI_Calc_my_off_len(ADIO_File     fd,
@@ -325,10 +326,6 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
     MPI_Aint filetype_extent, filetype_lb;
     ADIOI_Flatlist_node *flat_file;
     ADIO_Offset *offset_list, off, end_offset = 0, disp;
-
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5028, 0, NULL);
-#endif
 
     if (bufcount == 0) {
         *offset_list_ptr = NULL;
@@ -590,9 +587,6 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
         *contig_access_count_ptr = contig_access_count;
         *end_offset_ptr = end_offset;
     }
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5029, 0, NULL);
-#endif
 }
 
 static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
@@ -673,6 +667,10 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
     }
 
     MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fd->comm);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    fd->coll_read[11] = MAX(fd->coll_read[11], max_ntimes);
+#endif
 
     read_buf = fd->io_buf;      /* Allocated at open time */
 
@@ -945,6 +943,10 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
     MPI_Datatype send_type;
     MPI_Status *statuses;
 
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    double curT = MPI_Wtime();
+#endif
+
 /* exchange send_size info so that each process knows how much to
    receive from whom and how much memory to allocate. */
 
@@ -967,10 +969,6 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
 
 /* post recvs. if buftype_is_contig, data can be directly recd. into
    user buf at location given by buf_idx. else use recv_buf. */
-
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5032, 0, NULL);
-#endif
 
     MPI_Count j = 0;            // think of this as a counter of non-zero sends/recs
     if (buftype_is_contig) {
@@ -1049,12 +1047,19 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
             j++;
         }
     }
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fd->is_agg) fd->coll_read[4] += MPI_Wtime() - curT;
+#endif
+
 
     /* +1 to avoid a 0-size malloc */
     statuses = (MPI_Status *) ADIOI_Malloc((nprocs_send + nprocs_recv + 1) * sizeof(MPI_Status));
 
     /* wait on the receives */
     if (nprocs_recv) {
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+        curT = MPI_Wtime();
+#endif
 #ifdef NEEDS_MPI_TEST
         j = 0;
         while (!j)
@@ -1062,6 +1067,10 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
 #else
         MPI_Waitall(nprocs_recv, requests, statuses);
 #endif
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+        if (fd->is_agg) fd->coll_read[3] += MPI_Wtime() - curT;
+#endif
+
         *actual_recved_bytes = 0;
         j = 0;
         for (i = 0; i < nprocs; i++) {
@@ -1088,20 +1097,17 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
     }
 
     /* wait on the sends */
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    curT = MPI_Wtime();
+#endif
 #ifdef HAVE_MPI_STATUSES_IGNORE
     MPI_Waitall(nprocs_send, requests + nprocs_recv, MPI_STATUSES_IGNORE);
 #else
     MPI_Waitall(nprocs_send, requests + nprocs_recv, statuses + nprocs_recv);
 #endif
-
-/*
-if (myrank == 0) {
-float *recv = (float*)malloc(memLen);
-memcpy(recv, buf, memLen);
-ncmpii_in_swapn(recv, memLen/4, 4);
-for (i=0; i<memLen/4; i++) printf("\trecv[%d/%ld]=%.1f\n",i,memLen/4,recv[i]);
-}
-*/
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fd->is_agg) fd->coll_read[3] += MPI_Wtime() - curT;
+#endif
 
     ADIOI_Free(statuses);
     ADIOI_Free(requests);
@@ -1110,9 +1116,6 @@ for (i=0; i<memLen/4; i++) printf("\trecv[%d/%ld]=%.1f\n",i,memLen/4,recv[i]);
         ADIOI_Free(recv_buf[0]);
         ADIOI_Free(recv_buf);
     }
-#ifdef AGGREGATION_PROFILE
-    MPE_Log_event(5033, 0, NULL);
-#endif
 }
 
 #define ADIOI_BUF_INCR                                                  \
