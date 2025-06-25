@@ -1126,18 +1126,11 @@ int ADIO_Lustre_set_cb_node_list(ADIO_File fd)
         }
     }
     else { /* striping_factor <= nprocs */
-        /* Select striping_factor processes to be I/O aggregators */
-
-        if (fd->hints->cb_nodes == 0 || fd->access_mode & MPI_MODE_RDONLY) {
-            /* hint cb_nodes is not set by user and this file is opened for
-             * read only. Because collective read is using a different file
-             * domain partitioning strategy, for now we do not mess up
-             * ranklist for read operations and do not accept user hint to
-             * set ranklist for read operations
-             */
-            num_aggr = striping_factor;
-        }
-        else if (fd->hints->cb_nodes <= striping_factor) {
+        /* Select striping_factor processes to be I/O aggregators. Note this
+         * also applies to collective reads to allow more/less aggregators. In
+         * most cases, more aggregators yields better read performance.
+         */
+        if (fd->hints->cb_nodes <= striping_factor) {
             /* User has set hint cb_nodes and cb_nodes <= striping_factor.
              * Ignore user's hint and try to set cb_nodes to be at least
              * striping_factor.
