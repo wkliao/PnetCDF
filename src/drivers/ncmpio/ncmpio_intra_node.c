@@ -1773,13 +1773,15 @@ size_t bin_search(
 {
     size_t low, high;
 
+    /* only one element */
     if (nmemb == 1)
         return (base[0] <= key) ? 0 : -1;
 
+    /* check the 1st emelemt */
     if (base[0] <= key && key < base[1])
         return 0;
 
-    low = 0;
+    low = 1;
     high = nmemb - 1;
 
     while (low <= high) {
