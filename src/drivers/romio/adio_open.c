@@ -13,10 +13,9 @@
 #include <string.h>   /* strdup() */
 #include <assert.h>
 #include <sys/errno.h>
-#include <fcntl.h>    /* open(), O_CREAT */
-
-#include <sys/types.h>  /* open(), fgetxattr() */
-#include <sys/xattr.h>  /* fgetxattr() */
+#include <fcntl.h>      /* open(), O_CREAT */
+#include <sys/types.h>  /* open() */
+#include <libgen.h>    /* basename() */
 
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
@@ -258,6 +257,9 @@ static int compare(const void *a, const void *b)
      return (0);
 }
 
+#include <sys/types.h>  /* open(), fgetxattr() */
+#include <sys/xattr.h>  /* fgetxattr() */
+
 /*----< num_uniq_osts() >----------------------------------------------------*/
 static int num_uniq_osts(int fd_sys)
 {
@@ -339,7 +341,9 @@ file_create(ADIO_File fd,
 
     MPI_Comm_rank(fd->comm, &rank);
 
-static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",__FILE__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+#ifdef PNETCDF_PROFILING
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",basename(__FILE__),__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+#endif
 
     amode = O_CREAT;
     if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
@@ -499,7 +503,9 @@ file_open(ADIO_File fd)
 
     MPI_Comm_rank(fd->comm, &rank);
 
-static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",__FILE__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+#ifdef PNETCDF_PROFILING
+static int wkl=0; if (wkl == 0) {int rank; MPI_Comm_rank(fd->comm, &rank); if (rank == 0) printf("xxxx %s line %d: %s ---------%s\n",basename(__FILE__),__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; }
+#endif
 
     old_mask = umask(022);
     umask(old_mask);
