@@ -190,21 +190,22 @@ ncmpio_close(void *ncdp)
         }
         MPI_Reduce(tt, max_t, NTIMERS, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
         if (ncp->rank == 0) {
-            printf("%s: MAX intra-node %2d %.2f pwrite %5.2f comm %5.2f collw %5.2f nsends %5ld nrecvs %5ld nprocs %d (dtype=%.4f)\n",
-                __func__,ncp->num_aggrs_per_node,
-                max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4],
-                max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10], ncp->nprocs,max_t[11]);
+            double intra_t = max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4];
+            long nsends = (long)max_t[9], nrecvs =  (long)max_t[10], nsort = (long)max_t[5];
+            long r_count = (long)max_t[14], s_count = (long)max_t[15];
 
-            printf("%s: MAX pwrite %5.2f comm %5.2f collw %5.2f nsends %5ld nrecvs %5ld r_amnt %.2f s_amnt %.2f MB r_count %ld s_count %ld\n",
-                __func__,
-                max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10], max_t[12]/1048576.0, max_t[13]/1048576.0, (long)max_t[14], (long)max_t[15]);
+            printf("%s: TWO-PHASE intra %5.2f pwrite %5.2f comm %5.2f collw %5.2f (dtype=%.4f)\n",
+                __func__, intra_t, max_t[7], max_t[8], max_t[6], max_t[11]);
+/*
+            printf("%s: intra-node %2d time %.2f %.2f %.2f %.2f %.2f = %.2f (nsort %8ld)\n",
+                    __func__,ncp->num_aggrs_per_node, max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], intra_t, nsort);
 
-            printf("%s: MAX intra-node %2d %.2f %.2f %.2f %.2f %.2f = %.2f nsort %8ld\n", __func__,ncp->num_aggrs_per_node,
-                max_t[0], max_t[1], max_t[2], max_t[3], max_t[4], max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5]);
+            printf("%s: TWO-PHASE comm nsends %5ld nrecvs %5ld r_amnt %.2f s_amnt %.2f MB r_count %ld s_count %ld\n",
+                __func__, nsends, nrecvs, max_t[12]/1048576.0, max_t[13]/1048576.0, r_count, s_count);
 
             printf("excel: %.2f %8ld %5.2f %5.2f %5.2f %5ld %5ld\n",
-                max_t[0]+max_t[1]+max_t[2]+max_t[3]+max_t[4], (long)max_t[5],
-                max_t[7], max_t[8], max_t[6], (long)max_t[9], (long)max_t[10]);
+                intra_t, nsort, max_t[7], max_t[8], max_t[6], nsends, nrecvs);
+*/
         }
 
         /* print if this rank is an MPI-IO aggregator, but not an intra-node aggregator */
