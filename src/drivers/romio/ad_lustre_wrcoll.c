@@ -177,11 +177,11 @@ int ADIOI_LUSTRE_Calc_aggregator(ADIO_File fd,
  *        user_buf for data to be sent to each aggregator.
  */
 static
-void ADIOI_LUSTRE_Calc_my_req(ADIO_File fd,
-                              Flat_list flat_fview,
-                              int buf_is_contig,
+void ADIOI_LUSTRE_Calc_my_req(ADIO_File      fd,
+                              Flat_list      flat_fview,
+                              int            buf_is_contig,
                               ADIOI_Access **my_req_ptr,
-                              ADIO_Offset **buf_idx)
+                              ADIO_Offset  **buf_idx)
 {
     int aggr, *aggr_ranks, cb_nodes;
     MPI_Count i, l;
@@ -215,6 +215,18 @@ void ADIOI_LUSTRE_Calc_my_req(ADIO_File fd,
     aggr_ranks = (int*) ADIOI_Malloc(alloc_sz * flat_fview.count);
     avail_lens = aggr_ranks + flat_fview.count;
 #endif
+
+    /* Note that MPI standard (MPI 3.1 Chapter 13.1.1 and MPI 4.0 Chapter
+     * 14.1.1) requires that the typemap displacements of etype and
+     * filetype are non-negative and monotonically non-decreasing. This
+     * makes flat_fview.off[] to be monotonically non-decreasing.
+     */
+
+Alternative: especially for when flat_fview.count is large
+1 This rank's aggregate file access region is from start_offset to end_offset.
+2 start with the 1st aggregator ID and keep assign aggregator until next stripe.
+  This can avoid too many calls to ADIOI_LUSTRE_Calc_aggregator()
+
 
     /* nelems will be the number of offset-length pairs for my_req[] */
     nelems = 0;
@@ -365,14 +377,14 @@ assert(aggr >= 0 && aggr <= cb_nodes);
     ADIOI_Free(aggr_ranks);
 }
 
-/* ADIOI_LUSTRE_Calc_others_req() calculates what requests of other processes
- * lie in this aggregator's file domain.
+/* ADIOI_LUSTRE_Calc_others_req() calculates what requests from each of other
+ * processes fall in this aggregator's file domain.
  *   IN: my_req[cb_nodes]: offset-length pairs of this rank's requests fall
- *       into each aggregator
+ *       into each of aggregators
  *   OUT: count_others_req_per_proc[i]: number of noncontiguous requests of
- *        rank i that falls in this rank's file domain.
- *   OUT: others_req_ptr[nprocs]: requests of all other ranks fall into this
- *        aggregator's file domain.
+ *        rank i that falls in this aggregator's file domain.
+ *   OUT: others_req_ptr[nprocs]: requests of each of other ranks fall into
+ *        this aggregator's file domain.
  */
 static
 void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
@@ -392,9 +404,10 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
     others_req = (ADIOI_Access *) ADIOI_Malloc(nprocs * sizeof(ADIOI_Access));
     *others_req_ptr = others_req;
 
-    /* Use my_req[].count to set count_others_req_per_proc[]. my_req[i].count
-     * is the number of offset-length pairs, i.e. noncontiguous file regions,
-     * that fall into aggregator i's file domain.
+    /* Use my_req[i].count (the number of noncontiguous requests fall in
+     * aggregator i's file domain) to set count_others_req_per_proc[j] (the
+     * number of noncontiguous requests from process j fall into this
+     * aggregator's file domain).
      */
     count_my_req_per_proc = (MPI_Count *) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Count));
     count_others_req_per_proc = count_my_req_per_proc + nprocs;
@@ -411,7 +424,9 @@ if (!fd->is_agg) {
 }
 #endif
 
-    /* calculate total number of offset-length pairs */
+    /* calculate total number of offset-length pairs to be handled by this
+     * aggregator, only aggregators will have non-zero number of pairs.
+     */
     npairs = 0;
     for (i=0; i<nprocs; i++) {
         npairs += count_others_req_per_proc[i];
@@ -422,8 +437,8 @@ if (!fd->is_agg) {
 
     /* The best communication approach for aggregators to collect offset-length
      * pairs from the non-aggregators is to allocate a single contiguous memory
-     * space for my_req[] to store its offsets and lens. The same for
-     * others_req[].
+     * space for my_req[] to store all its pairs of offsets and lens. The same
+     * for others_req[].
      */
 #ifdef HAVE_MPI_LARGE_COUNT
     pair_sz = sizeof(MPI_Offset) * 2;
@@ -467,8 +482,9 @@ timing = MPI_Wtime();
 
     /* now send the calculated offsets and lengths to respective processes */
 
-    /* When the number of processes per compute node is large, using
-     * MPI_Alltoallv() can avoid possible hanging. Hanging error messages are
+    /* On Perlmutter at NERSC, when the number of processes per compute node is
+     * large, using MPI_Alltoallv() instead of MPI_Isend/Irecv may avoid
+     * possible hanging.  When hanging occurs, the error messages are
      * 1. RXC (0x11291:0) PtlTE 397:[Fatal] OVERFLOW buffer list exhausted
      * 2. MPICH WARNING: OFI is failing to make progress on posting a receive.
      *    MPICH suspects a hang due to completion queue exhaustion. Setting
@@ -525,14 +541,14 @@ timing = MPI_Wtime();
 
         ADIOI_Free(sendCounts);
     }
-    else { /* not using alltoall */
+    else { /* instead of using alltoall, use MPI_Issend and MPI_Irecv */
         int nreqs;
         MPI_Request *requests = (MPI_Request *)
             ADIOI_Malloc((nprocs + fd->hints->cb_nodes) * sizeof(MPI_Request));
 
         nreqs = 0;
         for (i = 0; i < nprocs; i++) {
-            if (others_req[i].count == 0)
+            if (others_req[i].count == 0) /* nothing to receive from rank i */
                 continue;
 #ifdef WKL_DEBUG
 if (i == myrank) assert(fd->my_cb_nodes_index >= 0 && fd->my_cb_nodes_index <= fd->hints->cb_nodes);
@@ -574,7 +590,7 @@ else recv_amnt += 2 * others_req[i].count;
 
         for (i=0; i<fd->hints->cb_nodes; i++) {
             if (my_req[i].count == 0 || i == fd->my_cb_nodes_index)
-                continue; /* nothing to send */
+                continue; /* nothing to send or send to self */
 
             /* Note the memory address of my_req[i].lens is right after
              * my_req[i].offsets. This allows the following Issend call to
@@ -663,6 +679,11 @@ ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s lin
      * flat_fview.len[]. flat_fview.count has taken into account of argument
      * 'count', i.e. the number of user buffer datatypes in this request.
      *
+     * Note that MPI standard (MPI 3.1 Chapter 13.1.1 and MPI 4.0 Chapter
+     * 14.1.1) requires that the typemap displacements of etype and
+     * filetype are non-negative and monotonically non-decreasing. This
+     * makes flat_fview.off[] to be monotonically non-decreasing.
+     *
      * TODO: In the current implementation, even for a small fileview type, the
      *       flat_fview.count can still be large, when the write amount is
      *       larger than the file type size. In order to reduce the memory
@@ -724,7 +745,7 @@ printf("--- offset=%lld flat_fview.count=%lld start_offset=%lld\n",offset,flat_f
 
 #ifdef WKL_DEBUG
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (ADIOI_Calc_my_off_len)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
 #endif
 
@@ -867,7 +888,7 @@ start_T = end_T;;
     }
 #ifdef WKL_DEBUG
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (check if do independent write)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
 #endif
 
@@ -975,12 +996,18 @@ printf("xxxx %s --- SWITCH to independent write !!!\n",__func__);
     if (flat_bview.is_contig)
         buf_idx = (ADIO_Offset **) ADIOI_Malloc(fd->hints->cb_nodes * sizeof(ADIO_Offset*));
 
+#ifdef WKL_DEBUG
+end_T = MPI_Wtime();
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+start_T = end_T;;
+#endif
+
     ADIOI_LUSTRE_Calc_my_req(fd, flat_fview, flat_bview.is_contig,
                              &my_req, buf_idx);
 
 #ifdef WKL_DEBUG
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (ADIOI_LUSTRE_Calc_my_req)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
 #endif
 
@@ -994,7 +1021,7 @@ start_T = end_T;;
 
 #ifdef WKL_DEBUG
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (ADIOI_LUSTRE_Calc_others_req)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;;
 #endif
 
@@ -1031,7 +1058,7 @@ start_T = end_T;;
 
 #ifdef WKL_DEBUG
 end_T = MPI_Wtime();
-ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
+ncmpi_inq_malloc_max_size(&maxm); if (debug && myrank == 0)  printf("xxxx %s line %d: maxm=%.2f MB time=%.2f (ADIOI_LUSTRE_Exch_and_write)\n",__func__,__LINE__,(float)maxm/1048576.0, end_T - start_T);
 start_T = end_T;
 #endif
 
@@ -1662,7 +1689,7 @@ s_time = e_time;
         MPI_Count range_size;
         ADIO_Offset range_off;
 
-        /* Note that MPI standard (MPI3.1 Chapter 13.1.1 and MPI 4.0 Chapter
+        /* Note that MPI standard (MPI 3.1 Chapter 13.1.1 and MPI 4.0 Chapter
          * 14.1.1) requires that the typemap displacements of etype and
          * filetype are non-negative and monotonically non-decreasing. This
          * simplifies implementation a bit compared to reads.
