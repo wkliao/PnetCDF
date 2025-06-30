@@ -532,7 +532,7 @@ file_create(ADIO_File fd,
 
 // int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank); printf("%s at %d: world_rank=%d local rank=%d ---- calling POSIX open()\n",__func__,__LINE__,world_rank,rank);
 
-#ifdef PNETCDF_PROFILING
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; fflush(stdout);}
 #endif
 
@@ -743,7 +743,7 @@ file_create(ADIO_File fd,
 
     MPI_Comm_rank(fd->comm, &rank);
 
-#ifdef PNETCDF_PROFILING
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; fflush(stdout);}
 #endif
 
@@ -906,7 +906,7 @@ file_open(ADIO_File fd)
 
     MPI_Comm_rank(fd->comm, &rank);
 
-#ifdef PNETCDF_PROFILING
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; fflush(stdout);}
 #endif
 
@@ -1215,16 +1215,10 @@ int ADIO_Lustre_set_cb_node_list(ADIO_File fd)
                 int nranks_per_node = num_aggr / striping_factor;
                 /* front nodes may have 1 more to pick */
                 if (remain > 0 && j/node_stride < remain) nranks_per_node++;
-#ifdef WKL_DEBUG
-                printf("node %d pick %d ranks\n", j, nranks_per_node);
-#endif
                 int rank_stride = nprocs_per_node[j] / nranks_per_node;
                 for (k=0; k<nranks_per_node; k++) {
                     /* Selecting rank IDs within node j with a stride */
                     fd->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
-#ifdef WKL_DEBUG
-                    printf("aggr %d is node %d %dth rank %d\n", n,j,k, ranks_per_node[j][k*rank_stride]);
-#endif
                     if (++n == num_aggr) {
                         j = fd->num_nodes; /* break loop j */
                         break; /* loop k */
@@ -1273,16 +1267,10 @@ int ADIO_Lustre_set_cb_node_list(ADIO_File fd)
             int n = 0;
             for (j=0; j<fd->num_nodes; j++) {
                 /* j is the node ID */
-#ifdef WKL_DEBUG
-                printf("node %d select %d ranks\n", j, naggr_per_node[j]);
-#endif
                 int rank_stride = nprocs_per_node[j] / naggr_per_node[j];
                 /* try stride==1 seems no effect, rank_stride = 1; */
                 for (k=0; k<naggr_per_node[j]; k++) {
                     fd->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
-#ifdef WKL_DEBUG
-                    printf("aggr %d is node %d %dth rank %d\n", n,j,k, ranks_per_node[j][k*rank_stride]);
-#endif
                     if (++n == num_aggr) {
                         j = fd->num_nodes; /* break loop j */
                         break; /* loop k */
@@ -1370,7 +1358,7 @@ first_ost_id = -1;
     if (err != NC_NOERR)
         return err;
 
-#ifdef PNETCDF_PROFILING
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     { for (i=0; i<11; i++) fd->coll_write[i] = fd->coll_read[i] = 0; }
 #endif
 
