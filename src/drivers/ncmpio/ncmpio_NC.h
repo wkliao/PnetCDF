@@ -677,6 +677,12 @@ extern int
 ncmpio_calc_off(const NC *ncp, const NC_var *varp, const MPI_Offset *start,
                 const MPI_Offset *count, MPI_Offset *offset);
 
+extern int
+ncmpio_calc_start_end(const NC *ncp, const NC_var *varp,
+                      const MPI_Offset *start, const MPI_Offset *count,
+                      const MPI_Offset *stride, MPI_Offset *start_off,
+                      MPI_Offset *end_off);
+
 /* Begin defined in ncmpio_file_io.c ----------------------------------------*/
 extern int
 ncmpio_read_write(NC *ncp, int rw_flag, int coll_indep, MPI_Offset offset,
