@@ -2151,97 +2151,6 @@ req_aggregation(NC     *ncp,
     return status;
 }
 
-/*----< calculate_access_range() >-------------------------------------------*/
-/* Returns the file offsets of access range of this request: starting file
- * offset and end offset (exclusive).
- * Note zero-length request should never call this subroutine.
- */
-static int
-calculate_access_range(const NC         *ncp,
-                       const NC_var     *varp,
-                       const MPI_Offset *start,     /* [varp->ndims] */
-                       const MPI_Offset *count,     /* [varp->ndims] */
-                       const MPI_Offset *stride,    /* [varp->ndims] */
-                       MPI_Offset       *start_off, /* OUT: start offset */
-                       MPI_Offset       *end_off)   /* OUT: end   offset */
-{
-    int i, ndims = varp->ndims; /* number of dimensions of this variable */
-
-    /*
-     * varp->dsizes[] is computed from right to left product of shape
-     * For example, a 3D array of size 5x4x3 in C order,
-     * For fixed-size variable: dsizes[0]=60 dsizes[1]=12 dsizes[2]=3
-     * For record     variable: dsizes[0]=12 dsizes[1]=12 dsizes[2]=3
-     */
-    if (IS_RECVAR(varp)) {
-        *start_off = 0;
-        *end_off   = 0;
-        if (stride == NULL) {
-            if (ndims > 1) {
-                /* least significant dimension */
-                *start_off = start[ndims-1];
-                *end_off   = start[ndims-1]+(count[ndims-1]-1);
-                /* the remaining dimensions */
-                for (i=ndims-2; i>0; i--) {
-                    *start_off += start[i]*varp->dsizes[i+1];
-                    *end_off += (start[i]+(count[i]-1))*varp->dsizes[i+1];
-                }
-            }
-            *start_off *= varp->xsz;  /* offset in bytes */
-            *end_off   *= varp->xsz;
-            /* handle the unlimited, most significant dimension */
-            *start_off += start[0] * ncp->recsize;
-            *end_off   += (start[0]+(count[0]-1)) * ncp->recsize;
-        }
-        else {
-            if (ndims > 1) {
-                /* least significant dimension */
-                *start_off = start[ndims-1];
-                *end_off   = start[ndims-1]+(count[ndims-1]-1)*stride[ndims-1];
-                /* the remaining dimensions */
-                for (i=ndims-2; i>0; i--) {
-                    *start_off += start[i]*varp->dsizes[i+1];
-                    *end_off += (start[i]+(count[i]-1)*stride[i]) *
-                                varp->dsizes[i+1];
-                }
-            }
-            *start_off *= varp->xsz;  /* offset in bytes */
-            *end_off   *= varp->xsz;
-            /* handle the unlimited, most significant dimension */
-            *start_off += start[0] * ncp->recsize;
-            *end_off   += (start[0]+(count[0]-1)*stride[0]) * ncp->recsize;
-        }
-    }
-    else {
-        if (stride == NULL) {
-            /* first handle the least significant dimension */
-            *start_off = start[ndims-1];
-            *end_off   = start[ndims-1] + (count[ndims-1]-1);
-            /* remaining dimensions till the most significant dimension */
-            for (i=ndims-2; i>=0; i--) {
-                *start_off += start[i] * varp->dsizes[i+1];
-                *end_off += (start[i]+(count[i]-1)) * varp->dsizes[i+1];
-            }
-        }
-        else {
-            /* first handle the least significant dimension */
-            *start_off = start[ndims-1];
-            *end_off   = start[ndims-1]+(count[ndims-1]-1)*stride[ndims-1];
-            /* remaining dimensions till the most significant dimension */
-            for (i=ndims-2; i>=0; i--) {
-                *start_off += start[i] * varp->dsizes[i+1];
-                *end_off += (start[i]+(count[i]-1)*stride[i])*varp->dsizes[i+1];
-            }
-        }
-        *start_off *= varp->xsz;  /* offset in bytes */
-        *end_off   *= varp->xsz;
-    }
-    *start_off += varp->begin; /* beginning file offset of this variable */
-    *end_off   += varp->begin + varp->xsz;
-
-    return NC_NOERR;
-}
-
 /*----< wait_getput() >------------------------------------------------------*/
 static int
 wait_getput(NC         *ncp,
@@ -2287,8 +2196,8 @@ wait_getput(NC         *ncp,
                      count + varp->ndims;
 
             /* calculate access range of this request */
-            calculate_access_range(ncp, varp, reqs[i].start, count, stride,
-                                   &reqs[i].offset_start, &reqs[i].offset_end);
+            ncmpio_calc_start_end(ncp, varp, reqs[i].start, count, stride,
+                                  &reqs[i].offset_start, &reqs[i].offset_end);
         }
         if (i > 0) {
             /* check if offset_start are in a monotonic nondecreasing order */
