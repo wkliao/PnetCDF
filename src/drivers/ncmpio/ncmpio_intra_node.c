@@ -875,16 +875,12 @@ flatten_reqs(NC            *ncp,
         else
             lead = ncp->get_lead_list + reqs[i].lead_off;
 
-        /* The case when reqs[i] contains only one offset-length pair has been
-         * specially handled to in ncmpio_igetput_varm() and igetput_varn()
-         * which store the relative offset to the beginning of the variable,
-         * varp->begin, to reqs[i].offset_start.  The length is stored in
-         * reqs[i].offset_end.
-         */
         if (reqs[i].npairs == 1) {
-            (*offsets)[idx] = reqs[i].offset_start + lead->varp->begin;
-            if (IS_RECVAR(lead->varp))
-                (*offsets)[idx] += reqs[i].start[0] * ncp->recsize;
+            /* When reqs[i] contains only one offset-length pair, re-use
+             * reqs[i].offset_start, which has been generated earlier at a call
+             * to ncmpio_intra_node_aggregation_nreqs().
+             */
+            (*offsets)[idx] = reqs[i].offset_start;
             (*lengths)[idx] = reqs[i].nelems * lead->varp->xsz;
 
             /* check if (*offsets)[] are in an increasing order */
@@ -1307,7 +1303,7 @@ int ina_put(NC           *ncp,
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double endT, startT = MPI_Wtime();
     MPI_Offset mem_max;
-    ncmpi_inq_malloc_max_size(&mem_max);
+    ncmpi_inq_malloc_size(&mem_max);
     ncp->maxmem_put[0] = MAX(ncp->maxmem_put[0], mem_max);
 #endif
 
@@ -1371,7 +1367,7 @@ int ina_put(NC           *ncp,
     }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncmpi_inq_malloc_max_size(&mem_max);
+    ncmpi_inq_malloc_size(&mem_max);
     ncp->maxmem_put[1] = MAX(ncp->maxmem_put[1], mem_max);
     endT = MPI_Wtime();
     if (ncp->rank == ncp->my_aggr) ncp->ina_time_put[0] += endT - startT;
@@ -1473,7 +1469,7 @@ int ina_put(NC           *ncp,
                 qsort_off_len_buf(npairs, offsets, lengths, bufAddr);
         }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        ncmpi_inq_malloc_max_size(&mem_max);
+        ncmpi_inq_malloc_size(&mem_max);
         ncp->maxmem_put[2] = MAX(ncp->maxmem_put[2], mem_max);
 
         endT = MPI_Wtime();
@@ -1497,7 +1493,7 @@ int ina_put(NC           *ncp,
             wr_buf = (char*) NCI_Malloc(buf_count);
         }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        ncmpi_inq_malloc_max_size(&mem_max);
+        ncmpi_inq_malloc_size(&mem_max);
         ncp->maxmem_put[3] = MAX(ncp->maxmem_put[3], mem_max);
 #endif
 
@@ -1732,7 +1728,7 @@ int ina_put(NC           *ncp,
         MPI_Type_free(&fileType);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncmpi_inq_malloc_max_size(&mem_max);
+    ncmpi_inq_malloc_size(&mem_max);
     ncp->maxmem_put[4] = MAX(ncp->maxmem_put[4], mem_max);
 #endif
 
@@ -1746,7 +1742,7 @@ int ina_put(NC           *ncp,
     if (lengths != NULL) NCI_Free(lengths);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncmpi_inq_malloc_max_size(&mem_max);
+    ncmpi_inq_malloc_size(&mem_max);
     ncp->maxmem_put[5] = MAX(ncp->maxmem_put[5], mem_max);
 #endif
     /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
@@ -1827,7 +1823,7 @@ int ina_get(NC           *ncp,
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double endT, startT = MPI_Wtime();
     MPI_Offset mem_max;
-    ncmpi_inq_malloc_max_size(&mem_max);
+    ncmpi_inq_malloc_size(&mem_max);
     ncp->maxmem_get[0] = MAX(ncp->maxmem_get[0], mem_max);
 #endif
 
@@ -1917,7 +1913,7 @@ int ina_get(NC           *ncp,
      */
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncmpi_inq_malloc_max_size(&mem_max);
+    ncmpi_inq_malloc_size(&mem_max);
     ncp->maxmem_get[1] = MAX(ncp->maxmem_get[1], mem_max);
 #endif
 
@@ -2008,8 +2004,8 @@ int ina_get(NC           *ncp,
                 qsort_off_len_buf(npairs, offsets, lengths, NULL);
         }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        ncmpi_inq_malloc_max_size(&mem_max);
-        ncp->maxmem_put[2] = MAX(ncp->maxmem_put[2], mem_max);
+        ncmpi_inq_malloc_size(&mem_max);
+        ncp->maxmem_get[2] = MAX(ncp->maxmem_get[2], mem_max);
         if (ncp->rank == ncp->my_aggr)
             ncp->ina_npairs_get = MAX(ncp->ina_npairs_get, npairs);
 #endif
@@ -2049,7 +2045,7 @@ int ina_get(NC           *ncp,
             rd_buf = (char*) NCI_Malloc(buf_count);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        ncmpi_inq_malloc_max_size(&mem_max);
+        ncmpi_inq_malloc_size(&mem_max);
         ncp->maxmem_get[3] = MAX(ncp->maxmem_get[3], mem_max);
 #endif
 
@@ -2134,7 +2130,7 @@ int ina_get(NC           *ncp,
         MPI_Type_free(&fileType);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncmpi_inq_malloc_max_size(&mem_max);
+    ncmpi_inq_malloc_size(&mem_max);
     ncp->maxmem_get[4] = MAX(ncp->maxmem_get[4], mem_max);
     endT = MPI_Wtime();
     if (ncp->rank == ncp->my_aggr) ncp->ina_time_get[0] += endT - startT;
@@ -2146,7 +2142,7 @@ int ina_get(NC           *ncp,
     if (status == NC_NOERR) status = err;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    ncmpi_inq_malloc_max_size(&mem_max);
+    ncmpi_inq_malloc_size(&mem_max);
     ncp->maxmem_get[5] = MAX(ncp->maxmem_get[5], mem_max);
     startT = MPI_Wtime();
 #endif
@@ -2187,7 +2183,10 @@ int ina_get(NC           *ncp,
 
     size_t m=0, k, scan_off=0;
     for (j=0; j<num_pairs; j++) {
-        /* Find the offset-length pair in rd_buf containing this pair */
+        /* Find the offset-length pair in rd_buf containing this pair.
+         * Note that if the offset-length pairs are not already sorted, i.e.
+         * is_incr == 1, this bin_search() below can be very expensive!
+         */
         if (!is_incr) m = 0;
         k = bin_search(orig_offsets[j], &offsets[m], npairs-m);
         assert(k >= 0); /* k returned from bin_search is relative to m */
@@ -2268,7 +2267,11 @@ int ina_get(NC           *ncp,
         for (j=0; j<remote_num_pairs; j++) {
             MPI_Aint addr;
 
-            /* Find the offset-length pair in rd_buf containing this pair */
+            /* Find the offset-length pair in rd_buf containing this pair.
+             * Note that if the offset-length pairs are not already sorted,
+             * i.e. remote_is_incr == 1, this bin_search() below can be very
+             * expensive!
+             */
             if (!remote_is_incr) m = 0;
 
             k = bin_search(off[j], &offsets[m], npairs-m);
@@ -2366,6 +2369,16 @@ fn_exit:
     return status;
 }
 
+/*----< req_compare() >------------------------------------------------------*/
+/* used to sort the the string file offsets of reqs[] */
+static int
+req_compare(const void *a, const void *b)
+{
+    if (((NC_req*)a)->offset_start > ((NC_req*)b)->offset_start) return (1);
+    if (((NC_req*)a)->offset_start < ((NC_req*)b)->offset_start) return (-1);
+    return (0);
+}
+
 /*----< ncmpio_intra_node_aggregation_nreqs() >------------------------------*/
 /* This subroutine is a collective call, which handles PnetCDF's requests made
  * from non-blocking APIs, which contain multiple requests to one or more
@@ -2400,6 +2413,50 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
     /* ensure the intra-node aggregation is enabled in this rank's group */
     assert(ncp->num_aggrs_per_node > 0);
 
+    /* populate reqs[].offset_start, starting offset of each request */
+    NC_req *reqs = req_list;
+    int i, descreasing=0;
+    for (i=0; i<num_reqs; i++) {
+        NC_lead_req *lead;
+        NC_var *varp;
+
+        lead = (reqMode == NC_REQ_RD) ? ncp->get_lead_list
+                                      : ncp->put_lead_list;
+        lead += reqs[i].lead_off;
+        varp = lead->varp;
+
+        if (varp->ndims == 0) { /* scalar variable */
+            reqs[i].offset_start += varp->begin;
+        }
+        else if (reqs[i].npairs == 1) { /* only one offset-length pair */
+            MPI_Offset off = varp->begin;
+
+            if (IS_RECVAR(varp)) off += reqs[i].start[0] * ncp->recsize;
+
+            reqs[i].offset_start += off;
+        }
+        else {
+            /* start/count/stride have been allocated in a contiguous array */
+            MPI_Offset *count, *stride, offset_end;
+            count  = reqs[i].start + varp->ndims;
+            stride = (fIsSet(lead->flag, NC_REQ_STRIDE_NULL)) ? NULL :
+                     count + varp->ndims;
+
+            /* calculate access range of this request */
+            ncmpio_calc_start_end(ncp, varp, reqs[i].start, count, stride,
+                                  &reqs[i].offset_start, &offset_end);
+        }
+        /* check if offset_start are in a monotonic nondecreasing order */
+        if (i > 0 && reqs[i].offset_start < reqs[i-1].offset_start)
+            descreasing = 1;
+    }
+
+    /* If a decreasing order is found, sort reqs[] based on reqs[].offset_start
+     * into an increasing order.
+     */
+    if (descreasing)
+        qsort(reqs, (size_t)num_reqs, sizeof(NC_req), req_compare);
+
     /* construct file offset-length pairs
      *     num_pairs: total number of off-len pairs
      *     offsets:   array of flattened offsets
@@ -2407,7 +2464,7 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
      *     is_incr:   whether offsets are incremental
      */
     if (num_reqs > 0)
-        flatten_reqs(ncp, reqMode, num_reqs, req_list, &is_incr, &num_pairs,
+        flatten_reqs(ncp, reqMode, num_reqs, reqs, &is_incr, &num_pairs,
                      &offsets, &lengths);
     else
         num_pairs = 0;
@@ -2416,7 +2473,7 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
      * bufLen is the buffer size in bytes
      */
     if (num_reqs > 0) {
-        construct_buf_type(ncp, reqMode, num_reqs, req_list, &bufLen,
+        construct_buf_type(ncp, reqMode, num_reqs, reqs, &bufLen,
                            &bufType);
         bufLen = 1;
     }
