@@ -15,7 +15,7 @@
 #include <sys/errno.h>
 #include <fcntl.h>      /* open(), O_CREAT */
 #include <sys/types.h>  /* open() */
-#include <libgen.h>    /* basename() */
+#include <libgen.h>     /* basename() */
 
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
@@ -275,7 +275,7 @@ static int num_uniq_osts(int fd_sys)
 {
     int err;
     void *xattr_val;
-    size_t xattr_size = XATTR_SIZE_MAX;
+    ssize_t xattr_size = XATTR_SIZE_MAX;
     struct llapi_layout *layout;
     uint64_t i, stripe_count, stripe_size, *osts, numOSTs;
 
@@ -288,7 +288,7 @@ static int num_uniq_osts(int fd_sys)
         ERR("fgetxattr")
     }
 
-    layout = llapi_layout_get_by_xattr(xattr_val, xattr_size, 0);
+    layout = llapi_layout_get_by_xattr(xattr_val, xattr_size, LLAPI_LAYOUT_GET_CHECK);
     ADIOI_Free(xattr_val);
     if (layout == NULL) ERR("llapi_layout_get_by_xattr")
 
@@ -362,6 +362,11 @@ int sort_ost_ids(struct llapi_layout *layout,
     return (numOSTs + 1);
 }
 
+#define ERR0(fn) { \
+    printf("Error at %s (%d) calling %s\n", __func__, __LINE__, fn); \
+    return 0; \
+}
+
 /*----< get_striping() >-----------------------------------------------------*/
 static uint64_t get_striping(int       fd,
                              uint64_t *pattern,
@@ -374,10 +379,10 @@ static uint64_t get_striping(int       fd,
     uint64_t *osts, numOSTs;
 
     layout = llapi_layout_get_by_fd(fd, LLAPI_LAYOUT_GET_COPY);
-    if (layout == NULL) ERR("llapi_layout_get_by_fd")
+    if (layout == NULL) ERR0("llapi_layout_get_by_fd")
 
     err = llapi_layout_pattern_get(layout, pattern);
-    if (err != 0) ERR("llapi_layout_pattern_get")
+    if (err != 0) ERR0("llapi_layout_pattern_get")
 /*
     if (*pattern == LLAPI_LAYOUT_DEFAULT)
         printf("line %d: pattern is LLAPI_LAYOUT_DEFAULT\n",__LINE__);
@@ -395,7 +400,7 @@ static uint64_t get_striping(int       fd,
 
     /* obtain file striping count */
     err = llapi_layout_stripe_count_get(layout, stripe_count);
-    if (err != 0) ERR("llapi_layout_stripe_count_get")
+    if (err != 0) ERR0("llapi_layout_stripe_count_get")
 
 /*
     if (*stripe_count == LLAPI_LAYOUT_DEFAULT)
@@ -406,7 +411,7 @@ static uint64_t get_striping(int       fd,
 
     /* obtain file striping unit size */
     err = llapi_layout_stripe_size_get(layout, stripe_size);
-    if (err != 0) ERR("llapi_layout_stripe_size_get")
+    if (err != 0) ERR0("llapi_layout_stripe_size_get")
 
 /*
     if (*stripe_size == LLAPI_LAYOUT_DEFAULT)
@@ -435,7 +440,7 @@ static uint64_t get_striping(int       fd,
         else if (S_ISDIR(path_stat.st_mode))
             printf("%s at %d: is a folder\n",__func__,__LINE__);
         else
-            ERR("fstat")
+            ERR0("fstat")
 
         *start_iodevice = LLAPI_LAYOUT_DEFAULT;
         return *stripe_count;
@@ -622,6 +627,10 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
                                            &start_iodevice);
                 close(dd);
                 ADIOI_Free(dirc);
+                if (numOSTs == 0) {
+                    stripin_info[3] = numOSTs;
+                    goto err_out;
+                }
             }
 
             numOSTs = (str_factor == -1) ? numOSTs : str_factor;
@@ -701,9 +710,10 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
 
 err_out:
     MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
-    if (fd->file_system == ADIO_LUSTRE && stripin_info[0] == -1) {
-        fprintf(stderr, "%s line %d: failed to create Lustre file %s\n", __func__,
-                __LINE__, fd->filename);
+    if (fd->file_system == ADIO_LUSTRE &&
+        (stripin_info[0] == -1 || stripin_info[3] == 0)) {
+        fprintf(stderr, "%s line %d: failed to create Lustre file %s\n",
+                __func__, __LINE__, fd->filename);
         return err;
     }
 
@@ -803,7 +813,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
             goto err_out;
         }
 
-#if defined(HAVE_LUSTRE)
+#ifdef HAVE_LUSTRE
         /* odd length here because lov_user_md contains some fixed data and
          * then a list of 'lmm_objects' representing stripe */
         lumlen = sizeof(struct lov_user_md)
@@ -928,7 +938,6 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
      */
     if (rank == 0) {
 #ifdef HAVE_LUSTRE
-        ADIO_Offset str_factor = -1, str_unit = 0, start_iodev = -1;
         struct lov_user_md *lum = NULL;
 
         int lumlen = sizeof(struct lov_user_md)
