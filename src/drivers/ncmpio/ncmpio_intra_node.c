@@ -1343,7 +1343,11 @@ int ina_put(NC           *ncp,
      * MPI-IO.
      */
     err = ina_collect_md(ncp, meta, &offsets, &lengths, &npairs);
-    if (err != NC_NOERR) goto fn_exit;
+    if (err != NC_NOERR) {
+        if (req != NULL) NCI_Free(req);
+        NCI_Free(meta);
+        return err;
+    }
 
     /* For write operation, the non-aggregators now can start sending their
      * write data to the aggregator.
@@ -1692,7 +1696,7 @@ int ina_put(NC           *ncp,
      * Non-aggregators do not participate MPI-IO calls.
      */
     if (ncp->rank != ncp->my_aggr)
-        goto fn_exit;
+        return status;
 
     /* intra-node aggregation only takes effect in collective data mode */
     fh = ncp->collective_fh;
@@ -1754,7 +1758,6 @@ int ina_put(NC           *ncp,
         ncp->adio_fh->filetype = saved_fileType;
     }
 
-fn_exit:
     return status;
 }
 
@@ -1865,7 +1868,11 @@ int ina_get(NC           *ncp,
      * datatype when an aggregator sends read data to its non-aggregators.
      */
     err = ina_collect_md(ncp, meta, &offsets, &lengths, &npairs);
-    if (err != NC_NOERR) goto fn_exit;
+    if (err != NC_NOERR) {
+        if (req != NULL) NCI_Free(req);
+        NCI_Free(meta);
+        return err;
+    }
 
     if (ncp->rank == ncp->my_aggr) {
         /* duplicate to keep a copy of the original offset-length pairs */
@@ -1904,8 +1911,10 @@ int ina_get(NC           *ncp,
     }
 
     /* Non-aggregators are now done. */
-    if (ncp->rank != ncp->my_aggr)
-        goto fn_exit;
+    if (ncp->rank != ncp->my_aggr) {
+        NCI_Free(meta);
+        return status;
+    }
 
     /* Below are tasks for aggregators only, which must call MPI-IO functions
      * to read data from the file. Non-aggregators do not participate MPI-IO
@@ -2359,7 +2368,6 @@ int ina_get(NC           *ncp,
     if (ncp->rank == ncp->my_aggr) ncp->ina_time_get[3] += endT - startT;
 #endif
 
-fn_exit:
     if (rd_buf != NULL) NCI_Free(rd_buf);
     if (orig_lengths != NULL) NCI_Free(orig_lengths);
     if (orig_offsets != NULL) NCI_Free(orig_offsets);
