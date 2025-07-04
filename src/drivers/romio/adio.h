@@ -254,6 +254,9 @@ int ADIOI_Type_dispose(MPI_Datatype * datatype);
 
 ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype);
 
+int ADIOI_Lustre_create(ADIO_File fd, int access_mode);
+int ADIOI_Lustre_open(ADIO_File fd);
+
 void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                 MPI_Datatype datatype, ADIO_Offset offset, ADIO_Status *status,
                 int *error_code);

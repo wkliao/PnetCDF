@@ -1,0 +1,334 @@
+/*
+ *  Copyright (C) 2025, Northwestern University
+ *  See COPYRIGHT notice in top-level directory.
+ */
+
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>      /* open(), O_CREAT */
+#include <sys/types.h>  /* open(), umask() */
+#include <sys/stat.h>   /* umask() */
+
+#include <assert.h>
+#include <sys/errno.h>
+
+#include <mpi.h>
+
+#include "adio.h"
+
+/*----< ADIO_GEN_set_cb_node_list() >----------------------------------------*/
+/* Construct the list of I/O aggregators. It sets the followings.
+ *   fd->hints->ranklist[].
+ *   fd->hints->cb_nodes and set file info for hint cb_nodes.
+ *   fd->is_agg: indicating whether this rank is an I/O aggregator
+ *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
+ */
+static
+int ADIO_GEN_set_cb_node_list(ADIO_File fd)
+{
+    int i, j, k, nprocs, rank, *nprocs_per_node, **ranks_per_node;
+
+    MPI_Comm_size(fd->comm, &nprocs);
+    MPI_Comm_rank(fd->comm, &rank);
+
+    if (fd->hints->cb_nodes == 0)
+        /* If hint cb_nodes is not set by user, select one rank per node to be
+         * an I/O aggregator
+         */
+        fd->hints->cb_nodes = fd->num_nodes;
+    else if (fd->hints->cb_nodes > 0)
+        /* cb_nodes must be <= nprocs */
+        fd->hints->cb_nodes = nprocs;
+
+    fd->hints->ranklist = (int *) ADIOI_Malloc(sizeof(int) * fd->hints->cb_nodes);
+    if (fd->hints->ranklist == NULL)
+        return NC_ENOMEM;
+
+    /* number of MPI processes running on each node */
+    nprocs_per_node = (int *) ADIOI_Calloc(fd->num_nodes, sizeof(int));
+
+    for (i=0; i<nprocs; i++) nprocs_per_node[fd->node_ids[i]]++;
+
+    /* construct rank IDs of MPI processes running on each node */
+    ranks_per_node = (int **) ADIOI_Malloc(sizeof(int*) * fd->num_nodes);
+    ranks_per_node[0] = (int *) ADIOI_Malloc(sizeof(int) * nprocs);
+    for (i=1; i<fd->num_nodes; i++)
+        ranks_per_node[i] = ranks_per_node[i - 1] + nprocs_per_node[i - 1];
+
+    for (i=0; i<fd->num_nodes; i++) nprocs_per_node[i] = 0;
+
+    /* Populate ranks_per_node[], list of MPI ranks running on each node.
+     * Populate nprocs_per_node[], number of MPI processes on each node.
+     */
+    for (i=0; i<nprocs; i++) {
+        k = fd->node_ids[i];
+        ranks_per_node[k][nprocs_per_node[k]] = i;
+        nprocs_per_node[k]++;
+    }
+
+    /* select process ranks from nodes in a round-robin fashion to be I/O
+     * aggregators
+     */
+    k = j = 0;
+    for (i=0; i<fd->hints->cb_nodes; i++) {
+        if (j >= nprocs_per_node[k]) { /* if run out of ranks in this node k */
+            k++;
+            if (k == fd->num_nodes) { /* round-robin to first node */
+                k = 0;
+                j++;
+            }
+        }
+        /* select jth rank of node k as an I/O aggregator */
+        fd->hints->ranklist[i] = ranks_per_node[k++][j];
+        if (rank == fd->hints->ranklist[i]) {
+            fd->is_agg = 1;
+            fd->my_cb_nodes_index = i;
+        }
+        if (k == fd->num_nodes) { /* round-robin to first node */
+            k = 0;
+            j++;
+        }
+    }
+    ADIOI_Free(ranks_per_node[0]);
+    ADIOI_Free(ranks_per_node);
+    ADIOI_Free(nprocs_per_node);
+
+    return 0;
+}
+
+/*----< ADIOI_GEN_create() >-------------------------------------------------*/
+/*   1. root creates the file
+ *   2. root sets and obtains striping info
+ *   3. root broadcasts striping info
+ *   4. non-root processes receive striping info from root
+ *   5. non-root processes opens the fie
+ */
+static int
+ADIOI_GEN_create(ADIO_File fd,
+                 int       access_mode)
+{
+    int err=NC_NOERR, rank, amode, perm, old_mask;
+    int stripin_info[4] = {-1, -1, -1, -1};
+
+    MPI_Comm_rank(fd->comm, &rank);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+if (rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd->filename); fflush(stdout);}
+#endif
+
+    amode = O_CREAT;
+    if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
+
+    old_mask = umask(022);
+    umask(old_mask);
+    perm = old_mask ^ 0666;
+
+    /* root process creates the file first, followed by all processes open the
+     * file.
+     */
+    if (rank > 0) goto err_out;
+
+    fd->fd_sys = open(fd->filename, amode, perm);
+    if (fd->fd_sys == -1) {
+        fprintf(stderr,"%s line %d: rank %d fails to create file %s (%s)\n",
+                __func__,__LINE__, rank, fd->filename, strerror(errno));
+        err = ncmpii_error_posix2nc("open");
+        goto err_out;
+    }
+
+err_out:
+    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
+
+    fd->hints->striping_unit   = stripin_info[0];
+    fd->hints->striping_factor = stripin_info[1];
+    fd->hints->start_iodevice  = stripin_info[2];
+
+    if (rank > 0) { /* non-root processes */
+        fd->fd_sys = open(fd->filename, O_RDWR, perm);
+        if (fd->fd_sys == -1) {
+            fprintf(stderr,"%s line %d: rank %d failure to open file %s (%s)\n",
+                    __func__,__LINE__, rank, fd->filename, strerror(errno));
+            return ncmpii_error_posix2nc("ioctl");
+        }
+    }
+
+    /* construct cb_nodes rank list */
+    ADIO_GEN_set_cb_node_list(fd);
+    MPI_Info_set(fd->info, "romio_filesystem_type", "UFS:");
+
+    return err;
+}
+
+/*----< ADIOI_GEN_open() >---------------------------------------------------*/
+/*   1. all processes open the file.
+ *   2. root obtains striping info and broadcasts to all others
+ */
+static int
+ADIOI_GEN_open(ADIO_File fd)
+{
+    int err=NC_NOERR, rank, perm, old_mask;
+    int stripin_info[4] = {1048576, -1, -1, -1};
+
+    MPI_Comm_rank(fd->comm, &rank);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+if (rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd->filename); fflush(stdout);}
+#endif
+
+    old_mask = umask(022);
+    umask(old_mask);
+    perm = old_mask ^ 0666;
+
+    /* All processes open the file. */
+    fd->fd_sys = open(fd->filename, O_RDWR, perm);
+    if (fd->fd_sys == -1) {
+        fprintf(stderr, "%s line %d: rank %d failure to open file %s (%s)\n",
+                __func__,__LINE__, rank, fd->filename, strerror(errno));
+        err = ncmpii_error_posix2nc("open");
+        goto err_out;
+    }
+
+    /* Only root obtains the striping information and bcast to all other
+     * processes.
+     */
+    if (rank == 0) {
+        /* Get the underlying file system block size as file striping_unit */
+        struct stat statbuf;
+        err = fstat(fd->fd_sys, &statbuf);
+        if (err >= 0)
+            stripin_info[0] = statbuf.st_blksize;
+    }
+
+err_out:
+    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
+    fd->hints->striping_unit   = stripin_info[0];
+    fd->hints->striping_factor = stripin_info[1];
+    fd->hints->start_iodevice  = stripin_info[2];
+
+    /* construct cb_nodes rank list */
+    ADIO_GEN_set_cb_node_list(fd);
+    MPI_Info_set(fd->info, "romio_filesystem_type", "UFS:");
+
+    return err;
+}
+
+/*----< ADIO_File_open() >---------------------------------------------------*/
+int ADIO_File_open(MPI_Comm    comm,
+                   const char *filename,
+                   int         amode,
+                   MPI_Info    info,
+                   ADIO_File   fd)
+{
+    /* Before reaching to this subroutine, ADIO_FileSysType() should have been
+     * called to check the file system type.
+     */
+    char value[MPI_MAX_INFO_VAL + 1], int_str[16];
+    int i, err, min_err;
+
+    fd->comm        = comm;
+    fd->filename    = filename;  /* without file system type name prefix */
+    fd->atomicity   = 0;
+    fd->filetype    = MPI_BYTE;
+    fd->is_open     = 0;
+    fd->access_mode = amode;
+    fd->flat_file   = NULL; /* flattend fileview in offset-length pairs */
+    fd->io_buf      = NULL; /* collective buffer used by aggregators only */
+
+    /* create and initialize info object */
+    fd->hints = (ADIOI_Hints*) ADIOI_Calloc(1, sizeof(ADIOI_Hints));
+    if (info == MPI_INFO_NULL)
+        MPI_Info_create(&fd->info);
+    else
+        MPI_Info_dup(info, &fd->info);
+
+    err = ADIO_File_SetInfo(fd, fd->info);
+    if (err != NC_NOERR)
+        return err;
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    {
+        int j, nelems = sizeof(fd->coll_write) / sizeof(fd->coll_write[0]);
+        for (j=0; j<nelems; j++)
+            fd->coll_write[j] = fd->coll_read[j] = 0;
+    }
+#endif
+
+    ADIOI_Assert(fd->file_system != ADIO_FSTYPE_MPIIO);
+
+    if (fd->file_system == ADIO_LUSTRE) {
+        if (amode & MPI_MODE_CREATE)
+            err = ADIOI_Lustre_create(fd, amode);
+        else
+            err = ADIOI_Lustre_open(fd);
+    }
+    else {
+        if (amode & MPI_MODE_CREATE)
+            err = ADIOI_GEN_create(fd, amode);
+        else
+            err = ADIOI_GEN_open(fd);
+    }
+    if (err != NC_NOERR) goto err_out;
+
+    /* TODO: when hint no_indep_rw hint is set to true, only aggregators open
+     * the file */
+    fd->is_open = 1;
+
+    /* set file striping hints */
+    snprintf(int_str, 16, "%d", fd->hints->striping_unit);
+    MPI_Info_set(fd->info, "striping_unit", int_str);
+
+    snprintf(int_str, 16, "%d", fd->hints->striping_factor);
+    MPI_Info_set(fd->info, "striping_factor", int_str);
+
+    snprintf(int_str, 16, "%d", fd->hints->start_iodevice);
+    MPI_Info_set(fd->info, "start_iodevice", int_str);
+
+    /* set file striping hints */
+    snprintf(int_str, 16, "%d", fd->hints->cb_nodes);
+    MPI_Info_set(fd->info, "cb_nodes", int_str);
+
+    /* add hint "cb_node_list", list of aggregators' rank IDs */
+    snprintf(value, 16, "%d", fd->hints->ranklist[0]);
+    for (i=1; i<fd->hints->cb_nodes; i++) {
+        snprintf(int_str, 16, " %d", fd->hints->ranklist[i]);
+        if (strlen(value) + strlen(int_str) >= MPI_MAX_INFO_VAL-5) {
+            strcat(value, " ...");
+            break;
+        }
+        strcat(value, int_str);
+    }
+    MPI_Info_set(fd->info, "cb_node_list", value);
+
+    /* collective buffer size must be at least file striping size */
+    if (fd->hints->cb_buffer_size < fd->hints->striping_unit) {
+        fd->hints->cb_buffer_size = fd->hints->striping_unit;
+        snprintf(int_str, 16, " %d", fd->hints->cb_buffer_size);
+        MPI_Info_set(fd->info, "cb_buffer_size", int_str);
+    }
+
+    /* collective buffer is used only by I/O aggregators only */
+    if (fd->is_agg) {
+        fd->io_buf = ADIOI_Calloc(1, fd->hints->cb_buffer_size);
+        if (fd->io_buf == NULL)
+            return NC_ENOMEM;
+    }
+
+err_out:
+    MPI_Allreduce(&err, &min_err, 1, MPI_INT, MPI_MIN, comm);
+    /* All NC errors are < 0 */
+    if (min_err < 0) {
+        if (err == 0) /* close file if opened successfully */
+            close(fd->fd_sys);
+        ADIOI_Free(fd->hints);
+        if (fd->info != MPI_INFO_NULL)
+            MPI_Info_free(&(fd->info));
+        if (fd->io_buf != NULL)
+            ADIOI_Free(fd->io_buf);
+    }
+    return err;
+}
+
