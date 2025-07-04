@@ -75,8 +75,6 @@
 #define ADIOI_Info_set MPI_Info_set
 #define ADIOI_Assert assert
 #define ADIO_Status MPI_Status
-#define ADIO_EXPLICIT_OFFSET     100
-#define ADIO_INDIVIDUAL          101
 #define ADIOI_COLL_TAG(rank,iter) 0
 #define ADIOI_AINT_CAST_TO_OFFSET (MPI_Offset)
 
@@ -139,7 +137,7 @@ typedef struct {
     } fs_hints;
 } ADIOI_Hints;
 
-typedef struct ADIOI_Fl_node {
+typedef struct {
     MPI_Count count;            /* no. of contiguous blocks */
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *indices;   /* array of byte offsets of each block */
@@ -178,20 +176,10 @@ typedef struct {
                              * data sieving or deferred open */
 
     int is_open;            /* no_indep_rw, 0: not open yet 1: is open */
-    ADIO_Offset fp_ind;     /* individual file pointer (in bytes) */
 
     ADIO_Offset disp;       /* file displacement */
     MPI_Datatype filetype;  /* file type set in fileview */
                             /* etype in fileview is always MPI_BYTE in PnetCDF */
-#if 0
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count ftype_size;
-    MPI_Count ftype_extent;
-#else
-    int ftype_size;
-    MPI_Aint ftype_extent;
-#endif
-#endif
     ADIOI_Flatlist_node *flat_file; /* flattern filetype */
 
     int atomicity;          /* true=atomic, false=nonatomic */
@@ -201,15 +189,12 @@ typedef struct {
     ADIOI_Hints *hints;     /* structure containing fs-indep. info values */
     MPI_Info info;
 
-    MPI_Comm ina_comm; /* Communicator containing intra-node aggregators only */
-
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double coll_write[12];
     double coll_read[12];
 #endif
 } ADIO_FileD;
 
-typedef ADIO_FileD *ADIO_File;
 typedef ADIO_FileD *ADIO_File;
 
 typedef struct {
@@ -279,48 +264,47 @@ int ADIOI_Type_dispose(MPI_Datatype * datatype);
 ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype);
 
 void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
-                MPI_Datatype datatype, int file_ptr_type, ADIO_Offset offset,
-                ADIO_Status *status, int *error_code);
+                MPI_Datatype datatype, ADIO_Offset offset, ADIO_Status *status,
+                int *error_code);
 
 void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
-                MPI_Aint count, MPI_Datatype buftype, int file_ptr_type,
-                ADIO_Offset offset, ADIO_Status *status, int *error_code);
+                MPI_Aint count, MPI_Datatype buftype, ADIO_Offset offset,
+                ADIO_Status *status, int *error_code);
 
 
 void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
-                            MPI_Datatype datatype, int file_ptr_type,
-                            ADIO_Offset offset, ADIO_Status *status,
-                            int *error_code);
+                            MPI_Datatype datatype, ADIO_Offset offset,
+                            ADIO_Status *status, int *error_code);
 
 void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
-                MPI_Datatype buftype, int file_ptr_type, ADIO_Offset offset,
-                ADIO_Status *status, int *error_code);
+                MPI_Datatype buftype, ADIO_Offset offset, ADIO_Status *status,
+                int *error_code);
 
 #define ADIO_ReadStridedColl ADIOI_GEN_ReadStridedColl
 void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
-                MPI_Datatype datatype, int file_ptr_type, ADIO_Offset offset,
-                ADIO_Status *status, int *error_code);
+                MPI_Datatype datatype, ADIO_Offset offset, ADIO_Status *status,
+                int *error_code);
 
 void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf,
-                MPI_Aint count, MPI_Datatype buftype, int file_ptr_type,
-                ADIO_Offset offset, ADIO_Status *status, int *error_code);
+                MPI_Aint count, MPI_Datatype buftype, ADIO_Offset offset,
+                ADIO_Status *status, int *error_code);
 
 int ADIO_WriteContig(ADIO_File fd, const void *buf, MPI_Aint count,
-                MPI_Datatype bufType, int file_ptr_type,
-                ADIO_Offset offset, ADIO_Status *status, int *error_code);
+                MPI_Datatype bufType, ADIO_Offset offset, ADIO_Status *status,
+                int *error_code);
 
 int ADIO_ReadContig(ADIO_File fd, void *buf, MPI_Aint count,
-                MPI_Datatype bufType, int file_ptr_type,
-                ADIO_Offset offset, ADIO_Status *status, int *error_code);
+                MPI_Datatype bufType, ADIO_Offset offset, ADIO_Status *status,
+                int *error_code);
 
 
 #define ADIO_ReadStrided ADIOI_GEN_ReadStrided
 void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
-                MPI_Datatype datatype, int file_ptr_type, ADIO_Offset offset,
-                ADIO_Status *status, int *error_code);
+                MPI_Datatype datatype, ADIO_Offset offset, ADIO_Status *status,
+                int *error_code);
 
-void ADIOI_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount, MPI_Datatype
-                datatype, int file_ptr_type, ADIO_Offset offset,
+void ADIOI_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount,
+                MPI_Datatype datatype, ADIO_Offset offset,
                 ADIO_Offset **offset_list_ptr,
 #ifdef HAVE_MPI_LARGE_COUNT
                 ADIO_Offset **len_list_ptr,
@@ -390,8 +374,8 @@ void ADIOI_Heap_merge(ADIOI_Access *others_req, MPI_Count *count,
                 int nprocs, int nprocs_recv, MPI_Count total_elements);
 
 void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
-                MPI_Datatype datatype, int file_ptr_type, ADIO_Offset offset,
-                ADIO_Status *status, int *error_code);
+                MPI_Datatype datatype, ADIO_Offset offset, ADIO_Status *status,
+                int *error_code);
 
 #define MPIR_ERR_RECOVERABLE 0
 int MPIO_Err_create_code(int lastcode, int fatal, const char fcname[],
