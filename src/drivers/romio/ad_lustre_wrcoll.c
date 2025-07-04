@@ -583,8 +583,8 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
 
 void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
                                    MPI_Aint count, MPI_Datatype buftype,
-                                   int file_ptr_type, ADIO_Offset offset,
-                                   ADIO_Status *status, int *error_code)
+                                   ADIO_Offset offset, ADIO_Status *status,
+                                   int *error_code)
 {
     /* Uses a generalized version of the extended two-phase method described in
      * "An Extended Two-Phase Method for Accessing Sections of Out-of-Core
@@ -595,7 +595,7 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
 
     int i, j, nprocs, myrank, old_error, tmp_error;
     int do_collect = 1, is_btype_predef, free_flat_fview, do_ex_wr;
-    ADIO_Offset orig_fp, start_offset, end_offset;
+    ADIO_Offset start_offset, end_offset;
     ADIO_Offset min_st_loc = -1, max_end_loc = -1;
     Flat_list flat_fview;
     Flat_list flat_bview;
@@ -604,8 +604,6 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
-
-    orig_fp = fd->fp_ind;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 double curT = MPI_Wtime();
@@ -653,9 +651,9 @@ double curT = MPI_Wtime();
      * is simply duplicated from flat_file.  To avoid such additional memory
      * allocation, we can just reused flat_file.
      */
-    ADIOI_Calc_my_off_len(fd, count, buftype, file_ptr_type, offset,
-                          &flat_fview.off, &flat_fview.len,
-                          &start_offset, &end_offset, &flat_fview.count);
+    ADIOI_Calc_my_off_len(fd, count, buftype, offset, &flat_fview.off,
+                          &flat_fview.len, &start_offset, &end_offset,
+                          &flat_fview.count);
     flat_fview.idx = 0;
     flat_fview.rnd = 0; /* currently for flat_fview, rnd is not used at all */
     flat_fview.rem = (flat_fview.count > 0) ? flat_fview.len[0] : 0;
@@ -836,8 +834,6 @@ double curT = MPI_Wtime();
     /* If collective I/O is not necessary, use independent I/O */
     if (!do_collect) {
 
-        fd->fp_ind = orig_fp;
-
         if (is_btype_predef)
             NCI_Free(flat_bview.off);
 
@@ -851,12 +847,11 @@ double curT = MPI_Wtime();
         if (flat_fview.is_contig && flat_bview.is_contig) {
             /* both buffer and fileview are contiguous */
             ADIO_Offset off = 0;
-            if (file_ptr_type == ADIO_EXPLICIT_OFFSET)
-                off = flat_fview.off[0];
-                /* In ADIOI_Calc_my_off_len(), (offset * fd->etype_size) has
-                 * been counted into flat_fview.off[]. Similarly, fd->disp has
-                 * been counted into flat_fview.off[].
-                 */
+            off = flat_fview.off[0];
+            /* In ADIOI_Calc_my_off_len(), (offset * fd->etype_size) has been
+             * counted into flat_fview.off[]. Similarly, fd->disp has been
+             * counted into flat_fview.off[].
+             */
 
             if (free_flat_fview && flat_fview.count > 0)
                 ADIOI_Free(flat_fview.off);
@@ -865,8 +860,7 @@ double curT = MPI_Wtime();
             printf("%s %d: SWITCH to ADIO_WriteContig !!!\n",__func__,__LINE__);
 #endif
 
-            ADIO_WriteContig(fd, buf, count, buftype, file_ptr_type, off,
-                             status, error_code);
+            ADIO_WriteContig(fd, buf, count, buftype, off, status, error_code);
         } else {
             if (free_flat_fview && flat_fview.count > 0)
                 ADIOI_Free(flat_fview.off);
@@ -875,8 +869,8 @@ double curT = MPI_Wtime();
                    __func__,__LINE__);
 #endif
 
-            ADIOI_LUSTRE_WriteStrided(fd, buf, count, buftype, file_ptr_type,
-                                      offset, status, error_code);
+            ADIOI_LUSTRE_WriteStrided(fd, buf, count, buftype, offset, status,
+                                      error_code);
         }
 
         return;
@@ -1821,7 +1815,6 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
                                      write_buf[j] + (srt_off_len[j].off[i] - range_off),
                                      srt_off_len[j].len[i],
                                      MPI_BYTE,
-                                     ADIO_EXPLICIT_OFFSET,
                                      srt_off_len[j].off[i],
                                      &status, error_code);
                     if (*error_code != MPI_SUCCESS)
@@ -2141,8 +2134,8 @@ void Exchange_data_recv(
 
     /* data sieving */
     if (fd->hints->ds_write != ADIOI_HINT_DISABLE && hole) {
-        ADIO_ReadContig(fd, write_buf, range_size, MPI_BYTE,
-                        ADIO_EXPLICIT_OFFSET, range_off, &status, &err);
+        ADIO_ReadContig(fd, write_buf, range_size, MPI_BYTE, range_off,
+                        &status, &err);
         if (err != MPI_SUCCESS) {
             *error_code = MPIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
                                                __func__, __LINE__, MPI_ERR_IO,
