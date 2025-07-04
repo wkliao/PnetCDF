@@ -15,8 +15,7 @@
         if (req_off >= writebuf_off + writebuf_len) {                   \
             if (writebuf_len) {                                         \
                 ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,  \
-                                 ADIO_EXPLICIT_OFFSET, writebuf_off,    \
-                                 &status1, error_code);                 \
+                                 writebuf_off, &status1, error_code);   \
                 if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                     ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
                 if (*error_code != MPI_SUCCESS) {                       \
@@ -37,7 +36,6 @@
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                 ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             ADIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
-                            ADIO_EXPLICIT_OFFSET,                       \
                             writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = MPIO_Err_create_code(*error_code,         \
@@ -54,7 +52,7 @@
         memcpy(writebuf + req_off - writebuf_off, (char *)buf +userbuf_off, write_sz); \
         while (write_sz != req_len) {                                   \
             ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                             ADIO_EXPLICIT_OFFSET, writebuf_off, &status1, error_code); \
+                             writebuf_off, &status1, error_code);       \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                 ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             if (*error_code != MPI_SUCCESS) {                           \
@@ -75,7 +73,6 @@
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                 ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             ADIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
-                            ADIO_EXPLICIT_OFFSET,                       \
                             writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = MPIO_Err_create_code(*error_code,         \
@@ -97,8 +94,7 @@
     {                                                                   \
         if (req_off >= writebuf_off + writebuf_len) {                   \
             ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                             ADIO_EXPLICIT_OFFSET, writebuf_off, &status1, \
-                             error_code);                               \
+                             writebuf_off, &status1,  error_code);      \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = MPIO_Err_create_code(*error_code,         \
                                                    MPIR_ERR_RECOVERABLE, \
@@ -119,7 +115,7 @@
                (char *)buf + userbuf_off, write_sz);                    \
         while (write_sz != req_len) {                                   \
             ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                             ADIO_EXPLICIT_OFFSET, writebuf_off, &status1, error_code); \
+                             writebuf_off, &status1, error_code); \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = MPIO_Err_create_code(*error_code,         \
                                                    MPIR_ERR_RECOVERABLE, myname, \
@@ -141,8 +137,8 @@
     }
 
 void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
-                               MPI_Datatype datatype, int file_ptr_type,
-                               ADIO_Offset offset, ADIO_Status * status, int *error_code)
+                               MPI_Datatype datatype, ADIO_Offset offset,
+                               ADIO_Status * status, int *error_code)
 {
     /* offset is in units of etype relative to the filetype. */
     ADIOI_Flatlist_node *flat_buf, *flat_file;
@@ -169,7 +165,7 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
          */
         ADIOI_GEN_WriteStrided_naive(fd,
                                      buf,
-                                     count, datatype, file_ptr_type, offset, status, error_code);
+                                     count, datatype, offset, status, error_code);
         return;
     }
 
@@ -220,8 +216,7 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         /* noncontiguous in memory, contiguous in file. */
         flat_buf = ADIOI_Flatten_and_find(datatype);
 
-        off = (file_ptr_type == ADIO_INDIVIDUAL) ? fd->fp_ind :
-            fd->disp + offset;
+        off = fd->disp + offset;
 
         start_off = off;
         end_offset = start_off + bufsize - 1;
@@ -246,8 +241,8 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         }
 
         /* write the buffer out finally */
-        ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
-                         ADIO_EXPLICIT_OFFSET, writebuf_off, &status1, error_code);
+        ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE, writebuf_off,
+                         &status1, error_code);
 
         if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
             ADIOI_UNLOCK(fd, start_off, SEEK_SET, bufsize);
@@ -256,61 +251,30 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
             return;
         }
         ADIOI_Free(writebuf);
-        if (file_ptr_type == ADIO_INDIVIDUAL)
-            fd->fp_ind = off;
     } else {
         /* noncontiguous in file */
         flat_file = fd->flat_file;
         disp = fd->disp;
 
-        if (file_ptr_type == ADIO_INDIVIDUAL) {
-            /* Wei-keng reworked type processing to be a bit more efficient */
-            offset = fd->fp_ind - disp;
-            n_filetypes = (offset - flat_file->indices[0]) / filetype_extent;
-            offset -= (ADIO_Offset) n_filetypes *filetype_extent;
-            /* now offset is local to this extent */
+        n_etypes_in_filetype = filetype_size;
+        n_filetypes = offset / n_etypes_in_filetype;
+        etype_in_filetype = offset % n_etypes_in_filetype;
+        size_in_filetype = etype_in_filetype;
 
-            /* find the block where offset is located, skip blocklens[i]==0 */
-            for (i = 0; i < flat_file->count; i++) {
-                ADIO_Offset dist;
-                if (flat_file->blocklens[i] == 0)
-                    continue;
-                dist = flat_file->indices[i] + flat_file->blocklens[i] - offset;
-                /* fwr_size is from offset to the end of block i */
-                if (dist == 0) {
-                    i++;
-                    offset = flat_file->indices[i];
-                    fwr_size = flat_file->blocklens[i];
-                    break;
-                }
-                if (dist > 0) {
-                    fwr_size = dist;
-                    break;
-                }
+        sum = 0;
+        for (i = 0; i < flat_file->count; i++) {
+            sum += flat_file->blocklens[i];
+            if (sum > size_in_filetype) {
+                st_index = i;
+                fwr_size = sum - size_in_filetype;
+                abs_off_in_filetype = flat_file->indices[i] +
+                    size_in_filetype - (sum - flat_file->blocklens[i]);
+                break;
             }
-            st_index = i;       /* starting index in flat_file->indices[] */
-            offset += disp + (ADIO_Offset) n_filetypes *filetype_extent;
-        } else {
-            n_etypes_in_filetype = filetype_size;
-            n_filetypes = offset / n_etypes_in_filetype;
-            etype_in_filetype = offset % n_etypes_in_filetype;
-            size_in_filetype = etype_in_filetype;
-
-            sum = 0;
-            for (i = 0; i < flat_file->count; i++) {
-                sum += flat_file->blocklens[i];
-                if (sum > size_in_filetype) {
-                    st_index = i;
-                    fwr_size = sum - size_in_filetype;
-                    abs_off_in_filetype = flat_file->indices[i] +
-                        size_in_filetype - (sum - flat_file->blocklens[i]);
-                    break;
-                }
-            }
-
-            /* abs. offset in bytes in the file */
-            offset = disp + (ADIO_Offset) n_filetypes *filetype_extent + abs_off_in_filetype;
         }
+
+        /* abs. offset in bytes in the file */
+        offset = disp + (ADIO_Offset) n_filetypes *filetype_extent + abs_off_in_filetype;
 
         start_off = offset;
 
@@ -332,26 +296,10 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
             if (fd->hints->ds_write != ADIOI_HINT_DISABLE)
                 ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
             ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
-                             ADIO_EXPLICIT_OFFSET, writebuf_off, &status1, error_code);
+                             writebuf_off, &status1, error_code);
             if (fd->hints->ds_write != ADIOI_HINT_DISABLE)
                 ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
 
-            if (file_ptr_type == ADIO_INDIVIDUAL) {
-                /* update MPI-IO file pointer to point to the first byte
-                 * that can be accessed in the fileview. */
-                fd->fp_ind = offset + bufsize;
-                if (bufsize == fwr_size) {
-                    do {
-                        st_index++;
-                        if (st_index == flat_file->count) {
-                            st_index = 0;
-                            n_filetypes++;
-                        }
-                    } while (flat_file->blocklens[st_index] == 0);
-                    fd->fp_ind = disp + flat_file->indices[st_index]
-                    + (ADIO_Offset) n_filetypes *filetype_extent;
-                }
-            }
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
             MPI_Status_set_elements_x(status, datatype, count);
 #else
@@ -504,7 +452,7 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         /* write the buffer out finally */
         if (writebuf_len) {
             ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
-                             ADIO_EXPLICIT_OFFSET, writebuf_off, &status1, error_code);
+                             writebuf_off, &status1, error_code);
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE)
                 ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
             if (*error_code != MPI_SUCCESS)
@@ -514,9 +462,6 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
             ADIOI_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         ADIOI_Free(writebuf);
-
-        if (file_ptr_type == ADIO_INDIVIDUAL)
-            fd->fp_ind = off;
     }
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
