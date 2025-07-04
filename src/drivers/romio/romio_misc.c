@@ -554,8 +554,6 @@ int ADIO_File_set_view(ADIO_File     fd,
     int is_predef, err=NC_NOERR, filetype_is_contig;
     MPI_Datatype copy_filetype;
 
-// printf("%s line %d: filetype = %s\n",__func__,__LINE__,(filetype == MPI_DATATYPE_NULL)?"NULL":"NOT NULL");
-
     if (filetype == MPI_DATATYPE_NULL) { /* called from intra_node_aggregation() */
         fd->flat_file = NCI_Malloc(sizeof(ADIOI_Flatlist_node));
         fd->flat_file->indices   = offsets;
@@ -579,18 +577,6 @@ int ADIO_File_set_view(ADIO_File     fd,
 
     if ((disp < 0) && (disp != MPI_DISPLACEMENT_CURRENT))
         return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, disp");
-
-#if 0
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count lb;
-    MPI_Type_size_c(filetype, &fd->ftype_size);
-    MPI_Type_get_extent_c(filetype, &lb, &fd->ftype_extent);
-#else
-    MPI_Aint lb;
-    MPI_Type_size(filetype, &fd->ftype_size);
-    MPI_Type_get_extent(filetype, &lb, &fd->ftype_extent);
-#endif
-#endif
 
     /* When info is MPI_INFO_NULL, ADIO_File_SetInfo() is an independent call.
      * Otherwise, it is collective, because it checks hint consistency.
