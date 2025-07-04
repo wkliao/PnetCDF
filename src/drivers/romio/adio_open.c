@@ -1486,5 +1486,26 @@ int ADIO_File_close(ADIO_File *fh)
         ADIOI_Flattened_type_keyval = MPI_KEYVAL_INVALID;
     }
 
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    int i, ntimers, rank;
+    double tt[16], max_t[16];
+
+    /* print two-phase I/O timing breakdown */
+    MPI_Comm_rank((*fh)->comm, &rank);
+    ntimers = 12;
+    for (i=0; i<ntimers; i++) tt[i] = (*fh)->coll_write[i];
+    MPI_Reduce(tt, max_t, ntimers, MPI_DOUBLE, MPI_MAX, 0, (*fh)->comm);
+    if (rank == 0 && max_t[11] > 0)
+        printf("%s: TWO-PHASE write init %5.2f pwrite %5.2f post %5.2f comm %5.2f collw %5.2f ntimes %d\n",
+        __func__, max_t[1], max_t[2], max_t[4], max_t[3], max_t[0], (int)(max_t[11]));
+
+    ntimers = 12;
+    for (i=0; i<ntimers; i++) tt[i] = (*fh)->coll_write[i];
+    MPI_Reduce(tt, max_t, ntimers, MPI_DOUBLE, MPI_MAX, 0, (*fh)->comm);
+    if (rank == 0 && max_t[11] > 0)
+        printf("%s: TWO-PHASE read  init %5.2f pread  %5.2f post %5.2f wait %5.2f collr %5.2f ntimes %d\n",
+        __func__, max_t[1], max_t[2], max_t[4], max_t[3], max_t[0], (int)(max_t[11]));
+#endif
+
     return err;
 }
