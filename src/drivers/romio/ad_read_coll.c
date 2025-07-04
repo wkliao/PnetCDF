@@ -212,7 +212,7 @@ double curT = MPI_Wtime();
     ADIOI_Calc_file_domains(st_offsets, end_offsets, nprocs,
                             nprocs_for_coll, &min_st_offset,
                             &fd_start, &fd_end,
-                            fd->hints->min_fdomain_size, &fd_size, fd->hints->striping_unit);
+                            &fd_size, fd->hints->striping_unit);
 // printf("%s at %d: ------------------ min_st_offset=%lld fd_size=%lld fd_start=%lld %lld fd_end=%lld %lld\n",__func__,__LINE__,min_st_offset,fd_size,fd_start[0],fd_start[1],fd_end[0],fd_end[1]);
 
     /* calculate where the portions of the access requests of this process
