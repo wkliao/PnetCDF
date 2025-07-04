@@ -551,7 +551,7 @@ int ADIO_File_set_view(ADIO_File     fd,
 #endif
 )
 {
-    int is_predef, i, err=NC_NOERR, filetype_is_contig;
+    int is_predef, err=NC_NOERR, filetype_is_contig;
     MPI_Datatype copy_filetype;
 
 // printf("%s line %d: filetype = %s\n",__func__,__LINE__,(filetype == MPI_DATATYPE_NULL)?"NULL":"NOT NULL");
@@ -569,15 +569,11 @@ int ADIO_File_set_view(ADIO_File     fd,
         /* mark this request comes from intra_node_aggregation() */
         fd->filetype = MPI_DATATYPE_NULL;
 
-        /* Note: PnetCDF uses only ADIO_EXPLICIT_OFFSET. Thus, fp_ind can be
-         * removed.
-         *
-         * In addition, when called from INA subroutines, the passed-in offsets
+        /* In addition, when called from INA subroutines, the passed-in offsets
          * and lengths are not based on MPI-IO fileview. They are flattened
          * byte offsets and sizes.
          */
         fd->disp = 0;
-        fd->fp_ind = 0;
         return NC_NOERR;
     }
 
@@ -637,20 +633,6 @@ int ADIO_File_set_view(ADIO_File     fd,
      * of a file. The displacement defines the location where a view begins.
      */
     fd->disp = disp;
-
-    /* reset MPI-IO file pointer to point to the first byte that can
-     * be accessed in this view. */
-
-    if (filetype_is_contig)
-        fd->fp_ind = disp;
-    else {
-        for (i = 0; i < fd->flat_file->count; i++) {
-            if (fd->flat_file->blocklens[i]) {
-                fd->fp_ind = disp + fd->flat_file->indices[i];
-                break;
-            }
-        }
-    }
 
     return err;
 }
