@@ -218,7 +218,7 @@ ncmpio_close(void *ncdp)
             MPI_Reduce(tt, max_t, ntimers+3, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
             put_time = max_t[ntimers+2];
             if (ncp->rank == 0)
-                printf("%s: INA put %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f = %5.2f\n",
+                printf("%s: INA put timing %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f = %5.2f\n",
                 __func__, max_t[ntimers],max_t[ntimers+1],max_t[0],max_t[1],max_t[2],max_t[3],put_time);
         }
         if (max_npairs_get > 0) { /* get npairs > 0 */
@@ -234,38 +234,8 @@ ncmpio_close(void *ncdp)
 
             MPI_Reduce(tt, max_t, ntimers+3, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
             if (ncp->rank == 0)
-                printf("%s: INA get %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f = %5.2f\n",
+                printf("%s: INA get timing %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f = %5.2f\n",
                 __func__, max_t[ntimers],max_t[ntimers+1],max_t[0],max_t[1],max_t[2],max_t[3],max_t[ntimers+2]);
-        }
-    }
-    else if (ncp->rank == 0)
-        printf("%s: INA is disabled\n",__func__);
-
-    /* print two-phase I/O timing breakdown */
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        if (max_npairs_put > 0) { /* put npairs > 0 */
-            ntimers = 12;
-            for (i=0; i<ntimers; i++) tt[i] = 0;
-            if (ncp->adio_fh != NULL) {
-                for (i=0; i<ntimers; i++)
-                    tt[i] = ncp->adio_fh->coll_write[i];
-            }
-            MPI_Reduce(tt, max_t, ntimers, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
-            if (ncp->rank == 0)
-                printf("%s: TWO-PHASE put intra %5.2f init %5.2f pwrite %5.2f post %5.2f comm %5.2f collw %5.2f ntimes %d\n",
-                   __func__, put_time, max_t[1], max_t[2], max_t[4], max_t[3], max_t[0], (int)(max_t[11]));
-        }
-        if (max_npairs_get > 0) { /* get npairs > 0 */
-            ntimers = 12;
-            for (i=0; i<ntimers; i++) tt[i] = 0;
-            if (ncp->adio_fh != NULL) {
-                for (i=0; i<ntimers; i++)
-                    tt[i] = ncp->adio_fh->coll_read[i];
-            }
-            MPI_Reduce(tt, max_t, ntimers, MPI_DOUBLE, MPI_MAX, 0, ncp->comm);
-            if (ncp->rank == 0)
-                printf("%s: TWO-PHASE get intra %5.2f init %5.2f pread %5.2f post %5.2f wait %5.2f collr %5.2f ntimes %d\n",
-                    __func__, get_time, max_t[1], max_t[2], max_t[4], max_t[3], max_t[0], (int)(max_t[11]));
         }
     }
 #endif
