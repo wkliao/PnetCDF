@@ -11,10 +11,6 @@
 
 #include <adio.h>
 
-#ifdef MPL_USE_DBG_LOGGING
-#define RDCOLL_DEBUG 1
-#endif
-
 /* prototypes of functions used for collective reads only. */
 static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
                                 datatype, int nprocs,
@@ -122,14 +118,6 @@ double curT = MPI_Wtime();
         ADIOI_Calc_my_off_len(fd, count, datatype, offset, &offset_list,
                               &len_list, &start_offset, &end_offset,
                               &contig_access_count);
-// printf("%s at %d: contig_access_count=%lld start_offset=%lld end_offset=%lld offset_list=%lld %lld len_list=%lld %lld\n",__func__,__LINE__,contig_access_count,start_offset,end_offset,offset_list[0],offset_list[1],len_list[0],len_list[1]);
-
-#ifdef RDCOLL_DEBUG
-        for (MPI_Count i = 0; i < contig_access_count; i++) {
-            DBG_FPRINTF(stderr, "rank %d  off %lld  len %lld\n",
-                        myrank, (long long) offset_list[i], (long long) len_list[i]);
-        }
-#endif
 
         /* each process communicates its start and end offsets to other
          * processes. The result is an array each of start and end offsets
@@ -151,7 +139,6 @@ double curT = MPI_Wtime();
 
     ADIOI_Datatype_iscontig(datatype, &buftype_is_contig);
 
-// printf("%s at %d: ------------------ interleave_count=%d\n",__func__,__LINE__,interleave_count);
     if (fd->hints->cb_read == ADIOI_HINT_DISABLE
         || (!interleave_count && (fd->hints->cb_read == ADIOI_HINT_AUTO))) {
         /* don't do aggregation */
@@ -167,8 +154,6 @@ double curT = MPI_Wtime();
         else
             ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
-// printf("%s at %d: ------------------\n",__func__,__LINE__);
-
         *error_code = MPI_SUCCESS;
         if (count == 0) return;
 
@@ -180,15 +165,11 @@ double curT = MPI_Wtime();
                 off = (fd->flat_file->count) ? fd->flat_file->indices[0] : 0;
             else
                 off = fd->disp + offset;
-// printf("%s at %d: SWITCH indep READ ------------------ off=%lld count=%lld\n",__func__,__LINE__, off, count);
             ADIO_ReadContig(fd, buf, count, datatype, off, status, error_code);
         } else
-{
-// printf("%s at %d: SWITCH indep READ ------------------\n",__func__,__LINE__);
-
             ADIO_ReadStrided(fd, buf, count, datatype, offset, status, error_code);
-}
 
+// printf("%s at %d: SWITCH indep READ ------------------ off=%lld count=%lld\n",__func__,__LINE__, off, count);
         return;
     }
 
@@ -213,7 +194,6 @@ double curT = MPI_Wtime();
                             nprocs_for_coll, &min_st_offset,
                             &fd_start, &fd_end,
                             &fd_size, fd->hints->striping_unit);
-// printf("%s at %d: ------------------ min_st_offset=%lld fd_size=%lld fd_start=%lld %lld fd_end=%lld %lld\n",__func__,__LINE__,min_st_offset,fd_size,fd_start[0],fd_start[1],fd_end[0],fd_end[1]);
 
     /* calculate where the portions of the access requests of this process
      * are located in terms of the file domains.  this could be on the same
@@ -230,15 +210,6 @@ double curT = MPI_Wtime();
     ADIOI_Calc_my_req(fd, offset_list, len_list, contig_access_count,
                       min_st_offset, fd_start, fd_end, fd_size,
                       nprocs, &count_my_req_procs, &count_my_req_per_proc, &my_req, &buf_idx);
-#if 0
-printf("%s at %d: my_req count=%lld %lld offsets=(%lld %lld) (%lld %lld) lens=(%lld %lld) (%lld %lld) buf_idx=%ld %ld\n",__func__,__LINE__,
-my_req[0].count, my_req[1].count,
-my_req[0].offsets[0],my_req[0].offsets[1],
-my_req[1].offsets[0],my_req[1].offsets[1],
-my_req[0].lens[0],my_req[0].lens[1],
-my_req[1].lens[0],my_req[1].lens[1],
-buf_idx[0],buf_idx[1]);
-#endif
 
     /* perform a collective communication in order to distribute the
      * data calculated above.  fills in the following:
@@ -411,17 +382,6 @@ assert(0);
         flat_file = fd->flat_file;
         disp = fd->disp;
 
-#ifdef RDCOLL_DEBUG
-        {
-            int ii;
-            DBG_FPRINTF(stderr, "flattened %3lld : ", (long long) flat_file->count);
-            for (ii = 0; ii < flat_file->count; ii++) {
-                DBG_FPRINTF(stderr, "%16lld:%-16lld", (long long) flat_file->indices[ii],
-                            (long long) flat_file->blocklens[ii]);
-            }
-            DBG_FPRINTF(stderr, "\n");
-        }
-#endif
         n_etypes_in_filetype = filetype_size;
         n_filetypes = offset / n_etypes_in_filetype;
         etype_in_filetype = offset % n_etypes_in_filetype;
@@ -700,16 +660,9 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
             MPI_Status read_status;
             ADIOI_Assert(size == (int) size);
             /* This should be only reached by I/O aggregators only */
-// printf("%s at %d: ------------------ off=%lld size=%lld\n",__func__,__LINE__,off,size);
 
             ADIO_ReadContig(fd, read_buf + for_curr_iter, (int) size, MPI_BYTE,
                             off, &read_status, error_code);
-/*
-float *wkl = (float*)malloc(size);
-memcpy(wkl, read_buf + for_curr_iter, size);
-ncmpii_in_swapn(wkl, size/4, 4);
-for (i=0; i<size/4; i++) printf("\twkl[%d/%lld]=%.1f\n",i,size/4,wkl[i]);
-*/
 
             if (*error_code != MPI_SUCCESS) {
                 /* TODO: proper error return */
@@ -738,9 +691,6 @@ for (i=0; i<size/4; i++) printf("\twkl[%d/%lld]=%.1f\n",i,size/4,wkl[i]);
         for_next_iter = 0;
 
         for (i = 0; i < nprocs; i++) {
-#ifdef RDCOLL_DEBUG
-            DBG_FPRINTF(stderr, "rank %d, i %d, others_count %lld\n", rank, i, others_req[i].count);
-#endif
             if (others_req[i].count) {
                 start_pos[i] = curr_offlen_ptr[i];
                 MPI_Count j = 0;
@@ -902,7 +852,6 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
     if (buftype_is_contig) {
         for (i = 0; i < nprocs; i++) {
             if (recv_size[i]) {
-// printf("%s at %d: ------------------ recv from %d size=%lld buf_idx=%ld\n",__func__,__LINE__,i,recv_size[i],buf_idx[i]);
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Irecv_c(((char *) buf) + buf_idx[i], recv_size[i],
                             MPI_BYTE, i, ADIOI_COLL_TAG(i, iter), fd->comm, requests + j);
@@ -932,10 +881,6 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
                             ADIOI_COLL_TAG(i, iter), fd->comm, requests + j);
 #endif
                 j++;
-#ifdef RDCOLL_DEBUG
-                DBG_FPRINTF(stderr, "node %d, recv_size %lld, tag %d \n",
-                            myrank, recv_size[i], ADIOI_COLL_TAG(i, iter));
-#endif
             }
         }
     }
@@ -966,7 +911,6 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
 #endif
             /* absolute displacement; use MPI_BOTTOM in send */
             MPI_Type_commit(&send_type);
-// printf("%s at %d: ------------------ send to %d size=%lld count=%lld others_req lens=%lld %lld mem_ptrs=%lld %lld\n",__func__,__LINE__,i,send_size[i],count[i],others_req[i].lens[0],others_req[i].lens[1],others_req[i].mem_ptrs[0],others_req[i].mem_ptrs[1]);
             MPI_Isend(MPI_BOTTOM, 1, send_type, i, ADIOI_COLL_TAG(i, iter),
                       fd->comm, requests + nprocs_recv + j);
             MPI_Type_free(&send_type);
