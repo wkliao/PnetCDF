@@ -10,9 +10,8 @@
 #include <adio.h>
 
 void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
-                                 MPI_Datatype buftype, int file_ptr_type,
-                                 ADIO_Offset offset, ADIO_Status * status, int
-                                 *error_code)
+                                 MPI_Datatype buftype, ADIO_Offset offset,
+                                 ADIO_Status * status, int *error_code)
 {
     /* offset is in units of etype relative to the filetype. */
 
@@ -56,7 +55,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
 
         flat_buf = ADIOI_Flatten_and_find(buftype);
 
-        off = (file_ptr_type == ADIO_INDIVIDUAL) ? fd->fp_ind : fd->disp + offset;
+        off = fd->disp + offset;
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -82,7 +81,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                 ADIO_ReadContig(fd,
                                 (char *) buf + userbuf_off,
                                 req_len,
-                                MPI_BYTE, ADIO_EXPLICIT_OFFSET, req_off, &status1, error_code);
+                                MPI_BYTE, req_off, &status1, error_code);
                 if (*error_code != MPI_SUCCESS)
                     return;
 
@@ -94,17 +93,12 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
         if ((fd->atomicity) && ADIO_Feature(fd, ADIO_LOCKS)) {
             ADIOI_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
         }
-
-        if (file_ptr_type == ADIO_INDIVIDUAL)
-            fd->fp_ind = off;
-
     }
 
     else {      /* noncontiguous in file */
         int f_index, st_index = 0;
         ADIO_Offset st_n_filetypes;
         ADIO_Offset st_frd_size;
-        int flag;
 
         /* First we're going to calculate a set of values for use in all
          * the noncontiguous in file cases:
@@ -123,48 +117,25 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
         flat_file = fd->flat_file;
         disp = fd->disp;
 
-        if (file_ptr_type == ADIO_INDIVIDUAL) {
-            start_off = fd->fp_ind;     /* in bytes */
-            n_filetypes = -1;
-            flag = 0;
-            while (!flag) {
-                n_filetypes++;
-                for (f_index = 0; f_index < flat_file->count; f_index++) {
-                    if (disp + flat_file->indices[f_index] +
-                        n_filetypes * (ADIO_Offset) filetype_extent +
-                        flat_file->blocklens[f_index] >= start_off) {
-                        /* this block contains our starting position */
+        n_etypes_in_filetype = filetype_size;
+        n_filetypes = offset / n_etypes_in_filetype;
+        etype_in_filetype = (int) (offset % n_etypes_in_filetype);
+        size_in_filetype = (unsigned) etype_in_filetype;
 
-                        st_index = f_index;
-                        frd_size = disp + flat_file->indices[f_index] +
-                            n_filetypes * (ADIO_Offset) filetype_extent +
-                            flat_file->blocklens[f_index] - start_off;
-                        flag = 1;
-                        break;
-                    }
-                }
+        sum = 0;
+        for (f_index = 0; f_index < flat_file->count; f_index++) {
+            sum += flat_file->blocklens[f_index];
+            if (sum > size_in_filetype) {
+                st_index = f_index;
+                frd_size = sum - size_in_filetype;
+                abs_off_in_filetype = flat_file->indices[f_index] +
+                    size_in_filetype - (sum - flat_file->blocklens[f_index]);
+                break;
             }
-        } else {
-            n_etypes_in_filetype = filetype_size;
-            n_filetypes = offset / n_etypes_in_filetype;
-            etype_in_filetype = (int) (offset % n_etypes_in_filetype);
-            size_in_filetype = (unsigned) etype_in_filetype;
-
-            sum = 0;
-            for (f_index = 0; f_index < flat_file->count; f_index++) {
-                sum += flat_file->blocklens[f_index];
-                if (sum > size_in_filetype) {
-                    st_index = f_index;
-                    frd_size = sum - size_in_filetype;
-                    abs_off_in_filetype = flat_file->indices[f_index] +
-                        size_in_filetype - (sum - flat_file->blocklens[f_index]);
-                    break;
-                }
-            }
-
-            /* abs. offset in bytes in the file */
-            start_off = disp + n_filetypes * (ADIO_Offset) filetype_extent + abs_off_in_filetype;
         }
+
+        /* abs. offset in bytes in the file */
+        start_off = disp + n_filetypes * (ADIO_Offset) filetype_extent + abs_off_in_filetype;
 
         st_frd_size = frd_size;
         st_n_filetypes = n_filetypes;
@@ -234,7 +205,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                     ADIO_ReadContig(fd,
                                     (char *) buf + userbuf_off,
                                     req_len,
-                                    MPI_BYTE, ADIO_EXPLICIT_OFFSET, req_off, &status1, error_code);
+                                    MPI_BYTE, req_off, &status1, error_code);
                     if (*error_code != MPI_SUCCESS)
                         return;
                 }
@@ -297,7 +268,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                     ADIO_ReadContig(fd,
                                     (char *) buf + userbuf_off,
                                     req_len,
-                                    MPI_BYTE, ADIO_EXPLICIT_OFFSET, req_off, &status1, error_code);
+                                    MPI_BYTE, req_off, &status1, error_code);
                     if (*error_code != MPI_SUCCESS)
                         return;
                 }
@@ -344,9 +315,6 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
         if ((fd->atomicity) && ADIO_Feature(fd, ADIO_LOCKS)) {
             ADIOI_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
         }
-
-        if (file_ptr_type == ADIO_INDIVIDUAL)
-            fd->fp_ind = off;
     }   /* end of (else noncontiguous in file) */
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
