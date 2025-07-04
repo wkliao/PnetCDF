@@ -40,9 +40,6 @@ static int ADIOI_Flattened_type_delete(MPI_Datatype datatype,
 
 static ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype);
 
-#ifdef WKL_MALLOC
-int flat_hits, flat_miss;
-#endif
 ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype datatype)
 {
     if (ADIOI_Flattened_type_keyval == MPI_KEYVAL_INVALID) {
@@ -51,28 +48,8 @@ ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype datatype)
                                ADIOI_Flattened_type_delete, &ADIOI_Flattened_type_keyval, NULL);
     }
 
-#if 1
     /* Caching flat list is not necessary, as PnetCDF never reuses a datatype */
     return ADIOI_Flatten_datatype(datatype);
-#else
-    ADIOI_Flatlist_node *node;
-    int flag = 0;
-
-    MPI_Type_get_attr(datatype, ADIOI_Flattened_type_keyval, &node, &flag);
-    if (flag == 0) {
-        node = ADIOI_Flatten_datatype(datatype);
-#ifdef WKL_MALLOC
-flat_miss++;
-#endif
-    }
-else
-printf("%s %d:------- MPI_Type_get_attr hit\n",__func__,__LINE__);
-#ifdef WKL_MALLOC
-else flat_hits++;
-#endif
-
-    return node;
-#endif
 }
 
 #ifdef HAVE_MPIX_TYPE_IOV
@@ -163,9 +140,6 @@ ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 
 #else
 
-#ifdef WKL_MALLOC
-int flat_mem;
-#endif
 static ADIOI_Flatlist_node *flatlist_node_new(MPI_Datatype datatype, MPI_Count count)
 {
     size_t alloc_sz;
@@ -187,9 +161,6 @@ static ADIOI_Flatlist_node *flatlist_node_new(MPI_Datatype datatype, MPI_Count c
     flat->blocklens = (int*) (flat->indices + flat->count);
 #endif
 
-#ifdef WKL_MALLOC
-flat_mem += sizeof(ADIOI_Flatlist_node) + flat->count * 2 * sizeof(ADIO_Offset);
-#endif
     return flat;
 }
 
