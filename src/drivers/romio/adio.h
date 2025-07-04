@@ -56,19 +56,11 @@
 #define ADIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
 #define ADIO_FSTYPE_CHECK  0      /* Use PnetCDF ADIO drivers */
 
-#if 1
 #define ADIOI_Strdup NCI_Strdup
 #define ADIOI_Malloc NCI_Malloc
 #define ADIOI_Calloc(a,b) NCI_Calloc((size_t)a,b)
 #define ADIOI_Realloc NCI_Realloc
 #define ADIOI_Free NCI_Free
-#else
-#define ADIOI_Strdup strdup
-#define ADIOI_Malloc malloc
-#define ADIOI_Calloc(a,b) calloc((size_t)a,b)
-#define ADIOI_Realloc realloc
-#define ADIOI_Free free
-#endif
 
 #define ADIOI_Strncpy strncpy
 #define ADIOI_Info_get MPI_Info_get
@@ -126,7 +118,6 @@ typedef struct {
     char *cb_config_list;
     int *ranklist;
 
-    int min_fdomain_size;
     union {
         struct {
             int num_osts;
@@ -317,8 +308,8 @@ void ADIOI_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount,
 void ADIOI_Calc_file_domains(ADIO_Offset * st_offsets,
                 ADIO_Offset *end_offsets, int nprocs, int nprocs_for_coll,
                 ADIO_Offset *min_st_offset_ptr, ADIO_Offset **fd_start_ptr,
-                ADIO_Offset **fd_end_ptr, int min_fd_size,
-                ADIO_Offset *fd_size_ptr, int striping_unit);
+                ADIO_Offset **fd_end_ptr, ADIO_Offset *fd_size_ptr,
+                int striping_unit);
 void ADIOI_Calc_my_req(ADIO_File fd, ADIO_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                 ADIO_Offset *len_list,
