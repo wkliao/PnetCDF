@@ -22,7 +22,9 @@ H_SRCS = adio.h
 C_SRCS = romio_misc.c \
          romio_read.c \
          romio_write.c \
-         adio_open.c \
+         ad_open.c \
+         ad_close.c \
+         ad_fstype.c \
          ad_aggregate.c \
          ad_read_str.c \
          ad_read_coll.c \
@@ -33,6 +35,7 @@ C_SRCS = romio_misc.c \
          ad_subarray.c \
          ad_darray.c \
          ad_utils.c \
+         ad_lustre_open.c \
          ad_lustre_wrcoll.c \
          ad_lustre_wrstr.c \
          ad_iscontig.c \
