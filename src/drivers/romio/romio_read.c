@@ -22,7 +22,6 @@ int ADIO_ReadContig(ADIO_File     fd,
                     void         *buf,
                     MPI_Aint      count,
                     MPI_Datatype  bufType,
-                    int           file_ptr_type,
                     ADIO_Offset   offset,
                     ADIO_Status  *status,
                     int          *error_code)
@@ -43,11 +42,8 @@ int ADIO_ReadContig(ADIO_File     fd,
 #endif
     len = count * bufType_size;
 
-    if (file_ptr_type == ADIO_INDIVIDUAL)
-        off = fd->fp_ind; /* offset is ignored */
-    else /* ADIO_EXPLICIT_OFFSET */
-        off = offset;
-        // off = fd->disp + fd->etype_size * offset;
+    off = offset;
+    // off = fd->disp + fd->etype_size * offset;
 
 // int rank; MPI_Comm_rank(MPI_COMM_WORLD,&rank); printf("%s at %d: pread off=%lld len=%lld\n",__func__,__LINE__,off,len);
 
@@ -68,10 +64,6 @@ int ADIO_ReadContig(ADIO_File     fd,
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     fd->coll_read[2] += MPI_Wtime() - timing;
 #endif
-
-    if (file_ptr_type == ADIO_INDIVIDUAL)
-        fd->fp_ind += bytes_xfered;
-    /* if ADIO_EXPLICIT_OFFSET, do not update file pointer */
 
 ioerr:
     if (err == -1) {
@@ -97,7 +89,6 @@ int file_read(ADIO_File     fd,
               void         *buf,
               int           count,
               MPI_Datatype  bufType,
-              int           file_ptr_type,
               MPI_Status   *status)
 {
     int err=NC_NOERR, buftype_is_contig, filetype_is_contig;
@@ -126,12 +117,10 @@ int file_read(ADIO_File     fd,
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint rcount = (MPI_Aint)count * bufType_size;
-        err = ADIO_ReadContig(fd, buf, rcount, MPI_BYTE, file_ptr_type,
-                              offset, status, NULL);
+        err = ADIO_ReadContig(fd, buf, rcount, MPI_BYTE, offset, status, NULL);
     }
     else {
-        ADIO_ReadStrided(fd, buf, count, bufType, file_ptr_type,
-                         offset, status, &err);
+        ADIO_ReadStrided(fd, buf, count, bufType, offset, status, &err);
         if (err != MPI_SUCCESS)
             err = ncmpii_error_mpi2nc(err, __func__);
         else
@@ -163,8 +152,7 @@ int ADIO_File_read_at(ADIO_File     fh,
     /* PnetCDF has only 2 modes: read-only and read-write */
     // if (fh->access_mode & MPI_MODE_RDONLY) return NC_EPERM;
 
-    err = file_read(fh, offset, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
-                     status);
+    err = file_read(fh, offset, buf, count, bufType, status);
 
     return err;
 }
@@ -188,7 +176,7 @@ int ADIO_File_read(ADIO_File     fh,
     /* PnetCDF has only 2 modes: read-only and read-write */
     // if (fh->access_mode & MPI_MODE_RDONLY) return NC_EPERM;
 
-    err = file_read(fh, 0, buf, count, bufType, ADIO_INDIVIDUAL, status);
+    err = file_read(fh, 0, buf, count, bufType, status);
 
     return err;
 }
@@ -214,8 +202,7 @@ int ADIO_File_read_at_all(ADIO_File     fh,
     /* PnetCDF has only 2 modes: read-only and read-write */
     // if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR) st = NC_EPERM;
 
-    ADIO_ReadStridedColl(fh, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
-                         offset, status, &err);
+    ADIO_ReadStridedColl(fh, buf, count, bufType, offset, status, &err);
     if (err != MPI_SUCCESS && st == NC_NOERR)
         st = ncmpii_error_mpi2nc(err, __func__);
 
@@ -239,8 +226,7 @@ int ADIO_File_read_all(ADIO_File     fh,
     /* PnetCDF has only 2 modes: read-only and read-write */
     // if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR) st = NC_EPERM;
 
-    ADIO_ReadStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
-                         0, status, &err);
+    ADIO_ReadStridedColl(fh, buf, count, bufType, 0, status, &err);
     if (err != MPI_SUCCESS && st == NC_NOERR)
         st = ncmpii_error_mpi2nc(err, __func__);
 
