@@ -61,9 +61,8 @@ static void ADIOI_Fill_send_buffer(ADIO_File fd, void *buf,
                   MPI_Aint buftype_extent);
 
 void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
-                                MPI_Datatype datatype, int file_ptr_type,
-                                ADIO_Offset offset, ADIO_Status * status, int
-                                *error_code)
+                                MPI_Datatype datatype, ADIO_Offset offset,
+                                ADIO_Status * status, int *error_code)
 {
 /* Uses a generalized version of the extended two-phase method described
    in "An Extended Two-Phase Method for Accessing Sections of
@@ -84,7 +83,7 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
     int interleave_count = 0, buftype_is_contig;
     MPI_Count *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
-    ADIO_Offset orig_fp, start_offset, end_offset, fd_size, min_st_offset, off;
+    ADIO_Offset start_offset, end_offset, fd_size, min_st_offset, off;
     ADIO_Offset *offset_list = NULL, *st_offsets = NULL, *fd_start = NULL,
         *fd_end = NULL, *end_offsets = NULL;
     MPI_Aint *buf_idx = NULL;
@@ -106,7 +105,6 @@ double curT = MPI_Wtime();
  * is stored in the hints off the ADIO_File structure
  */
     nprocs_for_coll = fd->hints->cb_nodes;
-    orig_fp = fd->fp_ind;
 
     /* only check for interleaving if cb_write isn't disabled */
     if (fd->hints->cb_write != ADIOI_HINT_DISABLE) {
@@ -116,9 +114,9 @@ double curT = MPI_Wtime();
         /* Note: end_offset points to the last byte-offset that will be accessed.
          * e.g., if start_offset=0 and 100 bytes to be read, end_offset=99 */
 
-        ADIOI_Calc_my_off_len(fd, count, datatype, file_ptr_type, offset,
-                              &offset_list, &len_list, &start_offset,
-                              &end_offset, &contig_access_count);
+        ADIOI_Calc_my_off_len(fd, count, datatype, offset, &offset_list,
+                              &len_list, &start_offset, &end_offset,
+                              &contig_access_count);
 
         /* each process communicates its start and end offsets to other
          * processes. The result is an array each of start and end offsets stored
@@ -153,7 +151,6 @@ double curT = MPI_Wtime();
             return;
         }
 
-        fd->fp_ind = orig_fp;
         if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL)
             filetype_is_contig = (fd->flat_file->count <= 1);
         else if (fd->filetype == MPI_BYTE)
@@ -162,20 +159,17 @@ double curT = MPI_Wtime();
             ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
         if (buftype_is_contig && filetype_is_contig) {
-            if (file_ptr_type == ADIO_EXPLICIT_OFFSET) {
-                if (fd->filetype == MPI_DATATYPE_NULL)
-                    /* intra-node aggregation has flattened the fileview and
-                     * temporarily set fd->filetype to MPI_DATATYPE_NULL
-                     */
-                    off = (fd->flat_file->count) ? fd->flat_file->indices[0] : 0;
-                else
-                    off = fd->disp + offset;
-                ADIO_WriteContig(fd, buf, count, datatype,
-                                 ADIO_EXPLICIT_OFFSET, off, status, error_code);
-            } else
-                ADIO_WriteContig(fd, buf, count, datatype, ADIO_INDIVIDUAL, 0, status, error_code);
+            if (fd->filetype == MPI_DATATYPE_NULL)
+                /* intra-node aggregation has flattened the fileview and
+                 * temporarily set fd->filetype to MPI_DATATYPE_NULL
+                 */
+                off = (fd->flat_file->count) ? fd->flat_file->indices[0] : 0;
+            else
+                off = fd->disp + offset;
+            ADIO_WriteContig(fd, buf, count, datatype, off, status,
+                             error_code);
         } else
-            ADIOI_GEN_WriteStrided(fd, buf, count, datatype, file_ptr_type, offset, status, error_code);
+            ADIOI_GEN_WriteStrided(fd, buf, count, datatype, offset, status, error_code);
 
         return;
     }
@@ -513,8 +507,8 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
                 flag = 1;
 
         if (flag) {
-            ADIO_WriteContig(fd, write_buf, size, MPI_BYTE, ADIO_EXPLICIT_OFFSET,
-                             off, &status, error_code);
+            ADIO_WriteContig(fd, write_buf, size, MPI_BYTE, off, &status,
+                             error_code);
             if (*error_code != MPI_SUCCESS)
                 return;
         }
@@ -689,8 +683,7 @@ double curT = MPI_Wtime();
 
     if (nprocs_recv) {
         if (*hole) {
-            ADIO_ReadContig(fd, write_buf, size, MPI_BYTE,
-                            ADIO_EXPLICIT_OFFSET, off, &status, &err);
+            ADIO_ReadContig(fd, write_buf, size, MPI_BYTE, off, &status, &err);
             /* --BEGIN ERROR HANDLING-- */
             if (err != MPI_SUCCESS) {
                 *error_code = MPIO_Err_create_code(err,
