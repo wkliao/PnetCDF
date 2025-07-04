@@ -26,7 +26,6 @@ int ADIO_WriteContig(ADIO_File     fd,
                      const void   *buf,
                      MPI_Aint      count,
                      MPI_Datatype  bufType,
-                     int           file_ptr_type,
                      ADIO_Offset   offset,
                      ADIO_Status  *status,
                      int          *error_code)
@@ -49,11 +48,7 @@ int ADIO_WriteContig(ADIO_File     fd,
 #endif
     len = count * bufType_size;
 
-    if (file_ptr_type == ADIO_INDIVIDUAL)
-        off = fd->fp_ind; /* offset is ignored */
-    else /* ADIO_EXPLICIT_OFFSET */
-        // off = fd->disp + fd->etype_size * offset;
-        off = offset;
+    off = offset;
 
 #ifdef WKL_DEBUG
 int rank; MPI_Comm_rank(MPI_COMM_WORLD,&rank);
@@ -67,7 +62,7 @@ ADIO_Offset ost_id = (off / fd->hints->striping_unit) % fd->hints->striping_fact
         printf("%2d Error: %s pwrite offset=%lld len=%lld ost_id=%lld not same 1st ost %d\n",rank,__func__,off,len,ost_id,first_ost_id);
 
     printf("%s line %d pwrite off=%lld len=%lld\n",__func__,__LINE__,off,len);
-printf("%s line %d: %s disp=%lld offset=%lld off=%lld count=%ld bufType_size=%d len=%lld\n",__func__,__LINE__,(file_ptr_type == ADIO_INDIVIDUAL)?"ADIO_INDIVIDUAL":"ADIO_EXPLICIT_OFFSET",fd->disp,offset,off,count,bufType_size,len);
+printf("%s line %d: disp=%lld offset=%lld off=%lld count=%ld bufType_size=%d len=%lld\n",__func__,__LINE__,fd->disp,offset,off,count,bufType_size,len);
 
     printf("%2d %s line %d pread off=%lld len=%lld\n",rank,__func__,__LINE__,off,len);
 #endif
@@ -89,10 +84,6 @@ printf("%s line %d: %s disp=%lld offset=%lld off=%lld count=%ld bufType_size=%d 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     fd->coll_write[2] += MPI_Wtime() - timing;
 #endif
-
-    if (file_ptr_type == ADIO_INDIVIDUAL)
-        fd->fp_ind += bytes_xfered;
-    /* if ADIO_EXPLICIT_OFFSET, do not update file pointer */
 
 ioerr:
     if (err == -1) {
@@ -118,7 +109,6 @@ int file_write(ADIO_File     fd,
                const void   *buf,
                int           count,
                MPI_Datatype  bufType,
-               int           file_ptr_type,
                MPI_Status   *status)
 {
     int err=NC_NOERR, buftype_is_contig, filetype_is_contig;
@@ -147,15 +137,12 @@ int file_write(ADIO_File     fd,
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;
-        err = ADIO_WriteContig(fd, buf, wcount, MPI_BYTE, file_ptr_type,
-                               offset, status, NULL);
+        err = ADIO_WriteContig(fd, buf, wcount, MPI_BYTE, offset, status, NULL);
     }
     else if (fd->file_system == ADIO_LUSTRE)
-        ADIOI_LUSTRE_WriteStrided(fd, buf, count, bufType, file_ptr_type,
-                                  offset, status, &err);
+        ADIOI_LUSTRE_WriteStrided(fd, buf, count, bufType, offset, status, &err);
     else
-        ADIOI_GEN_WriteStrided(fd, buf, count, bufType, file_ptr_type,
-                               offset, status, &err);
+        ADIOI_GEN_WriteStrided(fd, buf, count, bufType, offset, status, &err);
     if (err != MPI_SUCCESS)
         err = ncmpii_error_mpi2nc(err, __func__);
     else
@@ -186,8 +173,7 @@ int ADIO_File_write_at(ADIO_File     fh,
     if (fh->access_mode & MPI_MODE_RDONLY)
         return NC_EPERM;
 
-    err = file_write(fh, offset, buf, count, bufType, ADIO_EXPLICIT_OFFSET,
-                     status);
+    err = file_write(fh, offset, buf, count, bufType, status);
 
     return err;
 }
@@ -211,7 +197,7 @@ int ADIO_File_write(ADIO_File     fh,
     if (fh->access_mode & MPI_MODE_RDONLY)
         return NC_EPERM;
 
-    err = file_write(fh, 0, buf, count, bufType, ADIO_INDIVIDUAL, status);
+    err = file_write(fh, 0, buf, count, bufType, status);
 
     return err;
 }
@@ -238,11 +224,11 @@ int ADIO_File_write_at_all(ADIO_File    fh,
         st = NC_EPERM;
 
     if (fh->file_system == ADIO_LUSTRE)
-        ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType,
-                                   ADIO_EXPLICIT_OFFSET, offset, status, &err);
+        ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, offset, status,
+                                      &err);
     else if (fh->file_system == ADIO_UFS)
-        ADIOI_GEN_WriteStridedColl(fh, buf, count, bufType,
-                                   ADIO_EXPLICIT_OFFSET, offset, status, &err);
+        ADIOI_GEN_WriteStridedColl(fh, buf, count, bufType, offset, status,
+                                   &err);
     else
         return NC_EFSTYPE;
 
@@ -270,11 +256,9 @@ int ADIO_File_write_all(ADIO_File    fh,
         st = NC_EPERM;
 
     if (fh->file_system == ADIO_LUSTRE)
-        ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
-                                      0, status, &err);
+        ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, 0, status, &err);
     else if (fh->file_system == ADIO_UFS)
-        ADIOI_GEN_WriteStridedColl(fh, buf, count, bufType, ADIO_INDIVIDUAL,
-                                      0, status, &err);
+        ADIOI_GEN_WriteStridedColl(fh, buf, count, bufType, 0, status, &err);
     else
         return NC_EFSTYPE;
 
