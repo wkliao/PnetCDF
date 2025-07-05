@@ -377,8 +377,9 @@ ncmpio_intra_node_aggr_init(NC *ncp)
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double timing = MPI_Wtime();
+    int nelems = sizeof(ncp->ina_time_put) / sizeof(ncp->ina_time_put[0]);
     ncp->ina_time_init = ncp->ina_time_flatten = 0.0;
-    for (i=0; i<6; i++) {
+    for (i=0; i<nelems; i++) {
         ncp->ina_time_put[i] = ncp->ina_time_get[i] = 0;
         ncp->maxmem_put[i] = ncp->maxmem_get[i] = 0;
     }
@@ -2177,7 +2178,7 @@ int ina_get(NC           *ncp,
      * in an incremental order.
      */
     int buftype_is_contig;
-    char *ptr, *tmp_buf;
+    char *ptr=NULL, *tmp_buf=NULL;
 
     /* Check if this rank's user buftype is contiguous. If not, a temporary
      * buffer is allocated and the read data is copied over, before unpacking
