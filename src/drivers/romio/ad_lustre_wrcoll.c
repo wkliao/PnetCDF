@@ -1359,7 +1359,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
     MPI_Count **recv_size=NULL, **recv_count=NULL;
     MPI_Count **recv_start_pos=NULL, *send_size;
     ADIO_Offset end_loc, req_off, iter_end_off, *off_list, step_size;
-    ADIO_Offset *this_buf_idx;
+    ADIO_Offset *this_buf_idx=NULL;
     off_len_list *srt_off_len = NULL;
     disp_len_list *send_list = NULL, *recv_list = NULL;
 
@@ -2300,9 +2300,9 @@ static void ADIOI_LUSTRE_Fill_send_buffer(ADIO_File fd,
                                           disp_len_list *send_list)
 {
     /* this function is only called if buftype is not contiguous */
-    int q, first_q=-1, isUserBuf;
-    MPI_Count send_size_rem=0, size, copy_size;
-    char *user_buf_ptr, *send_buf_ptr, *same_buf_ptr;
+    int q, first_q=-1, isUserBuf=0;
+    MPI_Count send_size_rem=0, size, copy_size=0;
+    char *user_buf_ptr=NULL, *send_buf_ptr=NULL, *same_buf_ptr=NULL;
     ADIO_Offset off, user_buf_idx;
 #ifdef HAVE_MPI_LARGE_COUNT
     ADIO_Offset len, rem_len;
