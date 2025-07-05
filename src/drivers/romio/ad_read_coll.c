@@ -932,13 +932,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         curT = MPI_Wtime();
 #endif
-#ifdef NEEDS_MPI_TEST
-        j = 0;
-        while (!j)
-            MPI_Testall(nprocs_recv, requests, &j, statuses);
-#else
         MPI_Waitall(nprocs_recv, requests, statuses);
-#endif
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         if (fd->is_agg) fd->coll_read[3] += MPI_Wtime() - curT;
 #endif
