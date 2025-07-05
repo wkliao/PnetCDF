@@ -243,7 +243,6 @@ ADIO_File_SetInfo(ADIO_File fd,
 {
     int flag, nprocs = 0, len, ok_to_override_cb_nodes = 0;
     char value[MPI_MAX_INFO_VAL + 1];
-    MPI_Info info;
 
     if (fd->hints->initialized && users_info == MPI_INFO_NULL)
         return NC_NOERR;
@@ -256,6 +255,7 @@ ADIO_File_SetInfo(ADIO_File fd,
      */
     if (!fd->hints->initialized) {
         /* Hints here are the ones that can only be set at MPI_File_open */
+        MPI_Info info;
         MPI_Info_create(&(fd->info));
 
         info = fd->info;
@@ -367,7 +367,7 @@ ADIO_File_SetInfo(ADIO_File fd,
                                              &(fd->hints->cb_read));
         if (fd->hints->cb_read == ADIOI_HINT_DISABLE) {
             /* romio_cb_read overrides no_indep_rw */
-            ADIOI_Info_set(info, "romio_no_indep_rw", "false");
+            ADIOI_Info_set(fd->info, "romio_no_indep_rw", "false");
             fd->hints->no_indep_rw = ADIOI_HINT_DISABLE;
         }
 
@@ -375,7 +375,7 @@ ADIO_File_SetInfo(ADIO_File fd,
                                              &(fd->hints->cb_write));
         if (fd->hints->cb_write == ADIOI_HINT_DISABLE) {
             /* romio_cb_write overrides no_indep_rw */
-            ADIOI_Info_set(info, "romio_no_indep_rw", "false");
+            ADIOI_Info_set(fd->info, "romio_no_indep_rw", "false");
             fd->hints->no_indep_rw = ADIOI_HINT_DISABLE;
         }
 
@@ -386,8 +386,8 @@ ADIO_File_SetInfo(ADIO_File fd,
             /* if 'no_indep_rw' set, also hint that we will do
              * collective buffering: if we aren't doing independent io,
              * then we have to do collective  */
-            ADIOI_Info_set(info, "romio_cb_write", "enable");
-            ADIOI_Info_set(info, "romio_cb_read", "enable");
+            ADIOI_Info_set(fd->info, "romio_cb_write", "enable");
+            ADIOI_Info_set(fd->info, "romio_cb_read", "enable");
             fd->hints->cb_read = ADIOI_HINT_ENABLE;
             fd->hints->cb_write = ADIOI_HINT_ENABLE;
         }
@@ -414,7 +414,7 @@ ADIO_File_SetInfo(ADIO_File fd,
                  * might be interesting to think what such oversubscription
                  * might mean... someday */
                 snprintf(value, MPI_MAX_INFO_VAL + 1, "%d", nprocs);
-                ADIOI_Info_set(info, "cb_nodes", value);
+                ADIOI_Info_set(fd->info, "cb_nodes", value);
                 fd->hints->cb_nodes = nprocs;
             }
         }
@@ -460,7 +460,7 @@ ADIO_File_SetInfo(ADIO_File fd,
      * free/alloc and insures it is always set
      */
     if (fd->hints->cb_config_list == NULL) {
-        ADIOI_Info_set(info, "cb_config_list", ADIOI_CB_CONFIG_LIST_DFLT);
+        ADIOI_Info_set(fd->info, "cb_config_list", ADIOI_CB_CONFIG_LIST_DFLT);
         len = (strlen(ADIOI_CB_CONFIG_LIST_DFLT) + 1) * sizeof(char);
         fd->hints->cb_config_list = ADIOI_Malloc(len);
         if (fd->hints->cb_config_list == NULL)
@@ -481,7 +481,7 @@ ADIO_File_SetInfo(ADIO_File fd,
          * disable at the same time doesn't make sense. honor
          * romio_cb_{read,write} and force the no_indep_rw hint to
          * 'disable' */
-        ADIOI_Info_set(info, "romio_no_indep_rw", "false");
+        ADIOI_Info_set(fd->info, "romio_no_indep_rw", "false");
         fd->hints->no_indep_rw = 0;
         fd->hints->deferred_open = 0;
     }
