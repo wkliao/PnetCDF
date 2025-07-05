@@ -829,14 +829,7 @@ double curT = MPI_Wtime();
     if (fd->is_agg) fd->coll_write[4] += MPI_Wtime() - curT;
     curT = MPI_Wtime();
 #endif
-
-#ifdef NEEDS_MPI_TEST
-    i = 0;
-    while (!i)
-        MPI_Testall(nreqs, requests, &i, statuses);
-#else
     MPI_Waitall(nreqs, requests, statuses);
-#endif
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     if (fd->is_agg) fd->coll_write[3] += MPI_Wtime() - curT;
 #endif
