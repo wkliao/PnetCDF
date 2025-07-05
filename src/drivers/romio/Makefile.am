@@ -19,8 +19,8 @@ noinst_LTLIBRARIES = libromio.la
 
 H_SRCS = adio.h
 
-C_SRCS = romio_read.c \
-         romio_write.c \
+C_SRCS = ad_read.c \
+         ad_write.c \
          ad_open.c \
          ad_close.c \
          ad_fstype.c \
