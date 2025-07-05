@@ -19,8 +19,7 @@ noinst_LTLIBRARIES = libromio.la
 
 H_SRCS = adio.h
 
-C_SRCS = romio_misc.c \
-         romio_read.c \
+C_SRCS = romio_read.c \
          romio_write.c \
          ad_open.c \
          ad_close.c \
@@ -40,7 +39,13 @@ C_SRCS = romio_misc.c \
          ad_lustre_wrstr.c \
          ad_iscontig.c \
          ad_flatten.c \
-         ad_lock.c
+         ad_lock.c \
+         ad_set_size.c \
+         ad_sync.c \
+         ad_delete.c \
+         ad_set_view.c \
+         ad_hints.c
+
 
 libromio_la_SOURCES = $(C_SRCS) $(H_SRCS)
 
