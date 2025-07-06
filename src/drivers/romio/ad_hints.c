@@ -183,7 +183,7 @@ int
 ADIO_File_SetInfo(ADIO_File fd,
                   MPI_Info users_info)
 {
-    int flag, nprocs = 0, len, ok_to_override_cb_nodes = 0;
+    int flag, nprocs = 0, len;
     char value[MPI_MAX_INFO_VAL + 1];
 
     if (fd->hints->initialized && users_info == MPI_INFO_NULL)
@@ -243,13 +243,8 @@ ADIO_File_SetInfo(ADIO_File fd,
 
         fd->hints->cb_config_list = NULL;
 
-        /* for Lustre, default is set in construct_cb_node_list() */
-        if (fd->file_system != ADIO_LUSTRE) {
-            /* number of processes that perform I/O in collective I/O */
-            snprintf(value, MPI_MAX_INFO_VAL + 1, "%d", nprocs);
-            ADIOI_Info_set(info, "cb_nodes", value);
-            fd->hints->cb_nodes = nprocs;
-        }
+        /* cb_nodes may be set later right after file open call */
+        fd->hints->cb_nodes = 0;
 
         /* hint indicating that no indep. I/O will be performed on this file */
         ADIOI_Info_set(info, "romio_no_indep_rw", "false");
@@ -289,12 +284,6 @@ ADIO_File_SetInfo(ADIO_File fd,
         fd->hints->fs_hints.lustre.overstriping_ratio = 1;
 
         fd->hints->initialized = 1;
-
-        /* ADIO_Open sets up collective buffering arrays.  If we are in this
-         * path from say set_file_view, then we've don't want to adjust the
-         * array: we'll get a segfault during collective i/o.  We only want to
-         * look at the users cb_nodes if it's open time  */
-        ok_to_override_cb_nodes = 1;
     }
 
     /* add in user's info if supplied */
@@ -350,24 +339,23 @@ ADIO_File_SetInfo(ADIO_File fd,
         ADIOI_Info_check_and_install_int(fd, users_info, "romio_ds_wr_lb",
                                          &(fd->hints->ds_wr_lb));
 
-        if (ok_to_override_cb_nodes) {
+        if (fd->hints->cb_nodes == 0) { /* never set before */
             /* MPI_File_open path sets up some data structrues that don't
              * get resized in the MPI_File_set_view path, so ignore
              * cb_nodes in the set_view case */
             ADIOI_Info_check_and_install_int(fd, users_info, "cb_nodes",
                                              &(fd->hints->cb_nodes));
-            /* for Lustre, default is set in construct_cb_node_list() */
-            if (fd->file_system != ADIO_LUSTRE &&
-                (fd->hints->cb_nodes <= 0 || fd->hints->cb_nodes > nprocs)) {
-                /* can't ask for more aggregators than mpi processes, though it
-                 * might be interesting to think what such oversubscription
-                 * might mean... someday */
-                snprintf(value, MPI_MAX_INFO_VAL + 1, "%d", nprocs);
+            /* check ill value */
+            if (fd->hints->cb_nodes > 0 && fd->hints->cb_nodes <= nprocs) {
+                snprintf(value, MPI_MAX_INFO_VAL + 1, "%d", fd->hints->cb_nodes);
                 ADIOI_Info_set(fd->info, "cb_nodes", value);
-                fd->hints->cb_nodes = nprocs;
+            }
+            else {
+                fd->hints->cb_nodes = 0;
+                ADIOI_Info_set(fd->info, "cb_nodes", "0");
             }
         }
-        /* if (ok_to_override_cb_nodes) */
+
         ADIOI_Info_check_and_install_int(fd, users_info, "ind_wr_buffer_size",
                                          &(fd->hints->ind_wr_buffer_size));
         ADIOI_Info_check_and_install_int(fd, users_info, "ind_rd_buffer_size",
