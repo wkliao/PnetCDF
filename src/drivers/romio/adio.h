@@ -75,15 +75,21 @@
 #define ADIOI_IND_WR_BUFFER_SIZE_DFLT     "524288"
 #define ADIOI_CB_CONFIG_LIST_DFLT "*:1"
 
-    /* ADIOI_DS_WR_LB is the lower bound of the number of noncontiguous
-     * offset-length pairs to trigger data sieving write. When hint ds_write is
-     * set to 'auto' and the number of offset-length pairs is more than hint
-     * romio_cb_wr_lb, then data sieving is activated and checking holes in the
-     * file domains is skipped. When the number of holes is large, checking
-     * holes can be expensive, because it requires to a merge-sort of all the
-     * offset-length pairs.
-     */
-#define ADIOI_DS_WR_LB "8192"
+/* ADIOI_DS_WR_NPAIRS_LB is the lower bound of the averaged number of
+ *     offset-length pairs over the non-aggregator senders to be received by an
+ *     I/O aggregaor to skip the potentially expensive heap-merge sort that
+ *     determines whether or not odata sieving write is necessary.
+ * ADIOI_DS_WR_NAGGRS_LB is the lower bound of the number of non-aggregators
+ *     sending their offset-length pairs to an I/O aggregator.
+ * Both conditions must be met to skip the heap-merge sort.
+ *
+ * When data sieving is activated, each I/O aggregator checks holes in its file
+ * domains. When the number of holes is large, such checking can become
+ * expensive, because it requires to a merge-sort of all the offset-length
+ * pairs.
+ */
+#define ADIOI_DS_WR_NPAIRS_LB 4096
+#define ADIOI_DS_WR_NAGGRS_LB 64
 
 #define ADIOI_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
 #define ADIOI_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
@@ -109,7 +115,6 @@ typedef struct {
     int cb_ds_threshold;
     int ds_read;
     int ds_write;
-    int ds_wr_lb;
     int no_indep_rw;
     int ind_rd_buffer_size;
     int ind_wr_buffer_size;

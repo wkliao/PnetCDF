@@ -272,8 +272,6 @@ ADIO_File_SetInfo(ADIO_File fd,
         fd->hints->ds_read = ADIOI_HINT_AUTO;
         ADIOI_Info_set(info, "romio_ds_write", "automatic");
         fd->hints->ds_write = ADIOI_HINT_AUTO;
-        ADIOI_Info_set(info, "romio_ds_wr_lb", ADIOI_DS_WR_LB);
-        fd->hints->ds_wr_lb = atoi(ADIOI_DS_WR_LB);
 
         /* still to do: tune this a bit for a variety of file systems. there's
          * no good default value so just leave it unset */
@@ -336,8 +334,6 @@ ADIO_File_SetInfo(ADIO_File fd,
                                              &(fd->hints->ds_read));
         ADIOI_Info_check_and_install_enabled(fd, users_info, "romio_ds_write",
                                              &(fd->hints->ds_write));
-        ADIOI_Info_check_and_install_int(fd, users_info, "romio_ds_wr_lb",
-                                         &(fd->hints->ds_wr_lb));
 
         if (fd->hints->cb_nodes == 0) { /* never set before */
             /* MPI_File_open path sets up some data structrues that don't
