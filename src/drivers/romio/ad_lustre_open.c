@@ -696,7 +696,12 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
             err = ncmpii_error_posix2nc("open");
             goto err_out;
         }
-        stripin_info[0] = STRIPE_SIZE;
+
+        char *env_str = getenv("MIMIC_STRIPE_SIZE");
+        if (env_str != NULL)
+            stripin_info[0] = atoi(env_str);
+        else
+            stripin_info[0] = STRIPE_SIZE;
         stripin_info[1] = STRIPE_COUNT;
         stripin_info[2] = 0;
         stripin_info[3] = STRIPE_COUNT;
@@ -816,7 +821,11 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
             err = ncmpii_error_posix2nc("ioctl");
         ADIOI_Free(lum);
 #elif defined(MIMIC_LUSTRE)
-        stripin_info[0] = STRIPE_SIZE;
+        char *env_str = getenv("MIMIC_STRIPE_SIZE");
+        if (env_str != NULL)
+            stripin_info[0] = atoi(env_str);
+        else
+            stripin_info[0] = STRIPE_SIZE;
         stripin_info[1] = STRIPE_COUNT;
         stripin_info[2] = 0;
         stripin_info[3] = STRIPE_COUNT;
