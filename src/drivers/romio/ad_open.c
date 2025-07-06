@@ -40,7 +40,7 @@ int ADIO_GEN_set_cb_node_list(ADIO_File fd)
          * an I/O aggregator
          */
         fd->hints->cb_nodes = fd->num_nodes;
-    else if (fd->hints->cb_nodes > 0)
+    else if (fd->hints->cb_nodes > nprocs)
         /* cb_nodes must be <= nprocs */
         fd->hints->cb_nodes = nprocs;
 
