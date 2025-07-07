@@ -169,7 +169,7 @@ double curT = MPI_Wtime();
         } else
             ADIO_ReadStrided(fd, buf, count, datatype, offset, status, error_code);
 
-// printf("%s at %d: SWITCH indep READ ------------------ off=%lld count=%lld\n",__func__,__LINE__, off, count);
+// printf("%s at %d: SWITCH indep READ ------------------ off=%lld count=%ld\n",__func__,__LINE__, off, count);
         return;
     }
 
@@ -557,7 +557,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
     MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fd->comm);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->coll_read[11] = MAX(fd->coll_read[11], max_ntimes);
+    fd->read_ntimes = MAX(fd->read_ntimes, max_ntimes);
 #endif
 
     read_buf = fd->io_buf;      /* Allocated at open time */
