@@ -636,6 +636,8 @@ double curT = MPI_Wtime();
      * data to be written. For this, merge the (sorted) offset lists
      * others_req using a heap-merge. */
 
+/* TODO: ADIOI_Heap_merge is expensive, borrow codes from ad_lustre_wrcoll.c to skip it when possible */
+
     /* valgrind-detcted optimization: if there is no work on this process we do
      * not need to search for holes */
     if (sum) {
