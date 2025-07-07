@@ -351,7 +351,7 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
     MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fd->comm);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->coll_write[11] = MAX(fd->coll_write[11], max_ntimes);
+    fd->write_ntimes = MAX(fd->write_ntimes, max_ntimes);
 #endif
 
     write_buf = fd->io_buf;
@@ -639,10 +639,16 @@ double curT = MPI_Wtime();
     /* valgrind-detcted optimization: if there is no work on this process we do
      * not need to search for holes */
     if (sum) {
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+        double timing = MPI_Wtime();
+#endif
         srt_off = (ADIO_Offset *) ADIOI_Malloc(sum * sizeof(ADIO_Offset));
         srt_len = ADIOI_Malloc(sum * sizeof(*srt_len));
 
         ADIOI_Heap_merge(others_req, count, srt_off, srt_len, start_pos, nprocs, nprocs_recv, sum);
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+        if (fd->is_agg) fd->coll_write[5] += MPI_Wtime() - timing;
+#endif
     }
 
     /* for partial recvs, restore original lengths */
