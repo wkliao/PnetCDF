@@ -70,26 +70,29 @@
 #define ADIOI_COLL_TAG(rank,iter) 0
 #define ADIOI_AINT_CAST_TO_OFFSET (MPI_Offset)
 
-#define ADIOI_CB_BUFFER_SIZE_DFLT "16777216"
-#define ADIOI_IND_RD_BUFFER_SIZE_DFLT     "4194304"
-#define ADIOI_IND_WR_BUFFER_SIZE_DFLT     "524288"
-#define ADIOI_CB_CONFIG_LIST_DFLT "*:1"
+#define ADIOI_CB_BUFFER_SIZE_DFLT     "16777216"
+#define ADIOI_IND_RD_BUFFER_SIZE_DFLT "4194304"
+#define ADIOI_IND_WR_BUFFER_SIZE_DFLT "524288"
+#define ADIOI_CB_CONFIG_LIST_DFLT     "*:1"
 
-/* ADIOI_DS_WR_NPAIRS_LB is the lower bound of the averaged number of
+/* ADIOI_DS_WR_NPAIRS_LB is the lower bound of the total number of
  *     offset-length pairs over the non-aggregator senders to be received by an
  *     I/O aggregaor to skip the potentially expensive heap-merge sort that
- *     determines whether or not odata sieving write is necessary.
+ *     determines whether or not data sieving write is necessary.
  * ADIOI_DS_WR_NAGGRS_LB is the lower bound of the number of non-aggregators
  *     sending their offset-length pairs to an I/O aggregator.
  * Both conditions must be met to skip the heap-merge sort.
  *
  * When data sieving is activated, each I/O aggregator checks holes in its file
- * domains. When the number of holes is large, such checking can become
- * expensive, because it requires to a merge-sort of all the offset-length
- * pairs.
+ * domains. Checking holes is done first by heap-merge sorting of all the
+ * offset-length pairs into a single list, which can be expensive when the
+ * number of lists is large or the total number of offset-length pairs is
+ * large. Below two constants are the lower bounds used to determine whether or
+ * not to perform such sorting.
  */
-#define ADIOI_DS_WR_NPAIRS_LB 4096
-#define ADIOI_DS_WR_NAGGRS_LB 64
+#define ADIOI_DS_WR_NPAIRS_LB 8192
+#define ADIOI_DS_WR_NAGGRS_LB 256
+#define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > ADIOI_DS_WR_NAGGRS_LB || (npairs) > ADIOI_DS_WR_NPAIRS_LB)
 
 #define ADIOI_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
 #define ADIOI_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
