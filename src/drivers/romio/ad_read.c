@@ -45,7 +45,7 @@ int ADIO_ReadContig(ADIO_File     fd,
     off = offset;
     // off = fd->disp + fd->etype_size * offset;
 
-// int rank; MPI_Comm_rank(MPI_COMM_WORLD,&rank); printf("%s at %d: pread off=%lld len=%lld\n",__func__,__LINE__,off,len);
+// printf("%s at %d: %s pread off=%lld len=%lld\n",__func__,__LINE__,fd->filename,off,len);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double timing = MPI_Wtime();
