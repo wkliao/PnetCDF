@@ -2042,7 +2042,7 @@ void Exchange_data_recv(
     char *buf_ptr, *contig_buf;
     size_t alloc_sz;
     int i, j, nprocs, myrank, nprocs_recv, err, hole, check_hole;
-    MPI_Count sum_recv, avg_recv_count;
+    MPI_Count sum_recv;
     MPI_Status status;
 
     MPI_Comm_size(fd->comm, &nprocs);
@@ -2070,10 +2070,7 @@ void Exchange_data_recv(
 
     if (nprocs_recv == 0) return;
 
-    /* averaged recv_count[] over number of processes to receive */
-    avg_recv_count = (nprocs_recv > 0) ? (srt_off_len->num / nprocs_recv) : 0;
-
-printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d avg_recv_count=%lld ADIOI_DS_WR_NPAIRS_LB=%d\n",nprocs_recv,ADIOI_DS_WR_NAGGRS_LB,avg_recv_count,ADIOI_DS_WR_NPAIRS_LB);
+printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld ADIOI_DS_WR_NPAIRS_LB=%d\n",nprocs_recv,ADIOI_DS_WR_NAGGRS_LB,srt_off_len->num,ADIOI_DS_WR_NPAIRS_LB);
 
     /* determine whether checking holes is necessary */
     if (srt_off_len->num == 0) {
@@ -2100,11 +2097,10 @@ printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d avg_recv_count=%lld ADIOI_DS_WR_
         /* assuming there are holes */
         hole = 1;
     } else if (fd->hints->ds_write == ADIOI_HINT_AUTO) {
-        if (nprocs_recv    > ADIOI_DS_WR_NAGGRS_LB &&
-            avg_recv_count > ADIOI_DS_WR_NPAIRS_LB) {
-            /* When the number of sorted offset-length lists and the averaged
-             * number of offset-length pairs are both too large, heap-merge
-             * sort can become very expensive. Such sorting is required to
+        if (DO_HEAP_MERGE(nprocs_recv, srt_off_len->num)) {
+            /* When the number of sorted offset-length lists or the total
+             * number of offset-length pairs are too large, the heap-merge sort
+             * below can become very expensive. Such sorting is required to
              * check holes to determine whether read-modify-write is necessary.
              */
             check_hole = 0;
