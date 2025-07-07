@@ -188,6 +188,8 @@ typedef struct {
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double coll_write[12];
     double coll_read[12];
+    MPI_Count write_ntimes;
+    MPI_Count read_ntimes;
 #endif
 } ADIO_FileD;
 
