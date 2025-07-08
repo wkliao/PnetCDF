@@ -77,18 +77,33 @@
 
 /* ADIOI_DS_WR_NPAIRS_LB is the lower bound of the total number of
  *     offset-length pairs over the non-aggregator senders to be received by an
- *     I/O aggregaor to skip the potentially expensive heap-merge sort that
+ *     I/O aggregator to skip the potentially expensive heap-merge sort that
  *     determines whether or not data sieving write is necessary.
  * ADIOI_DS_WR_NAGGRS_LB is the lower bound of the number of non-aggregators
  *     sending their offset-length pairs to an I/O aggregator.
  * Both conditions must be met to skip the heap-merge sort.
  *
- * When data sieving is activated, each I/O aggregator checks holes in its file
- * domains. Checking holes is done first by heap-merge sorting of all the
- * offset-length pairs into a single list, which can be expensive when the
- * number of lists is large or the total number of offset-length pairs is
- * large. Below two constants are the lower bounds used to determine whether or
- * not to perform such sorting.
+ * When data sieving is enabled, read-modify-write will perform at each round
+ * of two-phase I/O at each aggregator. The following describes whether
+ * detecting "holes" in a write region is necessary, depending on the data
+ * sieving hint, romio_ds_write, is set to enable/disable/automatic.
+ *   + automatic - We need to check whether holes exist. If holes exist, the
+ *       "read-modify" part must run. If not, "read-modify" can be skipped.
+ *   + enable - "read-modify" part must perform, skip hole checking, and thus
+ *       skip the heap-merge sort.
+ *   + disable - "read-modify" part must skip, need not check holes, but must
+ *       construct srt_off_len to merge all others_req[] into a single sorted
+ *       list, which requires to call a heap-merge sort. This step is necessary
+ *       because write data from all non-aggregators are received into the same
+ *       write_buf, with a possibility of overlaps, and srt_off_len stores the
+ *       coalesced offset-length pairs of individual non-contiguous write
+ *       request and will be used to write them to the file.
+ *
+ * Heap-merge sort merges offset-length pairs received from all non-aggregators
+ * into a single list, which can be expensive. Its cost can be even larger than
+ * the cost of "read" in "read-modify-write". Below two constants are the lower
+ * bounds used to determine whether or not to perform such sorting, when data
+ * sieving is set to the automatic mode.
  */
 #define ADIOI_DS_WR_NPAIRS_LB 8192
 #define ADIOI_DS_WR_NAGGRS_LB 256
