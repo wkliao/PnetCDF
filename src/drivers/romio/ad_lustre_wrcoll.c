@@ -2110,8 +2110,16 @@ printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld ADIOI_DS_W
         else /* heap-merge is less expensive, proceed to check_hole */
             check_hole = 1;
     } else { /* if (fd->hints->ds_write == ADIOI_HINT_DISABLE) */
-        /* user do not want to perform read-modify-write, must check holes */
-        check_hole = 1;
+        /* User explicitly disable data sieving to skip read-modify-write.
+         * Whether or not there is a hole is no longer important. However,
+         * srt_off_len must be constructed to merge all others_req[] into a
+         * single sorted list. This step is necessary because write data from
+         * all non-aggregators are received into the same write_buf, with a
+         * possibility of overlaps, and srt_off_len stores the coalesced
+         * offset-length pairs of individual non-contiguous write request and
+         * will be used to write them to the file.
+         */
+        check_hole = 1; /* not to check holes, but to construct srt_off_len */
     }
 
     if (check_hole) {
@@ -2142,6 +2150,8 @@ printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld ADIOI_DS_W
          */
         hole = (srt_off_len->num > 1);
     }
+
+printf("%s at %d: ds_write=%s check_hole=%d hole=%d range_off=%lld range_size=%lld\n",__func__,__LINE__, (fd->hints->ds_write == ADIOI_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", check_hole,hole,range_off,range_size);
 
     /* data sieving */
     if (fd->hints->ds_write != ADIOI_HINT_DISABLE && hole) {
