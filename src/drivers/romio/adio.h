@@ -105,8 +105,8 @@
  * bounds used to determine whether or not to perform such sorting, when data
  * sieving is set to the automatic mode.
  */
-#define ADIOI_DS_WR_NPAIRS_LB 8192
-#define ADIOI_DS_WR_NAGGRS_LB 256
+#define ADIOI_DS_WR_NPAIRS_LB 4096
+#define ADIOI_DS_WR_NAGGRS_LB 64
 #define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > ADIOI_DS_WR_NAGGRS_LB || (npairs) > ADIOI_DS_WR_NPAIRS_LB)
 
 #define ADIOI_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
