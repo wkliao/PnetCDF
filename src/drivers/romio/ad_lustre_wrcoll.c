@@ -2070,7 +2070,7 @@ void Exchange_data_recv(
 
     if (nprocs_recv == 0) return;
 
-printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld ADIOI_DS_WR_NPAIRS_LB=%d\n",nprocs_recv,ADIOI_DS_WR_NAGGRS_LB,srt_off_len->num,ADIOI_DS_WR_NPAIRS_LB);
+// MPI_Count numx = srt_off_len->num; printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld ADIOI_DS_WR_NPAIRS_LB=%d\n",nprocs_recv,ADIOI_DS_WR_NAGGRS_LB,srt_off_len->num,ADIOI_DS_WR_NPAIRS_LB);
 
     /* determine whether checking holes is necessary */
     if (srt_off_len->num == 0) {
@@ -2151,7 +2151,7 @@ printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld ADIOI_DS_W
         hole = (srt_off_len->num > 1);
     }
 
-printf("%s at %d: ds_write=%s check_hole=%d hole=%d range_off=%lld range_size=%lld\n",__func__,__LINE__, (fd->hints->ds_write == ADIOI_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", check_hole,hole,range_off,range_size);
+// printf("%s at %d: ds_write=%s check_hole=%d hole=%d nprocs_recv=%d(ADIOI_DS_WR_NAGGRS_LB=%d) numx=%lld(ADIOI_DS_WR_NPAIRS_LB=%d)\n",__func__,__LINE__, (fd->hints->ds_write == ADIOI_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", check_hole,hole,nprocs_recv,ADIOI_DS_WR_NAGGRS_LB,numx,ADIOI_DS_WR_NPAIRS_LB);
 
     /* data sieving */
     if (fd->hints->ds_write != ADIOI_HINT_DISABLE && hole) {
