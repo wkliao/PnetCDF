@@ -965,7 +965,7 @@ double curT = MPI_Wtime();
 #endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_write[1] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->write_timing[1] += MPI_Wtime() - curT;
 #endif
 
     if (do_ex_wr || fd->is_agg)
@@ -1038,7 +1038,7 @@ double curT = MPI_Wtime();
     }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_write[0] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->write_timing[0] += MPI_Wtime() - curT;
 #endif
 }
 
@@ -1293,14 +1293,14 @@ void commit_comm_phase(ADIO_File      fd,
     }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->coll_write[4] += MPI_Wtime() - dtype_time;
+    fd->write_timing[4] += MPI_Wtime() - dtype_time;
 
-    fd->coll_write[6]  = MAX(fd->coll_write[6], nsends);
-    fd->coll_write[7]  = MAX(fd->coll_write[7], nrecvs);
-    fd->coll_write[8]  = MAX(fd->coll_write[8], max_r_amnt);
-    fd->coll_write[9]  = MAX(fd->coll_write[9], max_s_amnt);
-    fd->coll_write[10] = MAX(fd->coll_write[10], max_r_count);
-    fd->coll_write[11] = MAX(fd->coll_write[11], max_s_count);
+    fd->write_counter[2] = MAX(fd->write_counter[2], nsends);
+    fd->write_counter[3] = MAX(fd->write_counter[3], nrecvs);
+    fd->write_counter[4] = MAX(fd->write_counter[4], max_r_amnt);
+    fd->write_counter[5] = MAX(fd->write_counter[5], max_s_amnt);
+    fd->write_counter[6] = MAX(fd->write_counter[6], max_r_count);
+    fd->write_counter[7] = MAX(fd->write_counter[7], max_s_count);
 #endif
 
     if (nreqs > 0) {
@@ -1397,7 +1397,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
         ntimes++;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->write_ntimes = MAX(fd->write_ntimes, ntimes);
+    fd->write_counter[0] = MAX(fd->write_counter[0], ntimes);
 #endif
 
     /* collective buffer is divided into 'nbufs' sub-buffers. Each sub-buffer
@@ -1739,7 +1739,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
             /* communication phase */
             commit_comm_phase(fd, send_list, recv_list);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-            if (fd->is_agg) fd->coll_write[3] += MPI_Wtime() - curT;
+            if (fd->is_agg) fd->write_timing[3] += MPI_Wtime() - curT;
 #endif
 
             /* free send_buf allocated in ADIOI_LUSTRE_W_Exchange_data() */
@@ -2042,7 +2042,7 @@ void Exchange_data_recv(
     char *buf_ptr, *contig_buf;
     size_t alloc_sz;
     int i, j, nprocs, myrank, nprocs_recv, err, hole, check_hole;
-    MPI_Count sum_recv;
+    MPI_Count sum_recv, avg_num;
     MPI_Status status;
 
     MPI_Comm_size(fd->comm, &nprocs);
@@ -2069,6 +2069,14 @@ void Exchange_data_recv(
     }
 
     if (nprocs_recv == 0) return;
+
+    /* find the averaged number of offset-length lists */
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    avg_num = srt_off_len->num / nprocs_recv;
+    fd->write_counter[1] = MAX(fd->write_counter[1], avg_num);
+    fd->write_counter[2] = MAX(fd->write_counter[2], srt_off_len->num);
+    fd->write_counter[3] = MAX(fd->write_counter[3], nprocs_recv);
+#endif
 
 // MPI_Count numx = srt_off_len->num; printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld ADIOI_DS_WR_NPAIRS_LB=%d\n",nprocs_recv,ADIOI_DS_WR_NAGGRS_LB,srt_off_len->num,ADIOI_DS_WR_NPAIRS_LB);
 
@@ -2097,7 +2105,7 @@ void Exchange_data_recv(
         /* assuming there are holes */
         hole = 1;
     } else if (fd->hints->ds_write == ADIOI_HINT_AUTO) {
-        if (DO_HEAP_MERGE(nprocs_recv, srt_off_len->num)) {
+        if (DO_HEAP_MERGE(nprocs_recv, avg_num, srt_off_len->num)) {
             /* When the number of sorted offset-length lists or the total
              * number of offset-length pairs are too large, the heap-merge sort
              * below can become very expensive. Such sorting is required to
@@ -2143,7 +2151,7 @@ void Exchange_data_recv(
                    start_pos, nprocs, nprocs_recv, &srt_off_len->num);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        fd->coll_write[5] += MPI_Wtime() - curT;
+        fd->write_timing[5] += MPI_Wtime() - curT;
 #endif
         /* Now, (srt_off_len->off and srt_off_len->len) are in an increasing
          * order of file offsets. In addition, they are coalesced.
