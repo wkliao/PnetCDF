@@ -1295,12 +1295,14 @@ void commit_comm_phase(ADIO_File      fd,
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     fd->write_timing[4] += MPI_Wtime() - dtype_time;
 
+/*
     fd->write_counter[2] = MAX(fd->write_counter[2], nsends);
     fd->write_counter[3] = MAX(fd->write_counter[3], nrecvs);
     fd->write_counter[4] = MAX(fd->write_counter[4], max_r_amnt);
     fd->write_counter[5] = MAX(fd->write_counter[5], max_s_amnt);
     fd->write_counter[6] = MAX(fd->write_counter[6], max_r_count);
     fd->write_counter[7] = MAX(fd->write_counter[7], max_s_count);
+*/
 #endif
 
     if (nreqs > 0) {
@@ -2042,7 +2044,7 @@ void Exchange_data_recv(
     char *buf_ptr, *contig_buf;
     size_t alloc_sz;
     int i, j, nprocs, myrank, nprocs_recv, err, hole, check_hole;
-    MPI_Count sum_recv, avg_num;
+    MPI_Count sum_recv;
     MPI_Status status;
 
     MPI_Comm_size(fd->comm, &nprocs);
@@ -2069,14 +2071,6 @@ void Exchange_data_recv(
     }
 
     if (nprocs_recv == 0) return;
-
-    /* find the averaged number of offset-length lists */
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    avg_num = srt_off_len->num / nprocs_recv;
-    fd->write_counter[1] = MAX(fd->write_counter[1], avg_num);
-    fd->write_counter[2] = MAX(fd->write_counter[2], srt_off_len->num);
-    fd->write_counter[3] = MAX(fd->write_counter[3], nprocs_recv);
-#endif
 
 // MPI_Count numx = srt_off_len->num; printf("nprocs_recv=%d ADIOI_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld ADIOI_DS_WR_NPAIRS_LB=%d\n",nprocs_recv,ADIOI_DS_WR_NAGGRS_LB,srt_off_len->num,ADIOI_DS_WR_NPAIRS_LB);
 
@@ -2105,7 +2099,7 @@ void Exchange_data_recv(
         /* assuming there are holes */
         hole = 1;
     } else if (fd->hints->ds_write == ADIOI_HINT_AUTO) {
-        if (DO_HEAP_MERGE(nprocs_recv, avg_num, srt_off_len->num)) {
+        if (DO_HEAP_MERGE(nprocs_recv, srt_off_len->num)) {
             /* When the number of sorted offset-length lists or the total
              * number of offset-length pairs are too large, the heap-merge sort
              * below can become very expensive. Such sorting is required to
@@ -2117,6 +2111,19 @@ void Exchange_data_recv(
         }
         else /* heap-merge is less expensive, proceed to check_hole */
             check_hole = 1;
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (check_hole) {
+        fd->write_counter[1]++;
+        fd->write_counter[2] = MAX(fd->write_counter[2], srt_off_len->num);
+        fd->write_counter[3] = MAX(fd->write_counter[3], nprocs_recv);
+    } else {
+        fd->write_counter[4]++;
+        fd->write_counter[5] = MAX(fd->write_counter[5], srt_off_len->num);
+        fd->write_counter[6] = MAX(fd->write_counter[6], nprocs_recv);
+    }
+#endif
+
     } else { /* if (fd->hints->ds_write == ADIOI_HINT_DISABLE) */
         /* User explicitly disable data sieving to skip read-modify-write.
          * Whether or not there is a hole is no longer important. However,
