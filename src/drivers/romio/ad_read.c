@@ -62,7 +62,7 @@ int ADIO_ReadContig(ADIO_File     fd,
         p += err;
     }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->coll_read[2] += MPI_Wtime() - timing;
+    fd->read_timing[2] += MPI_Wtime() - timing;
 #endif
 
 ioerr:
