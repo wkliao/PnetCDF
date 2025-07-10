@@ -82,7 +82,7 @@ printf("%s line %d: disp=%lld offset=%lld off=%lld count=%ld bufType_size=%d len
         p += err;
     }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->coll_write[2] += MPI_Wtime() - timing;
+    fd->write_timing[2] += MPI_Wtime() - timing;
 #endif
 
 ioerr:
