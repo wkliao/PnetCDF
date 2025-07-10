@@ -27,6 +27,10 @@
 #include <pnc_debug.h>
 #include <common.h>
 
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+#define NMEASURES 8
+#endif
+
 #ifndef MPL_MAX
 #define MPL_MAX MAX
 #endif
@@ -105,9 +109,12 @@
  * bounds used to determine whether or not to perform such sorting, when data
  * sieving is set to the automatic mode.
  */
-#define ADIOI_DS_WR_NPAIRS_LB 4096
+#define ADIOI_DS_WR_NPAIRS_LB 8192
+#define ADIOI_DS_WR_AVGN_LB   256
 #define ADIOI_DS_WR_NAGGRS_LB 64
-#define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > ADIOI_DS_WR_NAGGRS_LB || (npairs) > ADIOI_DS_WR_NPAIRS_LB)
+#define DO_HEAP_MERGE(nrecv, avg, npairs) \
+    (((nrecv) > ADIOI_DS_WR_NAGGRS_LB && (avg) > ADIOI_DS_WR_AVGN_LB) || \
+     (npairs) > ADIOI_DS_WR_NPAIRS_LB)
 
 #define ADIOI_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
 #define ADIOI_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
@@ -204,10 +211,10 @@ typedef struct {
     MPI_Info info;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    double coll_write[12];
-    double coll_read[12];
-    MPI_Count write_ntimes;
-    MPI_Count read_ntimes;
+    double write_timing[NMEASURES];
+    double read_timing[NMEASURES];
+    MPI_Count write_counter[NMEASURES];
+    MPI_Count read_counter[NMEASURES];
 #endif
 } ADIO_FileD;
 
