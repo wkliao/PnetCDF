@@ -110,11 +110,8 @@
  * sieving is set to the automatic mode.
  */
 #define ADIOI_DS_WR_NPAIRS_LB 8192
-#define ADIOI_DS_WR_AVGN_LB   256
-#define ADIOI_DS_WR_NAGGRS_LB 64
-#define DO_HEAP_MERGE(nrecv, avg, npairs) \
-    (((nrecv) > ADIOI_DS_WR_NAGGRS_LB && (avg) > ADIOI_DS_WR_AVGN_LB) || \
-     (npairs) > ADIOI_DS_WR_NPAIRS_LB)
+#define ADIOI_DS_WR_NAGGRS_LB 256
+#define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > ADIOI_DS_WR_NAGGRS_LB || (npairs) > ADIOI_DS_WR_NPAIRS_LB)
 
 #define ADIOI_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
 #define ADIOI_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
