@@ -204,7 +204,7 @@ double curT = MPI_Wtime();
                           &others_req);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_write[1] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->write_timing[1] += MPI_Wtime() - curT;
 #endif
 
 /* exchange data and write in sizes of no more than coll_bufsize. */
@@ -262,7 +262,7 @@ double curT = MPI_Wtime();
     }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_write[0] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->write_timing[0] += MPI_Wtime() - curT;
 #endif
 }
 
@@ -351,7 +351,7 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
     MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fd->comm);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->write_ntimes = MAX(fd->write_ntimes, max_ntimes);
+    fd->write_counter[0] = MAX(fd->write_counter[0], max_ntimes);
 #endif
 
     write_buf = fd->io_buf;
@@ -649,7 +649,7 @@ double curT = MPI_Wtime();
 
         ADIOI_Heap_merge(others_req, count, srt_off, srt_len, start_pos, nprocs, nprocs_recv, sum);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        if (fd->is_agg) fd->coll_write[5] += MPI_Wtime() - timing;
+        if (fd->is_agg) fd->write_timing[5] += MPI_Wtime() - timing;
 #endif
     }
 
@@ -834,12 +834,12 @@ double curT = MPI_Wtime();
 #endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_write[4] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->write_timing[4] += MPI_Wtime() - curT;
     curT = MPI_Wtime();
 #endif
     MPI_Waitall(nreqs, requests, statuses);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_write[3] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->write_timing[3] += MPI_Wtime() - curT;
 #endif
 
 #ifndef HAVE_MPI_STATUSES_IGNORE
