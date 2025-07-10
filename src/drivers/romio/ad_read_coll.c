@@ -224,7 +224,7 @@ double curT = MPI_Wtime();
                           &others_req);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_read[1] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->read_timing[1] += MPI_Wtime() - curT;
 #endif
 
     /* read data in sizes of no more than ADIOI_Coll_bufsize,
@@ -245,7 +245,7 @@ double curT = MPI_Wtime();
     ADIOI_Free(fd_start);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_read[0] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->read_timing[0] += MPI_Wtime() - curT;
 #endif
 }
 
@@ -557,7 +557,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
     MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fd->comm);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->read_ntimes = MAX(fd->read_ntimes, max_ntimes);
+    fd->read_counter[0] = MAX(fd->read_counter[0], max_ntimes);
 #endif
 
     read_buf = fd->io_buf;      /* Allocated at open time */
@@ -920,7 +920,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
         }
     }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_read[4] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->read_timing[4] += MPI_Wtime() - curT;
 #endif
 
 
@@ -934,7 +934,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
 #endif
         MPI_Waitall(nprocs_recv, requests, statuses);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        if (fd->is_agg) fd->coll_read[3] += MPI_Wtime() - curT;
+        if (fd->is_agg) fd->read_timing[3] += MPI_Wtime() - curT;
 #endif
 
         *actual_recved_bytes = 0;
@@ -972,7 +972,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
     MPI_Waitall(nprocs_send, requests + nprocs_recv, statuses + nprocs_recv);
 #endif
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->coll_read[3] += MPI_Wtime() - curT;
+    if (fd->is_agg) fd->read_timing[3] += MPI_Wtime() - curT;
 #endif
 
     ADIOI_Free(statuses);
