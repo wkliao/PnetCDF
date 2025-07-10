@@ -250,11 +250,9 @@ int ADIO_File_open(MPI_Comm    comm,
         return err;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    {
-        int j, nelems = sizeof(fd->coll_write) / sizeof(fd->coll_write[0]);
-        for (j=0; j<nelems; j++)
-            fd->coll_write[j] = fd->coll_read[j] = 0;
-        fd->write_ntimes = fd->read_ntimes = 0;
+    for (i=0; i<NMEASURES; i++) {
+        fd->write_timing[i]  = fd->read_timing[i]  = 0;
+        fd->write_counter[i] = fd->read_counter[i] = 0;
     }
 #endif
 
