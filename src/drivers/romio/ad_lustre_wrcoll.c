@@ -606,37 +606,40 @@ void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
     MPI_Comm_rank(fd->comm, &myrank);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+MPI_Barrier(fd->comm);
 double curT = MPI_Wtime();
 #endif
 
-    /* Using user buffer datatype, count, and fileview to construct a list of
-     * starting file offsets and write lengths of this rank and store them in
-     * flat_fview.off[] and flat_fview.len[], respectively. Note a rank's
-     * fileview is changed only when MPI_File_set_view is called and thus The
-     * same fileview can be used by multiple collective writes. On the other
-     * hand, user buffer datatype and count can be different at each collective
-     * write call. Thus constructing a new flat_fview is necessary at each
-     * collective write.
+    /* Using argument buftype (user buffer datatype), count, and fileview set
+     * previously to construct a list of starting file offsets and lengths of
+     * write requests made by this rank and store them in flat_fview.off[] and
+     * flat_fview.len[], respectively. Note a rank's fileview is changed only
+     * when MPI_File_set_view() is called and thus The same fileview can be
+     * used by multiple collective writes (However, this not the case for
+     * PnetCDF, as PnetCDF never re-uses a fileview.) On the other hand, user
+     * buffer datatype and count are usually different at each collective write
+     * call. Thus constructing a new flat_fview is necessary at each collective
+     * write.
      *
-     * Note flat_fview here is NOT about the fileview datatype itself. It
-     * actually contains this rank's file access information of this collective
-     * write call. flat_fview.count is the number of noncontiguous file
-     * offset-length pairs, thus the size of both flat_fview.off[] and
-     * flat_fview.len[]. flat_fview.count has taken into account of argument
-     * 'count', i.e. the number of user buffer datatypes in this request.
+     * Note flat_fview here is NOT about the fileview itself. It contains this
+     * rank's file access information for this specific collective write call.
+     * flat_fview.count is the number of noncontiguous file offset-length
+     * pairs, thus is the size of both flat_fview.off[] and flat_fview.len[].
+     * flat_fview.count has taken into account of argument 'count', i.e. the
+     * number of user buffer datatypes in this subroutine call.
      *
      * Note that MPI standard (MPI 3.1 Chapter 13.1.1 and MPI 4.0 Chapter
-     * 14.1.1) requires that the typemap displacements of etype and
-     * filetype are non-negative and monotonically non-decreasing. This
+     * 14.1.1) requires that the typemap displacements of etype and filetype
+     * set by the user are non-negative and monotonically non-decreasing. This
      * makes flat_fview.off[] to be monotonically non-decreasing.
      *
      * TODO: In the current implementation, even for a small fileview type, the
      *       flat_fview.count can still be large, when the write amount is
-     *       larger than the file type size. In order to reduce the memory
-     *       footprint, flat_fview should be modified to describe only one file
-     *       type and use flat_fview.rnd, flat_fview.idx, flat_fview.rem to
-     *       keep track the latest processed offset-length pairs, just like the
-     *       way flat_bview is used.
+     *       larger than the fileview type size. In order to reduce the memory
+     *       footprint of flat_fview, is should be modified to describe only
+     *       one fileview type and maybe use flat_fview.rnd, flat_fview.idx,
+     *       flat_fview.rem to keep track the latest processed offset-length
+     *       pairs, similar to the way flat_bview is used.
      *
      * This rank's aggregate file access region is from start_offset to
      * end_offset. Note: end_offset points to the last byte-offset to be
@@ -644,12 +647,14 @@ double curT = MPI_Wtime();
      * file access region is of size 100 bytes. If this rank has no data to
      * write, end_offset == (start_offset - 1)
      *
-     * ADIOI_Calc_my_off_len() requires no inter-process communication.
+     * When PnetCDF intra-node aggregation (INA) is not enabled, the below call
+     * to ADIOI_Calc_my_off_len() will allocate new buffers for flat_fview.
      *
-     * Note ADIOI_Calc_my_off_len() allocates new buffers for flat_fview.off
-     * and flat_fview.len.  When intra-node aggregation is enabled, flat_fview
-     * is simply duplicated from flat_file.  To avoid such additional memory
-     * allocation, we can just reused flat_file.
+     * When INA is enabled, flat_fview will simply reuse the offsets and
+     * lengths buffers already flattened by the INA subroutines. This avoids
+     * additional memory allocation.
+     *
+     * ADIOI_Calc_my_off_len() performs no inter-process communication.
      */
     ADIOI_Calc_my_off_len(fd, count, buftype, offset, &flat_fview.off,
                           &flat_fview.len, &start_offset, &end_offset,
@@ -657,25 +662,25 @@ double curT = MPI_Wtime();
     flat_fview.idx = 0;
     flat_fview.rnd = 0; /* currently for flat_fview, rnd is not used at all */
     flat_fview.rem = (flat_fview.count > 0) ? flat_fview.len[0] : 0;
+
+    /* If flattened offsets and lengths are generated from the INA subroutines,
+     * then we should not free the space pointed in flat_fview.
+     */
     free_flat_fview = (fd->filetype != MPI_DATATYPE_NULL);
 
     /* When this rank's fileview datatype is not contiguous, it is still
      * possible that flat_fview.count == 1. It happens when this write is small
      * enough to fall into one of the contiguous segment of the fileview.
-     * Thus, flat_fview.count being 1 or not is the true indicator of whether
-     * or not this write is contiguous in the file. This is because
-     * ADIOI_Calc_my_off_len has taken into account of both fileview and user
-     * buffer type.
+     * Thus, flat_fview.count being 1 or not is the TRUE indicator of whether
+     * or not this rank's write request is contiguous in the file space. This
+     * is because ADIOI_Calc_my_off_len has taken into account of both fileview
+     * and user buffer type.
      *
-     * Note in ADIOI_Calc_my_off_len(), checking whether a fileview is
-     * contiguous by calling
+     * Note ADIOI_Calc_my_off_len() checks whether a fileview is contiguous or
+     * not by calling
      *     ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
-     * But whether a filetype is contiguous is not necessary requal to whether
-     * this collective write is contiguous in file.
-     *
-     * Note flat_fview.is_contig is whether or not the file access region of
-     * this collective write call is contiguous in file. It is not whether the
-     * filetype is contiguous or not. See test program noncontig_filetype.c
+     * However, a filetype being contiguous or not is not equal to whether or
+     * not this rank's write is contiguous or not in the file.
      */
     flat_fview.is_contig = (flat_fview.count > 1) ? 0 : 1;
 
@@ -713,18 +718,14 @@ double curT = MPI_Wtime();
     flat_bview.idx  = 0;
     flat_bview.rem  = (flat_bview.count > 0) ? flat_bview.len[0] : 0;
 
-    /* Check if the user buffer is truly contiguous or not.
-     * flat_bview.count being 1 is not the true indicator of whether or not
-     * buftype is contiguous. For example, a buftype may contain only one
+    /* Check if the user buffer is truly contiguous or not. Note that
+     * flat_bview.count being 1 or > 1 is not the true indicator of whether or
+     * not buftype is contiguous. For example, a buftype may contain only one
      * offset-length pair, but its ub and lb may have been resized to make
-     * buftype noncontiguous. In this case, if the value of argument 'count' in
+     * buftype noncontiguous. In this case, if the value of argument 'count' of
      * this collective write call is larger than 1, then the user buffer is not
-     * contiguous. On the other hand, when 'count' == 1, the user buffer is
-     * contiguous.
-     *
-     * Note flat_bview.is_contig is whether or not the user buffer of this
-     * collective write call is contiguous in memory or not. It is not whether
-     * or not the buftype is contiguous. See test program resize_buftype.c
+     * contiguous. Otherwise, when both 'count' == 1 and flat_bview.count == 1,
+     * the user buffer is contiguous.
      */
     flat_bview.is_contig = 0;
     if (is_btype_predef)
@@ -738,37 +739,33 @@ double curT = MPI_Wtime();
     }
 
     if (fd->hints->cb_write == ADIOI_HINT_DISABLE) {
-        /* explicitly disabled by user */
+        /* collective write is explicitly disabled by user */
         do_collect = 0;
     }
     else {
-        int is_interleaved;
-        ADIO_Offset st_end[2], *st_end_all = NULL;
+        /* Calculate the aggregate access region of all ranks and check if
+         * write requests are interleaved among all ranks.
+         */
+        int is_interleaved, large_indv_req = 1;
+        MPI_Offset striping_range, st_end[2], *st_end_all = NULL;
 
-        /* Gather starting and ending file offsets of requests from all ranks
-         * into st_end_all[]. Even indices of st_end_all[] are start offsets,
-         * odd indices are end offsets. st_end_all[] is used below to tell
-         * whether access across all ranks is interleaved.
+        /* Gather starting and ending file offsets of write requests from all
+         * ranks into st_end_all[]. Even indices of st_end_all[] are starting
+         * offsets, and odd indices are ending offsets.
          */
         st_end[0] = start_offset;
         st_end[1] = end_offset;
         st_end_all = (ADIO_Offset *) ADIOI_Malloc(nprocs * 2 * sizeof(ADIO_Offset));
         MPI_Allgather(st_end, 2, ADIO_OFFSET, st_end_all, 2, ADIO_OFFSET, fd->comm);
 
-        /* check if the request pattern is non-interleaved among all processes
-         * and each process writes a large amount. Here, "large" means a
-         * process's write range is > striping_factor * striping_unit. In this
-         * case, independent write will perform faster than collective.
+        /* The loop below does the followings.
+         * 1. Calculate this rank's aggregate access region.
+         * 2. Check whether or not the requests are interleaved among all ranks.
+         * 3. Check whether there are LARGE individual requests. Here, "large"
+         *    means a write range is > (striping_factor * striping_unit). In
+         *    this case, independent write will perform faster than collective.
          */
-        int large_indv_req = 1;
-        MPI_Offset striping_range = fd->hints->striping_unit * fd->hints->striping_factor;
-
-        /* Find the starting and ending file offsets of aggregate access region
-         * and the number of ranks that have non-zero length write requests.
-         * Also, check whether accesses are interleaved across ranks. Below is
-         * a rudimentary check for interleaving, but should suffice for the
-         * moment.
-         */
+        striping_range = fd->hints->striping_unit * fd->hints->striping_factor;
         is_interleaved = 0;
         for (i = 0; i < nprocs * 2; i += 2) {
             if (st_end_all[i] > st_end_all[i + 1]) {
@@ -813,25 +810,27 @@ double curT = MPI_Wtime();
              * Two typical access patterns can benefit from collective write.
              *   1) access file regions of all processes are interleaved, and
              *   2) the individual request sizes are not too big, i.e. no
-             *      bigger than hint coll_threshold.  Large individual requests
-             *      may cause a high communication cost for redistributing
-             *      requests to the I/O aggregators.
+             *      bigger than striping_range. Large individual requests may
+             *      result in a high communication cost in order to
+             *      redistribute requests from non-aggregators to I/O
+             *      aggregators.
              */
             if (is_interleaved > 0)
                 do_collect = 1;
             else if (nprocs == 1)
                 do_collect = 0;
             else if (large_indv_req &&
-                     fd->hints->cb_nodes <= fd->hints->striping_factor)
+                     fd->hints->cb_nodes <= fd->hints->striping_factor) {
                 /* do independent write, if every rank's write range >
                  * striping_range and writes are not interleaved in file
                  * space
                  */
                 do_collect = 0;
+            }
         }
     }
 
-    /* If collective I/O is not necessary, use independent I/O */
+    /* If collective I/O is determined not necessary, use independent I/O */
     if (!do_collect) {
 
         if (is_btype_predef)
@@ -911,42 +910,80 @@ double curT = MPI_Wtime();
     }
 #endif
 
-    /* my_req[cb_nodes] is an array of access info, one for each I/O
-     * aggregator whose file domain has this rank's request.
+    /* my_req[cb_nodes] is an array of access info, one for each I/O aggregator
+     * whose file domain has this rank's request.
      */
     ADIOI_Access *my_req;
 
-    /* others_req[nprocs] is an array of access info, one for each process
-     * whose write requests fall into this process's file domain.
+    /* others_req[nprocs] is an array of access info, one for each ranks, both
+     * aggregators and non-aggregators, whose write requests fall into this
+     * aggregator's file domain. others_req[] matters only for aggregators.
      */
     ADIOI_Access *others_req;
     ADIO_Offset **buf_idx = NULL;
 
-    /* Calculate the portions of this process's write requests that fall
-     * into the file domains of each I/O aggregator. No inter-process
-     * communication is needed.
-     */
     if (flat_bview.is_contig)
         buf_idx = (ADIO_Offset **) ADIOI_Malloc(fd->hints->cb_nodes *
                                                 sizeof(ADIO_Offset*));
 
+    /* Calculate the portions of this rank's write requests that fall into the
+     * file domains of each I/O aggregator. No inter-process communication is
+     * performed in ADIOI_LUSTRE_Calc_my_req().
+     */
     ADIOI_LUSTRE_Calc_my_req(fd, flat_fview, flat_bview.is_contig,
                              &my_req, buf_idx);
 
-    /* Calculate the portions of all other ranks' requests fall into this
-     * process's file domain (note only I/O aggregators are assigned file
-     * domains). Inter-process communication is required to construct
-     * others_req[], including MPI_Alltoall, MPI_Issend, MPI_Irecv, and
-     * MPI_Waitall.
+    if (fd->hints->ds_write != ADIOI_HINT_DISABLE) {
+        /* When data sieving is considered, below check the current file size
+         * first. If the aggregate access region of this collective write is
+         * beyond the current file size, then we can safely skip the read of
+         * the read-modify-write of data sieving.
+         */
+        if (fd->is_agg) {
+            /* Obtain the current file size. Note an MPI_Allgather() has been
+             * called above to calculate the aggregate access region. Thus all
+             * prior independent I/O should have completed by now, so it is
+             * safe to call lseek() to query the file size.
+             */
+            MPI_Offset cur_off, fsize;
+
+            cur_off = lseek(fd->fd_sys, 0, SEEK_CUR);
+            fsize   = lseek(fd->fd_sys, 0, SEEK_END);
+            /* Ignore the error, and proceed as if file size is very large. */
+#ifdef PNETCDF_DEBUG
+            if (fsize == -1)
+                fprintf(stderr, "%s at %d: lseek SEEK_END failed on file %s (%s)\n",
+                        __func__,__LINE__, fd->filename, strerror(errno));
+#endif
+            fd->skip_read = (fsize >=0 && min_st_loc >= fsize);
+
+            /* restore file pointer */
+            lseek(fd->fd_sys, cur_off, SEEK_SET);
+        }
+    }
+    else
+        fd->skip_read = 1;
+
+// if (fd->is_agg && !fd->skip_read) { MPI_Offset fsize = lseek(fd->fd_sys, 0, SEEK_END); printf("%d: %s at %d: skip_read=%d min_st_loc=%lld fsize=%lld\n",myrank,__func__,__LINE__,fd->skip_read,min_st_loc,fsize); }
+
+    /* For aggregators, calculate the portions of all other ranks' requests
+     * fall into this aggregator's file domain (note only I/O aggregators are
+     * assigned file domains).
+     *
+     * Inter-process communication is required to construct others_req[],
+     * including MPI_Alltoall, MPI_Issend, MPI_Irecv, and MPI_Waitall.
      */
     ADIOI_LUSTRE_Calc_others_req(fd, my_req, &others_req);
 
     /* Two-phase I/O: first communication phase to exchange write data from all
-     * processes to the I/O aggregators, followed by the write phase where only
-     * I/O aggregators write to the file. Unless MPI_Alltoallw() is used (when
-     * use_alltoallw is set to 1), there is no collective MPI communication in
-     * ADIOI_LUSTRE_Exch_and_write(), as it calls MPI_Issend, MPI_Irecv, and
-     * MPI_Waitall.
+     * ranks to the I/O aggregators, followed by the write phase where only I/O
+     * aggregators write to the file.
+     *
+     * Unless MPI_Alltoallw() is used (when use_alltoallw is set to 1), there
+     * is no collective MPI communication beyond this point, as
+     * ADIOI_LUSTRE_Exch_and_write() calls only MPI_Issend, MPI_Irecv, and
+     * MPI_Waitall. Thus it is safe for those non-aggregators making zero-sized
+     * request to skip the call.
      */
 
     /* if this rank has data to write, then participate exchange-and-write */
@@ -1356,8 +1393,8 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
 {
     char **write_buf = NULL, **recv_buf = NULL, **send_buf = NULL;
     size_t alloc_sz;
-    int i, nprocs, myrank, nbufs, ibuf, batch_idx=0, cb_nodes, striping_unit;
-    MPI_Count j, m, ntimes;
+    int nprocs, myrank, nbufs, ibuf, batch_idx=0, cb_nodes, striping_unit;
+    MPI_Count i, j, m, ntimes;
     MPI_Count **recv_size=NULL, **recv_count=NULL;
     MPI_Count **recv_start_pos=NULL, *send_size;
     ADIO_Offset end_loc, req_off, iter_end_off, *off_list, step_size;
@@ -2043,7 +2080,7 @@ void Exchange_data_recv(
 {
     char *buf_ptr, *contig_buf;
     size_t alloc_sz;
-    int i, j, nprocs, myrank, nprocs_recv, err, hole, check_hole;
+    int i, j, nprocs, myrank, nprocs_recv, err, hole, build_srt_off_len;
     MPI_Count sum_recv;
     MPI_Status status;
 
@@ -2077,10 +2114,10 @@ void Exchange_data_recv(
     /* determine whether checking holes is necessary */
     if (srt_off_len->num == 0) {
         /* this process has nothing to receive and hence no hole */
-        check_hole = 0;
+        build_srt_off_len = 0;
         hole = 0;
     } else if (srt_off_len->num == 1) {
-        check_hole = 0;
+        build_srt_off_len = 0;
         hole = 0;
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(ADIO_Offset) + sizeof(MPI_Count);
@@ -2094,50 +2131,51 @@ void Exchange_data_recv(
         srt_off_len->off[0] = others_req[j].offsets[start_pos[j]];
         srt_off_len->len[0] = others_req[j].lens[start_pos[j]];
     } else if (fd->hints->ds_write == ADIOI_HINT_ENABLE) {
-        /* skip hole checking and proceed to read-modify-write */
-        check_hole = 0;
+        /* skip building of srt_off_len and proceed to read-modify-write */
+        build_srt_off_len = 0;
         /* assuming there are holes */
         hole = 1;
     } else if (fd->hints->ds_write == ADIOI_HINT_AUTO) {
         if (DO_HEAP_MERGE(nprocs_recv, srt_off_len->num)) {
             /* When the number of sorted offset-length lists or the total
              * number of offset-length pairs are too large, the heap-merge sort
-             * below can become very expensive. Such sorting is required to
-             * check holes to determine whether read-modify-write is necessary.
+             * below for building srt_off_len can become very expensive. Such
+             * sorting is also used to check holes to determine whether
+             * read-modify-write is necessary.
              */
-            check_hole = 0;
+            build_srt_off_len = 0;
             /* assuming there are holes */
             hole = 1;
         }
-        else /* heap-merge is less expensive, proceed to check_hole */
-            check_hole = 1;
+        else /* heap-merge is less expensive, proceed to build srt_off_len */
+            build_srt_off_len = 1;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (check_hole) {
-        fd->write_counter[1]++;
-        fd->write_counter[2] = MAX(fd->write_counter[2], srt_off_len->num);
-        fd->write_counter[3] = MAX(fd->write_counter[3], nprocs_recv);
-    } else {
-        fd->write_counter[4]++;
-        fd->write_counter[5] = MAX(fd->write_counter[5], srt_off_len->num);
-        fd->write_counter[6] = MAX(fd->write_counter[6], nprocs_recv);
-    }
+        if (build_srt_off_len) {
+            fd->write_counter[1]++;
+            fd->write_counter[2] = MAX(fd->write_counter[2], srt_off_len->num);
+            fd->write_counter[3] = MAX(fd->write_counter[3], nprocs_recv);
+        } else {
+            fd->write_counter[4]++;
+            fd->write_counter[5] = MAX(fd->write_counter[5], srt_off_len->num);
+            fd->write_counter[6] = MAX(fd->write_counter[6], nprocs_recv);
+        }
 #endif
-
     } else { /* if (fd->hints->ds_write == ADIOI_HINT_DISABLE) */
         /* User explicitly disable data sieving to skip read-modify-write.
-         * Whether or not there is a hole is no longer important. However,
+         * Whether or not there is a hole is not important. However,
          * srt_off_len must be constructed to merge all others_req[] into a
-         * single sorted list. This step is necessary because write data from
-         * all non-aggregators are received into the same write_buf, with a
-         * possibility of overlaps, and srt_off_len stores the coalesced
-         * offset-length pairs of individual non-contiguous write request and
-         * will be used to write them to the file.
+         * single sorted list. This step is necessary because after this
+         * subroutine returns, write data from all non-aggregators will be
+         * packed into the write_buf, with a possibility of overlaps, and
+         * as srt_off_len stores the coalesced offset-length pairs of
+         * individual non-contiguous write requests, it is used to write them
+         * to the file.
          */
-        check_hole = 1; /* not to check holes, but to construct srt_off_len */
+        build_srt_off_len = 1;
     }
 
-    if (check_hole) {
+    if (build_srt_off_len) {
         /* merge all the offset-length pairs from others_req[] (already sorted
          * individually) into a single list of offset-length pairs.
          */
@@ -2157,26 +2195,32 @@ void Exchange_data_recv(
         heap_merge(others_req, recv_count, srt_off_len->off, srt_off_len->len,
                    start_pos, nprocs, nprocs_recv, &srt_off_len->num);
 
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        fd->write_timing[5] += MPI_Wtime() - curT;
-#endif
         /* Now, (srt_off_len->off and srt_off_len->len) are in an increasing
          * order of file offsets. In addition, they are coalesced.
          */
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+        fd->write_timing[5] += MPI_Wtime() - curT;
+#endif
+        /* whether or not there are holes */
         hole = (srt_off_len->num > 1);
     }
 
-// printf("%s at %d: ds_write=%s check_hole=%d hole=%d nprocs_recv=%d(ADIOI_DS_WR_NAGGRS_LB=%d) numx=%lld(ADIOI_DS_WR_NPAIRS_LB=%d)\n",__func__,__LINE__, (fd->hints->ds_write == ADIOI_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", check_hole,hole,nprocs_recv,ADIOI_DS_WR_NAGGRS_LB,numx,ADIOI_DS_WR_NPAIRS_LB);
+// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d skip_read=%d srt_off_len->num=%lld\n",__func__,__LINE__, (fd->hints->ds_write == ADIOI_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,fd->skip_read,srt_off_len->num);
+// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d nprocs_recv=%d(ADIOI_DS_WR_NAGGRS_LB=%d) numx=%lld(ADIOI_DS_WR_NPAIRS_LB=%d)\n",__func__,__LINE__, (fd->hints->ds_write == ADIOI_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,nprocs_recv,ADIOI_DS_WR_NAGGRS_LB,numx,ADIOI_DS_WR_NPAIRS_LB);
 
     /* data sieving */
     if (fd->hints->ds_write != ADIOI_HINT_DISABLE && hole) {
-        ADIO_ReadContig(fd, write_buf, range_size, MPI_BYTE, range_off,
-                        &status, &err);
-        if (err != MPI_SUCCESS) {
-            *error_code = MPIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
-                                               __func__, __LINE__, MPI_ERR_IO,
-                                               "**ioRMWrdwr", 0);
-            return;
+        if (fd->skip_read)
+            memset(write_buf, 0, range_size);
+        else {
+            ADIO_ReadContig(fd, write_buf, range_size, MPI_BYTE, range_off,
+                            &status, &err);
+            if (err != MPI_SUCCESS) {
+                *error_code = MPIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
+                                                   __func__, __LINE__, MPI_ERR_IO,
+                                                   "**ioRMWrdwr", 0);
+                return;
+            }
         }
 
         /* Once read, holes have been filled and thus the number of
