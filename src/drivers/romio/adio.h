@@ -196,7 +196,6 @@ typedef struct {
     int is_open;            /* no_indep_rw, 0: not open yet 1: is open */
 
     int skip_read;          /* whether to skip reads in read-modify-write */
-    ADIO_Offset fsize;      /* currnt file size */
 
     ADIO_Offset disp;       /* file displacement */
     MPI_Datatype filetype;  /* file type set in fileview */
