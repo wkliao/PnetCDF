@@ -38,7 +38,7 @@
             }                                                           \
         }                                                               \
         write_sz = (MPI_Aint) (MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
-        ADIOI_Assert((MPI_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
+        assert((MPI_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
         memcpy(writebuf+req_off-writebuf_off, (char *)buf +userbuf_off, write_sz); \
         while (write_sz != req_len) {                                   \
             PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
@@ -88,7 +88,7 @@
             writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
         }                                                               \
         write_sz = (MPI_Aint) (MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
-        ADIOI_Assert((MPI_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
+        assert((MPI_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
         memcpy(writebuf+req_off-writebuf_off, (char *)buf +userbuf_off, write_sz); \
         while (write_sz != req_len) {                                   \
             PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
@@ -188,7 +188,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
     /* Contiguous both in buftype and filetype should have been handled in a
      * call to PNCIO_WriteContig() earlier.
      */
-    ADIOI_Assert(!(buftype_is_contig && filetype_is_contig));
+    assert(!(buftype_is_contig && filetype_is_contig));
 
     if (!buftype_is_contig && filetype_is_contig) {
 

@@ -19,7 +19,7 @@ int PNCIO_Type_get_combiner(MPI_Datatype datatype, int *combiner)
 {
     int ret;
 
-    ADIOI_Assert(datatype != MPI_DATATYPE_NULL);
+    assert(datatype != MPI_DATATYPE_NULL);
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count ni, na, nc, nt;
     ret = MPI_Type_get_envelope_c(datatype, &ni, &na, &nc, &nt, combiner);
@@ -71,17 +71,17 @@ int PNCIO_Type_dispose(MPI_Datatype * datatype)
 #define CAST_INT32(func_name, count, bklen, disp, dType, newType) {          \
     int kk, iCount, *iBklen;                                                 \
     MPI_Aint *iDisp;                                                         \
-    ADIOI_Assert(count <= 2147483647); /* overflow 4-byte int */             \
+    assert(count <= 2147483647); /* overflow 4-byte int */             \
     iCount = (int)count;                                                     \
     iBklen = (int*) NCI_Malloc(sizeof(int) * iCount);                      \
     for (kk=0; kk<iCount; kk++) {                                            \
-        ADIOI_Assert(bklen[kk] <= 2147483647); /* overflow 4-byte int */     \
+        assert(bklen[kk] <= 2147483647); /* overflow 4-byte int */     \
         iBklen[kk] = (int)bklen[kk];                                         \
     }                                                                        \
     if (sizeof(MPI_Aint) != sizeof(MPI_Count)) {                             \
         iDisp = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * iCount);         \
         for (kk=0; kk<iCount; kk++) {                                        \
-            ADIOI_Assert(disp[kk] <= 2147483647); /* overflow 4-byte int */  \
+            assert(disp[kk] <= 2147483647); /* overflow 4-byte int */  \
             iDisp[kk] = (MPI_Aint)disp[kk];                                  \
         }                                                                    \
     }                                                                        \

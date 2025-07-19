@@ -245,7 +245,7 @@ Alternative: especially for when flat_fview.count is large
         aggr = ADIOI_LUSTRE_Calc_aggregator(fd, off, &avail_len);
         aggr_ranks[i] = aggr;          /* first aggregator ID of this request */
         avail_lens[i] = avail_len;     /* length covered, may be < flat_fview.len[i] */
-        ADIOI_Assert(aggr >= 0 && aggr <= cb_nodes);
+        assert(aggr >= 0 && aggr <= cb_nodes);
         my_req[aggr].count++; /* increment for aggregator aggr */
         nelems++;             /* true number of noncontiguous requests
                                * in terms of file domains */
@@ -254,7 +254,7 @@ Alternative: especially for when flat_fview.count is large
          * by aggregator aggr's file domain.
          */
         rem_len = flat_fview.len[i] - avail_len;
-        ADIOI_Assert(rem_len >= 0);
+        assert(rem_len >= 0);
 
         while (rem_len > 0) {
             off += avail_len;    /* move forward to first remaining byte */
@@ -316,7 +316,7 @@ Alternative: especially for when flat_fview.count is large
 
         off = flat_fview.off[i];
         aggr = aggr_ranks[i];
-        ADIOI_Assert(aggr >= 0 && aggr <= cb_nodes);
+        assert(aggr >= 0 && aggr <= cb_nodes);
         avail_len = avail_lens[i];
 
         l = my_req[aggr].count;
@@ -339,7 +339,7 @@ Alternative: especially for when flat_fview.count is large
             off += avail_len;
             avail_len = rem_len;
             aggr = ADIOI_LUSTRE_Calc_aggregator(fd, off, &avail_len);
-            ADIOI_Assert(aggr >= 0 && aggr <= cb_nodes);
+            assert(aggr >= 0 && aggr <= cb_nodes);
             l = my_req[aggr].count;
             if (buf_idx != NULL && buf_is_contig) {
                 buf_idx[aggr][l] = curr_idx;
@@ -1082,17 +1082,17 @@ double curT = MPI_Wtime();
 #define CAST_INT32(count, bklen, disp, dType, newType) {                     \
     int kk, iCount, *iBklen;                                                 \
     MPI_Aint *iDisp;                                                         \
-    ADIOI_Assert(count <= 2147483647); /* overflow 4-byte int */             \
+    assert(count <= 2147483647); /* overflow 4-byte int */             \
     iCount = (int)count;                                                     \
     iBklen = (int*) NCI_Malloc(sizeof(int) * iCount);                      \
     for (kk=0; kk<iCount; kk++) {                                            \
-        ADIOI_Assert(bklen[kk] <= 2147483647); /* overflow 4-byte int */     \
+        assert(bklen[kk] <= 2147483647); /* overflow 4-byte int */     \
         iBklen[kk] = (int)bklen[kk];                                         \
     }                                                                        \
     if (sizeof(MPI_Aint) < sizeof(MPI_Count)) {                              \
         iDisp = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * iCount);         \
         for (kk=0; kk<iCount; kk++) {                                        \
-            ADIOI_Assert(disp[kk] <= 2147483647); /* overflow 4-byte int */  \
+            assert(disp[kk] <= 2147483647); /* overflow 4-byte int */  \
             iDisp[kk] = (MPI_Aint)disp[kk];                                  \
         }                                                                    \
     }                                                                        \
@@ -1453,7 +1453,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
      * PNCIO_LUSTRE_WriteStridedColl().
      */
     nbufs = fd->hints->cb_buffer_size / striping_unit;
-    ADIOI_Assert(nbufs > 0); /* must at least 1 */
+    assert(nbufs > 0); /* must at least 1 */
 
     /* in case number of rounds is less than nbufs */
     nbufs = (ntimes < nbufs) ? (int)ntimes : nbufs;
@@ -1510,7 +1510,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
          * recv_list[i].len: length in bytes.
          * recv_list[i].disp: displacement (recv buffer address).
          */
-        ADIOI_Assert(fd->is_agg);
+        assert(fd->is_agg);
 
         recv_list = (disp_len_list*) NCI_Malloc(sizeof(disp_len_list) * nprocs);
         for (i = 0; i < nprocs; i++) {
@@ -1530,7 +1530,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
          * size must be at least striping_unit, which has been checked at the
          * time fd->io_buf is allocated.
          */
-        ADIOI_Assert(fd->io_buf != NULL);
+        assert(fd->io_buf != NULL);
 
         /* divide collective buffer into nbufs sub-buffers */
         write_buf = (char **) NCI_Malloc(nbufs * sizeof(char*));
@@ -1847,7 +1847,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
                      * range of [range_off, range_off+range_size). This below
                      * assertion should never fail.
                      */
-                    ADIOI_Assert(srt_off_len[j].off[i] < range_off + range_size &&
+                    assert(srt_off_len[j].off[i] < range_off + range_size &&
                                  srt_off_len[j].off[i] >= range_off);
 
                     PNCIO_WriteContig(fd,
@@ -2458,7 +2458,7 @@ int num_memcpy=0;
              */
 
             if (first_q != q) {
-                ADIOI_Assert(send_size_rem == 0);
+                assert(send_size_rem == 0);
                 first_q = q;
                 isUserBuf = 1;
                 send_size_rem = send_size[q];
@@ -2556,7 +2556,7 @@ num_memcpy++;
                  * collective write call. Unlike flat_bview whose offset-length
                  * pairs can be used multiple rounds when 'count' is > 1.
                  */
-                ADIOI_Assert(flat_fview->rnd <= 1);
+                assert(flat_fview->rnd <= 1);
                 flat_fview->idx = 0;
                 flat_fview->rnd++;
             }

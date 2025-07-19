@@ -452,7 +452,7 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
                     }
                     if (req_off < off + size) {
                         count[i]++;
-                        ADIOI_Assert((((MPI_Offset) (uintptr_t) write_buf) + req_off - off) ==
+                        assert((((MPI_Offset) (uintptr_t) write_buf) + req_off - off) ==
                                      (MPI_Offset) (uintptr_t) (write_buf + req_off - off));
                         if (myrank != i) {
                             MPI_Aint addr;
@@ -729,7 +729,7 @@ double curT = MPI_Wtime();
                              write_buf, 1, self_recv_type, MPI_COMM_SELF);
 #else
                 int position = 0;
-                ADIOI_Assert(recv_size[i] < INT_MAX);
+                assert(recv_size[i] < INT_MAX);
                 MPI_Unpack((char *) buf + buf_idx[i], (int)recv_size[i], &position,
                            write_buf, 1, self_recv_type, MPI_COMM_SELF);
 #endif
@@ -746,7 +746,7 @@ double curT = MPI_Wtime();
         j = 0;
         for (i = 0; i < nprocs; i++)
             if (send_size[i] && i != myrank) {
-                ADIOI_Assert(buf_idx[i] != -1);
+                assert(buf_idx[i] != -1);
 #if MPI_VERSION >= 4
                 MPI_Isend_c((char *) buf + buf_idx[i], send_size[i],
                             MPI_BYTE, i, 0, fd->comm, send_req + j);
@@ -797,7 +797,7 @@ double curT = MPI_Wtime();
                              MPI_COMM_SELF);
 #else
                 int position = 0;
-                ADIOI_Assert(recv_size[i] < INT_MAX);
+                assert(recv_size[i] < INT_MAX);
                 MPI_Unpack(ptr, (int)recv_size[i], &position, write_buf, 1, self_recv_type,
                            MPI_COMM_SELF);
 #endif
@@ -811,7 +811,7 @@ double curT = MPI_Wtime();
                      MPI_COMM_SELF);
 #else
         int position = 0;
-        ADIOI_Assert(recv_size[myrank] < INT_MAX);
+        assert(recv_size[myrank] < INT_MAX);
         MPI_Unpack(send_buf[myrank], (int)recv_size[myrank], &position, write_buf, 1, self_recv_type,
                    MPI_COMM_SELF);
 #endif
@@ -874,8 +874,8 @@ double curT = MPI_Wtime();
 { \
     while (size) { \
         size_in_buf = MPL_MIN(size, flat_buf_sz); \
-  ADIOI_Assert((((MPI_Offset)(uintptr_t)buf) + user_buf_idx) == (MPI_Offset)(uintptr_t)((uintptr_t)buf + user_buf_idx)); \
-  ADIOI_Assert(size_in_buf == (size_t)size_in_buf); \
+  assert((((MPI_Offset)(uintptr_t)buf) + user_buf_idx) == (MPI_Offset)(uintptr_t)((uintptr_t)buf + user_buf_idx)); \
+  assert(size_in_buf == (size_t)size_in_buf); \
         memcpy(&(send_buf[p][send_buf_idx[p]]), \
                ((char *) buf) + user_buf_idx, size_in_buf); \
         send_buf_idx[p] += size_in_buf; \

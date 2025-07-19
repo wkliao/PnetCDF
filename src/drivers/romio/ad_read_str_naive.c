@@ -44,7 +44,7 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
     MPI_Type_size_x(buftype, &buftype_size);
     MPI_Type_get_extent(buftype, &lb, &buftype_extent);
 
-    ADIOI_Assert((buftype_size * count) == ((MPI_Offset) buftype_size * (MPI_Offset) count));
+    assert((buftype_size * count) == ((MPI_Offset) buftype_size * (MPI_Offset) count));
     bufsize = buftype_size * count;
 
     /* contiguous in buftype and filetype is handled elsewhere */
@@ -75,9 +75,9 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
                 req_off = off;
                 req_len = flat_buf->blocklens[b_index];
 
-                ADIOI_Assert((((MPI_Offset) (uintptr_t) buf) + userbuf_off) ==
+                assert((((MPI_Offset) (uintptr_t) buf) + userbuf_off) ==
                              (MPI_Offset) (uintptr_t) ((uintptr_t) buf + userbuf_off));
-                ADIOI_Assert(req_len == (int) req_len);
+                assert(req_len == (int) req_len);
                 PNCIO_ReadContig(fd,
                                 (char *) buf + userbuf_off,
                                 req_len,
@@ -199,9 +199,9 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
                     req_off = off;
                     req_len = frd_size;
 
-                    ADIOI_Assert((((MPI_Offset) (uintptr_t) buf) + userbuf_off) ==
+                    assert((((MPI_Offset) (uintptr_t) buf) + userbuf_off) ==
                                  (MPI_Offset) (uintptr_t) ((uintptr_t) buf + userbuf_off));
-                    ADIOI_Assert(req_len == (int) req_len);
+                    assert(req_len == (int) req_len);
                     PNCIO_ReadContig(fd,
                                     (char *) buf + userbuf_off,
                                     req_len,
@@ -262,9 +262,9 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
                     req_len = size;
                     userbuf_off = i_offset;
 
-                    ADIOI_Assert((((MPI_Offset) (uintptr_t) buf) + userbuf_off) ==
+                    assert((((MPI_Offset) (uintptr_t) buf) + userbuf_off) ==
                                  (MPI_Offset) (uintptr_t) ((uintptr_t) buf + userbuf_off));
-                    ADIOI_Assert(req_len == (int) req_len);
+                    assert(req_len == (int) req_len);
                     PNCIO_ReadContig(fd,
                                     (char *) buf + userbuf_off,
                                     req_len,

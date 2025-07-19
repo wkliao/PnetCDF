@@ -143,7 +143,7 @@ int PNCIO_File_read_at(PNCIO_File    *fh,
 {
     int err = NC_NOERR;
 
-    ADIOI_Assert(fh != NULL);
+    assert(fh != NULL);
 
     if (count == 0) return NC_NOERR;
 
@@ -171,7 +171,7 @@ int PNCIO_File_read_at_all(PNCIO_File    *fh,
 {
     int err, st=NC_NOERR;
 
-    ADIOI_Assert(fh != NULL);
+    assert(fh != NULL);
 
     if (count < 0) st = NC_ENEGATIVECNT;
 
