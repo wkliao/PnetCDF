@@ -371,7 +371,7 @@ int ADIOI_Calc_aggregator(ADIO_File fd, ADIO_Offset off, ADIO_Offset min_off,
 int PNCIO_Type_create_subarray(int ndims, const int *array_of_sizes,
                 const int *array_of_subsizes, const int *array_of_starts,
                 int order, MPI_Datatype oldtype, MPI_Datatype *newtype);
-int ADIO_Type_create_darray(int size, int rank, int ndims,
+int PNCIO_Type_create_darray(int size, int rank, int ndims,
                 const int *array_of_gsizes, const int *array_of_distribs,
                 const int *array_of_dargs, const int *array_of_psizes,
                 int order, MPI_Datatype oldtype, MPI_Datatype * newtype);
