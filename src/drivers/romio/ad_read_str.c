@@ -59,7 +59,7 @@ void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
 
 /* offset is in units of etype relative to the filetype. */
 
-    ADIOI_Flatlist_node *flat_buf, *flat_file;
+    PNCIO_Flatlist_node *flat_buf, *flat_file;
     MPI_Offset i_offset, new_brd_size, brd_size, size;
     int i, j, k, st_index = 0;
     MPI_Count num, bufsize;
