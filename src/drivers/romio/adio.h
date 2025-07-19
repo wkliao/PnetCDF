@@ -150,7 +150,7 @@ typedef struct {
             int overstriping_ratio;
         } lustre;
     } fs_hints;
-} ADIOI_Hints;
+} PNCIO_Hints;
 
 typedef struct {
     MPI_Count count;            /* no. of contiguous blocks */
@@ -203,7 +203,7 @@ typedef struct {
     char *io_buf;           /* two-phase buffer allocated out of i/o path */
     int is_agg;             /* bool: if I am an aggregator */
     int my_cb_nodes_index;  /* my index into cb_config_list. -1 if N/A */
-    ADIOI_Hints *hints;     /* structure containing fs-indep. info values */
+    PNCIO_Hints *hints;     /* structure containing fs-indep. info values */
     MPI_Info info;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
