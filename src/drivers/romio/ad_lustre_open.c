@@ -445,7 +445,7 @@ int ADIO_Lustre_set_cb_node_list(ADIO_File fd)
 
     /* Next step is to determine the MPI rank IDs of I/O aggregators and add
      * them into ranklist[]. Note fd->hints->ranklist will be freed in
-     * ADIO_File_close().
+     * PNCIO_File_close().
      */
     fd->hints->ranklist = (int *) ADIOI_Malloc(num_aggr * sizeof(int));
     if (fd->hints->ranklist == NULL)

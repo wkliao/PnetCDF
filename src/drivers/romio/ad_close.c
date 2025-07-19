@@ -17,8 +17,8 @@
 
 #include "adio.h"
 
-/*----< ADIO_File_close() >--------------------------------------------------*/
-int ADIO_File_close(ADIO_File *fh)
+/*----< PNCIO_File_close() >--------------------------------------------------*/
+int PNCIO_File_close(ADIO_File *fh)
 {
     int err = NC_NOERR;
 
