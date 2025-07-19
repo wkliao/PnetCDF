@@ -208,7 +208,7 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int wh
 }
 #endif
 
-int ADIOI_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
+int PNCIO_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
                         MPI_Offset len)
 {
     FDTYPE fd_sys = fd->fd_sys;
@@ -233,11 +233,11 @@ int ADIOI_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset, int 
 
     if (err && (errno != EBADF)) {
         fprintf(stderr,
-                "File locking failed in ADIOI_GEN_SetLock64(fd %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
+                "File locking failed in PNCIO_GEN_SetLock64(fd %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
                 "If the file system is NFS, you need to use NFS version 3, ensure that the lockd daemon is running on all the machines, and mount the directory with the 'noac' option (no attribute caching).\n",
                 fd_sys, ADIOI_GEN_flock_cmd_to_string(cmd), cmd,
                 ADIOI_GEN_flock_type_to_string(type), type, whence, err, errno);
-        perror("ADIOI_GEN_SetLock64:");
+        perror("PNCIO_GEN_SetLock64:");
         fprintf(stderr, "ADIOI_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
                 (unsigned long long) len);
         MPI_Abort(MPI_COMM_WORLD, 1);
