@@ -67,7 +67,6 @@
 #define ADIOI_Free NCI_Free
 
 #define ADIOI_Strncpy strncpy
-#define ADIOI_Info_get MPI_Info_get
 #define ADIOI_Info_set MPI_Info_set
 #define ADIOI_Assert assert
 #define ADIOI_COLL_TAG(rank,iter) 0
