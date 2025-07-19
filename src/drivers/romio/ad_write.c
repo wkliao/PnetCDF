@@ -142,7 +142,7 @@ int file_write(ADIO_File     fd,
     else if (fd->file_system == ADIO_LUSTRE)
         PNCIO_LUSTRE_WriteStrided(fd, buf, count, bufType, offset, status, &err);
     else
-        ADIOI_GEN_WriteStrided(fd, buf, count, bufType, offset, status, &err);
+        PNCIO_GEN_WriteStrided(fd, buf, count, bufType, offset, status, &err);
     if (err != MPI_SUCCESS)
         err = ncmpii_error_mpi2nc(err, __func__);
     else

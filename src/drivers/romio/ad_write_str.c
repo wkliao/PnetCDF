@@ -107,7 +107,7 @@
             memcpy(writebuf, (char *)buf + userbuf_off, write_sz);      \
         }                                                               \
     }
-void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
+void PNCIO_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                             MPI_Datatype datatype, MPI_Offset offset,
                             ADIO_Status * status, int *error_code)
 {
@@ -129,7 +129,7 @@ void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
     MPI_Aint bufsize;
     ADIO_Status status1;
     MPI_Offset new_bwr_size, new_fwr_size, st_fwr_size, fwr_size = 0, bwr_size, req_len;
-    static char myname[] = "ADIOI_GEN_WriteStrided";
+    static char myname[] = "PNCIO_GEN_WriteStrided";
 
     if (fd->hints->ds_write == ADIOI_HINT_DISABLE) {
         /* if user has disabled data sieving on reads, use naive
