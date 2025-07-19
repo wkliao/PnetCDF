@@ -120,7 +120,7 @@ int file_read(ADIO_File     fd,
         err = PNCIO_ReadContig(fd, buf, rcount, MPI_BYTE, offset, status, NULL);
     }
     else {
-        ADIO_ReadStrided(fd, buf, count, bufType, offset, status, &err);
+        PNCIO_GEN_ReadStrided(fd, buf, count, bufType, offset, status, &err);
         if (err != MPI_SUCCESS)
             err = ncmpii_error_mpi2nc(err, __func__);
         else
