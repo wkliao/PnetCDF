@@ -581,7 +581,7 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
     }
 }
 
-void ADIOI_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
+void PNCIO_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
                                    MPI_Aint count, MPI_Datatype buftype,
                                    MPI_Offset offset, ADIO_Status *status,
                                    int *error_code)
@@ -1450,7 +1450,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
      * open/create time when fd->io_buf is allocated.
      *
      * Note cb_buffer_size and striping_unit may also be adjusted earlier in
-     * ADIOI_LUSTRE_WriteStridedColl().
+     * PNCIO_LUSTRE_WriteStridedColl().
      */
     nbufs = fd->hints->cb_buffer_size / striping_unit;
     ADIOI_Assert(nbufs > 0); /* must at least 1 */
