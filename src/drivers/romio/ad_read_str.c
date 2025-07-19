@@ -24,7 +24,7 @@
             }                                                           \
         }                                                               \
         while (req_len > readbuf_off + readbuf_len - req_off) {         \
-            ADIOI_Assert((readbuf_off + readbuf_len - req_off) ==       \
+            assert((readbuf_off + readbuf_len - req_off) ==       \
                          (MPI_Aint) (readbuf_off + readbuf_len - req_off)); \
             partial_read = (MPI_Aint) (readbuf_off + readbuf_len - req_off); \
             tmp_buf = (char *) NCI_Malloc(partial_read);              \
@@ -46,7 +46,7 @@
                 return;                                                 \
             }                                                           \
         }                                                               \
-        ADIOI_Assert(req_len == (size_t)req_len);                       \
+        assert(req_len == (size_t)req_len);                       \
         memcpy((char *)buf + userbuf_off, readbuf+req_off-readbuf_off, req_len); \
     }
 
@@ -344,7 +344,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
                         new_frd_size -= size;
                     }
                 }
-                ADIOI_Assert(((MPI_Offset) num + size) == (MPI_Aint) (num + size));
+                assert(((MPI_Offset) num + size) == (MPI_Aint) (num + size));
                 num += size;
                 frd_size = new_frd_size;
                 brd_size = new_brd_size;

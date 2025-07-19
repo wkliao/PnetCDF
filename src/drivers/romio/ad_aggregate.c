@@ -354,7 +354,7 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
 
         /* for each separate contiguous access from this process */
         if (buf_idx[proc] == -1) {
-            ADIOI_Assert(curr_idx == (MPI_Aint) curr_idx);
+            assert(curr_idx == (MPI_Aint) curr_idx);
             buf_idx[proc] = (MPI_Aint) curr_idx;
         }
 
@@ -379,7 +379,7 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
                                          fd_size, fd_start, fd_end);
 
             if (buf_idx[proc] == -1) {
-                ADIOI_Assert(curr_idx == (MPI_Aint) curr_idx);
+                assert(curr_idx == (MPI_Aint) curr_idx);
                 buf_idx[proc] = (MPI_Aint) curr_idx;
             }
 
@@ -509,7 +509,7 @@ void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
             MPI_Irecv_c(others_req[i].lens, others_req[i].count,
                         MPI_OFFSET, i, i + myrank, fd->comm, &requests[j++]);
 #else
-            ADIOI_Assert(others_req[i].count <= 2147483647); /* overflow 4-byte int */
+            assert(others_req[i].count <= 2147483647); /* overflow 4-byte int */
             MPI_Irecv(others_req[i].offsets, (int)others_req[i].count,
                       MPI_OFFSET, i, i + myrank, fd->comm, &requests[j++]);
             MPI_Irecv(others_req[i].lens, (int)others_req[i].count,
@@ -526,7 +526,7 @@ void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
             MPI_Isend_c(my_req[i].lens, my_req[i].count,
                         MPI_OFFSET, i, i + myrank, fd->comm, &requests[j++]);
 #else
-            ADIOI_Assert(my_req[i].count <= 2147483647); /* overflow 4-byte int */
+            assert(my_req[i].count <= 2147483647); /* overflow 4-byte int */
             MPI_Isend(my_req[i].offsets, (int)my_req[i].count,
                       MPI_OFFSET, i, i + myrank, fd->comm, &requests[j++]);
             MPI_Isend(my_req[i].lens, (int)my_req[i].count,

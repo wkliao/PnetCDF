@@ -71,7 +71,7 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf, MPI_Aint coun
     /* Contiguous both in buftype and filetype should have been handled in a
      * call to PNCIO_WriteContig() earlier.
      */
-    ADIOI_Assert(!(buftype_is_contig && filetype_is_contig));
+    assert(!(buftype_is_contig && filetype_is_contig));
 
     if (!buftype_is_contig && filetype_is_contig) {
         int b_count;

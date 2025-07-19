@@ -217,7 +217,7 @@ uint64_t get_striping(int         fd,
     *start_iodevice = osts[0];
 
     numOSTs = sort_ost_ids(layout, *stripe_count, osts);
-    ADIOI_Assert(numOSTs <= *stripe_count);
+    assert(numOSTs <= *stripe_count);
 
 err_out:
     if (osts != NULL) NCI_Free(osts);
@@ -507,7 +507,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
                  */
                 j = (i % striping_factor) * stride;
                 k = (i / striping_factor) * (nprocs_per_node[j] / avg);
-                ADIOI_Assert(k < nprocs_per_node[j]);
+                assert(k < nprocs_per_node[j]);
                 fd->hints->ranklist[i] = ranks_per_node[j][k];
             }
         }
@@ -557,7 +557,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
                 k *= idx_per_node[j];
                 /* try stride==1 seems no effect, k = idx_per_node[j]; */
                 idx_per_node[j]++;
-                ADIOI_Assert(k < nprocs_per_node[j]);
+                assert(k < nprocs_per_node[j]);
                 fd->hints->ranklist[i] = ranks_per_node[j][k];
             }
         }

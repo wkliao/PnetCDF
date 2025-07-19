@@ -28,7 +28,7 @@ void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag)
                 MPI_Aint *adds;
                 MPI_Count *cnts;
                 MPI_Datatype *types;
-                ADIOI_Assert(datatype != MPI_DATATYPE_NULL);
+                assert(datatype != MPI_DATATYPE_NULL);
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count nints, nadds, ncnts, ntypes;
                 MPI_Type_get_envelope_c(datatype, &nints, &nadds, &ncnts, &ntypes, &combiner);

@@ -27,7 +27,7 @@ static int ADIOI_Flattened_type_delete(MPI_Datatype datatype,
                                        int type_keyval, void *attribute_val, void *extra_state)
 {
     PNCIO_Flatlist_node *node = (PNCIO_Flatlist_node *) attribute_val;
-    ADIOI_Assert(node != NULL);
+    assert(node != NULL);
     node->refct--;
 
     if (node->refct <= 0) {
@@ -73,15 +73,15 @@ PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
         MPI_Count num_iovs, actual;
 
         MPIX_Type_iov_len(datatype, type_size, &num_iovs, &actual);
-        ADIOI_Assert(num_iovs > 0);
-        ADIOI_Assert(actual == type_size);
+        assert(num_iovs > 0);
+        assert(actual == type_size);
 
         MPIX_Iov *iovs;
         iovs = NCI_Malloc(num_iovs * sizeof(MPIX_Iov));
-        ADIOI_Assert(iovs);
+        assert(iovs);
 
         MPIX_Type_iov(datatype, 0, iovs, num_iovs, &actual);
-        ADIOI_Assert(actual == num_iovs);
+        assert(actual == num_iovs);
 
         /* copy to flatlist */
         flat = NCI_Malloc(sizeof(PNCIO_Flatlist_node));
@@ -264,14 +264,14 @@ static PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 static inline int downcast_i(MPI_Count count_value)
 {
     int int_value = (int) count_value;
-    ADIOI_Assert((int_value == count_value));
+    assert((int_value == count_value));
     return int_value;
 }
 
 static inline MPI_Aint downcast_a(MPI_Count count_value)
 {
     MPI_Aint aint_value = (MPI_Aint) count_value;
-    ADIOI_Assert((aint_value == count_value));
+    assert((aint_value == count_value));
     return aint_value;
 }
 #endif
@@ -280,7 +280,7 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
                               int *nints, int *nadds, int *ntypes,
                               int **ints, MPI_Aint ** adds, MPI_Datatype ** types)
 {
-    ADIOI_Assert(datatype != MPI_DATATYPE_NULL);
+    assert(datatype != MPI_DATATYPE_NULL);
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count nints_c, nadds_c, ncnts_c, ntypes_c;
@@ -426,8 +426,8 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
             default:
                 break;
         }
-        ADIOI_Assert((iq == nints_c));
-        ADIOI_Assert((cq == ncnts_c));
+        assert((iq == nints_c));
+        assert((cq == ncnts_c));
 
         NCI_Free(ints_c);
         NCI_Free(adds_c);
