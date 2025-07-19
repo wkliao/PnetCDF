@@ -149,7 +149,7 @@ void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
         readbuf_len = (MPI_Aint) (MPL_MIN(max_bufsize, end_offset - readbuf_off + 1));
 
 /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if ((fd->atomicity) && ADIO_Feature(fd, PNCIO_LOCKS))
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         PNCIO_ReadContig(fd, readbuf, readbuf_len, MPI_BYTE, readbuf_off,
@@ -166,7 +166,7 @@ void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
             }
         }
 
-        if ((fd->atomicity) && ADIO_Feature(fd, PNCIO_LOCKS))
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         ADIOI_Free(readbuf);
@@ -238,7 +238,7 @@ void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
         }
 
 /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if ((fd->atomicity) && ADIO_Feature(fd, PNCIO_LOCKS))
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         readbuf_off = 0;
@@ -351,7 +351,7 @@ void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
             }
         }
 
-        if ((fd->atomicity) && ADIO_Feature(fd, PNCIO_LOCKS))
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         ADIOI_Free(readbuf);    /* malloced in the buffered_read macro */
