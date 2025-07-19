@@ -68,7 +68,7 @@
  * The "len" parameter is also modified to indicate the amount of data
  * actually available in this file domain.
  */
-int PNCIO_Calc_aggregator(ADIO_File fd,
+int PNCIO_Calc_aggregator(PNCIO_File *fd,
                           MPI_Offset off,
                           MPI_Offset min_off,
                           MPI_Offset * len,
@@ -223,7 +223,7 @@ void PNCIO_Calc_file_domains(MPI_Offset * st_offsets, MPI_Offset
  * of this process are located in the file domains of various processes
  * (including this one)
  */
-void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
+void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                        MPI_Offset *len_list,
 #else
@@ -406,7 +406,7 @@ void PNCIO_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
     ADIOI_Free(buf_idx);
 }
 
-void PNCIO_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
+void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
                            MPI_Count * count_my_req_per_proc,
                            PNCIO_Access * my_req,
                            int nprocs, int myrank,

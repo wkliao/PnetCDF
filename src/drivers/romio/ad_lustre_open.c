@@ -329,7 +329,7 @@ err_out:
  *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
  */
 static
-int ADIO_Lustre_set_cb_node_list(ADIO_File fd)
+int ADIO_Lustre_set_cb_node_list(PNCIO_File *fd)
 {
     int i, j, k, rank, nprocs, num_aggr, striping_factor;
     int *nprocs_per_node, **ranks_per_node;
@@ -598,8 +598,8 @@ int ADIO_Lustre_set_cb_node_list(ADIO_File fd)
  *   5. non-root processes opens the fie
  */
 int
-PNCIO_Lustre_create(ADIO_File fd,
-                    int       access_mode)
+PNCIO_Lustre_create(PNCIO_File *fd,
+                    int        access_mode)
 {
     char int_str[16];
     int err=NC_NOERR, rank, amode, perm, old_mask;
@@ -841,7 +841,7 @@ err_out:
  *   2. root obtains striping info and broadcasts to all others
  */
 int
-PNCIO_Lustre_open(ADIO_File fd)
+PNCIO_Lustre_open(PNCIO_File *fd)
 {
     char int_str[16];
     int err=NC_NOERR, rank, perm, old_mask;

@@ -10,7 +10,7 @@
 #include "adio.h"
 
 /* prototypes of functions used for collective writes only. */
-static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
+static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
                                  datatype, int nprocs, int myrank,
                                  PNCIO_Access
                                  * others_req, MPI_Offset * offset_list,
@@ -23,7 +23,7 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
                                  min_st_offset, MPI_Offset fd_size,
                                  MPI_Offset * fd_start, MPI_Offset * fd_end,
                                  MPI_Aint * buf_idx, int *error_code);
-static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
+static void ADIOI_W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
                                   PNCIO_Flatlist_node * flat_buf,
                                   MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -44,7 +44,7 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
                                   MPI_Count *done_to_proc, int *hole, int iter,
                                   MPI_Aint buftype_extent, MPI_Aint * buf_idx, int *error_code);
 
-static void ADIOI_Fill_send_buffer(ADIO_File fd, void *buf,
+static void ADIOI_Fill_send_buffer(PNCIO_File *fd, void *buf,
                   PNCIO_Flatlist_node *flat_buf, char **send_buf,
                   MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -60,7 +60,7 @@ static void ADIOI_Fill_send_buffer(ADIO_File fd, void *buf,
                   MPI_Count *curr_to_proc, MPI_Count *done_to_proc, int iter,
                   MPI_Aint buftype_extent);
 
-void PNCIO_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
+void PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf, MPI_Aint count,
                                 MPI_Datatype datatype, MPI_Offset offset,
                                 ADIO_Status * status, int *error_code)
 {
@@ -102,7 +102,7 @@ double curT = MPI_Wtime();
 #endif
 
 /* the number of processes that actually perform I/O, nprocs_for_coll,
- * is stored in the hints off the ADIO_File structure
+ * is stored in the hints off the PNCIO_File structure
  */
     nprocs_for_coll = fd->hints->cb_nodes;
 
@@ -271,7 +271,7 @@ double curT = MPI_Wtime();
 /* If successful, error_code is set to MPI_SUCCESS.  Otherwise an error
  * code is created and returned in error_code.
  */
-static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
+static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
                                  datatype, int nprocs,
                                  int myrank,
                                  PNCIO_Access
@@ -539,7 +539,7 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
 /* Sets error_code to MPI_SUCCESS if successful, or creates an error code
  * in the case of error.
  */
-static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
+static void ADIOI_W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
                                   PNCIO_Flatlist_node * flat_buf,
                                   MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -902,7 +902,7 @@ double curT = MPI_Wtime();
 
 
 static
-void ADIOI_Fill_send_buffer(ADIO_File fd, void *buf, PNCIO_Flatlist_node
+void ADIOI_Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                             * flat_buf, char **send_buf,
                             MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT

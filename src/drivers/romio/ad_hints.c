@@ -20,8 +20,8 @@
 #include "adio.h"
 
 /*----< PNCIO_File_get_info() >-----------------------------------------------*/
-int PNCIO_File_get_info(ADIO_File fd,
-                      MPI_Info *info_used)
+int PNCIO_File_get_info(PNCIO_File *fd,
+                        MPI_Info  *info_used)
 {
     int err;
 
@@ -36,7 +36,7 @@ int PNCIO_File_get_info(ADIO_File fd,
 
 /*----< ADIOI_Info_check_and_install_int() >---------------------------------*/
 static
-int ADIOI_Info_check_and_install_int(ADIO_File   fd,
+int ADIOI_Info_check_and_install_int(PNCIO_File  *fd,
                                      MPI_Info    info,
                                      const char *key,
                                      int        *local_cache)
@@ -68,7 +68,7 @@ fn_exit:
 
 /*----< ADIOI_Info_check_and_install_enabled() >-----------------------------*/
 static
-int ADIOI_Info_check_and_install_enabled(ADIO_File   fd,
+int ADIOI_Info_check_and_install_enabled(PNCIO_File  *fd,
                                          MPI_Info    info,
                                          const char *key,
                                          int        *local_cache)
@@ -112,7 +112,7 @@ fn_exit:
 
 /*----< ADIOI_Info_check_and_install_true() >--------------------------------*/
 static
-int ADIOI_Info_check_and_install_true(ADIO_File   fd,
+int ADIOI_Info_check_and_install_true(PNCIO_File  *fd,
                                       MPI_Info    info,
                                       const char *key,
                                       int        *local_cache)
@@ -145,7 +145,7 @@ fn_exit:
 
 /*----< ADIOI_Info_check_and_install_str() >---------------------------------*/
 static
-int ADIOI_Info_check_and_install_str(ADIO_File    fd,
+int ADIOI_Info_check_and_install_str(PNCIO_File   *fd,
                                      MPI_Info     info,
                                      const char  *key,
                                      char       **local_cache)
@@ -180,8 +180,8 @@ fn_exit:
  * consistency of all hints values set in user's info object.
  */
 int
-PNCIO_File_SetInfo(ADIO_File fd,
-                  MPI_Info users_info)
+PNCIO_File_SetInfo(PNCIO_File *fd,
+                   MPI_Info   users_info)
 {
     int flag, nprocs = 0, len;
     char value[MPI_MAX_INFO_VAL + 1];

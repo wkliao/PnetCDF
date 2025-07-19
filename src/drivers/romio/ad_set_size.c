@@ -23,8 +23,8 @@
 #include "adio.h"
 
 /*----< PNCIO_File_set_size() >-----------------------------------------------*/
-int PNCIO_File_set_size(ADIO_File  fd,
-                      MPI_Offset size)
+int PNCIO_File_set_size(PNCIO_File  *fd,
+                        MPI_Offset  size)
 {
     int err = NC_NOERR, rank;
 
@@ -42,8 +42,8 @@ int PNCIO_File_set_size(ADIO_File  fd,
 }
 
 /*----< PNCIO_File_get_size() >-----------------------------------------------*/
-int PNCIO_File_get_size(ADIO_File   fd,
-                      MPI_Offset *size)
+int PNCIO_File_get_size(PNCIO_File  *fd,
+                        MPI_Offset *size)
 {
     int err = NC_NOERR, rank;
     MPI_Offset msg[2];

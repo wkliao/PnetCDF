@@ -51,7 +51,7 @@
     }
 
 
-void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
+void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
                            MPI_Datatype datatype, MPI_Offset offset,
                            ADIO_Status * status, int *error_code)
 {

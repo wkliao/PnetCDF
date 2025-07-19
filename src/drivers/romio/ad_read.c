@@ -18,13 +18,13 @@
 #include "adio.h"
 
 /*----< PNCIO_ReadContig() >--------------------------------------------------*/
-int PNCIO_ReadContig(ADIO_File     fd,
-                    void         *buf,
-                    MPI_Aint      count,
-                    MPI_Datatype  bufType,
-                    MPI_Offset   offset,
-                    ADIO_Status  *status,
-                    int          *error_code)
+int PNCIO_ReadContig(PNCIO_File    *fd,
+                     void         *buf,
+                     MPI_Aint      count,
+                     MPI_Datatype  bufType,
+                     MPI_Offset   offset,
+                     ADIO_Status  *status,
+                     int          *error_code)
 {
     ssize_t err = 0;
     size_t r_count;
@@ -84,7 +84,7 @@ ioerr:
 /*----< file_read() >--------------------------------------------------------*/
 /* This is an independent call. */
 static
-int file_read(ADIO_File     fd,
+int file_read(PNCIO_File    *fd,
               MPI_Offset    offset,
               void         *buf,
               int           count,
@@ -134,12 +134,12 @@ int file_read(ADIO_File     fd,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNCIO_File_read_at(ADIO_File     fh,
-                      MPI_Offset    offset,
-                      void         *buf,
-                      int           count,
-                      MPI_Datatype  bufType,
-                      MPI_Status   *status)
+int PNCIO_File_read_at(PNCIO_File    *fh,
+                       MPI_Offset    offset,
+                       void         *buf,
+                       int           count,
+                       MPI_Datatype  bufType,
+                       MPI_Status   *status)
 {
     int err = NC_NOERR;
 
@@ -162,12 +162,12 @@ int PNCIO_File_read_at(ADIO_File     fh,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNCIO_File_read_at_all(ADIO_File     fh,
-                          MPI_Offset    offset,
-                          void         *buf,
-                          int           count,
-                          MPI_Datatype  bufType,
-                          MPI_Status   *status)
+int PNCIO_File_read_at_all(PNCIO_File    *fh,
+                           MPI_Offset    offset,
+                           void         *buf,
+                           int           count,
+                           MPI_Datatype  bufType,
+                           MPI_Status   *status)
 {
     int err, st=NC_NOERR;
 

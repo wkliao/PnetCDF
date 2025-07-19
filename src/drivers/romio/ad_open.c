@@ -28,7 +28,7 @@
  *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
  */
 static
-int ADIO_GEN_set_cb_node_list(ADIO_File fd)
+int ADIO_GEN_set_cb_node_list(PNCIO_File *fd)
 {
     int i, j, k, nprocs, rank, *nprocs_per_node, **ranks_per_node;
 
@@ -108,7 +108,7 @@ int ADIO_GEN_set_cb_node_list(ADIO_File fd)
  *   5. non-root processes opens the fie
  */
 static int
-ADIOI_GEN_create(ADIO_File fd,
+ADIOI_GEN_create(PNCIO_File *fd,
                  int       access_mode)
 {
     int err=NC_NOERR, rank, amode, perm, old_mask;
@@ -168,7 +168,7 @@ err_out:
  *   2. root obtains striping info and broadcasts to all others
  */
 static int
-ADIOI_GEN_open(ADIO_File fd)
+ADIOI_GEN_open(PNCIO_File *fd)
 {
     int err=NC_NOERR, rank, perm, old_mask;
     int stripin_info[4] = {1048576, -1, -1, -1};
@@ -218,10 +218,10 @@ err_out:
 
 /*----< PNCIO_File_open() >---------------------------------------------------*/
 int PNCIO_File_open(MPI_Comm    comm,
-                   const char *filename,
-                   int         amode,
-                   MPI_Info    info,
-                   ADIO_File   fd)
+                    const char *filename,
+                    int         amode,
+                    MPI_Info    info,
+                    PNCIO_File  *fd)
 {
     /* Before reaching to this subroutine, PNCIO_FileSysType() should have been
      * called to check the file system type.

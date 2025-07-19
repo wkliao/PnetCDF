@@ -60,7 +60,7 @@ const char *ADIOI_GEN_flock_type_to_string(int type)
 /* This assumes that lock will always remain in the common directory and
  * that the ntfs directory will always be called ad_ntfs. */
 #include "..\ad_ntfs\ad_ntfs.h"
-int PNCIO_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
+int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, int whence,
                       MPI_Offset len)
 {
     static char myname[] = "PNCIO_GEN_SetLock";
@@ -130,7 +130,7 @@ int PNCIO_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int wh
     return error_code;
 }
 #else
-int PNCIO_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
+int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, int whence,
                       MPI_Offset len)
 {
     FDTYPE fd_sys = fd->fd_sys;
@@ -208,7 +208,7 @@ int PNCIO_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int wh
 }
 #endif
 
-int PNCIO_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
+int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, int whence,
                         MPI_Offset len)
 {
     FDTYPE fd_sys = fd->fd_sys;

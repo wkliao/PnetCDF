@@ -23,7 +23,7 @@
 #include "adio.h"
 
 /*----< PNCIO_File_sync() >---------------------------------------------------*/
-int PNCIO_File_sync(ADIO_File fd)
+int PNCIO_File_sync(PNCIO_File *fd)
 {
     int err = NC_NOERR;
 

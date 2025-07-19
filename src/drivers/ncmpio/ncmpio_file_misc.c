@@ -194,7 +194,7 @@ ncmpio_begin_indep_data(void *ncdp)
 
         filename = ncmpii_remove_file_system_type_prefix(ncp->path);
 
-        ncp->adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
+        ncp->adio_fh = (PNCIO_File*) NCI_Calloc(1,sizeof(PNCIO_File));
         ncp->adio_fh->file_system = ncp->fstype;
         ncp->adio_fh->num_nodes = 1;
         ncp->adio_fh->node_ids = (int*) NCI_Malloc(sizeof(int));
