@@ -49,7 +49,7 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
         return NC_ENOMEM;
 
     /* number of MPI processes running on each node */
-    nprocs_per_node = (int *) ADIOI_Calloc(fd->num_nodes, sizeof(int));
+    nprocs_per_node = (int *) NCI_Calloc(fd->num_nodes, sizeof(int));
 
     for (i=0; i<nprocs; i++) nprocs_per_node[fd->node_ids[i]]++;
 
@@ -239,7 +239,7 @@ int PNCIO_File_open(MPI_Comm    comm,
     fd->io_buf      = NULL; /* collective buffer used by aggregators only */
 
     /* create and initialize info object */
-    fd->hints = (PNCIO_Hints*) ADIOI_Calloc(1, sizeof(PNCIO_Hints));
+    fd->hints = (PNCIO_Hints*) NCI_Calloc(1, sizeof(PNCIO_Hints));
     if (info == MPI_INFO_NULL)
         MPI_Info_create(&fd->info);
     else
@@ -311,7 +311,7 @@ int PNCIO_File_open(MPI_Comm    comm,
 
     /* collective buffer is used only by I/O aggregators only */
     if (fd->is_agg) {
-        fd->io_buf = ADIOI_Calloc(1, fd->hints->cb_buffer_size);
+        fd->io_buf = NCI_Calloc(1, fd->hints->cb_buffer_size);
         if (fd->io_buf == NULL)
             return NC_ENOMEM;
     }

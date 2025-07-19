@@ -562,7 +562,7 @@ static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
 
     read_buf = fd->io_buf;      /* Allocated at open time */
 
-    curr_offlen_ptr = ADIOI_Calloc(nprocs * 7, sizeof(*curr_offlen_ptr));
+    curr_offlen_ptr = NCI_Calloc(nprocs * 7, sizeof(*curr_offlen_ptr));
     /* its use is explained below. calloc initializes to 0. */
 
     count = curr_offlen_ptr + nprocs;

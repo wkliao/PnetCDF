@@ -356,7 +356,7 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
 
     write_buf = fd->io_buf;
 
-    curr_offlen_ptr = ADIOI_Calloc(nprocs * 10, sizeof(*curr_offlen_ptr));
+    curr_offlen_ptr = NCI_Calloc(nprocs * 10, sizeof(*curr_offlen_ptr));
     /* its use is explained below. calloc initializes to 0. */
 
     count = curr_offlen_ptr + nprocs;

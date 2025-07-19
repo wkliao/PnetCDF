@@ -153,11 +153,11 @@ static PNCIO_Flatlist_node *flatlist_node_new(MPI_Datatype datatype, MPI_Count c
 
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(MPI_Count) * 2;
-    flat->indices   = (MPI_Count *) ADIOI_Calloc(flat->count, alloc_sz);
+    flat->indices   = (MPI_Count *) NCI_Calloc(flat->count, alloc_sz);
     flat->blocklens = flat->indices + flat->count;
 #else
     alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-    flat->indices   = (MPI_Offset *) ADIOI_Calloc(flat->count, alloc_sz);
+    flat->indices   = (MPI_Offset *) NCI_Calloc(flat->count, alloc_sz);
     flat->blocklens = (int*) (flat->indices + flat->count);
 #endif
 
@@ -1424,11 +1424,11 @@ static void ADIOI_Optimize_flattened(PNCIO_Flatlist_node * flat_type)
 
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(MPI_Count) * 2;
-    opt_indices   = (MPI_Count*) ADIOI_Calloc(opt_blocks, alloc_sz);
+    opt_indices   = (MPI_Count*) NCI_Calloc(opt_blocks, alloc_sz);
     opt_blocklens = opt_indices + opt_blocks;
 #else
     alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-    opt_indices   = (MPI_Offset*) ADIOI_Calloc(opt_blocks, alloc_sz);
+    opt_indices   = (MPI_Offset*) NCI_Calloc(opt_blocks, alloc_sz);
     opt_blocklens = (int*) (opt_indices + opt_blocks);
 #endif
 
