@@ -469,13 +469,11 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
                             /* --BEGIN ERROR HANDLING-- */
                             if ((j + 1 < others_req[i].count) &&
                                 (others_req[i].offsets[j + 1] < off + size)) {
-                                *error_code = MPIO_Err_create_code(MPI_SUCCESS,
-                                                                   MPIR_ERR_RECOVERABLE,
-                                                                   myname,
-                                                                   __LINE__,
-                                                                   MPI_ERR_ARG,
-                                                                   "Filetype specifies overlapping write regions (which is illegal according to the MPI-2 specification)",
-                                                                   0);
+                                *error_code = PNCIO_Err_create_code(MPI_SUCCESS,
+                                    MPIR_ERR_RECOVERABLE, myname, __LINE__,
+                                    MPI_ERR_ARG,
+                                    "Filetype specifies overlapping write regions (which is illegal according to the MPI-2 specification)",
+                                    0);
                                 /* allow to continue since additional
                                  * communication might have to occur
                                  */
@@ -694,9 +692,8 @@ double curT = MPI_Wtime();
             ADIO_ReadContig(fd, write_buf, size, MPI_BYTE, off, &status, &err);
             /* --BEGIN ERROR HANDLING-- */
             if (err != MPI_SUCCESS) {
-                *error_code = MPIO_Err_create_code(err,
-                                                   MPIR_ERR_RECOVERABLE, myname,
-                                                   __LINE__, MPI_ERR_IO, "**ioRMWrdwr", 0);
+                *error_code = PNCIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
+                    myname, __LINE__, MPI_ERR_IO, "**ioRMWrdwr", 0);
                 return;
             }
             /* --END ERROR HANDLING-- */

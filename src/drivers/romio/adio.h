@@ -376,9 +376,6 @@ int ADIOI_Calc_aggregator(ADIO_File fd, ADIO_Offset off, ADIO_Offset min_off,
                 ADIO_Offset *fd_end);
 
 
-#define FPRINTF fprintf
-#define DBG_FPRINTF fprintf
-
 int ADIO_Type_create_subarray(int ndims, const int *array_of_sizes,
                 const int *array_of_subsizes, const int *array_of_starts,
                 int order, MPI_Datatype oldtype, MPI_Datatype *newtype);
@@ -403,7 +400,7 @@ void ADIOI_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
                 int *error_code);
 
 #define MPIR_ERR_RECOVERABLE 0
-int MPIO_Err_create_code(int lastcode, int fatal, const char fcname[],
+int PNCIO_Err_create_code(int lastcode, int fatal, const char fcname[],
                 int line, int error_class, const char generic_msg[],
                 const char specific_msg[], ...);
 

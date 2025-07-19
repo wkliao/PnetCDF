@@ -15,17 +15,17 @@
             readbuf_off = req_off;                                      \
             readbuf_len = (MPI_Aint) (MPL_MIN(max_bufsize, end_offset-readbuf_off+1)); \
             ADIO_ReadContig(fd, readbuf, readbuf_len, MPI_BYTE,         \
-                            readbuf_off, &status1, error_code); \
+                            readbuf_off, &status1, error_code);         \
             if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = MPIO_Err_create_code(*error_code,         \
-                                          MPIR_ERR_RECOVERABLE, myname, \
-                                                  __LINE__, MPI_ERR_IO, \
-                                                   "**iorsrc", 0);      \
+                *error_code = PNCIO_Err_create_code(*error_code,        \
+                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
+                    "**iorsrc", 0);                                     \
                 return;                                                 \
             }                                                           \
         }                                                               \
         while (req_len > readbuf_off + readbuf_len - req_off) {         \
-            ADIOI_Assert((readbuf_off + readbuf_len - req_off) == (MPI_Aint) (readbuf_off + readbuf_len - req_off)); \
+            ADIOI_Assert((readbuf_off + readbuf_len - req_off) ==       \
+                         (MPI_Aint) (readbuf_off + readbuf_len - req_off)); \
             partial_read = (MPI_Aint) (readbuf_off + readbuf_len - req_off); \
             tmp_buf = (char *) ADIOI_Malloc(partial_read);              \
             memcpy(tmp_buf, readbuf+readbuf_len-partial_read, partial_read); \
@@ -34,16 +34,15 @@
             memcpy(readbuf, tmp_buf, partial_read);                     \
             ADIOI_Free(tmp_buf);                                        \
             readbuf_off += readbuf_len-partial_read;                    \
-            readbuf_len = (MPI_Aint) (partial_read + MPL_MIN(max_bufsize, \
-                                                             end_offset-readbuf_off+1)); \
+            readbuf_len = (MPI_Aint) (partial_read +                    \
+                          MPL_MIN(max_bufsize, end_offset-readbuf_off+1)); \
             ADIO_ReadContig(fd, readbuf+partial_read, readbuf_len-partial_read, \
                             MPI_BYTE, readbuf_off+partial_read, \
                             &status1, error_code);                      \
             if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = MPIO_Err_create_code(*error_code,         \
-                                          MPIR_ERR_RECOVERABLE, myname, \
-                                                  __LINE__, MPI_ERR_IO, \
-                                                   "**iorsrc", 0);      \
+                *error_code = PNCIO_Err_create_code(*error_code,        \
+                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
+                    "**iorsrc", 0);                                     \
                 return;                                                 \
             }                                                           \
         }                                                               \

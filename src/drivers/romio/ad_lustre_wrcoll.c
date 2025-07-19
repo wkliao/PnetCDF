@@ -2216,9 +2216,9 @@ void Exchange_data_recv(
             ADIO_ReadContig(fd, write_buf, range_size, MPI_BYTE, range_off,
                             &status, &err);
             if (err != MPI_SUCCESS) {
-                *error_code = MPIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
-                                                   __func__, __LINE__, MPI_ERR_IO,
-                                                   "**ioRMWrdwr", 0);
+                *error_code = PNCIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
+                                                    __func__, __LINE__, MPI_ERR_IO,
+                                                    "**ioRMWrdwr", 0);
                 return;
             }
         }
