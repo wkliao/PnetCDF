@@ -114,7 +114,7 @@ PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
         for (MPI_Count i = 0; i < flat->count; i++) {
             /* Check if any of the displacements is negative */
             if (flat->indices[i] < 0) {
-                flat->flag |= ADIOI_TYPE_NEGATIVE;
+                flat->flag |= PNCIO_TYPE_NEGATIVE;
             }
 
             if (i > 0) {
@@ -1398,7 +1398,7 @@ static void ADIOI_Optimize_flattened(PNCIO_Flatlist_node * flat_type)
 
         /* Check if any of the displacements is negative */
         if (flat_type->blocklens[i] > 0 && flat_type->indices[i] < 0)
-            flat_type->flag |= ADIOI_TYPE_NEGATIVE;
+            flat_type->flag |= PNCIO_TYPE_NEGATIVE;
 
         if (flat_type->blocklens[i] == 0)       /* skip zero-length block */
             continue;
