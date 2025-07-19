@@ -65,7 +65,7 @@
 #define PNCIO_CB_BUFFER_SIZE_DFLT     "16777216"
 #define PNCIO_IND_RD_BUFFER_SIZE_DFLT "4194304"
 #define PNCIO_IND_WR_BUFFER_SIZE_DFLT "524288"
-#define ADIOI_CB_CONFIG_LIST_DFLT     "*:1"
+#define PNCIO_CB_CONFIG_LIST_DFLT     "*:1"
 
 /* ADIOI_DS_WR_NPAIRS_LB is the lower bound of the total number of
  *     offset-length pairs over the non-aggregator senders to be received by an
