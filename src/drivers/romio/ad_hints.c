@@ -173,14 +173,14 @@ fn_exit:
     return ret;
 }
 
-/*----< ADIO_File_SetInfo() >------------------------------------------------*/
+/*----< PNCIO_File_SetInfo() >------------------------------------------------*/
 /* When users_info == MPI_INFO_NULL, this subroutine is an independent call.
  * When users_info != MPI_INFO_NULL, this subroutine is a collective call.
  * because it calls ADIOI_Info_check_and_install_xxx(), which checks the
  * consistency of all hints values set in user's info object.
  */
 int
-ADIO_File_SetInfo(ADIO_File fd,
+PNCIO_File_SetInfo(ADIO_File fd,
                   MPI_Info users_info)
 {
     int flag, nprocs = 0, len;

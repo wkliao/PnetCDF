@@ -245,7 +245,7 @@ int PNCIO_File_open(MPI_Comm    comm,
     else
         MPI_Info_dup(info, &fd->info);
 
-    err = ADIO_File_SetInfo(fd, fd->info);
+    err = PNCIO_File_SetInfo(fd, fd->info);
     if (err != NC_NOERR)
         return err;
 
