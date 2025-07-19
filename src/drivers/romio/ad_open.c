@@ -20,7 +20,7 @@
 
 #include "adio.h"
 
-/*----< ADIO_GEN_set_cb_node_list() >----------------------------------------*/
+/*----< GEN_set_cb_node_list() >---------------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
  *   fd->hints->ranklist[].
  *   fd->hints->cb_nodes and set file info for hint cb_nodes.
@@ -28,7 +28,7 @@
  *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
  */
 static
-int ADIO_GEN_set_cb_node_list(PNCIO_File *fd)
+int GEN_set_cb_node_list(PNCIO_File *fd)
 {
     int i, j, k, nprocs, rank, *nprocs_per_node, **ranks_per_node;
 
@@ -157,7 +157,7 @@ err_out:
     }
 
     /* construct cb_nodes rank list */
-    ADIO_GEN_set_cb_node_list(fd);
+    GEN_set_cb_node_list(fd);
     MPI_Info_set(fd->info, "romio_filesystem_type", "UFS:");
 
     return err;
@@ -210,7 +210,7 @@ err_out:
     fd->hints->start_iodevice  = stripin_info[2];
 
     /* construct cb_nodes rank list */
-    ADIO_GEN_set_cb_node_list(fd);
+    GEN_set_cb_node_list(fd);
     MPI_Info_set(fd->info, "romio_filesystem_type", "UFS:");
 
     return err;
