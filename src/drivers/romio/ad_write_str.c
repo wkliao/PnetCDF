@@ -27,7 +27,7 @@
             writebuf_off = req_off;                                     \
             writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
-                ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
+                PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
                             writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
@@ -56,7 +56,7 @@
             writebuf_off += writebuf_len;                               \
             writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
-                ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
+                PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
                             writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
@@ -207,7 +207,7 @@ void PNCIO_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
         if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
-            ADIOI_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         for (j = 0; j < count; j++) {
             for (i = 0; i < flat_buf->count; i++) {
@@ -269,7 +269,7 @@ void PNCIO_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
              * datatypes, instead of a count of bytes (which might overflow)
              * Other WriteContig calls in this path are operating on data
              * sieving buffer */
-            ADIOI_WRITE_LOCK(fd, offset, SEEK_SET, bufsize);
+            PNCIO_WRITE_LOCK(fd, offset, SEEK_SET, bufsize);
             PNCIO_WriteContig(fd, buf, count, datatype, offset, status,
                              error_code);
             PNCIO_UNLOCK(fd, offset, SEEK_SET, bufsize);
@@ -310,7 +310,7 @@ void PNCIO_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
         if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
-            ADIOI_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         writebuf_off = 0;
         writebuf_len = 0;

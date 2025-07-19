@@ -150,7 +150,7 @@ void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
 
 /* if atomicity is true, lock (exclusive) the region to be accessed */
         if ((fd->atomicity) && ADIO_Feature(fd, ADIO_LOCKS))
-            ADIOI_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         PNCIO_ReadContig(fd, readbuf, readbuf_len, MPI_BYTE, readbuf_off,
                         &status1, error_code);
@@ -239,7 +239,7 @@ void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
 
 /* if atomicity is true, lock (exclusive) the region to be accessed */
         if ((fd->atomicity) && ADIO_Feature(fd, ADIO_LOCKS))
-            ADIOI_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         readbuf_off = 0;
         readbuf_len = 0;

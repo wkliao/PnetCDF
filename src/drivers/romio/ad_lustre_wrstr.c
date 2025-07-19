@@ -32,7 +32,7 @@
                                    (writebuf_off / stripe_size + 1) *   \
                                    stripe_size - writebuf_off);         \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
-                ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
+                PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
                             writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
@@ -65,7 +65,7 @@
                                    (writebuf_off / stripe_size + 1) *   \
                                    stripe_size - writebuf_off);         \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
-                ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
+                PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
                             writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
@@ -218,7 +218,7 @@ void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
         if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
-            ADIOI_WRITE_LOCK(fd, start_off, SEEK_SET, bufsize);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, bufsize);
 
         for (j = 0; j < count; j++) {
             for (i = 0; i < flat_buf->count; i++) {
@@ -284,7 +284,7 @@ void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
             ADIOI_BUFFERED_WRITE_WITHOUT_READ;
             /* write the buffer out finally */
             if (fd->hints->ds_write != ADIOI_HINT_DISABLE)
-                ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
+                PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
             PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
                              writebuf_off, &status1, error_code);
             if (fd->hints->ds_write != ADIOI_HINT_DISABLE)
@@ -326,7 +326,7 @@ void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
         if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
-            ADIOI_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         writebuf_off = 0;
         writebuf_len = 0;

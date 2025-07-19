@@ -45,12 +45,12 @@
 #if defined(F_SETLKW64)
 #define PNCIO_UNLOCK(fd, offset, whence, len) \
         PNCIO_GEN_SetLock64(fd, F_SETLK, F_UNLCK, offset, whence, len)
-#define ADIOI_WRITE_LOCK(fd, offset, whence, len) \
+#define PNCIO_WRITE_LOCK(fd, offset, whence, len) \
         PNCIO_GEN_SetLock64(fd, F_SETLKW, F_WRLCK, offset, whence, len)
 #else
 #define PNCIO_UNLOCK(fd, offset, whence, len) \
         PNCIO_GEN_SetLock(fd, F_SETLK, F_UNLCK, offset, whence, len)
-#define ADIOI_WRITE_LOCK(fd, offset, whence, len) \
+#define PNCIO_WRITE_LOCK(fd, offset, whence, len) \
         PNCIO_GEN_SetLock(fd, F_SETLKW, F_WRLCK, offset, whence, len)
 #endif
 

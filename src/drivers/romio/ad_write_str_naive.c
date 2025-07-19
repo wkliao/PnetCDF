@@ -86,7 +86,7 @@ void PNCIO_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
         if ((fd->atomicity) && ADIO_Feature(fd, ADIO_LOCKS)) {
-            ADIOI_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
         }
 
         /* for each region in the buffer, grab the data and put it in
@@ -195,7 +195,7 @@ void PNCIO_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
         if ((fd->atomicity) && ADIO_Feature(fd, ADIO_LOCKS)) {
-            ADIOI_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
         }
 
         if (buftype_is_contig && !filetype_is_contig) {
