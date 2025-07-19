@@ -294,7 +294,6 @@ void PNCIO_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                 MPI_Datatype buftype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
-#define ADIO_ReadStridedColl PNCIO_GEN_ReadStridedColl
 void PNCIO_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
                 MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);

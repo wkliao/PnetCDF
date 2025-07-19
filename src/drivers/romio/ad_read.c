@@ -178,7 +178,7 @@ int PNCIO_File_read_at_all(ADIO_File     fh,
     /* PnetCDF has only 2 modes: read-only and read-write */
     // if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR) st = NC_EPERM;
 
-    ADIO_ReadStridedColl(fh, buf, count, bufType, offset, status, &err);
+    PNCIO_GEN_ReadStridedColl(fh, buf, count, bufType, offset, status, &err);
     if (err != MPI_SUCCESS && st == NC_NOERR)
         st = ncmpii_error_mpi2nc(err, __func__);
 
