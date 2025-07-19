@@ -1508,7 +1508,7 @@ int ina_put(NC           *ncp,
             if (bufType == MPI_DATATYPE_NULL)
                 is_predef = 0;
             else
-                ADIOI_Type_ispredef(bufType, &is_predef);
+                PNCIO_Type_ispredef(bufType, &is_predef);
 
             if (is_predef)
                 memcpy(recv_buf, buf, bufLen);
