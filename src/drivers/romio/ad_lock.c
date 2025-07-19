@@ -12,7 +12,7 @@
 #include <adio.h>
 
 static
-const char *ADIOI_GEN_flock_cmd_to_string(int cmd)
+const char *GEN_flock_cmd_to_string(int cmd)
 {
     switch (cmd) {
 #ifdef F_GETLK64
@@ -42,7 +42,7 @@ const char *ADIOI_GEN_flock_cmd_to_string(int cmd)
 }
 
 static
-const char *ADIOI_GEN_flock_type_to_string(int type)
+const char *GEN_flock_type_to_string(int type)
 {
     switch (type) {
         case F_RDLCK:
@@ -101,8 +101,8 @@ int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, int 
                 "This requires fcntl(2) to be implemented. As of 8/25/2011 it is not. Generic MPICH Message: File locking failed in PNCIO_GEN_SetLock(fd %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
                 "- If the file system is NFS, you need to use NFS version 3, ensure that the lockd daemon is running on all the machines, and mount the directory with the 'noac' option (no attribute caching).\n"
                 "- If the file system is LUSTRE, ensure that the directory is mounted with the 'flock' option.\n",
-                fd_sys, ADIOI_GEN_flock_cmd_to_string(cmd), cmd,
-                ADIOI_GEN_flock_type_to_string(type), type, whence, err, errno);
+                fd_sys, GEN_flock_cmd_to_string(cmd), cmd,
+                GEN_flock_type_to_string(type), type, whence, err, errno);
         perror("PNCIO_GEN_SetLock:");
         fprintf(stderr, "PNCIO_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
                 (unsigned long long) len);
@@ -143,8 +143,8 @@ int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, in
         fprintf(stderr,
                 "File locking failed in PNCIO_GEN_SetLock64(fd %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
                 "If the file system is NFS, you need to use NFS version 3, ensure that the lockd daemon is running on all the machines, and mount the directory with the 'noac' option (no attribute caching).\n",
-                fd_sys, ADIOI_GEN_flock_cmd_to_string(cmd), cmd,
-                ADIOI_GEN_flock_type_to_string(type), type, whence, err, errno);
+                fd_sys, GEN_flock_cmd_to_string(cmd), cmd,
+                GEN_flock_type_to_string(type), type, whence, err, errno);
         perror("PNCIO_GEN_SetLock64:");
         fprintf(stderr, "PNCIO_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
                 (unsigned long long) len);
