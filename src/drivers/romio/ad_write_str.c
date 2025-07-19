@@ -13,7 +13,7 @@
     {                                                                   \
         if (req_off >= writebuf_off + writebuf_len) {                   \
             if (writebuf_len) {                                         \
-                ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,  \
+                PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,  \
                                  writebuf_off, &status1, error_code);   \
                 if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                     ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
@@ -41,7 +41,7 @@
         ADIOI_Assert((ADIO_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
         memcpy(writebuf+req_off-writebuf_off, (char *)buf +userbuf_off, write_sz); \
         while (write_sz != req_len) {                                   \
-            ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
+            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
                              writebuf_off, &status1, error_code);       \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                 ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
@@ -76,7 +76,7 @@
 #define ADIOI_BUFFERED_WRITE_WITHOUT_READ                               \
     {                                                                   \
         if (req_off >= writebuf_off + writebuf_len) {                   \
-            ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
+            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
                              writebuf_off, &status1, error_code);       \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = PNCIO_Err_create_code(*error_code,        \
@@ -91,7 +91,7 @@
         ADIOI_Assert((ADIO_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
         memcpy(writebuf+req_off-writebuf_off, (char *)buf +userbuf_off, write_sz); \
         while (write_sz != req_len) {                                   \
-            ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
+            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
                              writebuf_off, &status1, error_code);       \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = PNCIO_Err_create_code(*error_code,        \
@@ -186,7 +186,7 @@ void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
     max_bufsize = fd->hints->ind_wr_buffer_size;
 
     /* Contiguous both in buftype and filetype should have been handled in a
-     * call to ADIO_WriteContig() earlier.
+     * call to PNCIO_WriteContig() earlier.
      */
     ADIOI_Assert(!(buftype_is_contig && filetype_is_contig));
 
@@ -221,7 +221,7 @@ void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
 
         /* write the buffer out finally */
         if (writebuf_len) {
-            ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
+            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
                              writebuf_off, &status1, error_code);
         }
 
@@ -270,7 +270,7 @@ void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
              * Other WriteContig calls in this path are operating on data
              * sieving buffer */
             ADIOI_WRITE_LOCK(fd, offset, SEEK_SET, bufsize);
-            ADIO_WriteContig(fd, buf, count, datatype, offset, status,
+            PNCIO_WriteContig(fd, buf, count, datatype, offset, status,
                              error_code);
             ADIOI_UNLOCK(fd, offset, SEEK_SET, bufsize);
 
@@ -427,7 +427,7 @@ void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
 
         /* write the buffer out finally */
         if (writebuf_len) {
-            ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
+            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
                              writebuf_off, &status1, error_code);
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE)
                 ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);

@@ -21,8 +21,8 @@
 int first_ost_id;
 #endif
 
-/*----< ADIO_WriteContig() >-------------------------------------------------*/
-int ADIO_WriteContig(ADIO_File     fd,
+/*----< PNCIO_WriteContig() >-------------------------------------------------*/
+int PNCIO_WriteContig(ADIO_File     fd,
                      const void   *buf,
                      MPI_Aint      count,
                      MPI_Datatype  bufType,
@@ -137,7 +137,7 @@ int file_write(ADIO_File     fd,
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;
-        err = ADIO_WriteContig(fd, buf, wcount, MPI_BYTE, offset, status, NULL);
+        err = PNCIO_WriteContig(fd, buf, wcount, MPI_BYTE, offset, status, NULL);
     }
     else if (fd->file_system == ADIO_LUSTRE)
         ADIOI_LUSTRE_WriteStrided(fd, buf, count, bufType, offset, status, &err);

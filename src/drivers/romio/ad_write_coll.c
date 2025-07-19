@@ -166,7 +166,7 @@ double curT = MPI_Wtime();
                 off = (fd->flat_file->count) ? fd->flat_file->indices[0] : 0;
             else
                 off = fd->disp + offset;
-            ADIO_WriteContig(fd, buf, count, datatype, off, status,
+            PNCIO_WriteContig(fd, buf, count, datatype, off, status,
                              error_code);
         } else
             ADIOI_GEN_WriteStrided(fd, buf, count, datatype, offset, status, error_code);
@@ -505,7 +505,7 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
                 flag = 1;
 
         if (flag) {
-            ADIO_WriteContig(fd, write_buf, size, MPI_BYTE, off, &status,
+            PNCIO_WriteContig(fd, write_buf, size, MPI_BYTE, off, &status,
                              error_code);
             if (*error_code != MPI_SUCCESS)
                 return;
