@@ -175,7 +175,7 @@ typedef struct {
                                  * type, attribute copy and delete routines
                                  * will manage refct */
     int flag;                   /* ADIOI_TYPE_XXX */
-} ADIOI_Flatlist_node;
+} PNCIO_Flatlist_node;
 
 typedef struct {
     MPI_Comm comm;          /* communicator indicating who called open */
@@ -197,7 +197,7 @@ typedef struct {
     MPI_Offset disp;       /* file displacement */
     MPI_Datatype filetype;  /* file type set in fileview */
                             /* etype in fileview is always MPI_BYTE in PnetCDF */
-    ADIOI_Flatlist_node *flat_file; /* flattern filetype */
+    PNCIO_Flatlist_node *flat_file; /* flattern filetype */
 
     int atomicity;          /* true=atomic, false=nonatomic */
     char *io_buf;           /* two-phase buffer allocated out of i/o path */
@@ -272,7 +272,7 @@ int PNCIO_Type_ispredef(MPI_Datatype datatype, int *flag);
 
 int PNCIO_Type_dispose(MPI_Datatype * datatype);
 
-ADIOI_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype);
+PNCIO_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype);
 
 int PNCIO_Lustre_create(ADIO_File fd, int access_mode);
 int PNCIO_Lustre_open(ADIO_File fd);

@@ -22,7 +22,7 @@
 /*----< check_type() >-------------------------------------------------------*/
 /* check if filetype and etype are legal */
 static
-int check_type(ADIOI_Flatlist_node *flat_type,
+int check_type(PNCIO_Flatlist_node *flat_type,
                int access_mode,
                const char *type_kind)
 {
@@ -87,7 +87,7 @@ int PNCIO_File_set_view(ADIO_File     fd,
     MPI_Datatype copy_filetype;
 
     if (filetype == MPI_DATATYPE_NULL) { /* called from intra_node_aggregation() */
-        fd->flat_file = NCI_Malloc(sizeof(ADIOI_Flatlist_node));
+        fd->flat_file = NCI_Malloc(sizeof(PNCIO_Flatlist_node));
         fd->flat_file->indices   = offsets;
         fd->flat_file->blocklens = lengths;
         fd->flat_file->count     = npairs;

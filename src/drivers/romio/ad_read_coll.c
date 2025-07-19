@@ -27,7 +27,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
                                 MPI_Offset * fd_start, MPI_Offset * fd_end,
                                 MPI_Aint * buf_idx, MPI_Status * status, int *error_code);
 
-static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
+static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, PNCIO_Flatlist_node
                                   * flat_buf, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                   MPI_Offset *len_list,
@@ -46,7 +46,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
                                   ADIOI_Access * others_req,
                                   int iter, MPI_Aint buftype_extent, MPI_Aint * buf_idx,
                                   MPI_Aint * actual_recved_bytes);
-void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, ADIOI_Flatlist_node
+void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, PNCIO_Flatlist_node
                             * flat_buf, char **recv_buf,
                             MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -283,7 +283,7 @@ void PNCIO_Calc_my_off_len(ADIO_File     fd,
     int *len_list;
 #endif
     MPI_Aint filetype_extent, filetype_lb;
-    ADIOI_Flatlist_node *flat_file;
+    PNCIO_Flatlist_node *flat_file;
     MPI_Offset *offset_list, off, end_offset = 0, disp;
 
     if (bufcount == 0) {
@@ -509,7 +509,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
     /* Not convinced end_loc-st_loc couldn't be > int, so make these offsets */
     MPI_Offset real_size, size, for_curr_iter, for_next_iter;
     int rank;
-    ADIOI_Flatlist_node *flat_buf = NULL;
+    PNCIO_Flatlist_node *flat_buf = NULL;
     MPI_Aint lb, buftype_extent;
     MPI_Aint coll_bufsize;
     MPI_Aint actual_recved_bytes = 0;
@@ -798,7 +798,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
     ADIOI_Free(curr_offlen_ptr);
 }
 
-static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
+static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, PNCIO_Flatlist_node
                                   * flat_buf, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                   MPI_Offset *len_list,
@@ -1032,7 +1032,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, ADIOI_Flatlist_node
         ADIOI_BUF_INCR                                                  \
     }
 
-void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, ADIOI_Flatlist_node
+void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, PNCIO_Flatlist_node
                             * flat_buf, char **recv_buf, MPI_Offset
                             * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT

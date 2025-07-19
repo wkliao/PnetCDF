@@ -15,7 +15,7 @@ void PNCIO_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
 {
     /* offset is in units of etype relative to the filetype. */
 
-    ADIOI_Flatlist_node *flat_buf, *flat_file;
+    PNCIO_Flatlist_node *flat_buf, *flat_file;
     /* bwr == buffer write; fwr == file write */
     MPI_Offset bwr_size, fwr_size = 0, sum, size_in_filetype;
     int b_index;

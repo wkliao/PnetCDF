@@ -15,10 +15,10 @@ static int ADIOI_Flattened_type_copy(MPI_Datatype oldtype,
                                      int type_keyval, void *extra_state, void *attribute_val_in,
                                      void *attribute_val_out, int *flag)
 {
-    ADIOI_Flatlist_node *node = (ADIOI_Flatlist_node *) attribute_val_in;
+    PNCIO_Flatlist_node *node = (PNCIO_Flatlist_node *) attribute_val_in;
     if (node != NULL)
         node->refct++;
-    *(ADIOI_Flatlist_node **) attribute_val_out = node;
+    *(PNCIO_Flatlist_node **) attribute_val_out = node;
     *flag = 1;  /* attribute copied to new communicator */
     return MPI_SUCCESS;
 }
@@ -26,7 +26,7 @@ static int ADIOI_Flattened_type_copy(MPI_Datatype oldtype,
 static int ADIOI_Flattened_type_delete(MPI_Datatype datatype,
                                        int type_keyval, void *attribute_val, void *extra_state)
 {
-    ADIOI_Flatlist_node *node = (ADIOI_Flatlist_node *) attribute_val;
+    PNCIO_Flatlist_node *node = (PNCIO_Flatlist_node *) attribute_val;
     ADIOI_Assert(node != NULL);
     node->refct--;
 
@@ -38,9 +38,9 @@ static int ADIOI_Flattened_type_delete(MPI_Datatype datatype,
     return MPI_SUCCESS;
 }
 
-static ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype);
+static PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype);
 
-ADIOI_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype datatype)
+PNCIO_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype datatype)
 {
     if (ADIOI_Flattened_type_keyval == MPI_KEYVAL_INVALID) {
         /* ADIOI_End_call will take care of cleanup */
@@ -53,17 +53,17 @@ ADIOI_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype datatype)
 }
 
 #ifdef HAVE_MPIX_TYPE_IOV
-ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
+PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 {
     size_t alloc_sz;
     MPI_Count type_size;
-    ADIOI_Flatlist_node *flat;
+    PNCIO_Flatlist_node *flat;
 
     MPI_Type_size_x(datatype, &type_size);
 
     if (type_size == 0) {
         /* copy to flatlist */
-        flat = ADIOI_Malloc(sizeof(ADIOI_Flatlist_node));
+        flat = ADIOI_Malloc(sizeof(PNCIO_Flatlist_node));
         flat->count = 0;
         flat->blocklens = NULL;
         flat->indices = NULL;
@@ -84,7 +84,7 @@ ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
         ADIOI_Assert(actual == num_iovs);
 
         /* copy to flatlist */
-        flat = ADIOI_Malloc(sizeof(ADIOI_Flatlist_node));
+        flat = ADIOI_Malloc(sizeof(PNCIO_Flatlist_node));
         flat->count = num_iovs;
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(MPI_Count) * 2;
@@ -140,11 +140,11 @@ ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 
 #else
 
-static ADIOI_Flatlist_node *flatlist_node_new(MPI_Datatype datatype, MPI_Count count)
+static PNCIO_Flatlist_node *flatlist_node_new(MPI_Datatype datatype, MPI_Count count)
 {
     size_t alloc_sz;
-    ADIOI_Flatlist_node *flat;
-    flat = ADIOI_Malloc(sizeof(ADIOI_Flatlist_node));
+    PNCIO_Flatlist_node *flat;
+    flat = ADIOI_Malloc(sizeof(PNCIO_Flatlist_node));
 
     flat->lb_idx = flat->ub_idx = -1;
     flat->refct = 1;
@@ -172,7 +172,7 @@ static ADIOI_Flatlist_node *flatlist_node_new(MPI_Datatype datatype, MPI_Count c
  * time something's added to flat's arrays, let's make sure they're big enough
  * and re-alloc if not.
  */
-static void flatlist_node_grow(ADIOI_Flatlist_node * flat, MPI_Count idx)
+static void flatlist_node_grow(PNCIO_Flatlist_node * flat, MPI_Count idx)
 {
     size_t alloc_sz;
 
@@ -205,15 +205,15 @@ static void flatlist_node_grow(ADIOI_Flatlist_node * flat, MPI_Count idx)
 }
 
 static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count * curr_index);
-static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
+static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                           MPI_Offset st_offset, MPI_Count * curr_index);
-static void ADIOI_Optimize_flattened(ADIOI_Flatlist_node * flat_type);
+static void ADIOI_Optimize_flattened(PNCIO_Flatlist_node * flat_type);
 /* flatten datatype and add it to Flatlist */
-static ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
+static PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 {
     MPI_Count flat_count, curr_index = 0;
     int is_contig;
-    ADIOI_Flatlist_node *flat;
+    PNCIO_Flatlist_node *flat;
 
     /* is it entirely contiguous? */
     PNCIO_Datatype_iscontig(datatype, &is_contig);
@@ -446,7 +446,7 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
  *
  * Assumption: input datatype is not a basic!!!!
  */
-static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
+static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                           MPI_Offset st_offset, MPI_Count * curr_index)
 {
     int k, m, n, is_hindexed_block = 0;
@@ -1387,7 +1387,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
  * went in, the flattened representation should no longer have zero-length
  * blocks except for UB and LB markers.
  */
-static void ADIOI_Optimize_flattened(ADIOI_Flatlist_node * flat_type)
+static void ADIOI_Optimize_flattened(PNCIO_Flatlist_node * flat_type)
 {
     size_t alloc_sz;
     int i, j, opt_blocks;

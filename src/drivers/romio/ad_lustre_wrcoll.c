@@ -707,7 +707,7 @@ double curT = MPI_Wtime();
     }
     else {
         MPI_Aint lb;
-        ADIOI_Flatlist_node *flat_view = PNCIO_Flatten_and_find(buftype);
+        PNCIO_Flatlist_node *flat_view = PNCIO_Flatten_and_find(buftype);
         flat_bview.count = flat_view->count;
         flat_bview.off   = flat_view->indices;
         flat_bview.len   = flat_view->blocklens;

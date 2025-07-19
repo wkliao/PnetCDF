@@ -131,7 +131,7 @@ void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                                ADIO_Status * status, int *error_code)
 {
     /* offset is in units of etype relative to the filetype. */
-    ADIOI_Flatlist_node *flat_buf, *flat_file;
+    PNCIO_Flatlist_node *flat_buf, *flat_file;
     MPI_Offset i_offset, sum, size_in_filetype;
     int i, j, k, st_index = 0;
     MPI_Count n_etypes_in_filetype;

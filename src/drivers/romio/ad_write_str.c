@@ -114,7 +114,7 @@ void PNCIO_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
 
 /* offset is in units of etype relative to the filetype. */
 
-    ADIOI_Flatlist_node *flat_buf, *flat_file;
+    PNCIO_Flatlist_node *flat_buf, *flat_file;
     MPI_Offset i_offset, sum, size_in_filetype;
     int i, j, k, st_index = 0;
     MPI_Offset num, size, n_filetypes, etype_in_filetype, st_n_filetypes;

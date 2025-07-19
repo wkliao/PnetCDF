@@ -24,7 +24,7 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
                                  MPI_Offset * fd_start, MPI_Offset * fd_end,
                                  MPI_Aint * buf_idx, int *error_code);
 static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
-                                  ADIOI_Flatlist_node * flat_buf,
+                                  PNCIO_Flatlist_node * flat_buf,
                                   MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                   MPI_Offset *len_list,
@@ -45,7 +45,7 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
                                   MPI_Aint buftype_extent, MPI_Aint * buf_idx, int *error_code);
 
 static void ADIOI_Fill_send_buffer(ADIO_File fd, void *buf,
-                  ADIOI_Flatlist_node *flat_buf, char **send_buf,
+                  PNCIO_Flatlist_node *flat_buf, char **send_buf,
                   MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                   MPI_Offset *len_list,
@@ -305,7 +305,7 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
     int flag;
     MPI_Count *send_buf_idx, *curr_to_proc, *done_to_proc;
     MPI_Status status;
-    ADIOI_Flatlist_node *flat_buf = NULL;
+    PNCIO_Flatlist_node *flat_buf = NULL;
     MPI_Aint lb, buftype_extent;
     int info_flag;
     MPI_Aint coll_bufsize;
@@ -540,7 +540,7 @@ static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
  * in the case of error.
  */
 static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
-                                  ADIOI_Flatlist_node * flat_buf,
+                                  PNCIO_Flatlist_node * flat_buf,
                                   MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                   MPI_Offset *len_list,
@@ -902,7 +902,7 @@ double curT = MPI_Wtime();
 
 
 static
-void ADIOI_Fill_send_buffer(ADIO_File fd, void *buf, ADIOI_Flatlist_node
+void ADIOI_Fill_send_buffer(ADIO_File fd, void *buf, PNCIO_Flatlist_node
                             * flat_buf, char **send_buf,
                             MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
