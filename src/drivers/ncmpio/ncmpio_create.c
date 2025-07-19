@@ -239,7 +239,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
                     err = PNCIO_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDWR,
                                          MPI_INFO_NULL, adio_fh);
                     if (err == NC_NOERR)
-                        ADIO_File_set_size(adio_fh, 0); /* can be expensive */
+                        PNCIO_File_set_size(adio_fh, 0); /* can be expensive */
                     else
                         PNCIO_File_close(&adio_fh);
                     NCI_Free(adio_fh);

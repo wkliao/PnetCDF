@@ -22,8 +22,8 @@
 #include <common.h>
 #include "adio.h"
 
-/*----< ADIO_File_set_size() >-----------------------------------------------*/
-int ADIO_File_set_size(ADIO_File  fd,
+/*----< PNCIO_File_set_size() >-----------------------------------------------*/
+int PNCIO_File_set_size(ADIO_File  fd,
                       MPI_Offset size)
 {
     int err = NC_NOERR, rank;
