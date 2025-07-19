@@ -342,7 +342,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
                 MPI_Count *count_my_req_procs_ptr,
                 MPI_Count **count_my_req_per_proc_ptr,
                 ADIOI_Access **my_req_ptr, MPI_Aint **buf_idx_ptr);
-void ADIOI_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
+void PNCIO_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
                 MPI_Count *count_my_req_per_proc, ADIOI_Access *my_req,
                 int nprocs, int myrank, MPI_Count *count_others_req_procs_ptr,
                 MPI_Count **count_others_req_per_proc_ptr,
