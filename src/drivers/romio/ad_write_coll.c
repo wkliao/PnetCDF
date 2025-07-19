@@ -169,7 +169,7 @@ double curT = MPI_Wtime();
             PNCIO_WriteContig(fd, buf, count, datatype, off, status,
                              error_code);
         } else
-            ADIOI_GEN_WriteStrided(fd, buf, count, datatype, offset, status, error_code);
+            PNCIO_GEN_WriteStrided(fd, buf, count, datatype, offset, status, error_code);
 
         return;
     }
