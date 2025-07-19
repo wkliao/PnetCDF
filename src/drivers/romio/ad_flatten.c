@@ -546,8 +546,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                 for (m = 1; m < top_count; m++) {
                     for (i = 0; i < num; i++) {
                         flatlist_node_grow(flat, j);
-                        flat->indices[j] =
-                            flat->indices[j - num] + ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                        flat->indices[j] = flat->indices[j - num] + old_extent;
                         flat->blocklens[j] = flat->blocklens[j - num];
                         j++;
                     }
@@ -599,8 +598,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                 for (m = 1; m < blocklength; m++) {
                     for (i = 0; i < num; i++) {
                         flatlist_node_grow(flat, j);
-                        flat->indices[j] =
-                            flat->indices[j - num] + ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                        flat->indices[j] = flat->indices[j - num] + old_extent;
                         flat->blocklens[j] = flat->blocklens[j - num];
                         j++;
                     }
@@ -613,7 +611,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                     for (m = 0; m < num; m++) {
                         flatlist_node_grow(flat, j);
                         flat->indices[j] =
-                            flat->indices[j - num] + stride * ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                            flat->indices[j - num] + stride * old_extent;
                         flat->blocklens[j] = flat->blocklens[j - num];
                         j++;
                     }
@@ -668,8 +666,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                 for (m = 1; m < blocklength; m++) {
                     for (i = 0; i < num; i++) {
                         flatlist_node_grow(flat, j);
-                        flat->indices[j] =
-                            flat->indices[j - num] + ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                        flat->indices[j] = flat->indices[j - num] + old_extent;
                         flat->blocklens[j] = flat->blocklens[j - num];
                         j++;
                     }
@@ -704,8 +701,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                 /* By using MPI_Offset we preserve +/- sign and
                  * avoid >2G integer arithmetic problems */
                 MPI_Offset stride = ints[top_count + 1];
-                ADIOI_Flatten(types[0], flat,
-                              st_offset + stride * ADIOI_AINT_CAST_TO_OFFSET old_extent,
+                ADIOI_Flatten(types[0], flat, st_offset + stride * old_extent,
                               curr_index);
             }
 
@@ -719,9 +715,8 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                     if (blocklength > 0) {
                         flatlist_node_grow(flat, nonzeroth);
                         flat->indices[nonzeroth] =
-                            st_offset + stride * ADIOI_AINT_CAST_TO_OFFSET old_extent;
-                        flat->blocklens[nonzeroth] =
-                            blocklength * ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                            st_offset + stride * old_extent;
+                        flat->blocklens[nonzeroth] = blocklength * old_extent;
                         nonzeroth++;
                     }
                 }
@@ -741,8 +736,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                         if (flat->blocklens[j - num] > 0) {
                             flatlist_node_grow(flat, nonzeroth);
                             flat->indices[nonzeroth] =
-                                flat->indices[nonzeroth - num] +
-                                ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                                flat->indices[nonzeroth - num] + old_extent;
                             flat->blocklens[nonzeroth] = flat->blocklens[nonzeroth - num];
                             nonzeroth++;
                         }
@@ -762,8 +756,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                         if (flat->blocklens[j - num] > 0) {
                             flatlist_node_grow(flat, nonzeroth);
                             flat->indices[nonzeroth] =
-                                flat->indices[j - num] +
-                                stride * ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                                flat->indices[j - num] + stride * old_extent;
                             flat->blocklens[nonzeroth] = flat->blocklens[j - num];
                             nonzeroth++;
                         }
@@ -775,8 +768,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                             if (flat->blocklens[j - basic_num] > 0) {
                                 flatlist_node_grow(flat, nonzeroth);
                                 flat->indices[nonzeroth] =
-                                    flat->indices[j - basic_num] +
-                                    ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                                    flat->indices[j - basic_num] + old_extent;
                                 flat->blocklens[nonzeroth] = flat->blocklens[j - basic_num];
                                 nonzeroth++;
                             }
@@ -811,7 +803,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                     ADIOI_Flatten(types[0], flat, st_offset + adds[0], curr_index);
                 } else {
                     ADIOI_Flatten(types[0], flat,
-                                  st_offset + stride * ADIOI_AINT_CAST_TO_OFFSET old_extent,
+                                  st_offset + stride * old_extent,
                                   curr_index);
                 }
             }
@@ -829,10 +821,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                     } else {
                         MPI_Offset stride = ints[1 + 1 + i - j];
                         flatlist_node_grow(flat, i);
-                        flat->indices[i] = st_offset +
-                            stride * ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                        flat->indices[i] = st_offset + stride * old_extent;
                     }
-                    flat->blocklens[i] = blocklength * ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                    flat->blocklens[i] = blocklength * old_extent;
                 }
                 *curr_index = i;
             } else {
@@ -851,8 +842,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                             MPI_Type_get_extent(types[0], &lb, &old_extent);
                         }
                         flatlist_node_grow(flat, j);
-                        flat->indices[j] = flat->indices[j - num] +
-                            ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                        flat->indices[j] = flat->indices[j - num] + old_extent;
                         flat->blocklens[j] = flat->blocklens[j - num];
                         j++;
                     }
@@ -872,7 +862,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                             MPI_Offset stride = ints[2 + i] - ints[1 + i];
                             flatlist_node_grow(flat, j);
                             flat->indices[j] = flat->indices[j - num] +
-                                stride * ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                                stride * old_extent;
                         }
                         flat->blocklens[j] = flat->blocklens[j - num];
                         j++;
@@ -930,7 +920,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                         if (flat->blocklens[j - num] > 0) {
                             flatlist_node_grow(flat, nonzeroth);
                             flat->indices[nonzeroth] =
-                                flat->indices[j - num] + ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                                flat->indices[j - num] + old_extent;
                             flat->blocklens[nonzeroth] = flat->blocklens[j - num];
                             nonzeroth++;
                         }
@@ -959,8 +949,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                             if (flat->blocklens[j - basic_num] > 0) {
                                 flatlist_node_grow(flat, nonzeroth);
                                 flat->indices[nonzeroth] =
-                                    flat->indices[j - basic_num] +
-                                    ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                                    flat->indices[j - basic_num] + old_extent;
                                 flat->blocklens[nonzeroth] = flat->blocklens[j - basic_num];
                                 nonzeroth++;
                             }
@@ -1013,7 +1002,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                         for (i = 0; i < num; i++) {
                             flatlist_node_grow(flat, j);
                             flat->indices[j] =
-                                flat->indices[j - num] + ADIOI_AINT_CAST_TO_OFFSET old_extent;
+                                flat->indices[j - num] + old_extent;
                             flat->blocklens[j] = flat->blocklens[j - num];
                             j++;
                         }
