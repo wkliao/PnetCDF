@@ -112,7 +112,7 @@ static void PNCIO_FileSysType_parentdir(const char *filename, char **dirnamep)
             linkbuf[namelen] = '\0';    /* readlink doesn't null terminate */
             dir = NCI_Strdup(linkbuf);
         }
-        ADIOI_Free(linkbuf);
+        NCI_Free(linkbuf);
     }
 
     slash = strrchr(dir, '/');
@@ -228,7 +228,7 @@ int PNCIO_FileSysType(const char *filename)
             char *dir;
             PNCIO_FileSysType_parentdir(filename, &dir);
             err = romio_statfs(dir, &file_id);
-            ADIOI_Free(dir);
+            NCI_Free(dir);
         } else
             return 0;
     }

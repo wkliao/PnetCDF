@@ -49,10 +49,10 @@ void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag)
                 PNCIO_Datatype_iscontig(types[0], flag);
 
                 PNCIO_Type_dispose(types);
-                ADIOI_Free(ints);
-                ADIOI_Free(adds);
-                ADIOI_Free(cnts);
-                ADIOI_Free(types);
+                NCI_Free(ints);
+                NCI_Free(adds);
+                NCI_Free(cnts);
+                NCI_Free(types);
             }
             break;
         case MPI_COMBINER_F90_INTEGER:

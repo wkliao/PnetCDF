@@ -27,15 +27,15 @@ int PNCIO_File_close(PNCIO_File *fh)
         err = ncmpii_error_posix2nc("close");
 
     if (fh->hints->ranklist != NULL)
-        ADIOI_Free(fh->hints->ranklist);
+        NCI_Free(fh->hints->ranklist);
     if (fh->hints->cb_config_list != NULL)
-        ADIOI_Free(fh->hints->cb_config_list);
+        NCI_Free(fh->hints->cb_config_list);
     if (fh->hints != NULL)
-        ADIOI_Free(fh->hints);
+        NCI_Free(fh->hints);
     if (fh->info != MPI_INFO_NULL)
         MPI_Info_free(&(fh->info));
     if (fh->io_buf != NULL)
-        ADIOI_Free(fh->io_buf);
+        NCI_Free(fh->io_buf);
     PNCIO_Type_dispose(&fh->filetype);
 
     if (PNCIO_Flattened_type_keyval != MPI_KEYVAL_INVALID) {

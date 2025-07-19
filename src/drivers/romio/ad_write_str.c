@@ -450,5 +450,5 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
 
   fn_exit:
     if (writebuf != NULL)
-        ADIOI_Free(writebuf);
+        NCI_Free(writebuf);
 }

@@ -1074,7 +1074,7 @@ int ina_collect_md(NC          *ncp,
         MPI_Status *statuses = (MPI_Status *)
                                NCI_Malloc(nreqs * sizeof(MPI_Status));
         TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
-        ADIOI_Free(statuses);
+        NCI_Free(statuses);
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn,"MPI_Waitall");
@@ -1196,7 +1196,7 @@ int ina_collect_md(NC          *ncp,
         MPI_Status *statuses = (MPI_Status *)
                                NCI_Malloc(nreqs * sizeof(MPI_Status));
         TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
-        ADIOI_Free(statuses);
+        NCI_Free(statuses);
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn,"MPI_Waitall");
@@ -1561,7 +1561,7 @@ int ina_put(NC           *ncp,
             MPI_Status *statuses = (MPI_Status *)
                                    NCI_Malloc(nreqs * sizeof(MPI_Status));
             TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
-            ADIOI_Free(statuses);
+            NCI_Free(statuses);
 #endif
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn,"MPI_Waitall");
@@ -2348,7 +2348,7 @@ int ina_get(NC           *ncp,
     MPI_Status *statuses = (MPI_Status *)
                            NCI_Malloc(nreqs * sizeof(MPI_Status));
     TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
-    ADIOI_Free(statuses);
+    NCI_Free(statuses);
 #endif
     if (mpireturn != MPI_SUCCESS) {
         err = ncmpii_error_mpi2nc(mpireturn,"MPI_Waitall");

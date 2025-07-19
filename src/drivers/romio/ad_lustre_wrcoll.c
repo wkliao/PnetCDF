@@ -352,7 +352,7 @@ Alternative: especially for when flat_fview.count is large
             my_req[aggr].count++;
         }
     }
-    ADIOI_Free(aggr_ranks);
+    NCI_Free(aggr_ranks);
 }
 
 /* ADIOI_LUSTRE_Calc_others_req() calculates what requests from each of other
@@ -404,7 +404,7 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
         others_req[i].count = count_others_req_per_proc[i];
         others_req[i].curr = 0;
     }
-    ADIOI_Free(count_my_req_per_proc);
+    NCI_Free(count_my_req_per_proc);
 
     /* The best communication approach for aggregators to collect offset-length
      * pairs from the non-aggregators is to allocate a single contiguous memory
@@ -503,7 +503,7 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
                       r_off_buf, recvCounts, rdispls, MPI_BYTE, fd->comm);
 #endif
 
-        ADIOI_Free(sendCounts);
+        NCI_Free(sendCounts);
     }
     else { /* instead of using alltoall, use MPI_Issend and MPI_Irecv */
         int nreqs;
@@ -574,10 +574,10 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
             MPI_Status *statuses = (MPI_Status *)
                                    NCI_Malloc(nreqs * sizeof(MPI_Status));
             MPI_Waitall(nreqs, requests, statuses);
-            ADIOI_Free(statuses);
+            NCI_Free(statuses);
 #endif
         }
-        ADIOI_Free(requests);
+        NCI_Free(requests);
     }
 }
 
@@ -797,7 +797,7 @@ double curT = MPI_Wtime();
                 large_indv_req = 0;
             j = i;
         }
-        ADIOI_Free(st_end_all);
+        NCI_Free(st_end_all);
 
         if (fd->hints->cb_write == ADIOI_HINT_ENABLE) {
             /* explicitly enabled by user */
@@ -838,7 +838,7 @@ double curT = MPI_Wtime();
 
         if (count == 0) {
             if (free_flat_fview && flat_fview.count > 0)
-                ADIOI_Free(flat_fview.off);
+                NCI_Free(flat_fview.off);
             *error_code = MPI_SUCCESS;
             return;
         }
@@ -853,7 +853,7 @@ double curT = MPI_Wtime();
              */
 
             if (free_flat_fview && flat_fview.count > 0)
-                ADIOI_Free(flat_fview.off);
+                NCI_Free(flat_fview.off);
 
 #ifdef WKL_DEBUG
             printf("%s %d: SWITCH to PNCIO_WriteContig !!!\n",__func__,__LINE__);
@@ -862,7 +862,7 @@ double curT = MPI_Wtime();
             PNCIO_WriteContig(fd, buf, count, buftype, off, status, error_code);
         } else {
             if (free_flat_fview && flat_fview.count > 0)
-                ADIOI_Free(flat_fview.off);
+                NCI_Free(flat_fview.off);
 #ifdef WKL_DEBUG
             printf("%s %d: SWITCH to PNCIO_LUSTRE_WriteStrided !!!\n",
                    __func__,__LINE__);
@@ -1014,15 +1014,15 @@ double curT = MPI_Wtime();
                                     max_end_loc, buf_idx, error_code);
 
     /* free all memory allocated */
-    ADIOI_Free(others_req[0].offsets);
-    ADIOI_Free(others_req);
+    NCI_Free(others_req[0].offsets);
+    NCI_Free(others_req);
 
     if (buf_idx != NULL) {
-        ADIOI_Free(buf_idx[0]);
-        ADIOI_Free(buf_idx);
+        NCI_Free(buf_idx[0]);
+        NCI_Free(buf_idx);
     }
-    ADIOI_Free(my_req[0].offsets);
-    ADIOI_Free(my_req);
+    NCI_Free(my_req[0].offsets);
+    NCI_Free(my_req);
 
 #ifdef ADJUST_STRIPING_UNIT
     /* restore the original striping_unit */
@@ -1030,7 +1030,7 @@ double curT = MPI_Wtime();
 #endif
 
     if (free_flat_fview && flat_fview.count > 0)
-        ADIOI_Free(flat_fview.off);
+        NCI_Free(flat_fview.off);
 
     if (is_btype_predef)
         NCI_Free(flat_bview.off);
@@ -1099,9 +1099,9 @@ double curT = MPI_Wtime();
     else                                                                     \
         iDisp = (MPI_Aint*)disp;                                             \
     MPI_Type_create_hindexed(iCount, iBklen, iDisp, dType, newType);         \
-    ADIOI_Free(iBklen);                                                      \
+    NCI_Free(iBklen);                                                      \
     if (sizeof(MPI_Aint) != sizeof(MPI_Count))                               \
-        ADIOI_Free(iDisp);                                                   \
+        NCI_Free(iDisp);                                                   \
 }
 
 static
@@ -1207,8 +1207,8 @@ void comm_phase_alltoallw(PNCIO_File     *fd,
         if (recvTypes[i] != MPI_BYTE)
             MPI_Type_free(&recvTypes[i]);
     }
-    ADIOI_Free(sendCounts);
-    ADIOI_Free(sendTypes);
+    NCI_Free(sendCounts);
+    NCI_Free(sendTypes);
 
     /* clear send_list and recv_list for future reuse */
     for (i = 0; i < fd->hints->cb_nodes; i++)
@@ -1349,11 +1349,11 @@ void commit_comm_phase(PNCIO_File     *fd,
         MPI_Status *statuses = (MPI_Status *)
                                NCI_Malloc(nreqs * sizeof(MPI_Status));
         MPI_Waitall(nreqs, reqs, statuses);
-        ADIOI_Free(statuses);
+        NCI_Free(statuses);
 #endif
     }
 
-    ADIOI_Free(reqs);
+    NCI_Free(reqs);
 
     /* clear send_list and recv_list for future reuse */
     for (i = 0; i < fd->hints->cb_nodes; i++)
@@ -1784,7 +1784,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
             /* free send_buf allocated in ADIOI_LUSTRE_W_Exchange_data() */
             for (j = 0; j < numBufs; j++) {
                 if (send_buf[j] != NULL) {
-                    ADIOI_Free(send_buf[j]);
+                    NCI_Free(send_buf[j]);
                     send_buf[j] = NULL;
                 }
             }
@@ -1860,7 +1860,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
                         goto over;
                 }
                 if (srt_off_len[j].num > 0) {
-                    ADIOI_Free(srt_off_len[j].off);
+                    NCI_Free(srt_off_len[j].off);
                     srt_off_len[j].num = 0;
                 }
             }
@@ -1870,33 +1870,33 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
 
   over:
     if (srt_off_len)
-        ADIOI_Free(srt_off_len);
+        NCI_Free(srt_off_len);
     if (write_buf != NULL)
-        ADIOI_Free(write_buf);
+        NCI_Free(write_buf);
     if (recv_buf != NULL) {
         for (j = 0; j < nbufs; j++)
-            ADIOI_Free(recv_buf[j]);
-        ADIOI_Free(recv_buf);
+            NCI_Free(recv_buf[j]);
+        NCI_Free(recv_buf);
     }
     if (recv_count != NULL) {
-        ADIOI_Free(recv_count[0]);
-        ADIOI_Free(recv_count);
+        NCI_Free(recv_count[0]);
+        NCI_Free(recv_count);
     }
-    ADIOI_Free(send_size);
-    ADIOI_Free(off_list);
+    NCI_Free(send_size);
+    NCI_Free(off_list);
     if (flat_bview->is_contig)
-        ADIOI_Free(this_buf_idx);
+        NCI_Free(this_buf_idx);
     if (send_buf != NULL)
-        ADIOI_Free(send_buf);
+        NCI_Free(send_buf);
     if (send_list != NULL) {
         for (i = 0; i < cb_nodes; i++)
-            ADIOI_Free(send_list[i].disp);
-        ADIOI_Free(send_list);
+            NCI_Free(send_list[i].disp);
+        NCI_Free(send_list);
     }
     if (recv_list != NULL) {
         for (i = 0; i < nprocs; i++)
-            ADIOI_Free(recv_list[i].disp);
-        ADIOI_Free(recv_list);
+            NCI_Free(recv_list[i].disp);
+        NCI_Free(recv_list);
     }
 
 #ifdef WKL_DEBUG
@@ -2031,7 +2031,7 @@ void heap_merge(const PNCIO_Access *others_req,
                 break;
         }
     }
-    ADIOI_Free(a);
+    NCI_Free(a);
     *total_elements = j;
 }
 
@@ -2365,7 +2365,7 @@ void Exchange_data_send(
         }
 
         *send_buf_ptr = send_buf[0];
-        ADIOI_Free(send_buf);
+        NCI_Free(send_buf);
     }
 }
 

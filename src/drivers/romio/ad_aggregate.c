@@ -400,10 +400,10 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
 void PNCIO_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
                        PNCIO_Access * my_req, MPI_Aint * buf_idx)
 {
-    ADIOI_Free(count_my_req_per_proc);
-    ADIOI_Free(my_req[0].offsets);
-    ADIOI_Free(my_req);
-    ADIOI_Free(buf_idx);
+    NCI_Free(count_my_req_per_proc);
+    NCI_Free(my_req[0].offsets);
+    NCI_Free(my_req);
+    NCI_Free(buf_idx);
 }
 
 void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
@@ -541,11 +541,11 @@ void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
 #else
         MPI_Status *statuses = (MPI_Status *) NCI_Malloc(j * sizeof(MPI_Status));
         MPI_Waitall(j, requests, statuses);
-        ADIOI_Free(statuses);
+        NCI_Free(statuses);
 #endif
     }
 
-    ADIOI_Free(requests);
+    NCI_Free(requests);
 
     *count_others_req_procs_ptr = count_others_req_procs;
 }
@@ -553,8 +553,8 @@ void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
 void PNCIO_Free_others_req(int nprocs, MPI_Count * count_others_req_per_proc,
                            PNCIO_Access * others_req)
 {
-    ADIOI_Free(count_others_req_per_proc);
-    ADIOI_Free(others_req[0].offsets);
-    ADIOI_Free(others_req);
+    NCI_Free(count_others_req_per_proc);
+    NCI_Free(others_req[0].offsets);
+    NCI_Free(others_req);
 }
 

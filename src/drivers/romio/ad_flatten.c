@@ -31,8 +31,8 @@ static int ADIOI_Flattened_type_delete(MPI_Datatype datatype,
     node->refct--;
 
     if (node->refct <= 0) {
-        if (node->indices) ADIOI_Free(node->indices);
-        ADIOI_Free(node);
+        if (node->indices) NCI_Free(node->indices);
+        NCI_Free(node);
     }
 
     return MPI_SUCCESS;
@@ -107,7 +107,7 @@ PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 #endif
         }
 
-        ADIOI_Free(iovs);
+        NCI_Free(iovs);
 
         /* update flags */
         flat->flag = 0;
@@ -429,10 +429,10 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
         ADIOI_Assert((iq == nints_c));
         ADIOI_Assert((cq == ncnts_c));
 
-        ADIOI_Free(ints_c);
-        ADIOI_Free(adds_c);
+        NCI_Free(ints_c);
+        NCI_Free(adds_c);
     }
-    ADIOI_Free(cnts_c);
+    NCI_Free(cnts_c);
 #else
     MPI_Type_get_envelope(datatype, nints, nadds, ntypes, combiner);
     *ints = (int *) NCI_Malloc((*nints + 1) * sizeof(int));
@@ -1096,9 +1096,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
         PNCIO_Type_dispose(types + i);
     }
 
-    ADIOI_Free(ints);
-    ADIOI_Free(adds);
-    ADIOI_Free(types);
+    NCI_Free(ints);
+    NCI_Free(adds);
+    NCI_Free(types);
 }
 
 /********************************************************/
@@ -1366,9 +1366,9 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
         PNCIO_Type_dispose(types + i);
     }
 
-    ADIOI_Free(ints);
-    ADIOI_Free(adds);
-    ADIOI_Free(types);
+    NCI_Free(ints);
+    NCI_Free(adds);
+    NCI_Free(types);
     return count;
 }
 
@@ -1457,7 +1457,7 @@ static void ADIOI_Optimize_flattened(PNCIO_Flatlist_node * flat_type)
         }
     }
     flat_type->count = opt_blocks;
-    ADIOI_Free(flat_type->indices);
+    NCI_Free(flat_type->indices);
     flat_type->blocklens = opt_blocklens;
     flat_type->indices = opt_indices;
     return;

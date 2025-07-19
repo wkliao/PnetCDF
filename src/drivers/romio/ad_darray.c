@@ -134,8 +134,8 @@ int PNCIO_Type_create_darray(int size, int rank, int ndims,
     MPI_Type_free(&type_old);
     MPI_Type_free(&type_new);
 
-    ADIOI_Free(st_offsets);
-    ADIOI_Free(coords);
+    NCI_Free(st_offsets);
+    NCI_Free(coords);
     return MPI_SUCCESS;
 }
 

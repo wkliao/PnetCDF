@@ -108,8 +108,8 @@ int get_total_avail_osts(void)
     printf("------------------------------------\n\n");
 #endif
 
-    ADIOI_Free(buffer);
-    ADIOI_Free(members);
+    NCI_Free(buffer);
+    NCI_Free(members);
 
     return num_OSTs;
 }
@@ -220,7 +220,7 @@ uint64_t get_striping(int         fd,
     ADIOI_Assert(numOSTs <= *stripe_count);
 
 err_out:
-    if (osts != NULL) ADIOI_Free(osts);
+    if (osts != NULL) NCI_Free(osts);
     if (layout != NULL) llapi_layout_free(layout);
 
     return numOSTs;
@@ -561,17 +561,17 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
                 fd->hints->ranklist[i] = ranks_per_node[j][k];
             }
         }
-        ADIOI_Free(naggr_per_node);
-        ADIOI_Free(idx_per_node);
+        NCI_Free(naggr_per_node);
+        NCI_Free(idx_per_node);
     }
 
     /* TODO: we can keep these two arrays in case for dynamic construction
      * of fd->hints->ranklist[], such as in group-cyclic file domain
      * assignment method, used in each collective write call.
      */
-    ADIOI_Free(nprocs_per_node);
-    ADIOI_Free(ranks_per_node[0]);
-    ADIOI_Free(ranks_per_node);
+    NCI_Free(nprocs_per_node);
+    NCI_Free(ranks_per_node[0]);
+    NCI_Free(ranks_per_node);
 
     /* set file striping hints */
     fd->hints->cb_nodes = num_aggr;
@@ -691,7 +691,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
                                        &stripe_size,
                                        &start_iodevice);
             close(dd);
-            ADIOI_Free(dirc);
+            NCI_Free(dirc);
 
             /* in case of default striping setting is used */
             if (numOSTs == 0) numOSTs = 1;
