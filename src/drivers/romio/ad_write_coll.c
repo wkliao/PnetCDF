@@ -12,7 +12,7 @@
 /* prototypes of functions used for collective writes only. */
 static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
                                  datatype, int nprocs, int myrank,
-                                 ADIOI_Access
+                                 PNCIO_Access
                                  * others_req, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                  MPI_Offset *len_list,
@@ -39,7 +39,7 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
                                   int myrank, int buftype_is_contig, MPI_Count contig_access_count,
                                   MPI_Offset min_st_offset, MPI_Offset fd_size,
                                   MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                  ADIOI_Access * others_req,
+                                  PNCIO_Access * others_req,
                                   MPI_Count *send_buf_idx, MPI_Count *curr_to_proc,
                                   MPI_Count *done_to_proc, int *hole, int iter,
                                   MPI_Aint buftype_extent, MPI_Aint * buf_idx, int *error_code);
@@ -70,11 +70,11 @@ void PNCIO_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
    Scientific Programming, (5)4:301--317, Winter 1996.
    http://www.mcs.anl.gov/home/thakur/ext2ph.ps */
 
-    ADIOI_Access *my_req;
+    PNCIO_Access *my_req;
     /* array of nprocs access structures, one for each other process in
      * whose file domain this process's request lies */
 
-    ADIOI_Access *others_req;
+    PNCIO_Access *others_req;
     /* array of nprocs access structures, one for each other process
      * whose request lies in this process's file domain. */
 
@@ -274,7 +274,7 @@ double curT = MPI_Wtime();
 static void ADIOI_Exch_and_write(ADIO_File fd, void *buf, MPI_Datatype
                                  datatype, int nprocs,
                                  int myrank,
-                                 ADIOI_Access
+                                 PNCIO_Access
                                  * others_req, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                  MPI_Offset *len_list,
@@ -557,7 +557,7 @@ static void ADIOI_W_Exchange_data(ADIO_File fd, void *buf, char *write_buf,
                                   MPI_Offset min_st_offset,
                                   MPI_Offset fd_size,
                                   MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                  ADIOI_Access * others_req,
+                                  PNCIO_Access * others_req,
                                   MPI_Count * send_buf_idx, MPI_Count * curr_to_proc,
                                   MPI_Count * done_to_proc, int *hole, int iter,
                                   MPI_Aint buftype_extent, MPI_Aint * buf_idx, int *error_code)

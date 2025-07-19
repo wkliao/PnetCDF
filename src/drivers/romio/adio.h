@@ -232,7 +232,7 @@ typedef struct {
     size_t    count;
 #endif
     size_t    curr; /* index of offsets/lens that is currently being processed */
-} ADIOI_Access;
+} PNCIO_Access;
 
 extern int ADIOI_Flattened_type_keyval;
 
@@ -341,16 +341,16 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
                 MPI_Offset *fd_end, MPI_Offset fd_size, int nprocs,
                 MPI_Count *count_my_req_procs_ptr,
                 MPI_Count **count_my_req_per_proc_ptr,
-                ADIOI_Access **my_req_ptr, MPI_Aint **buf_idx_ptr);
+                PNCIO_Access **my_req_ptr, MPI_Aint **buf_idx_ptr);
 void PNCIO_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
-                MPI_Count *count_my_req_per_proc, ADIOI_Access *my_req,
+                MPI_Count *count_my_req_per_proc, PNCIO_Access *my_req,
                 int nprocs, int myrank, MPI_Count *count_others_req_procs_ptr,
                 MPI_Count **count_others_req_per_proc_ptr,
-                ADIOI_Access **others_req_ptr);
+                PNCIO_Access **others_req_ptr);
 void PNCIO_Free_my_req(int nprocs, MPI_Count *count_my_req_per_proc,
-                ADIOI_Access *my_req, MPI_Aint *buf_idx);
+                PNCIO_Access *my_req, MPI_Aint *buf_idx);
 void PNCIO_Free_others_req(int nprocs, MPI_Count *count_others_req_per_proc,
-                ADIOI_Access *others_req);
+                PNCIO_Access *others_req);
 
 int ADIOI_Type_create_hindexed_x(MPI_Count count,
                 const MPI_Count array_of_blocklengths[],
@@ -377,7 +377,7 @@ int PNCIO_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset,
 int PNCIO_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
 
-void PNCIO_Heap_merge(ADIOI_Access *others_req, MPI_Count *count,
+void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,
                 MPI_Offset *srt_off, MPI_Count *srt_len, MPI_Count *start_pos,
                 int nprocs, int nprocs_recv, MPI_Count total_elements);
 
