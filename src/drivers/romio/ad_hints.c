@@ -57,7 +57,7 @@ int ADIOI_Info_check_and_install_int(PNCIO_File  *fd,
         }
         /* --END ERROR HANDLING-- */
 
-        ADIOI_Info_set(fd->info, key, value);
+        MPI_Info_set(fd->info, key, value);
         /* some file systems do not cache hints in the fd struct */
         if (local_cache != NULL)
             *local_cache = intval;
@@ -79,20 +79,20 @@ int ADIOI_Info_check_and_install_enabled(PNCIO_File  *fd,
     MPI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
     if (flag) {
         if (!strcmp(value, "enable") || !strcmp(value, "ENABLE")) {
-            ADIOI_Info_set(fd->info, key, value);
+            MPI_Info_set(fd->info, key, value);
             *local_cache = ADIOI_HINT_ENABLE;
         } else if (!strcmp(value, "disable") || !strcmp(value, "DISABLE")) {
-            ADIOI_Info_set(fd->info, key, value);
+            MPI_Info_set(fd->info, key, value);
             *local_cache = ADIOI_HINT_DISABLE;
         } else if (!strcmp(value, "automatic") || !strcmp(value, "AUTOMATIC")) {
-            ADIOI_Info_set(fd->info, key, value);
+            MPI_Info_set(fd->info, key, value);
             *local_cache = ADIOI_HINT_AUTO;
             /* treat the user-provided string like "enabled":  either it is a
              * hint ROMIO knows about and can support it, or ROMIO will not
              * return the hint at all in the MPI_File_get_info info object
              */
         } else if (!strcmp(value, "requested") || !strcmp(value, "REQUESTED")) {
-            ADIOI_Info_set(fd->info, key, "enable");
+            MPI_Info_set(fd->info, key, "enable");
             *local_cache = ADIOI_HINT_ENABLE;
         }
 
@@ -123,10 +123,10 @@ int ADIOI_Info_check_and_install_true(PNCIO_File  *fd,
     MPI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
     if (flag) {
         if (!strcmp(value, "true") || !strcmp(value, "TRUE")) {
-            ADIOI_Info_set(fd->info, key, value);
+            MPI_Info_set(fd->info, key, value);
             *local_cache = 1;
         } else if (!strcmp(value, "false") || !strcmp(value, "FALSE")) {
-            ADIOI_Info_set(fd->info, key, value);
+            MPI_Info_set(fd->info, key, value);
             *local_cache = 0;
         }
         tmp_val = *local_cache;
@@ -156,7 +156,7 @@ int ADIOI_Info_check_and_install_str(PNCIO_File   *fd,
 
     MPI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
     if (flag) {
-        ADIOI_Info_set(fd->info, key, value);
+        MPI_Info_set(fd->info, key, value);
         len = (strlen(value) + 1) * sizeof(char);
         *local_cache = ADIOI_Malloc(len);
         if (*local_cache == NULL) {
@@ -210,35 +210,35 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
             MPI_Info_get(users_info, "striping_unit", MPI_MAX_INFO_VAL,
                            value, &flag);
             if (flag)
-                ADIOI_Info_set(info, "striping_unit", value);
+                MPI_Info_set(info, "striping_unit", value);
 
             MPI_Info_get(users_info, "striping_factor", MPI_MAX_INFO_VAL,
                            value, &flag);
             if (flag)
-                ADIOI_Info_set(info, "striping_factor", value);
+                MPI_Info_set(info, "striping_factor", value);
 
             MPI_Info_get(users_info, "start_iodevice", MPI_MAX_INFO_VAL,
                            value, &flag);
             if (flag)
-                ADIOI_Info_set(info, "start_iodevice", value);
+                MPI_Info_set(info, "start_iodevice", value);
 
             /* Lustre overstriping ratio. 0 or 1 means disabled */
             MPI_Info_get(users_info, "lustre_overstriping_ratio",
                            MPI_MAX_INFO_VAL, value, &flag);
             if (flag)
-                ADIOI_Info_set(info, "lustre_overstriping_ratio", value);
+                MPI_Info_set(info, "lustre_overstriping_ratio", value);
         }
 
         /* buffer size for collective I/O */
-        ADIOI_Info_set(info, "cb_buffer_size", ADIOI_CB_BUFFER_SIZE_DFLT);
+        MPI_Info_set(info, "cb_buffer_size", ADIOI_CB_BUFFER_SIZE_DFLT);
         fd->hints->cb_buffer_size = atoi(ADIOI_CB_BUFFER_SIZE_DFLT);
 
         /* default is to let romio automatically decide when to use
          * collective buffering
          */
-        ADIOI_Info_set(info, "romio_cb_read", "automatic");
+        MPI_Info_set(info, "romio_cb_read", "automatic");
         fd->hints->cb_read = ADIOI_HINT_AUTO;
-        ADIOI_Info_set(info, "romio_cb_write", "automatic");
+        MPI_Info_set(info, "romio_cb_write", "automatic");
         fd->hints->cb_write = ADIOI_HINT_AUTO;
 
         fd->hints->cb_config_list = NULL;
@@ -247,30 +247,30 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         fd->hints->cb_nodes = 0;
 
         /* hint indicating that no indep. I/O will be performed on this file */
-        ADIOI_Info_set(info, "romio_no_indep_rw", "false");
+        MPI_Info_set(info, "romio_no_indep_rw", "false");
         fd->hints->no_indep_rw = 0;
 
         /* hint to set a threshold percentage for a datatype's size/extent at
          * which data sieving should be done in collective I/O */
-        ADIOI_Info_set(info, "romio_cb_ds_threshold", "0");
+        MPI_Info_set(info, "romio_cb_ds_threshold", "0");
         fd->hints->cb_ds_threshold = 0;
 
         /* buffer size for data sieving in independent reads */
-        ADIOI_Info_set(info, "ind_rd_buffer_size",
+        MPI_Info_set(info, "ind_rd_buffer_size",
                        ADIOI_IND_RD_BUFFER_SIZE_DFLT);
         fd->hints->ind_rd_buffer_size = atoi(ADIOI_IND_RD_BUFFER_SIZE_DFLT);
 
         /* buffer size for data sieving in independent writes */
-        ADIOI_Info_set(info, "ind_wr_buffer_size",
+        MPI_Info_set(info, "ind_wr_buffer_size",
                        ADIOI_IND_WR_BUFFER_SIZE_DFLT);
         fd->hints->ind_wr_buffer_size = atoi(ADIOI_IND_WR_BUFFER_SIZE_DFLT);
 
         /* default is to let romio automatically decide when to use data
          * sieving
          */
-        ADIOI_Info_set(info, "romio_ds_read", "automatic");
+        MPI_Info_set(info, "romio_ds_read", "automatic");
         fd->hints->ds_read = ADIOI_HINT_AUTO;
-        ADIOI_Info_set(info, "romio_ds_write", "automatic");
+        MPI_Info_set(info, "romio_ds_write", "automatic");
         fd->hints->ds_write = ADIOI_HINT_AUTO;
 
         /* still to do: tune this a bit for a variety of file systems. there's
@@ -303,7 +303,7 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
                                              &(fd->hints->cb_read));
         if (fd->hints->cb_read == ADIOI_HINT_DISABLE) {
             /* romio_cb_read overrides no_indep_rw */
-            ADIOI_Info_set(fd->info, "romio_no_indep_rw", "false");
+            MPI_Info_set(fd->info, "romio_no_indep_rw", "false");
             fd->hints->no_indep_rw = ADIOI_HINT_DISABLE;
         }
 
@@ -311,7 +311,7 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
                                              &(fd->hints->cb_write));
         if (fd->hints->cb_write == ADIOI_HINT_DISABLE) {
             /* romio_cb_write overrides no_indep_rw */
-            ADIOI_Info_set(fd->info, "romio_no_indep_rw", "false");
+            MPI_Info_set(fd->info, "romio_no_indep_rw", "false");
             fd->hints->no_indep_rw = ADIOI_HINT_DISABLE;
         }
 
@@ -322,8 +322,8 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
             /* if 'no_indep_rw' set, also hint that we will do
              * collective buffering: if we aren't doing independent io,
              * then we have to do collective  */
-            ADIOI_Info_set(fd->info, "romio_cb_write", "enable");
-            ADIOI_Info_set(fd->info, "romio_cb_read", "enable");
+            MPI_Info_set(fd->info, "romio_cb_write", "enable");
+            MPI_Info_set(fd->info, "romio_cb_read", "enable");
             fd->hints->cb_read = ADIOI_HINT_ENABLE;
             fd->hints->cb_write = ADIOI_HINT_ENABLE;
         }
@@ -344,11 +344,11 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
             /* check ill value */
             if (fd->hints->cb_nodes > 0 && fd->hints->cb_nodes <= nprocs) {
                 snprintf(value, MPI_MAX_INFO_VAL + 1, "%d", fd->hints->cb_nodes);
-                ADIOI_Info_set(fd->info, "cb_nodes", value);
+                MPI_Info_set(fd->info, "cb_nodes", value);
             }
             else {
                 fd->hints->cb_nodes = 0;
-                ADIOI_Info_set(fd->info, "cb_nodes", "0");
+                MPI_Info_set(fd->info, "cb_nodes", "0");
             }
         }
 
@@ -394,7 +394,7 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
      * free/alloc and insures it is always set
      */
     if (fd->hints->cb_config_list == NULL) {
-        ADIOI_Info_set(fd->info, "cb_config_list", ADIOI_CB_CONFIG_LIST_DFLT);
+        MPI_Info_set(fd->info, "cb_config_list", ADIOI_CB_CONFIG_LIST_DFLT);
         len = (strlen(ADIOI_CB_CONFIG_LIST_DFLT) + 1) * sizeof(char);
         fd->hints->cb_config_list = ADIOI_Malloc(len);
         if (fd->hints->cb_config_list == NULL)
@@ -415,7 +415,7 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
          * disable at the same time doesn't make sense. honor
          * romio_cb_{read,write} and force the no_indep_rw hint to
          * 'disable' */
-        ADIOI_Info_set(fd->info, "romio_no_indep_rw", "false");
+        MPI_Info_set(fd->info, "romio_no_indep_rw", "false");
         fd->hints->no_indep_rw = 0;
         fd->hints->deferred_open = 0;
     }
