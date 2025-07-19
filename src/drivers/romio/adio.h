@@ -67,7 +67,7 @@
 #define PNCIO_IND_WR_BUFFER_SIZE_DFLT "524288"
 #define PNCIO_CB_CONFIG_LIST_DFLT     "*:1"
 
-/* ADIOI_DS_WR_NPAIRS_LB is the lower bound of the total number of
+/* PNCIO_DS_WR_NPAIRS_LB is the lower bound of the total number of
  *     offset-length pairs over the non-aggregator senders to be received by an
  *     I/O aggregator to skip the potentially expensive heap-merge sort that
  *     determines whether or not data sieving write is necessary.
@@ -97,9 +97,9 @@
  * bounds used to determine whether or not to perform such sorting, when data
  * sieving is set to the automatic mode.
  */
-#define ADIOI_DS_WR_NPAIRS_LB 8192
+#define PNCIO_DS_WR_NPAIRS_LB 8192
 #define ADIOI_DS_WR_NAGGRS_LB 256
-#define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > ADIOI_DS_WR_NAGGRS_LB || (npairs) > ADIOI_DS_WR_NPAIRS_LB)
+#define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > ADIOI_DS_WR_NAGGRS_LB || (npairs) > PNCIO_DS_WR_NPAIRS_LB)
 
 #define ADIOI_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
 #define ADIOI_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
