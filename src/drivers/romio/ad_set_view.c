@@ -126,7 +126,7 @@ int PNCIO_File_set_view(ADIO_File     fd,
         ADIOI_Type_dispose(&fd->filetype);
 
     if (filetype != MPI_BYTE && filetype != MPI_DATATYPE_NULL)
-        ADIOI_Type_ispredef(filetype, &is_predef);
+        PNCIO_Type_ispredef(filetype, &is_predef);
     else
         is_predef = 1;
 

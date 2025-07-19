@@ -34,7 +34,7 @@ int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner)
  * a datatype is predefined if its combiner is MPI_COMBINER_NAMED
  * or MPI_COMBINER_F90_{INTEGER|REAL|COMPLEX} */
 
-int ADIOI_Type_ispredef(MPI_Datatype datatype, int *flag)
+int PNCIO_Type_ispredef(MPI_Datatype datatype, int *flag)
 {
     int ret, combiner;
     ret = ADIOI_Type_get_combiner(datatype, &combiner);
@@ -61,7 +61,7 @@ int ADIOI_Type_dispose(MPI_Datatype * datatype)
     int ret, flag;
     if (*datatype == MPI_DATATYPE_NULL)
         return MPI_SUCCESS;
-    ret = ADIOI_Type_ispredef(*datatype, &flag);
+    ret = PNCIO_Type_ispredef(*datatype, &flag);
     if (ret == MPI_SUCCESS && !flag)
         ret = MPI_Type_free(datatype);
     *datatype = MPI_DATATYPE_NULL;

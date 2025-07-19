@@ -684,7 +684,7 @@ double curT = MPI_Wtime();
      */
     flat_fview.is_contig = (flat_fview.count > 1) ? 0 : 1;
 
-    ADIOI_Type_ispredef(buftype, &is_btype_predef);
+    PNCIO_Type_ispredef(buftype, &is_btype_predef);
 
     /* flatten user buffer datatype, buftype */
     if (is_btype_predef) {

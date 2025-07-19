@@ -268,7 +268,7 @@ int PNCIO_File_read_at_all(ADIO_File fh, MPI_Offset offset, void *buf,
 
 void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag);
 
-int ADIOI_Type_ispredef(MPI_Datatype datatype, int *flag);
+int PNCIO_Type_ispredef(MPI_Datatype datatype, int *flag);
 
 int ADIOI_Type_dispose(MPI_Datatype * datatype);
 
