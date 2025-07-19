@@ -138,7 +138,7 @@ int PNCIO_File_set_view(ADIO_File     fd,
         MPI_Type_commit(&copy_filetype);
 
         fd->filetype = copy_filetype;
-        ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
         /* check filetype only if it is not a predefined MPI datatype */
         fd->flat_file = ADIOI_Flatten_and_find(fd->filetype);

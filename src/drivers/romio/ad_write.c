@@ -122,7 +122,7 @@ int file_write(ADIO_File     fd,
 #endif
     if (bufType_size == 0) return NC_NOERR;
 
-    ADIOI_Datatype_iscontig(bufType, &buftype_is_contig);
+    PNCIO_Datatype_iscontig(bufType, &buftype_is_contig);
 
     /* when fd->filetype == MPI_DATATYPE_NULL, this is called from INA */
     if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL) {
@@ -133,7 +133,7 @@ int file_write(ADIO_File     fd,
     else if (fd->filetype == MPI_BYTE)
         filetype_is_contig = 1;
     else
-        ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;

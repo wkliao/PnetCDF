@@ -678,7 +678,7 @@ double curT = MPI_Wtime();
      *
      * Note ADIOI_Calc_my_off_len() checks whether a fileview is contiguous or
      * not by calling
-     *     ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+     *     PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
      * However, a filetype being contiguous or not is not equal to whether or
      * not this rank's write is contiguous or not in the file.
      */
