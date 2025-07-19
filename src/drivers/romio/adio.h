@@ -64,7 +64,6 @@
 
 #define ADIOI_Strncpy strncpy
 #define ADIOI_Assert assert
-#define ADIOI_COLL_TAG(rank,iter) 0
 #define ADIOI_AINT_CAST_TO_OFFSET (MPI_Offset)
 
 #define ADIOI_CB_BUFFER_SIZE_DFLT     "16777216"
