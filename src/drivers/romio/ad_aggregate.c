@@ -11,7 +11,7 @@
 
 /* This file contains four functions:
  *
- * ADIOI_Calc_aggregator()
+ * PNCIO_Calc_aggregator()
  * PNCIO_Calc_file_domains()
  * PNCIO_Calc_my_req()
  * PNCIO_Free_my_req()
@@ -41,7 +41,7 @@
  *    uneven distributions
  */
 
-/* ADIOI_Calc_aggregator()
+/* PNCIO_Calc_aggregator()
  *
  * The intention here is to implement a function which provides basically
  * the same functionality as in Rajeev's original version of
@@ -68,7 +68,7 @@
  * The "len" parameter is also modified to indicate the amount of data
  * actually available in this file domain.
  */
-int ADIOI_Calc_aggregator(ADIO_File fd,
+int PNCIO_Calc_aggregator(ADIO_File fd,
                           MPI_Offset off,
                           MPI_Offset min_off,
                           MPI_Offset * len,
@@ -97,7 +97,7 @@ int ADIOI_Calc_aggregator(ADIO_File fd,
      * overrunning arrays.  Obviously, we should never ever hit this abort */
     if (rank_index >= fd->hints->cb_nodes || rank_index < 0) {
         fprintf(stderr,
-                "Error in ADIOI_Calc_aggregator(): rank_index(%d) >= fd->hints->cb_nodes (%d) fd_size=%lld off=%lld\n",
+                "Error in PNCIO_Calc_aggregator(): rank_index(%d) >= fd->hints->cb_nodes (%d) fd_size=%lld off=%lld\n",
                 rank_index, fd->hints->cb_nodes, (long long) fd_size, (long long) off);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
@@ -279,11 +279,11 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
         off = offset_list[i];
         fd_len = len_list[i];
         /* note: we set fd_len to be the total size of the access.  then
-         * ADIOI_Calc_aggregator() will modify the value to return the
+         * PNCIO_Calc_aggregator() will modify the value to return the
          * amount that was available from the file domain that holds the
          * first part of the access.
          */
-        proc = ADIOI_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_start, fd_end);
+        proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_start, fd_end);
         count_my_req_per_proc[proc]++;
 
         /* figure out how much data is remaining in the access (i.e. wasn't
@@ -295,7 +295,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
         while (rem_len != 0) {
             off += fd_len;      /* point to first remaining byte */
             fd_len = rem_len;   /* save remaining size, pass to calc */
-            proc = ADIOI_Calc_aggregator(fd, off, min_st_offset, &fd_len,
+            proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len,
                                          fd_size, fd_start, fd_end);
 
             count_my_req_per_proc[proc]++;
@@ -350,7 +350,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
             continue;
         off = offset_list[i];
         fd_len = len_list[i];
-        proc = ADIOI_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_start, fd_end);
+        proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_start, fd_end);
 
         /* for each separate contiguous access from this process */
         if (buf_idx[proc] == -1) {
@@ -375,7 +375,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
         while (rem_len != 0) {
             off += fd_len;
             fd_len = rem_len;
-            proc = ADIOI_Calc_aggregator(fd, off, min_st_offset, &fd_len,
+            proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len,
                                          fd_size, fd_start, fd_end);
 
             if (buf_idx[proc] == -1) {

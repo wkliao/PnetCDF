@@ -954,11 +954,11 @@ void ADIOI_Fill_send_buffer(ADIO_File fd, void *buf, ADIOI_Flatlist_node
         /*this request may span the file domains of more than one process */
         while (rem_len != 0) {
             len = rem_len;
-            /* NOTE: len value is modified by ADIOI_Calc_aggregator() to be no
+            /* NOTE: len value is modified by PNCIO_Calc_aggregator() to be no
              * longer than the single region that processor "p" is responsible
              * for.
              */
-            p = ADIOI_Calc_aggregator(fd, off, min_st_offset, &len, fd_size, fd_start, fd_end);
+            p = PNCIO_Calc_aggregator(fd, off, min_st_offset, &len, fd_size, fd_start, fd_end);
 
             if (send_buf_idx[p] < send_size[p]) {
                 if (curr_to_proc[p] + len > done_to_proc[p]) {
