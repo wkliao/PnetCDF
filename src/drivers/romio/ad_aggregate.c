@@ -14,7 +14,7 @@
  * ADIOI_Calc_aggregator()
  * PNCIO_Calc_file_domains()
  * PNCIO_Calc_my_req()
- * ADIOI_Free_my_req()
+ * PNCIO_Free_my_req()
  * PNCIO_Calc_others_req()
  * ADIOI_Free_others_req()
  *
@@ -397,7 +397,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
     *buf_idx_ptr = buf_idx;
 }
 
-void ADIOI_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
+void PNCIO_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
                        ADIOI_Access * my_req, MPI_Aint * buf_idx)
 {
     ADIOI_Free(count_my_req_per_proc);

@@ -347,7 +347,7 @@ void PNCIO_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
                 int nprocs, int myrank, MPI_Count *count_others_req_procs_ptr,
                 MPI_Count **count_others_req_per_proc_ptr,
                 ADIOI_Access **others_req_ptr);
-void ADIOI_Free_my_req(int nprocs, MPI_Count *count_my_req_per_proc,
+void PNCIO_Free_my_req(int nprocs, MPI_Count *count_my_req_per_proc,
                 ADIOI_Access *my_req, MPI_Aint *buf_idx);
 void ADIOI_Free_others_req(int nprocs, MPI_Count *count_others_req_per_proc,
                 ADIOI_Access *others_req);

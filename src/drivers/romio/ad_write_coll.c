@@ -241,7 +241,7 @@ double curT = MPI_Wtime();
         *error_code = old_error;
 
     /* free all memory allocated for collective I/O */
-    ADIOI_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
+    PNCIO_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
     ADIOI_Free_others_req(nprocs, count_others_req_per_proc, others_req);
 
     if (fd->filetype != MPI_DATATYPE_NULL)
