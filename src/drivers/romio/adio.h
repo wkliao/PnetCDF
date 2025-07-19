@@ -377,7 +377,7 @@ int PNCIO_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset,
 int PNCIO_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
 
-void ADIOI_Heap_merge(ADIOI_Access *others_req, MPI_Count *count,
+void PNCIO_Heap_merge(ADIOI_Access *others_req, MPI_Count *count,
                 MPI_Offset *srt_off, MPI_Count *srt_len, MPI_Count *start_pos,
                 int nprocs, int nprocs_recv, MPI_Count total_elements);
 

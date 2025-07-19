@@ -634,7 +634,7 @@ double curT = MPI_Wtime();
      * data to be written. For this, merge the (sorted) offset lists
      * others_req using a heap-merge. */
 
-/* TODO: ADIOI_Heap_merge is expensive, borrow codes from ad_lustre_wrcoll.c to skip it when possible */
+/* TODO: PNCIO_Heap_merge is expensive, borrow codes from ad_lustre_wrcoll.c to skip it when possible */
 
     /* valgrind-detcted optimization: if there is no work on this process we do
      * not need to search for holes */
@@ -645,7 +645,7 @@ double curT = MPI_Wtime();
         srt_off = (MPI_Offset *) ADIOI_Malloc(sum * sizeof(MPI_Offset));
         srt_len = ADIOI_Malloc(sum * sizeof(*srt_len));
 
-        ADIOI_Heap_merge(others_req, count, srt_off, srt_len, start_pos, nprocs, nprocs_recv, sum);
+        PNCIO_Heap_merge(others_req, count, srt_off, srt_len, start_pos, nprocs, nprocs_recv, sum);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         if (fd->is_agg) fd->write_timing[5] += MPI_Wtime() - timing;
 #endif
