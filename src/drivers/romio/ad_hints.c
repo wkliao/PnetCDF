@@ -19,8 +19,8 @@
 #include <common.h>
 #include "adio.h"
 
-/*----< ADIO_File_get_info() >-----------------------------------------------*/
-int ADIO_File_get_info(ADIO_File fd,
+/*----< PNCIO_File_get_info() >-----------------------------------------------*/
+int PNCIO_File_get_info(ADIO_File fd,
                       MPI_Info *info_used)
 {
     int err;
