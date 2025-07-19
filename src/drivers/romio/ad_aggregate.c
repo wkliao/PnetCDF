@@ -251,7 +251,7 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
 #endif
     PNCIO_Access *my_req;
 
-    *count_my_req_per_proc_ptr = ADIOI_Calloc(nprocs, sizeof(MPI_Count));
+    *count_my_req_per_proc_ptr = NCI_Calloc(nprocs, sizeof(MPI_Count));
     count_my_req_per_proc = *count_my_req_per_proc_ptr;
 /* count_my_req_per_proc[i] gives the no. of contig. requests of this
    process in process i's file domain. calloc initializes to zero.

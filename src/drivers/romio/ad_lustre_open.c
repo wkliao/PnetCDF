@@ -94,7 +94,7 @@ int get_total_avail_osts(void)
     char **members, *buffer, *pool="scratch.original";
     int num_OSTs, list_size = 1024;
     members = (char**)NCI_Malloc(sizeof(char*) * list_size);
-    buffer = (char*)ADIOI_Calloc(list_size * 64, sizeof(char));
+    buffer = (char*)NCI_Calloc(list_size * 64, sizeof(char));
 
     num_OSTs = llapi_get_poolmembers(pool, members, list_size, buffer,
                                      list_size * 64);
@@ -338,7 +338,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
     MPI_Comm_rank(fd->comm, &rank);
 
     /* number of MPI processes running on each node */
-    nprocs_per_node = (int *) ADIOI_Calloc(fd->num_nodes, sizeof(int));
+    nprocs_per_node = (int *) NCI_Calloc(fd->num_nodes, sizeof(int));
 
     for (i=0; i<nprocs; i++) nprocs_per_node[fd->node_ids[i]]++;
 
@@ -518,7 +518,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
          * aggregators are spread evenly instead of the first few ranks.
          */
         int *naggr_per_node, *idx_per_node, avg;
-        idx_per_node = (int*) ADIOI_Calloc(fd->num_nodes, sizeof(int));
+        idx_per_node = (int*) NCI_Calloc(fd->num_nodes, sizeof(int));
         naggr_per_node = (int*) NCI_Malloc(fd->num_nodes * sizeof(int));
         for (i = 0; i < striping_factor % fd->num_nodes; i++)
             naggr_per_node[i] = striping_factor / fd->num_nodes + 1;

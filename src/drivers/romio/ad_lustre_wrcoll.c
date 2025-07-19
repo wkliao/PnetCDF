@@ -191,7 +191,7 @@ void ADIOI_LUSTRE_Calc_my_req(PNCIO_File     *fd,
     /* my_req[i].count gives the number of contiguous requests of this process
      * that fall in aggregator i's file domain (not process MPI rank i).
      */
-    my_req = (PNCIO_Access *) ADIOI_Calloc(cb_nodes, sizeof(PNCIO_Access));
+    my_req = (PNCIO_Access *) NCI_Calloc(cb_nodes, sizeof(PNCIO_Access));
     *my_req_ptr = my_req;
 
     /* First pass is just to calculate how much space is needed to allocate
@@ -387,7 +387,7 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
      * number of noncontiguous requests from process j fall into this
      * aggregator's file domain).
      */
-    count_my_req_per_proc = (MPI_Count *) ADIOI_Calloc(nprocs * 2, sizeof(MPI_Count));
+    count_my_req_per_proc = (MPI_Count *) NCI_Calloc(nprocs * 2, sizeof(MPI_Count));
     count_others_req_per_proc = count_my_req_per_proc + nprocs;
     for (i=0; i<fd->hints->cb_nodes; i++)
         count_my_req_per_proc[fd->hints->ranklist[i]] = my_req[i].count;
@@ -465,14 +465,14 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
         MPI_Count *sendCounts, *recvCounts;
         MPI_Aint *sdispls, *rdispls;
         alloc_sz   = sizeof(MPI_Count) * 2 + sizeof(MPI_Aint) * 2;
-        sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs, alloc_sz);
+        sendCounts = (MPI_Count*) NCI_Calloc(nprocs, alloc_sz);
         recvCounts = sendCounts + nprocs;
         sdispls    = (MPI_Aint*) (recvCounts + nprocs);
         rdispls    = sdispls + nprocs;
 #else
         int *sendCounts, *recvCounts, *sdispls, *rdispls;
         alloc_sz   = sizeof(int) * 4;
-        sendCounts = (int*) ADIOI_Calloc(nprocs, alloc_sz);
+        sendCounts = (int*) NCI_Calloc(nprocs, alloc_sz);
         recvCounts = sendCounts + nprocs;
         sdispls    = recvCounts + nprocs;
         rdispls    = sdispls + nprocs;
@@ -1132,12 +1132,12 @@ void comm_phase_alltoallw(PNCIO_File     *fd,
     MPI_Count *sendCounts, *recvCounts;
     MPI_Aint *sdispls, *rdispls;
     alloc_sz = sizeof(MPI_Count) + sizeof(MPI_Aint);
-    sendCounts = (MPI_Count*) ADIOI_Calloc(nprocs * 2, alloc_sz);
+    sendCounts = (MPI_Count*) NCI_Calloc(nprocs * 2, alloc_sz);
     sdispls = (MPI_Aint*) (sendCounts + (nprocs * 2));
 #else
     int *sendCounts, *recvCounts, *sdispls, *rdispls;
     alloc_sz = sizeof(int) * 2;
-    sendCounts = (int*) ADIOI_Calloc(nprocs * 2, alloc_sz);
+    sendCounts = (int*) NCI_Calloc(nprocs * 2, alloc_sz);
     sdispls = (int*) (sendCounts + (nprocs * 2));
 #endif
     recvCounts = sendCounts + nprocs;
@@ -1585,7 +1585,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
         this_buf_idx = (MPI_Offset *) NCI_Malloc(sizeof(MPI_Offset) * cb_nodes);
 
     /* array of data sizes to be sent to each aggregator in a 2-phase round */
-    send_size = (MPI_Count *) ADIOI_Calloc(cb_nodes, sizeof(MPI_Count));
+    send_size = (MPI_Count *) NCI_Calloc(cb_nodes, sizeof(MPI_Count));
 
     /* min_st_loc is the beginning file offsets of the aggregate access region
      *     of this collective write, and it has been downward aligned to the
