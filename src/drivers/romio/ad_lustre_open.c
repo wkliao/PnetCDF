@@ -836,12 +836,12 @@ err_out:
     return err;
 }
 
-/*----< ADIOI_Lustre_open() >------------------------------------------------*/
+/*----< PNCIO_Lustre_open() >------------------------------------------------*/
 /*   1. all processes open the file.
  *   2. root obtains striping info and broadcasts to all others
  */
 int
-ADIOI_Lustre_open(ADIO_File fd)
+PNCIO_Lustre_open(ADIO_File fd)
 {
     char int_str[16];
     int err=NC_NOERR, rank, perm, old_mask;
