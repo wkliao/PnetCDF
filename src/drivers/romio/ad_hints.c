@@ -34,12 +34,12 @@ int PNCIO_File_get_info(PNCIO_File *fd,
     return err;
 }
 
-/*----< ADIOI_Info_check_and_install_int() >---------------------------------*/
+/*----< Info_check_and_install_int() >---------------------------------------*/
 static
-int ADIOI_Info_check_and_install_int(PNCIO_File  *fd,
-                                     MPI_Info    info,
-                                     const char *key,
-                                     int        *local_cache)
+int Info_check_and_install_int(PNCIO_File  *fd,
+                               MPI_Info    info,
+                               const char *key,
+                               int        *local_cache)
 {
     int intval, tmp_val, flag, ret = 0;
     char value[MPI_MAX_INFO_VAL + 1];
@@ -66,12 +66,12 @@ fn_exit:
     return ret;
 }
 
-/*----< ADIOI_Info_check_and_install_enabled() >-----------------------------*/
+/*----< Info_check_and_install_enabled() >-----------------------------------*/
 static
-int ADIOI_Info_check_and_install_enabled(PNCIO_File  *fd,
-                                         MPI_Info    info,
-                                         const char *key,
-                                         int        *local_cache)
+int Info_check_and_install_enabled(PNCIO_File  *fd,
+                                   MPI_Info    info,
+                                   const char *key,
+                                   int        *local_cache)
 {
     int tmp_val, flag, ret = 0;
     char value[MPI_MAX_INFO_VAL + 1];
@@ -110,12 +110,12 @@ fn_exit:
     return ret;
 }
 
-/*----< ADIOI_Info_check_and_install_true() >--------------------------------*/
+/*----< Info_check_and_install_true() >--------------------------------------*/
 static
-int ADIOI_Info_check_and_install_true(PNCIO_File  *fd,
-                                      MPI_Info    info,
-                                      const char *key,
-                                      int        *local_cache)
+int Info_check_and_install_true(PNCIO_File  *fd,
+                                MPI_Info    info,
+                                const char *key,
+                                int        *local_cache)
 {
     int flag, tmp_val, ret = 0;
     char value[MPI_MAX_INFO_VAL + 1];
@@ -143,12 +143,12 @@ fn_exit:
     return ret;
 }
 
-/*----< ADIOI_Info_check_and_install_str() >---------------------------------*/
+/*----< Info_check_and_install_str() >---------------------------------------*/
 static
-int ADIOI_Info_check_and_install_str(PNCIO_File   *fd,
-                                     MPI_Info     info,
-                                     const char  *key,
-                                     char       **local_cache)
+int Info_check_and_install_str(PNCIO_File   *fd,
+                               MPI_Info     info,
+                               const char  *key,
+                               char       **local_cache)
 {
     int flag, ret = 0;
     size_t len;
@@ -176,8 +176,8 @@ fn_exit:
 /*----< PNCIO_File_SetInfo() >------------------------------------------------*/
 /* When users_info == MPI_INFO_NULL, this subroutine is an independent call.
  * When users_info != MPI_INFO_NULL, this subroutine is a collective call.
- * because it calls ADIOI_Info_check_and_install_xxx(), which checks the
- * consistency of all hints values set in user's info object.
+ * because it calls Info_check_and_install_xxx(), which checks the consistency
+ * of all hints values set in user's info object.
  */
 int
 PNCIO_File_SetInfo(PNCIO_File *fd,
@@ -286,29 +286,28 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
 
     /* add in user's info if supplied */
     if (users_info != MPI_INFO_NULL) {
-        ADIOI_Info_check_and_install_int(fd, users_info, "cb_buffer_size",
-                                         &(fd->hints->cb_buffer_size));
+        Info_check_and_install_int(fd, users_info, "cb_buffer_size",
+                                   &(fd->hints->cb_buffer_size));
 
         /* for collective I/O, try to be smarter about when to do data sieving
          * using a specific threshold for the datatype size/extent
          * (percentage 0-100%) */
-        ADIOI_Info_check_and_install_int(fd, users_info,
-                                         "romio_cb_ds_threshold",
-                                         &(fd->hints->cb_ds_threshold));
+        Info_check_and_install_int(fd, users_info, "romio_cb_ds_threshold",
+                                   &(fd->hints->cb_ds_threshold));
 
         /* new hints for enabling/disabling coll. buffering on
          * reads/writes
          */
-        ADIOI_Info_check_and_install_enabled(fd, users_info, "romio_cb_read",
-                                             &(fd->hints->cb_read));
+        Info_check_and_install_enabled(fd, users_info, "romio_cb_read",
+                                       &(fd->hints->cb_read));
         if (fd->hints->cb_read == PNCIO_HINT_DISABLE) {
             /* romio_cb_read overrides no_indep_rw */
             MPI_Info_set(fd->info, "romio_no_indep_rw", "false");
             fd->hints->no_indep_rw = PNCIO_HINT_DISABLE;
         }
 
-        ADIOI_Info_check_and_install_enabled(fd, users_info, "romio_cb_write",
-                                             &(fd->hints->cb_write));
+        Info_check_and_install_enabled(fd, users_info, "romio_cb_write",
+                                       &(fd->hints->cb_write));
         if (fd->hints->cb_write == PNCIO_HINT_DISABLE) {
             /* romio_cb_write overrides no_indep_rw */
             MPI_Info_set(fd->info, "romio_no_indep_rw", "false");
@@ -316,8 +315,8 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         }
 
         /* Has the user indicated all I/O will be done collectively? */
-        ADIOI_Info_check_and_install_true(fd, users_info, "romio_no_indep_rw",
-                                          &(fd->hints->no_indep_rw));
+        Info_check_and_install_true(fd, users_info, "romio_no_indep_rw",
+                                    &(fd->hints->no_indep_rw));
         if (fd->hints->no_indep_rw == 1) {
             /* if 'no_indep_rw' set, also hint that we will do
              * collective buffering: if we aren't doing independent io,
@@ -330,17 +329,17 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         /* new hints for enabling/disabling data sieving on
          * reads/writes
          */
-        ADIOI_Info_check_and_install_enabled(fd, users_info, "romio_ds_read",
-                                             &(fd->hints->ds_read));
-        ADIOI_Info_check_and_install_enabled(fd, users_info, "romio_ds_write",
-                                             &(fd->hints->ds_write));
+        Info_check_and_install_enabled(fd, users_info, "romio_ds_read",
+                                       &(fd->hints->ds_read));
+        Info_check_and_install_enabled(fd, users_info, "romio_ds_write",
+                                       &(fd->hints->ds_write));
 
         if (fd->hints->cb_nodes == 0) { /* never set before */
             /* MPI_File_open path sets up some data structrues that don't
              * get resized in the MPI_File_set_view path, so ignore
              * cb_nodes in the set_view case */
-            ADIOI_Info_check_and_install_int(fd, users_info, "cb_nodes",
-                                             &(fd->hints->cb_nodes));
+            Info_check_and_install_int(fd, users_info, "cb_nodes",
+                                       &(fd->hints->cb_nodes));
             /* check ill value */
             if (fd->hints->cb_nodes > 0 && fd->hints->cb_nodes <= nprocs) {
                 snprintf(value, MPI_MAX_INFO_VAL + 1, "%d", fd->hints->cb_nodes);
@@ -352,10 +351,10 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
             }
         }
 
-        ADIOI_Info_check_and_install_int(fd, users_info, "ind_wr_buffer_size",
-                                         &(fd->hints->ind_wr_buffer_size));
-        ADIOI_Info_check_and_install_int(fd, users_info, "ind_rd_buffer_size",
-                                         &(fd->hints->ind_rd_buffer_size));
+        Info_check_and_install_int(fd, users_info, "ind_wr_buffer_size",
+                                   &(fd->hints->ind_wr_buffer_size));
+        Info_check_and_install_int(fd, users_info, "ind_rd_buffer_size",
+                                   &(fd->hints->ind_rd_buffer_size));
 
         if (fd->hints->cb_config_list == NULL) {
             /* only set cb_config_list if it isn't already set.  Note that
@@ -366,24 +365,23 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
              * otherwise we would get an error if someone used the same info
              * value with a cb_config_list value in it in a couple of calls,
              * which would be irritating. */
-            ADIOI_Info_check_and_install_str(fd, users_info, "cb_config_list",
-                                             &(fd->hints->cb_config_list));
+            Info_check_and_install_str(fd, users_info, "cb_config_list",
+                                       &(fd->hints->cb_config_list));
 
         }
         /* Now we use striping information in common code so we should
          * process hints for it. */
-        ADIOI_Info_check_and_install_int(fd, users_info, "striping_unit",
-                                         &(fd->hints->striping_unit));
+        Info_check_and_install_int(fd, users_info, "striping_unit",
+                                   &(fd->hints->striping_unit));
 
-        ADIOI_Info_check_and_install_int(fd, users_info, "striping_factor",
-                                         &(fd->hints->striping_factor));
+        Info_check_and_install_int(fd, users_info, "striping_factor",
+                                   &(fd->hints->striping_factor));
 
-        ADIOI_Info_check_and_install_int(fd, users_info, "start_iodevice",
-                                         &(fd->hints->start_iodevice));
+        Info_check_and_install_int(fd, users_info, "start_iodevice",
+                                   &(fd->hints->start_iodevice));
 
         /* Lustre overstriping ratio. 0 or 1 means disabled */
-        ADIOI_Info_check_and_install_int(fd, users_info,
-                         "lustre_overstriping_ratio",
+        Info_check_and_install_int(fd, users_info, "lustre_overstriping_ratio",
                          &(fd->hints->fs_hints.lustre.overstriping_ratio));
     }
 
