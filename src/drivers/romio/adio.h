@@ -39,8 +39,8 @@
 #endif
 #define MPL_UNREFERENCED_ARG(a)
 
-#define ADIO_LOCKS  300    /* file system supports fcntl()-style locking */
-#define ADIO_Feature(a, b) ((b == ADIO_LOCKS) ? 1 : 0)
+#define PNCIO_LOCKS  300    /* file system supports fcntl()-style locking */
+#define ADIO_Feature(a, b) ((b == PNCIO_LOCKS) ? 1 : 0)
 
 #if defined(F_SETLKW64)
 #define PNCIO_UNLOCK(fd, offset, whence, len) \
