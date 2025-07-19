@@ -262,7 +262,7 @@ int PNCIO_File_open(MPI_Comm    comm,
         if (amode & MPI_MODE_CREATE)
             err = PNCIO_Lustre_create(fd, amode);
         else
-            err = ADIOI_Lustre_open(fd);
+            err = PNCIO_Lustre_open(fd);
     }
     else {
         if (amode & MPI_MODE_CREATE)
