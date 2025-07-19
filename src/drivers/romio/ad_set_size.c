@@ -41,8 +41,8 @@ int PNCIO_File_set_size(ADIO_File  fd,
     return err;
 }
 
-/*----< ADIO_File_get_size() >-----------------------------------------------*/
-int ADIO_File_get_size(ADIO_File   fd,
+/*----< PNCIO_File_get_size() >-----------------------------------------------*/
+int PNCIO_File_get_size(ADIO_File   fd,
                       MPI_Offset *size)
 {
     int err = NC_NOERR, rank;
