@@ -316,7 +316,7 @@ move_file_block(NC         *ncp,
                                              get_count /* NOT bufcount */,
                                              MPI_BYTE, &mpistatus);
             else if (get_count > 0)
-                err = ADIO_File_write_at(ncp->adio_fh, off_to, buf,
+                err = PNCIO_File_write_at(ncp->adio_fh, off_to, buf,
                                              get_count /* NOT bufcount */,
                                              MPI_BYTE, &mpistatus);
             if (err != NC_NOERR) {
@@ -759,7 +759,7 @@ write_NC(NC *ncp)
             }
             else {
                 if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-                    err = ADIO_File_write_at(ncp->adio_fh, offset, buf_ptr, bufCount,
+                    err = PNCIO_File_write_at(ncp->adio_fh, offset, buf_ptr, bufCount,
                                             MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
                 }

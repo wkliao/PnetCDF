@@ -150,12 +150,12 @@ int file_write(ADIO_File     fd,
     return err;
 }
 
-/*----< ADIO_File_write_at() >-----------------------------------------------*/
+/*----< PNCIO_File_write_at() >-----------------------------------------------*/
 /* This is an independent call.
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int ADIO_File_write_at(ADIO_File     fh,
+int PNCIO_File_write_at(ADIO_File     fh,
                        MPI_Offset    offset,
                        const void   *buf,
                        int           count,

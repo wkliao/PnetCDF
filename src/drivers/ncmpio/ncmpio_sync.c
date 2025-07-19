@@ -171,7 +171,7 @@ ncmpio_write_numrecs(NC         *ncp,
         }
         else {
             if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-                err = ADIO_File_write_at(ncp->adio_fh, NC_NUMRECS_OFFSET, (void*)pos,
+                err = PNCIO_File_write_at(ncp->adio_fh, NC_NUMRECS_OFFSET, (void*)pos,
                                         len, MPI_BYTE, &mpistatus);
                 if (err != NC_NOERR) return err;
             }
