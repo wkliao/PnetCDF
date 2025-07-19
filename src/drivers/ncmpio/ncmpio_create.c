@@ -236,7 +236,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
                 if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
                     ADIO_File adio_fh;
                     adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
-                    err = ADIO_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDWR,
+                    err = PNCIO_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDWR,
                                          MPI_INFO_NULL, adio_fh);
                     if (err == NC_NOERR)
                         ADIO_File_set_size(adio_fh, 0); /* can be expensive */
@@ -449,7 +449,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
         ncp->adio_fh->num_nodes   = ncp->num_nodes;
         ncp->adio_fh->node_ids    = ncp->node_ids;
 
-        err = ADIO_File_open(comm, filename, mpiomode, user_info, ncp->adio_fh);
+        err = PNCIO_File_open(comm, filename, mpiomode, user_info, ncp->adio_fh);
         if (err != NC_NOERR) DEBUG_RETURN_ERROR(err)
 
         /* Now the file has been successfully created, obtain the I/O hints

@@ -216,8 +216,8 @@ err_out:
     return err;
 }
 
-/*----< ADIO_File_open() >---------------------------------------------------*/
-int ADIO_File_open(MPI_Comm    comm,
+/*----< PNCIO_File_open() >---------------------------------------------------*/
+int PNCIO_File_open(MPI_Comm    comm,
                    const char *filename,
                    int         amode,
                    MPI_Info    info,
