@@ -799,7 +799,7 @@ double curT = MPI_Wtime();
         }
         NCI_Free(st_end_all);
 
-        if (fd->hints->cb_write == ADIOI_HINT_ENABLE) {
+        if (fd->hints->cb_write == PNCIO_HINT_ENABLE) {
             /* explicitly enabled by user */
             do_collect = 1;
         }
@@ -2130,7 +2130,7 @@ void Exchange_data_recv(
 #endif
         srt_off_len->off[0] = others_req[j].offsets[start_pos[j]];
         srt_off_len->len[0] = others_req[j].lens[start_pos[j]];
-    } else if (fd->hints->ds_write == ADIOI_HINT_ENABLE) {
+    } else if (fd->hints->ds_write == PNCIO_HINT_ENABLE) {
         /* skip building of srt_off_len and proceed to read-modify-write */
         build_srt_off_len = 0;
         /* assuming there are holes */
@@ -2205,8 +2205,8 @@ void Exchange_data_recv(
         hole = (srt_off_len->num > 1);
     }
 
-// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d skip_read=%d srt_off_len->num=%lld\n",__func__,__LINE__, (fd->hints->ds_write == ADIOI_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,fd->skip_read,srt_off_len->num);
-// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d nprocs_recv=%d(PNCIO_DS_WR_NAGGRS_LB=%d) numx=%lld(PNCIO_DS_WR_NPAIRS_LB=%d)\n",__func__,__LINE__, (fd->hints->ds_write == ADIOI_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,nprocs_recv,PNCIO_DS_WR_NAGGRS_LB,numx,PNCIO_DS_WR_NPAIRS_LB);
+// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d skip_read=%d srt_off_len->num=%lld\n",__func__,__LINE__, (fd->hints->ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,fd->skip_read,srt_off_len->num);
+// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d nprocs_recv=%d(PNCIO_DS_WR_NAGGRS_LB=%d) numx=%lld(PNCIO_DS_WR_NPAIRS_LB=%d)\n",__func__,__LINE__, (fd->hints->ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,nprocs_recv,PNCIO_DS_WR_NAGGRS_LB,numx,PNCIO_DS_WR_NPAIRS_LB);
 
     /* data sieving */
     if (fd->hints->ds_write != ADIOI_HINT_DISABLE && hole) {
