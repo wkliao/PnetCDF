@@ -108,7 +108,7 @@
 enum {
     PNCIO_HINT_AUTO = 0,
     PNCIO_HINT_ENABLE = 1,
-    ADIOI_HINT_DISABLE = 2
+    PNCIO_HINT_DISABLE = 2
 };
 
 typedef struct {

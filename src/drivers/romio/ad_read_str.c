@@ -77,7 +77,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
     MPI_Status status1;
     static char myname[] = "PNCIO_GEN_ReadStrided";
 
-    if (fd->hints->ds_read == ADIOI_HINT_DISABLE) {
+    if (fd->hints->ds_read == PNCIO_HINT_DISABLE) {
         /* if user has disabled data sieving on reads, use naive
          * approach instead.
          */
