@@ -140,7 +140,7 @@ double curT = MPI_Wtime();
     PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
 
     if (fd->hints->cb_read == ADIOI_HINT_DISABLE
-        || (!interleave_count && (fd->hints->cb_read == ADIOI_HINT_AUTO))) {
+        || (!interleave_count && (fd->hints->cb_read == PNCIO_HINT_AUTO))) {
         /* don't do aggregation */
         if (fd->hints->cb_read != ADIOI_HINT_DISABLE) {
             if (free_flat_fview) NCI_Free(offset_list);

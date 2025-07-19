@@ -139,7 +139,7 @@ double curT = MPI_Wtime();
     PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
 
     if (fd->hints->cb_write == ADIOI_HINT_DISABLE ||
-        (!interleave_count && (fd->hints->cb_write == ADIOI_HINT_AUTO))) {
+        (!interleave_count && (fd->hints->cb_write == PNCIO_HINT_AUTO))) {
         /* use independent accesses */
         if (fd->hints->cb_write != ADIOI_HINT_DISABLE) {
             if (fd->filetype != MPI_DATATYPE_NULL)

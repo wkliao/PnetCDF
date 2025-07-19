@@ -86,7 +86,7 @@ int ADIOI_Info_check_and_install_enabled(PNCIO_File  *fd,
             *local_cache = ADIOI_HINT_DISABLE;
         } else if (!strcmp(value, "automatic") || !strcmp(value, "AUTOMATIC")) {
             MPI_Info_set(fd->info, key, value);
-            *local_cache = ADIOI_HINT_AUTO;
+            *local_cache = PNCIO_HINT_AUTO;
             /* treat the user-provided string like "enabled":  either it is a
              * hint ROMIO knows about and can support it, or ROMIO will not
              * return the hint at all in the MPI_File_get_info info object
@@ -237,9 +237,9 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
          * collective buffering
          */
         MPI_Info_set(info, "romio_cb_read", "automatic");
-        fd->hints->cb_read = ADIOI_HINT_AUTO;
+        fd->hints->cb_read = PNCIO_HINT_AUTO;
         MPI_Info_set(info, "romio_cb_write", "automatic");
-        fd->hints->cb_write = ADIOI_HINT_AUTO;
+        fd->hints->cb_write = PNCIO_HINT_AUTO;
 
         fd->hints->cb_config_list = NULL;
 
@@ -269,9 +269,9 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
          * sieving
          */
         MPI_Info_set(info, "romio_ds_read", "automatic");
-        fd->hints->ds_read = ADIOI_HINT_AUTO;
+        fd->hints->ds_read = PNCIO_HINT_AUTO;
         MPI_Info_set(info, "romio_ds_write", "automatic");
-        fd->hints->ds_write = ADIOI_HINT_AUTO;
+        fd->hints->ds_write = PNCIO_HINT_AUTO;
 
         /* still to do: tune this a bit for a variety of file systems. there's
          * no good default value so just leave it unset */

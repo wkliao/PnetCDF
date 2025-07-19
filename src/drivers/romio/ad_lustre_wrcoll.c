@@ -803,9 +803,9 @@ double curT = MPI_Wtime();
             /* explicitly enabled by user */
             do_collect = 1;
         }
-        else if (fd->hints->cb_write == ADIOI_HINT_AUTO) {
+        else if (fd->hints->cb_write == PNCIO_HINT_AUTO) {
             /* Check if collective write is actually necessary, only when
-             * cb_write hint is set to ADIOI_HINT_AUTO.
+             * cb_write hint is set to PNCIO_HINT_AUTO.
              *
              * Two typical access patterns can benefit from collective write.
              *   1) access file regions of all processes are interleaved, and
@@ -2135,7 +2135,7 @@ void Exchange_data_recv(
         build_srt_off_len = 0;
         /* assuming there are holes */
         hole = 1;
-    } else if (fd->hints->ds_write == ADIOI_HINT_AUTO) {
+    } else if (fd->hints->ds_write == PNCIO_HINT_AUTO) {
         if (DO_HEAP_MERGE(nprocs_recv, srt_off_len->num)) {
             /* When the number of sorted offset-length lists or the total
              * number of offset-length pairs are too large, the heap-merge sort
