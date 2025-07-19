@@ -242,7 +242,7 @@ double curT = MPI_Wtime();
 
     /* free all memory allocated for collective I/O */
     PNCIO_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
-    ADIOI_Free_others_req(nprocs, count_others_req_per_proc, others_req);
+    PNCIO_Free_others_req(nprocs, count_others_req_per_proc, others_req);
 
     if (fd->filetype != MPI_DATATYPE_NULL)
         ADIOI_Free(offset_list);
