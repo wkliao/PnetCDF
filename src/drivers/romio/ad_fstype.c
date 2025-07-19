@@ -117,7 +117,7 @@ static void PNCIO_FileSysType_parentdir(const char *filename, char **dirnamep)
 
     slash = strrchr(dir, '/');
     if (!slash)
-        ADIOI_Strncpy(dir, ".", 2);
+        strncpy(dir, ".", 2);
     else {
         if (slash == dir)
             *(dir + 1) = '\0';

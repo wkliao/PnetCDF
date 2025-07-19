@@ -163,7 +163,7 @@ int ADIOI_Info_check_and_install_str(PNCIO_File   *fd,
             ret = NC_ENOMEM;
             goto fn_exit;
         }
-        ADIOI_Strncpy(*local_cache, value, len);
+        strncpy(*local_cache, value, len);
     }
     /* if it has been set already, we ignore it the second time.
      * otherwise we would get an error if someone used the same
@@ -400,7 +400,7 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         if (fd->hints->cb_config_list == NULL)
             return NC_ENOMEM;
 
-        ADIOI_Strncpy(fd->hints->cb_config_list, ADIOI_CB_CONFIG_LIST_DFLT, len);
+        strncpy(fd->hints->cb_config_list, ADIOI_CB_CONFIG_LIST_DFLT, len);
     }
     /* deferred_open won't be set by callers, but if the user doesn't
      * explicitly disable collecitve buffering (two-phase) and does hint that
