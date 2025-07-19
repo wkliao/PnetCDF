@@ -362,7 +362,7 @@ hdr_fetch(bufferinfo *gbp) {
            not change the file pointer */
         if (gbp->coll_mode == 1) { /* collective read */
             if (gbp->fstype != ADIO_FSTYPE_MPIIO) {
-                err = ADIO_File_read_at_all(gbp->adio_fh, gbp->offset, readBuf,
+                err = PNCIO_File_read_at_all(gbp->adio_fh, gbp->offset, readBuf,
                                            readLen, MPI_BYTE, &mpistatus);
             }
             else {
@@ -433,7 +433,7 @@ hdr_fetch(bufferinfo *gbp) {
                 /* adio_fh is NULL for non-aggregators when intra-node
                  * aggregation is enabled.
                  */
-                err = ADIO_File_read_at_all(gbp->adio_fh,  0, NULL,
+                err = PNCIO_File_read_at_all(gbp->adio_fh,  0, NULL,
                                             0, MPI_BYTE, &mpistatus);
         }
         else if (gbp->collective_fh != NULL) {

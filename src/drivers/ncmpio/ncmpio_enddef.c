@@ -242,7 +242,7 @@ move_file_block(NC         *ncp,
         err = NC_NOERR;
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
             if (do_coll)
-                err = ADIO_File_read_at_all(ncp->adio_fh, off_from, buf,
+                err = PNCIO_File_read_at_all(ncp->adio_fh, off_from, buf,
                                             chunk_size, MPI_BYTE, &mpistatus);
             else if (chunk_size > 0)
                 err = ADIO_File_read_at(ncp->adio_fh, off_from, buf,

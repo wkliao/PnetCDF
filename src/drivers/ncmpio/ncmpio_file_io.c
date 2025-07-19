@@ -144,7 +144,7 @@ ncmpio_read_write(NC           *ncp,
         err = NC_NOERR;
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
             if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-                err = ADIO_File_read_at_all(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
+                err = PNCIO_File_read_at_all(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                            &mpistatus);
                 if (status == NC_NOERR) status = err;
             }
