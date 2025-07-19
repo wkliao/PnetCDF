@@ -165,7 +165,7 @@ ncmpio_read_write(NC           *ncp,
             }
         } else {
             if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-                err = ADIO_File_read_at(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
+                err = PNCIO_File_read_at(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                        &mpistatus);
                 if (status == NC_NOERR) status = err;
             }

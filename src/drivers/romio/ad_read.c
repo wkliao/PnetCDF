@@ -129,12 +129,12 @@ int file_read(ADIO_File     fd,
     return err;
 }
 
-/*----< ADIO_File_read_at() >------------------------------------------------*/
+/*----< PNCIO_File_read_at() >------------------------------------------------*/
 /* This is an independent call.
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int ADIO_File_read_at(ADIO_File     fh,
+int PNCIO_File_read_at(ADIO_File     fh,
                       MPI_Offset    offset,
                       void         *buf,
                       int           count,

@@ -245,7 +245,7 @@ move_file_block(NC         *ncp,
                 err = PNCIO_File_read_at_all(ncp->adio_fh, off_from, buf,
                                             chunk_size, MPI_BYTE, &mpistatus);
             else if (chunk_size > 0)
-                err = ADIO_File_read_at(ncp->adio_fh, off_from, buf,
+                err = PNCIO_File_read_at(ncp->adio_fh, off_from, buf,
                                             chunk_size, MPI_BYTE, &mpistatus);
             if (err != NC_NOERR) {
                 if (status == NC_NOERR)
