@@ -9,7 +9,7 @@
 
 #include <adio.h>
 
-int ADIOI_Flattened_type_keyval = MPI_KEYVAL_INVALID;
+int PNCIO_Flattened_type_keyval = MPI_KEYVAL_INVALID;
 
 static int ADIOI_Flattened_type_copy(MPI_Datatype oldtype,
                                      int type_keyval, void *extra_state, void *attribute_val_in,
@@ -42,10 +42,10 @@ static PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype);
 
 PNCIO_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype datatype)
 {
-    if (ADIOI_Flattened_type_keyval == MPI_KEYVAL_INVALID) {
+    if (PNCIO_Flattened_type_keyval == MPI_KEYVAL_INVALID) {
         /* ADIOI_End_call will take care of cleanup */
         MPI_Type_create_keyval(ADIOI_Flattened_type_copy,
-                               ADIOI_Flattened_type_delete, &ADIOI_Flattened_type_keyval, NULL);
+                               ADIOI_Flattened_type_delete, &PNCIO_Flattened_type_keyval, NULL);
     }
 
     /* Caching flat list is not necessary, as PnetCDF never reuses a datatype */
@@ -133,7 +133,7 @@ PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
     }
 
     /* cache it to attribute */
-    MPI_Type_set_attr(datatype, ADIOI_Flattened_type_keyval, flat);
+    MPI_Type_set_attr(datatype, PNCIO_Flattened_type_keyval, flat);
 
     return flat;
 }
@@ -255,7 +255,7 @@ static PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 
         ADIOI_Optimize_flattened(flat);
     }
-    MPI_Type_set_attr(datatype, ADIOI_Flattened_type_keyval, flat);
+    MPI_Type_set_attr(datatype, PNCIO_Flattened_type_keyval, flat);
     return flat;
 
 }
