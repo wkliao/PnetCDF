@@ -39,7 +39,7 @@ int check_type(PNCIO_Flatlist_node *flat_type,
 
     /* MPI standard requires the displacements of etype and filetype be in a
      * monotonically nondecreasing order */
-    if (flat_type->flag & ADIOI_TYPE_DECREASE) {
+    if (flat_type->flag & PNCIO_TYPE_DECREASE) {
         sprintf(err_msg, "displacements of %s must be in a monotonically nondecreasing order",
                 type_kind);
         goto err_check;
