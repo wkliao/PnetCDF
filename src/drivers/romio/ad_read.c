@@ -157,30 +157,6 @@ int ADIO_File_read_at(ADIO_File     fh,
     return err;
 }
 
-/*----< ADIO_File_read() >---------------------------------------------------*/
-/* This is an independent call. Note PnetCDF never calls this subroutine. */
-int ADIO_File_read(ADIO_File     fh,
-                   void         *buf,
-                   int           count,
-                   MPI_Datatype  bufType,
-                   MPI_Status   *status)
-{
-    int err = NC_NOERR;
-
-    ADIOI_Assert(fh != NULL);
-
-    if (count == 0) return NC_NOERR;
-
-    if (count < 0) return NC_ENEGATIVECNT;
-
-    /* PnetCDF has only 2 modes: read-only and read-write */
-    // if (fh->access_mode & MPI_MODE_RDONLY) return NC_EPERM;
-
-    err = file_read(fh, 0, buf, count, bufType, status);
-
-    return err;
-}
-
 /*----< ADIO_File_read_at_all() >--------------------------------------------*/
 /* This is a collective call.
  * offset is a position in the file relative to the current view, expressed as
@@ -203,30 +179,6 @@ int ADIO_File_read_at_all(ADIO_File     fh,
     // if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR) st = NC_EPERM;
 
     ADIO_ReadStridedColl(fh, buf, count, bufType, offset, status, &err);
-    if (err != MPI_SUCCESS && st == NC_NOERR)
-        st = ncmpii_error_mpi2nc(err, __func__);
-
-    return st;
-}
-
-/*----< ADIO_File_read_all() >----------------------------------------------*/
-/* This is a collective call. Note PnetCDF never calls this subroutine. */
-int ADIO_File_read_all(ADIO_File     fh,
-                       void         *buf,
-                       int           count,
-                       MPI_Datatype  bufType,
-                       MPI_Status   *status)
-{
-    int err, st=NC_NOERR;
-
-    ADIOI_Assert(fh != NULL);
-
-    if (count < 0) st = NC_ENEGATIVECNT;
-
-    /* PnetCDF has only 2 modes: read-only and read-write */
-    // if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR) st = NC_EPERM;
-
-    ADIO_ReadStridedColl(fh, buf, count, bufType, 0, status, &err);
     if (err != MPI_SUCCESS && st == NC_NOERR)
         st = ncmpii_error_mpi2nc(err, __func__);
 
