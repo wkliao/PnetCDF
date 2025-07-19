@@ -203,7 +203,7 @@ int PNCIO_File_write_at_all(ADIO_File    fh,
         PNCIO_LUSTRE_WriteStridedColl(fh, buf, count, bufType, offset, status,
                                       &err);
     else if (fh->file_system == ADIO_UFS)
-        ADIOI_GEN_WriteStridedColl(fh, buf, count, bufType, offset, status,
+        PNCIO_GEN_WriteStridedColl(fh, buf, count, bufType, offset, status,
                                    &err);
     else
         return NC_EFSTYPE;
