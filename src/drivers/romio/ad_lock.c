@@ -56,80 +56,6 @@ const char *ADIOI_GEN_flock_type_to_string(int type)
     }
 }
 
-#ifdef ROMIO_NTFS
-/* This assumes that lock will always remain in the common directory and
- * that the ntfs directory will always be called ad_ntfs. */
-#include "..\ad_ntfs\ad_ntfs.h"
-int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, int whence,
-                      MPI_Offset len)
-{
-    static char myname[] = "PNCIO_GEN_SetLock";
-    FDTYPE fd_sys = fd->fd_sys;
-    int ret_val, error_code = MPI_SUCCESS;
-    OVERLAPPED Overlapped;
-    DWORD dwFlags;
-
-    MPL_UNREFERENCED_ARG(whence);
-
-    if (len == 0)
-        return MPI_SUCCESS;
-
-    dwFlags = type;
-
-    Overlapped.hEvent = /*0; */ CreateEvent(NULL, TRUE, FALSE, NULL);
-#ifdef HAVE_INT64
-    Overlapped.Offset = ((DWORD) (offset & (__int64) 0xFFFFFFFF));
-    Overlapped.OffsetHigh = ((DWORD) ((offset >> 32) & (__int64) 0xFFFFFFFF));
-
-    if (cmd == ADIOI_LOCK_CMD) {
-        /*printf("locking %d\n", (int)fd);fflush(stdout); */
-        ret_val = LockFileEx(fd_sys, dwFlags, 0,
-                             ((DWORD) (len & (__int64) 0xFFFFFFFF)),
-                             ((DWORD) ((len >> 32) & (__int64) 0xFFFFFFFF)), &Overlapped);
-    } else {
-        /*printf("unlocking %d\n", (int)fd);fflush(stdout); */
-        ret_val = UnlockFileEx(fd_sys, 0,
-                               ((DWORD) (len & (__int64) 0xFFFFFFFF)),
-                               ((DWORD) ((len >> 32) & (__int64) 0xFFFFFFFF)), &Overlapped);
-    }
-#else
-    Overlapped.Offset = offset;
-    Overlapped.OffsetHigh = 0;
-
-    if (cmd == ADIOI_LOCK_CMD) {
-        /*printf("locking %d\n", (int)fd);fflush(stdout); */
-        ret_val = LockFileEx(fd_sys, dwFlags, 0, len, 0, &Overlapped);
-    } else {
-        /*printf("unlocking %d\n", (int)fd);fflush(stdout); */
-        ret_val = UnlockFileEx(fd_sys, 0, len, 0, &Overlapped);
-    }
-#endif
-
-    if (!ret_val) {
-        char errMsg[ADIOI_NTFS_ERR_MSG_MAX];
-        /*
-         * fprintf(stderr, "File locking failed in PNCIO_GEN_SetLock.\n");
-         * MPI_Abort(MPI_COMM_WORLD, 1);
-         */
-        ret_val = GetLastError();
-        if (ret_val == ERROR_IO_PENDING) {
-            DWORD dummy;
-            ret_val = GetOverlappedResult(fd_sys, &Overlapped, &dummy, TRUE);
-            if (ret_val) {
-                CloseHandle(Overlapped.hEvent);
-                return MPI_SUCCESS;
-            }
-            ret_val = GetLastError();
-        }
-        ADIOI_NTFS_Strerror(ret_val, errMsg, ADIOI_NTFS_ERR_MSG_MAX);
-        error_code = PNCIO_Err_create_code(MPI_SUCCESS, MPIR_ERR_RECOVERABLE, myname, __LINE__,
-                                           MPI_ERR_IO, "**io", "**io %s", errMsg);
-    }
-    CloseHandle(Overlapped.hEvent);
-
-    return error_code;
-}
-#else
 int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, int whence,
                       MPI_Offset len)
 {
@@ -206,7 +132,6 @@ int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, int 
     error_code = (err == 0) ? MPI_SUCCESS : MPI_ERR_UNKNOWN;
     return error_code;
 }
-#endif
 
 int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, int whence,
                         MPI_Offset len)
