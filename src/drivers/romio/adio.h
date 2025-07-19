@@ -234,7 +234,7 @@ typedef struct {
     size_t    curr; /* index of offsets/lens that is currently being processed */
 } PNCIO_Access;
 
-extern int ADIOI_Flattened_type_keyval;
+extern int PNCIO_Flattened_type_keyval;
 
 /*---- APIs -----------------------------------------------------------------*/
 int PNCIO_FileSysType(const char *filename);

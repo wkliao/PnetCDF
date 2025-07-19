@@ -38,9 +38,9 @@ int PNCIO_File_close(ADIO_File *fh)
         ADIOI_Free((*fh)->io_buf);
     PNCIO_Type_dispose(&(*fh)->filetype);
 
-    if (ADIOI_Flattened_type_keyval != MPI_KEYVAL_INVALID) {
-        MPI_Type_free_keyval(&ADIOI_Flattened_type_keyval);
-        ADIOI_Flattened_type_keyval = MPI_KEYVAL_INVALID;
+    if (PNCIO_Flattened_type_keyval != MPI_KEYVAL_INVALID) {
+        MPI_Type_free_keyval(&PNCIO_Flattened_type_keyval);
+        PNCIO_Flattened_type_keyval = MPI_KEYVAL_INVALID;
     }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
