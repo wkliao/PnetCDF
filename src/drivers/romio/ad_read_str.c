@@ -14,7 +14,7 @@
         if (req_off >= readbuf_off + readbuf_len) {                     \
             readbuf_off = req_off;                                      \
             readbuf_len = (MPI_Aint) (MPL_MIN(max_bufsize, end_offset-readbuf_off+1)); \
-            ADIO_ReadContig(fd, readbuf, readbuf_len, MPI_BYTE,         \
+            PNCIO_ReadContig(fd, readbuf, readbuf_len, MPI_BYTE,         \
                             readbuf_off, &status1, error_code);         \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = PNCIO_Err_create_code(*error_code,        \
@@ -36,7 +36,7 @@
             readbuf_off += readbuf_len-partial_read;                    \
             readbuf_len = (MPI_Aint) (partial_read +                    \
                           MPL_MIN(max_bufsize, end_offset-readbuf_off+1)); \
-            ADIO_ReadContig(fd, readbuf+partial_read, readbuf_len-partial_read, \
+            PNCIO_ReadContig(fd, readbuf+partial_read, readbuf_len-partial_read, \
                             MPI_BYTE, readbuf_off+partial_read, \
                             &status1, error_code);                      \
             if (*error_code != MPI_SUCCESS) {                           \
@@ -152,7 +152,7 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
         if ((fd->atomicity) && ADIO_Feature(fd, ADIO_LOCKS))
             ADIOI_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
-        ADIO_ReadContig(fd, readbuf, readbuf_len, MPI_BYTE, readbuf_off,
+        PNCIO_ReadContig(fd, readbuf, readbuf_len, MPI_BYTE, readbuf_off,
                         &status1, error_code);
         if (*error_code != MPI_SUCCESS)
             return;
@@ -203,7 +203,7 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
          * array */
         if (buftype_is_contig && bufsize <= frd_size) {
             /* a count of bytes can overflow. operate on original type instead */
-            ADIO_ReadContig(fd, buf, count, datatype, offset, status,
+            PNCIO_ReadContig(fd, buf, count, datatype, offset, status,
                             error_code);
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X

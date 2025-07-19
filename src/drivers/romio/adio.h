@@ -310,7 +310,7 @@ int ADIO_WriteContig(ADIO_File fd, const void *buf, MPI_Aint count,
                 MPI_Datatype bufType, ADIO_Offset offset, ADIO_Status *status,
                 int *error_code);
 
-int ADIO_ReadContig(ADIO_File fd, void *buf, MPI_Aint count,
+int PNCIO_ReadContig(ADIO_File fd, void *buf, MPI_Aint count,
                 MPI_Datatype bufType, ADIO_Offset offset, ADIO_Status *status,
                 int *error_code);
 

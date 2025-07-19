@@ -28,7 +28,7 @@
             writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                 ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            ADIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
+            PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
                             writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = PNCIO_Err_create_code(*error_code,        \
@@ -57,7 +57,7 @@
             writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                 ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            ADIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
+            PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
                             writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = PNCIO_Err_create_code(*error_code,        \

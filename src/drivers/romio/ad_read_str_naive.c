@@ -78,7 +78,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                 ADIOI_Assert((((ADIO_Offset) (uintptr_t) buf) + userbuf_off) ==
                              (ADIO_Offset) (uintptr_t) ((uintptr_t) buf + userbuf_off));
                 ADIOI_Assert(req_len == (int) req_len);
-                ADIO_ReadContig(fd,
+                PNCIO_ReadContig(fd,
                                 (char *) buf + userbuf_off,
                                 req_len,
                                 MPI_BYTE, req_off, &status1, error_code);
@@ -202,7 +202,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                     ADIOI_Assert((((ADIO_Offset) (uintptr_t) buf) + userbuf_off) ==
                                  (ADIO_Offset) (uintptr_t) ((uintptr_t) buf + userbuf_off));
                     ADIOI_Assert(req_len == (int) req_len);
-                    ADIO_ReadContig(fd,
+                    PNCIO_ReadContig(fd,
                                     (char *) buf + userbuf_off,
                                     req_len,
                                     MPI_BYTE, req_off, &status1, error_code);
@@ -265,7 +265,7 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                     ADIOI_Assert((((ADIO_Offset) (uintptr_t) buf) + userbuf_off) ==
                                  (ADIO_Offset) (uintptr_t) ((uintptr_t) buf + userbuf_off));
                     ADIOI_Assert(req_len == (int) req_len);
-                    ADIO_ReadContig(fd,
+                    PNCIO_ReadContig(fd,
                                     (char *) buf + userbuf_off,
                                     req_len,
                                     MPI_BYTE, req_off, &status1, error_code);

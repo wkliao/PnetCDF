@@ -2213,7 +2213,7 @@ void Exchange_data_recv(
         if (fd->skip_read)
             memset(write_buf, 0, range_size);
         else {
-            ADIO_ReadContig(fd, write_buf, range_size, MPI_BYTE, range_off,
+            PNCIO_ReadContig(fd, write_buf, range_size, MPI_BYTE, range_off,
                             &status, &err);
             if (err != MPI_SUCCESS) {
                 *error_code = PNCIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,

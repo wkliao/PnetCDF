@@ -689,7 +689,7 @@ double curT = MPI_Wtime();
 
     if (nprocs_recv) {
         if (*hole) {
-            ADIO_ReadContig(fd, write_buf, size, MPI_BYTE, off, &status, &err);
+            PNCIO_ReadContig(fd, write_buf, size, MPI_BYTE, off, &status, &err);
             /* --BEGIN ERROR HANDLING-- */
             if (err != MPI_SUCCESS) {
                 *error_code = PNCIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
