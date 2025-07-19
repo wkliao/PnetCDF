@@ -82,8 +82,8 @@ typedef struct {
 static void ADIOI_LUSTRE_Exch_and_write(ADIO_File fd,
                                         const void *buf,
                                         Flat_list *flat_bview,
-                                        ADIOI_Access *others_req,
-                                        ADIOI_Access *my_req,
+                                        PNCIO_Access *others_req,
+                                        PNCIO_Access *my_req,
                                         Flat_list *flat_fview,
                                         MPI_Offset min_st_loc,
                                         MPI_Offset max_end_loc,
@@ -110,7 +110,7 @@ static void Exchange_data_recv(ADIO_File             fd,
                                      MPI_Count       range_size,
                                const MPI_Count      *recv_count,
                                const MPI_Count      *start_pos,
-                               const ADIOI_Access   *others_req,
+                               const PNCIO_Access   *others_req,
                                const MPI_Offset    *buf_idx,
                                      off_len_list   *srt_off_len,
                                      disp_len_list  *recv_list,
@@ -125,7 +125,7 @@ static void Exchange_data_send(      ADIO_File       fd,
                                const MPI_Count      *send_size,
                                      MPI_Count       self_count,
                                      MPI_Count       start_pos,
-                               const ADIOI_Access   *others_req,
+                               const PNCIO_Access   *others_req,
                                const MPI_Offset    *buf_idx,
                                      disp_len_list  *send_list);
 
@@ -172,7 +172,7 @@ static
 void ADIOI_LUSTRE_Calc_my_req(ADIO_File      fd,
                               Flat_list      flat_fview,
                               int            buf_is_contig,
-                              ADIOI_Access **my_req_ptr,
+                              PNCIO_Access **my_req_ptr,
                               MPI_Offset  **buf_idx)
 {
     int aggr, *aggr_ranks, cb_nodes;
@@ -184,14 +184,14 @@ void ADIOI_LUSTRE_Calc_my_req(ADIO_File      fd,
     int rem_len, avail_len, *avail_lens;
 #endif
     MPI_Offset curr_idx, off;
-    ADIOI_Access *my_req;
+    PNCIO_Access *my_req;
 
     cb_nodes = fd->hints->cb_nodes;
 
     /* my_req[i].count gives the number of contiguous requests of this process
      * that fall in aggregator i's file domain (not process MPI rank i).
      */
-    my_req = (ADIOI_Access *) ADIOI_Calloc(cb_nodes, sizeof(ADIOI_Access));
+    my_req = (PNCIO_Access *) ADIOI_Calloc(cb_nodes, sizeof(PNCIO_Access));
     *my_req_ptr = my_req;
 
     /* First pass is just to calculate how much space is needed to allocate
@@ -366,12 +366,12 @@ Alternative: especially for when flat_fview.count is large
  */
 static
 void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
-                                  const ADIOI_Access *my_req,
-                                  ADIOI_Access **others_req_ptr)
+                                  const PNCIO_Access *my_req,
+                                  PNCIO_Access **others_req_ptr)
 {
     int i, myrank, nprocs, do_alltoallv;
     MPI_Count *count_my_req_per_proc, *count_others_req_per_proc;
-    ADIOI_Access *others_req;
+    PNCIO_Access *others_req;
     size_t npairs, alloc_sz, pair_sz;
 
     /* first find out how much to send/recv and from/to whom */
@@ -379,7 +379,7 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
-    others_req = (ADIOI_Access *) ADIOI_Malloc(nprocs * sizeof(ADIOI_Access));
+    others_req = (PNCIO_Access *) ADIOI_Malloc(nprocs * sizeof(PNCIO_Access));
     *others_req_ptr = others_req;
 
     /* Use my_req[i].count (the number of noncontiguous requests fall in
@@ -913,13 +913,13 @@ double curT = MPI_Wtime();
     /* my_req[cb_nodes] is an array of access info, one for each I/O aggregator
      * whose file domain has this rank's request.
      */
-    ADIOI_Access *my_req;
+    PNCIO_Access *my_req;
 
     /* others_req[nprocs] is an array of access info, one for each ranks, both
      * aggregators and non-aggregators, whose write requests fall into this
      * aggregator's file domain. others_req[] matters only for aggregators.
      */
-    ADIOI_Access *others_req;
+    PNCIO_Access *others_req;
     MPI_Offset **buf_idx = NULL;
 
     if (flat_bview.is_contig)
@@ -1383,8 +1383,8 @@ void commit_comm_phase(ADIO_File      fd,
 static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
                                         const void    *buf,
                                         Flat_list     *flat_bview,
-                                        ADIOI_Access  *others_req,
-                                        ADIOI_Access  *my_req,
+                                        PNCIO_Access  *others_req,
+                                        PNCIO_Access  *my_req,
                                         Flat_list     *flat_fview,
                                         MPI_Offset    min_st_loc,
                                         MPI_Offset    max_end_loc,
@@ -1919,7 +1919,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
  * there are no function calls. Function calls are too expensive.
  */
 static
-void heap_merge(const ADIOI_Access *others_req,
+void heap_merge(const PNCIO_Access *others_req,
                 const MPI_Count    *count,
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count          *srt_off,
@@ -2066,7 +2066,7 @@ void Exchange_data_recv(
                                          * rank i */
     const MPI_Count      *start_pos,    /* [nprocs] start_pos[i] starting value
                                          * of others_req[i].curr */
-    const ADIOI_Access   *others_req,   /* [nprocs] others_req[i] is rank i's
+    const PNCIO_Access   *others_req,   /* [nprocs] others_req[i] is rank i's
                                          * write requests fall into this
                                          * aggregator's file domain */
     const MPI_Offset    *buf_idx,      /* [cb_nodes] indices to user buffer
@@ -2306,7 +2306,7 @@ void Exchange_data_send(
           MPI_Count       self_count,   /* No. offset-length pairs sent to self
                                          * rank */
           MPI_Count       start_pos,    /* others_req[myrank].curr */
-    const ADIOI_Access   *others_req,   /* [nprocs] only used when send to self,
+    const PNCIO_Access   *others_req,   /* [nprocs] only used when send to self,
                                          * others_req[myrank] */
     const MPI_Offset    *buf_idx,      /* [cb_nodes] indices to user buffer
                                          * for sending this rank's write data

@@ -14,7 +14,7 @@
 /* prototypes of functions used for collective reads only. */
 static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
                                 datatype, int nprocs,
-                                int myrank, ADIOI_Access *others_req,
+                                int myrank, PNCIO_Access *others_req,
                                 MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                 MPI_Offset *len_list,
@@ -43,7 +43,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, PNCIO_Flatlist_node
                                   MPI_Offset min_st_offset,
                                   MPI_Offset fd_size,
                                   MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                  ADIOI_Access * others_req,
+                                  PNCIO_Access * others_req,
                                   int iter, MPI_Aint buftype_extent, MPI_Aint * buf_idx,
                                   MPI_Aint * actual_recved_bytes);
 void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, PNCIO_Flatlist_node
@@ -72,11 +72,11 @@ void PNCIO_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
    Scientific Programming, (5)4:301--317, Winter 1996.
    http://www.mcs.anl.gov/home/thakur/ext2ph.ps */
 
-    ADIOI_Access *my_req;
+    PNCIO_Access *my_req;
     /* array of nprocs structures, one for each other process in
      * whose file domain this process's request lies */
 
-    ADIOI_Access *others_req;
+    PNCIO_Access *others_req;
     /* array of nprocs structures, one for each other process
      * whose request lies in this process's file domain. */
 
@@ -479,7 +479,7 @@ assert(0);
 
 static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
                                 datatype, int nprocs,
-                                int myrank, ADIOI_Access *others_req,
+                                int myrank, PNCIO_Access *others_req,
                                 MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                 MPI_Offset *len_list,
@@ -811,7 +811,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, PNCIO_Flatlist_node
                                   int myrank, int buftype_is_contig, MPI_Count contig_access_count,
                                   MPI_Offset min_st_offset, MPI_Offset fd_size,
                                   MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                  ADIOI_Access * others_req, int iter, MPI_Aint buftype_extent,
+                                  PNCIO_Access * others_req, int iter, MPI_Aint buftype_extent,
                                   MPI_Aint * buf_idx, MPI_Aint * actual_recved_bytes)
 {
     int i, nprocs_recv, nprocs_send;

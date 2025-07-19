@@ -235,7 +235,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
                        int nprocs,
                        MPI_Count * count_my_req_procs_ptr,
                        MPI_Count ** count_my_req_per_proc_ptr,
-                       ADIOI_Access ** my_req_ptr, MPI_Aint ** buf_idx_ptr)
+                       PNCIO_Access ** my_req_ptr, MPI_Aint ** buf_idx_ptr)
 /* Possibly reconsider if buf_idx's are ok as int's, or should they be aints/offsets?
    They are used as memory buffer indices so it seems like the 2G limit is in effect */
 {
@@ -249,7 +249,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
 #else
     int *len_ptr;
 #endif
-    ADIOI_Access *my_req;
+    PNCIO_Access *my_req;
 
     *count_my_req_per_proc_ptr = ADIOI_Calloc(nprocs, sizeof(MPI_Count));
     count_my_req_per_proc = *count_my_req_per_proc_ptr;
@@ -305,7 +305,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
 
 /* now allocate space for my_req, offset, and len */
 
-    *my_req_ptr = (ADIOI_Access *) ADIOI_Malloc(nprocs * sizeof(ADIOI_Access));
+    *my_req_ptr = (PNCIO_Access *) ADIOI_Malloc(nprocs * sizeof(PNCIO_Access));
     my_req = *my_req_ptr;
 
     /* combine offsets and lens into a single regions so we can make one
@@ -398,7 +398,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
 }
 
 void PNCIO_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
-                       ADIOI_Access * my_req, MPI_Aint * buf_idx)
+                       PNCIO_Access * my_req, MPI_Aint * buf_idx)
 {
     ADIOI_Free(count_my_req_per_proc);
     ADIOI_Free(my_req[0].offsets);
@@ -408,11 +408,11 @@ void PNCIO_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
 
 void PNCIO_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
                            MPI_Count * count_my_req_per_proc,
-                           ADIOI_Access * my_req,
+                           PNCIO_Access * my_req,
                            int nprocs, int myrank,
                            MPI_Count * count_others_req_procs_ptr,
                            MPI_Count ** count_others_req_per_proc_ptr,
-                           ADIOI_Access ** others_req_ptr)
+                           PNCIO_Access ** others_req_ptr)
 {
 /* determine what requests of other processes lie in this process's
    file domain */
@@ -426,7 +426,7 @@ void PNCIO_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
     size_t alloc_sz;
     int i, j;
     MPI_Request *requests;
-    ADIOI_Access *others_req;
+    PNCIO_Access *others_req;
     size_t memLen;
     MPI_Offset *off_ptr;
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -443,7 +443,7 @@ void PNCIO_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
     MPI_Alltoall(count_my_req_per_proc, 1, MPI_COUNT,
                  count_others_req_per_proc, 1, MPI_COUNT, fd->comm);
 
-    *others_req_ptr = (ADIOI_Access *) ADIOI_Malloc(nprocs * sizeof(ADIOI_Access));
+    *others_req_ptr = (PNCIO_Access *) ADIOI_Malloc(nprocs * sizeof(PNCIO_Access));
     others_req = *others_req_ptr;
 
     memLen = 0;
@@ -551,7 +551,7 @@ void PNCIO_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
 }
 
 void PNCIO_Free_others_req(int nprocs, MPI_Count * count_others_req_per_proc,
-                           ADIOI_Access * others_req)
+                           PNCIO_Access * others_req)
 {
     ADIOI_Free(count_others_req_per_proc);
     ADIOI_Free(others_req[0].offsets);
