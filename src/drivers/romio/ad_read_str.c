@@ -51,7 +51,7 @@
     }
 
 
-void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
+void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
                            MPI_Datatype datatype, MPI_Offset offset,
                            ADIO_Status * status, int *error_code)
 {
@@ -75,7 +75,7 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
     int info_flag;
     MPI_Aint max_bufsize, readbuf_len;
     ADIO_Status status1;
-    static char myname[] = "ADIOI_GEN_ReadStrided";
+    static char myname[] = "PNCIO_GEN_ReadStrided";
 
     if (fd->hints->ds_read == ADIOI_HINT_DISABLE) {
         /* if user has disabled data sieving on reads, use naive
