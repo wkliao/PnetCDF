@@ -10,59 +10,59 @@
 #include "adio.h"
 
 /* prototypes of functions used for collective writes only. */
-static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
-                                 datatype, int nprocs, int myrank,
-                                 PNCIO_Access
-                                 * others_req, MPI_Offset * offset_list,
+static void Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
+                           datatype, int nprocs, int myrank,
+                           PNCIO_Access *others_req, MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                                 MPI_Offset *len_list,
+                           MPI_Offset *len_list,
 #else
-                                 int *len_list,
+                           int *len_list,
 #endif
-                                 MPI_Count contig_access_count, MPI_Offset
-                                 min_st_offset, MPI_Offset fd_size,
-                                 MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                 MPI_Aint * buf_idx, int *error_code);
-static void ADIOI_W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
-                                  PNCIO_Flatlist_node * flat_buf,
-                                  MPI_Offset *offset_list,
+                           MPI_Count contig_access_count, MPI_Offset
+                           min_st_offset, MPI_Offset fd_size,
+                           MPI_Offset * fd_start, MPI_Offset * fd_end,
+                           MPI_Aint * buf_idx, int *error_code);
+static void W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
+                            PNCIO_Flatlist_node * flat_buf,
+                            MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                                  MPI_Offset *len_list,
+                            MPI_Offset *len_list,
 #else
-                                  int *len_list,
+                            int *len_list,
 #endif
-                                  MPI_Count * send_size, MPI_Count * recv_size,
-                                  MPI_Offset off, MPI_Count size,   /* 10 */
-                                  MPI_Count * count, MPI_Count * start_pos,
-                                  MPI_Count * partial_recv, MPI_Count *
-                                  sent_to_proc, int nprocs,
-                                  int myrank, int buftype_is_contig, MPI_Count contig_access_count,
-                                  MPI_Offset min_st_offset, MPI_Offset fd_size,
-                                  MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                  PNCIO_Access * others_req,
-                                  MPI_Count *send_buf_idx, MPI_Count *curr_to_proc,
-                                  MPI_Count *done_to_proc, int *hole, int iter,
-                                  MPI_Aint buftype_extent, MPI_Aint * buf_idx, int *error_code);
+                            MPI_Count * send_size, MPI_Count * recv_size,
+                            MPI_Offset off, MPI_Count size,   /* 10 */
+                            MPI_Count * count, MPI_Count * start_pos,
+                            MPI_Count * partial_recv, MPI_Count *
+                            sent_to_proc, int nprocs,
+                            int myrank, int buftype_is_contig, MPI_Count contig_access_count,
+                            MPI_Offset min_st_offset, MPI_Offset fd_size,
+                            MPI_Offset * fd_start, MPI_Offset * fd_end,
+                            PNCIO_Access * others_req,
+                            MPI_Count *send_buf_idx, MPI_Count *curr_to_proc,
+                            MPI_Count *done_to_proc, int *hole, int iter,
+                            MPI_Aint buftype_extent, MPI_Aint * buf_idx, int *error_code);
 
-static void ADIOI_Fill_send_buffer(PNCIO_File *fd, void *buf,
-                  PNCIO_Flatlist_node *flat_buf, char **send_buf,
-                  MPI_Offset *offset_list,
+static void Fill_send_buffer(PNCIO_File *fd, void *buf,
+                             PNCIO_Flatlist_node *flat_buf, char **send_buf,
+                             MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                  MPI_Offset *len_list,
+                             MPI_Offset *len_list,
 #else
-                  int *len_list,
+                             int *len_list,
 #endif
-                  MPI_Count *send_size, MPI_Request *requests,
-                  MPI_Count *sent_to_proc, int nprocs, int myrank,
-                  MPI_Count contig_access_count, MPI_Offset min_st_offset,
-                  MPI_Offset fd_size, MPI_Offset *fd_start,
-                  MPI_Offset *fd_end, MPI_Count *send_buf_idx,
-                  MPI_Count *curr_to_proc, MPI_Count *done_to_proc, int iter,
-                  MPI_Aint buftype_extent);
+                             MPI_Count *send_size, MPI_Request *requests,
+                             MPI_Count *sent_to_proc, int nprocs, int myrank,
+                             MPI_Count contig_access_count, MPI_Offset min_st_offset,
+                             MPI_Offset fd_size, MPI_Offset *fd_start,
+                             MPI_Offset *fd_end, MPI_Count *send_buf_idx,
+                             MPI_Count *curr_to_proc, MPI_Count *done_to_proc, int iter,
+                             MPI_Aint buftype_extent);
 
-void PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf, MPI_Aint count,
-                                MPI_Datatype datatype, MPI_Offset offset,
-                                MPI_Status * status, int *error_code)
+void PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
+                                MPI_Aint count, MPI_Datatype datatype,
+                                MPI_Offset offset, MPI_Status *status,
+                                int *error_code)
 {
 /* Uses a generalized version of the extended two-phase method described
    in "An Extended Two-Phase Method for Accessing Sections of
@@ -111,16 +111,17 @@ double curT = MPI_Wtime();
         /* For this process's request, calculate the list of offsets and
          * lengths in the file and determine the start and end offsets. */
 
-        /* Note: end_offset points to the last byte-offset that will be accessed.
-         * e.g., if start_offset=0 and 100 bytes to be read, end_offset=99 */
+        /* Note: end_offset points to the last byte-offset that will be
+         * accessed.  e.g., if start_offset=0 and 100 bytes to be read,
+         * end_offset=99 */
 
         PNCIO_Calc_my_off_len(fd, count, datatype, offset, &offset_list,
                               &len_list, &start_offset, &end_offset,
                               &contig_access_count);
 
         /* each process communicates its start and end offsets to other
-         * processes. The result is an array each of start and end offsets stored
-         * in order of process rank. */
+         * processes. The result is an array each of start and end offsets
+         * stored in order of process rank. */
 
         st_offsets = (MPI_Offset *) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
         end_offsets = st_offsets + nprocs;
@@ -209,10 +210,10 @@ double curT = MPI_Wtime();
 
 /* exchange data and write in sizes of no more than coll_bufsize. */
     /* Cast away const'ness for the below function */
-    ADIOI_Exch_and_write(fd, (char *) buf, datatype, nprocs, myrank,
-                         others_req, offset_list,
-                         len_list, contig_access_count, min_st_offset,
-                         fd_size, fd_start, fd_end, buf_idx, error_code);
+    Exch_and_write(fd, (char *) buf, datatype, nprocs, myrank,
+                   others_req, offset_list,
+                   len_list, contig_access_count, min_st_offset,
+                   fd_size, fd_start, fd_end, buf_idx, error_code);
 
     /* If this collective write is followed by an independent write,
      * it's possible to have those subsequent writes on other processes
@@ -271,20 +272,19 @@ double curT = MPI_Wtime();
 /* If successful, error_code is set to MPI_SUCCESS.  Otherwise an error
  * code is created and returned in error_code.
  */
-static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
-                                 datatype, int nprocs,
-                                 int myrank,
-                                 PNCIO_Access
-                                 * others_req, MPI_Offset * offset_list,
+static void Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
+                           datatype, int nprocs,
+                           int myrank,
+                           PNCIO_Access *others_req, MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                                 MPI_Offset *len_list,
+                           MPI_Offset *len_list,
 #else
-                                 int *len_list,
+                           int *len_list,
 #endif
-                                 MPI_Count contig_access_count,
-                                 MPI_Offset min_st_offset, MPI_Offset fd_size,
-                                 MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                 MPI_Aint * buf_idx, int *error_code)
+                           MPI_Count contig_access_count,
+                           MPI_Offset min_st_offset, MPI_Offset fd_size,
+                           MPI_Offset * fd_start, MPI_Offset * fd_end,
+                           MPI_Aint * buf_idx, int *error_code)
 {
 /* Send data to appropriate processes and write in sizes of no more
    than coll_bufsize.
@@ -310,7 +310,7 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
     int info_flag;
     MPI_Aint coll_bufsize;
     char *value;
-    static char myname[] = "ADIOI_EXCH_AND_WRITE";
+    static char myname[] = "EXCH_AND_WRITE";
 
     *error_code = MPI_SUCCESS;  /* changed below if error */
     /* only I/O errors are currently reported */
@@ -377,12 +377,12 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
 
     sent_to_proc = recv_size + nprocs;
     /* amount of data sent to each proc so far. Used in
-     * ADIOI_Fill_send_buffer. initialized to 0 here. */
+     * Fill_send_buffer. initialized to 0 here. */
 
     send_buf_idx = sent_to_proc + nprocs;
     curr_to_proc = send_buf_idx + nprocs;
     done_to_proc = curr_to_proc + nprocs;
-    /* Above three are used in ADIOI_Fill_send_buffer */
+    /* Above three are used in Fill_send_buffer */
 
     start_pos = done_to_proc + nprocs;
     /* used to store the starting value of curr_offlen_ptr[i] in
@@ -393,18 +393,6 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
         flat_buf = PNCIO_Flatten_and_find(datatype);
     }
     MPI_Type_get_extent(datatype, &lb, &buftype_extent);
-
-
-/* I need to check if there are any outstanding nonblocking writes to
-   the file, which could potentially interfere with the writes taking
-   place in this collective write call. Since this is not likely to be
-   common, let me do the simplest thing possible here: Each process
-   completes all pending nonblocking operations before completing. */
-
-    /*ADIOI_Complete_async(error_code);
-     * if (*error_code != MPI_SUCCESS) return;
-     * MPI_Barrier(fd->comm);
-     */
 
     done = 0;
     off = st_loc;
@@ -453,7 +441,7 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
                     if (req_off < off + size) {
                         count[i]++;
                         assert((((MPI_Offset) (uintptr_t) write_buf) + req_off - off) ==
-                                     (MPI_Offset) (uintptr_t) (write_buf + req_off - off));
+                                 (MPI_Offset) (uintptr_t) (write_buf + req_off - off));
                         if (myrank != i) {
                             MPI_Aint addr;
                             MPI_Get_address(write_buf + req_off - off, &addr);
@@ -488,14 +476,13 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
             }
         }
 
-        ADIOI_W_Exchange_data(fd, buf, write_buf, flat_buf, offset_list,
-                              len_list, send_size, recv_size, off, size, count,
-                              start_pos, partial_recv,
-                              sent_to_proc, nprocs, myrank,
-                              buftype_is_contig, contig_access_count,
-                              min_st_offset, fd_size, fd_start, fd_end,
-                              others_req, send_buf_idx, curr_to_proc,
-                              done_to_proc, &hole, m, buftype_extent, buf_idx, error_code);
+        W_Exchange_data(fd, buf, write_buf, flat_buf, offset_list, len_list,
+                        send_size, recv_size, off, size, count, start_pos,
+                        partial_recv, sent_to_proc, nprocs, myrank,
+                        buftype_is_contig, contig_access_count, min_st_offset,
+                        fd_size, fd_start, fd_end, others_req, send_buf_idx,
+                        curr_to_proc, done_to_proc, &hole, m, buftype_extent,
+                        buf_idx, error_code);
         if (*error_code != MPI_SUCCESS)
             return;
 
@@ -519,15 +506,13 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
         count[i] = recv_size[i] = 0;
     for (m = ntimes; m < max_ntimes; m++) {
         /* nothing to recv, but check for send. */
-        ADIOI_W_Exchange_data(fd, buf, write_buf, flat_buf, offset_list,
-                              len_list, send_size, recv_size, off, size, count,
-                              start_pos, partial_recv,
-                              sent_to_proc, nprocs, myrank,
-                              buftype_is_contig, contig_access_count,
-                              min_st_offset, fd_size, fd_start, fd_end,
-                              others_req, send_buf_idx,
-                              curr_to_proc, done_to_proc, &hole, m,
-                              buftype_extent, buf_idx, error_code);
+        W_Exchange_data(fd, buf, write_buf, flat_buf, offset_list, len_list,
+                        send_size, recv_size, off, size, count, start_pos,
+                        partial_recv, sent_to_proc, nprocs, myrank,
+                        buftype_is_contig, contig_access_count, min_st_offset,
+                        fd_size, fd_start, fd_end, others_req, send_buf_idx,
+                        curr_to_proc, done_to_proc, &hole, m, buftype_extent,
+                        buf_idx, error_code);
         if (*error_code != MPI_SUCCESS)
             return;
     }
@@ -539,28 +524,29 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
 /* Sets error_code to MPI_SUCCESS if successful, or creates an error code
  * in the case of error.
  */
-static void ADIOI_W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
-                                  PNCIO_Flatlist_node * flat_buf,
-                                  MPI_Offset *offset_list,
+static void W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
+                            PNCIO_Flatlist_node * flat_buf,
+                            MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                                  MPI_Offset *len_list,
+                            MPI_Offset *len_list,
 #else
-                                  int *len_list,
+                            int *len_list,
 #endif
-                                  MPI_Count * send_size,
-                                  MPI_Count * recv_size, MPI_Offset off, MPI_Count size,
-                                  MPI_Count * count, MPI_Count * start_pos,
-                                  MPI_Count * partial_recv,
-                                  MPI_Count * sent_to_proc, int nprocs,
-                                  int myrank, int
-                                  buftype_is_contig, MPI_Count contig_access_count,
-                                  MPI_Offset min_st_offset,
-                                  MPI_Offset fd_size,
-                                  MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                  PNCIO_Access * others_req,
-                                  MPI_Count * send_buf_idx, MPI_Count * curr_to_proc,
-                                  MPI_Count * done_to_proc, int *hole, int iter,
-                                  MPI_Aint buftype_extent, MPI_Aint * buf_idx, int *error_code)
+                            MPI_Count *send_size, MPI_Count *recv_size,
+                            MPI_Offset off, MPI_Count size,
+                            MPI_Count *count, MPI_Count * start_pos,
+                            MPI_Count *partial_recv,
+                            MPI_Count *sent_to_proc, int nprocs,
+                            int myrank, int
+                            buftype_is_contig, MPI_Count contig_access_count,
+                            MPI_Offset min_st_offset,
+                            MPI_Offset fd_size,
+                            MPI_Offset * fd_start, MPI_Offset * fd_end,
+                            PNCIO_Access * others_req,
+                            MPI_Count * send_buf_idx, MPI_Count * curr_to_proc,
+                            MPI_Count * done_to_proc, int *hole, int iter,
+                            MPI_Aint buftype_extent, MPI_Aint *buf_idx,
+                            int *error_code)
 {
     int i, j, nprocs_recv, nprocs_send, err;
     MPI_Count *tmp_len;
@@ -571,7 +557,7 @@ static void ADIOI_W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
     MPI_Count sum, *srt_len = NULL;
     int num_rtypes, nreqs;
     MPI_Offset *srt_off = NULL;
-    static char myname[] = "ADIOI_W_EXCHANGE_DATA";
+    static char myname[] = "W_EXCHANGE_DATA";
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 double curT = MPI_Wtime();
@@ -645,7 +631,8 @@ double curT = MPI_Wtime();
         srt_off = (MPI_Offset *) NCI_Malloc(sum * sizeof(MPI_Offset));
         srt_len = NCI_Malloc(sum * sizeof(*srt_len));
 
-        PNCIO_Heap_merge(others_req, count, srt_off, srt_len, start_pos, nprocs, nprocs_recv, sum);
+        PNCIO_Heap_merge(others_req, count, srt_off, srt_len, start_pos,
+                         nprocs, nprocs_recv, sum);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         if (fd->is_agg) fd->write_timing[5] += MPI_Wtime() - timing;
 #endif
@@ -767,14 +754,13 @@ double curT = MPI_Wtime();
         for (i = 1; i < nprocs; i++)
             send_buf[i] = send_buf[i - 1] + send_size[i - 1];
 
-        ADIOI_Fill_send_buffer(fd, buf, flat_buf, send_buf,
-                               offset_list, len_list, send_size,
-                               send_req,
-                               sent_to_proc, nprocs, myrank,
-                               contig_access_count,
-                               min_st_offset, fd_size, fd_start, fd_end,
-                               send_buf_idx, curr_to_proc, done_to_proc, iter, buftype_extent);
-        /* the send is done in ADIOI_Fill_send_buffer */
+        Fill_send_buffer(fd, buf, flat_buf, send_buf, offset_list, len_list,
+                         send_size, send_req, sent_to_proc, nprocs, myrank,
+                         contig_access_count, min_st_offset, fd_size,
+                         fd_start, fd_end, send_buf_idx, curr_to_proc,
+                         done_to_proc, iter, buftype_extent);
+
+        /* the send is done in Fill_send_buffer */
     }
 
     if (fd->atomicity) {
@@ -849,7 +835,7 @@ double curT = MPI_Wtime();
     }
 }
 
-#define ADIOI_BUF_INCR \
+#define BUF_INCR \
 { \
     while (buf_incr) { \
         size_in_buf = MPL_MIN(buf_incr, flat_buf_sz); \
@@ -862,7 +848,7 @@ double curT = MPI_Wtime();
                 n_buftypes++; \
             } \
             user_buf_idx = flat_buf->indices[flat_buf_idx] + \
-                              (MPI_Offset)n_buftypes*(MPI_Offset)buftype_extent; \
+                           n_buftypes*buftype_extent; \
             flat_buf_sz = flat_buf->blocklens[flat_buf_idx]; \
         } \
         buf_incr -= size_in_buf; \
@@ -870,7 +856,7 @@ double curT = MPI_Wtime();
 }
 
 
-#define ADIOI_BUF_COPY \
+#define BUF_COPY \
 { \
     while (size) { \
         size_in_buf = MPL_MIN(size, flat_buf_sz); \
@@ -888,13 +874,13 @@ double curT = MPI_Wtime();
                 n_buftypes++; \
             } \
             user_buf_idx = flat_buf->indices[flat_buf_idx] + \
-                              (MPI_Offset)n_buftypes*(MPI_Offset)buftype_extent; \
+                           n_buftypes*buftype_extent; \
             flat_buf_sz = flat_buf->blocklens[flat_buf_idx]; \
         } \
         size -= size_in_buf; \
         buf_incr -= size_in_buf; \
     } \
-    ADIOI_BUF_INCR \
+    BUF_INCR \
 }
 
 
@@ -902,22 +888,23 @@ double curT = MPI_Wtime();
 
 
 static
-void ADIOI_Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                            * flat_buf, char **send_buf,
-                            MPI_Offset *offset_list,
+void Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
+                      *flat_buf, char **send_buf,
+                      MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                            MPI_Offset *len_list,
+                      MPI_Offset *len_list,
 #else
-                            int *len_list,
+                      int *len_list,
 #endif
-                            MPI_Count * send_size,
-                            MPI_Request * requests, MPI_Count * sent_to_proc,
-                            int nprocs, int myrank,
-                            MPI_Count contig_access_count,
-                            MPI_Offset min_st_offset, MPI_Offset fd_size,
-                            MPI_Offset * fd_start, MPI_Offset * fd_end,
-                            MPI_Count * send_buf_idx, MPI_Count * curr_to_proc,
-                            MPI_Count * done_to_proc, int iter, MPI_Aint buftype_extent)
+                      MPI_Count * send_size,
+                      MPI_Request * requests, MPI_Count * sent_to_proc,
+                      int nprocs, int myrank,
+                      MPI_Count contig_access_count,
+                      MPI_Offset min_st_offset, MPI_Offset fd_size,
+                      MPI_Offset * fd_start, MPI_Offset * fd_end,
+                      MPI_Count * send_buf_idx, MPI_Count * curr_to_proc,
+                      MPI_Count * done_to_proc, int iter,
+                      MPI_Aint buftype_extent)
 {
 /* this function is only called if buftype is not contig */
 
@@ -966,14 +953,17 @@ void ADIOI_Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                         size = MPL_MIN(curr_to_proc[p] + len -
                                        done_to_proc[p], send_size[p] - send_buf_idx[p]);
                         buf_incr = done_to_proc[p] - curr_to_proc[p];
-                        ADIOI_BUF_INCR buf_incr = curr_to_proc[p] + len - done_to_proc[p];
+                        BUF_INCR
+                        buf_incr = curr_to_proc[p] + len - done_to_proc[p];
                         /* ok to cast: bounded by cb buffer size */
-                        curr_to_proc[p] = done_to_proc[p] + (int) size;
-                    ADIOI_BUF_COPY} else {
+                        curr_to_proc[p] = done_to_proc[p] + size;
+                        BUF_COPY
+                    } else {
                         size = MPL_MIN(len, send_size[p] - send_buf_idx[p]);
                         buf_incr = len;
                         curr_to_proc[p] += size;
-                    ADIOI_BUF_COPY}
+                        BUF_COPY
+                    }
                     if (send_buf_idx[p] == send_size[p] && p != myrank) {
 #if MPI_VERSION >= 4
                         MPI_Isend_c(send_buf[p], send_size[p], MPI_BYTE, p,
@@ -986,10 +976,12 @@ void ADIOI_Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                 } else {
                     curr_to_proc[p] += len;
                     buf_incr = len;
-                ADIOI_BUF_INCR}
+                    BUF_INCR
+                }
             } else {
                 buf_incr = len;
-            ADIOI_BUF_INCR}
+                BUF_INCR
+            }
             off += len;
             rem_len -= len;
         }
