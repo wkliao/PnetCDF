@@ -62,7 +62,6 @@
 
 #define ADIOI_Calloc(a,b) NCI_Calloc((size_t)a,b)
 
-#define ADIOI_Strncpy strncpy
 #define ADIOI_Assert assert
 #define ADIOI_AINT_CAST_TO_OFFSET (MPI_Offset)
 
