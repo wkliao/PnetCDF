@@ -321,7 +321,7 @@ err_out:
 }
 #endif
 
-/*----< ADIO_Lustre_set_cb_node_list() >-------------------------------------*/
+/*----< Lustre_set_cb_node_list() >------------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
  *   fd->hints->ranklist[].
  *   fd->hints->cb_nodes and set file info for hint cb_nodes.
@@ -329,7 +329,7 @@ err_out:
  *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
  */
 static
-int ADIO_Lustre_set_cb_node_list(PNCIO_File *fd)
+int Lustre_set_cb_node_list(PNCIO_File *fd)
 {
     int i, j, k, rank, nprocs, num_aggr, striping_factor;
     int *nprocs_per_node, **ranks_per_node;
@@ -823,7 +823,7 @@ err_out:
     }
 
     /* construct cb_nodes rank list */
-    ADIO_Lustre_set_cb_node_list(fd);
+    Lustre_set_cb_node_list(fd);
 
     MPI_Info_set(fd->info, "romio_filesystem_type", "LUSTRE:");
 
@@ -913,7 +913,7 @@ err_out:
     fd->hints->fs_hints.lustre.overstriping_ratio = stripin_info[1] / stripin_info[3];
 
     /* construct cb_nodes rank list */
-    ADIO_Lustre_set_cb_node_list(fd);
+    Lustre_set_cb_node_list(fd);
 
     MPI_Info_set(fd->info, "romio_filesystem_type", "LUSTRE:");
 
