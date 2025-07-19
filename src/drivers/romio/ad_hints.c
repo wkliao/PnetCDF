@@ -44,7 +44,7 @@ int ADIOI_Info_check_and_install_int(PNCIO_File  *fd,
     int intval, tmp_val, flag, ret = 0;
     char value[MPI_MAX_INFO_VAL + 1];
 
-    ADIOI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
+    MPI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
     if (flag) {
         intval = atoi(value);
         tmp_val = intval;
@@ -76,7 +76,7 @@ int ADIOI_Info_check_and_install_enabled(PNCIO_File  *fd,
     int tmp_val, flag, ret = 0;
     char value[MPI_MAX_INFO_VAL + 1];
 
-    ADIOI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
+    MPI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
     if (flag) {
         if (!strcmp(value, "enable") || !strcmp(value, "ENABLE")) {
             ADIOI_Info_set(fd->info, key, value);
@@ -120,7 +120,7 @@ int ADIOI_Info_check_and_install_true(PNCIO_File  *fd,
     int flag, tmp_val, ret = 0;
     char value[MPI_MAX_INFO_VAL + 1];
 
-    ADIOI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
+    MPI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
     if (flag) {
         if (!strcmp(value, "true") || !strcmp(value, "TRUE")) {
             ADIOI_Info_set(fd->info, key, value);
@@ -154,7 +154,7 @@ int ADIOI_Info_check_and_install_str(PNCIO_File   *fd,
     size_t len;
     char value[MPI_MAX_INFO_VAL + 1];
 
-    ADIOI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
+    MPI_Info_get(info, key, MPI_MAX_INFO_VAL, value, &flag);
     if (flag) {
         ADIOI_Info_set(fd->info, key, value);
         len = (strlen(value) + 1) * sizeof(char);
@@ -207,23 +207,23 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         if (users_info != MPI_INFO_NULL) {
 
             /* striping information */
-            ADIOI_Info_get(users_info, "striping_unit", MPI_MAX_INFO_VAL,
+            MPI_Info_get(users_info, "striping_unit", MPI_MAX_INFO_VAL,
                            value, &flag);
             if (flag)
                 ADIOI_Info_set(info, "striping_unit", value);
 
-            ADIOI_Info_get(users_info, "striping_factor", MPI_MAX_INFO_VAL,
+            MPI_Info_get(users_info, "striping_factor", MPI_MAX_INFO_VAL,
                            value, &flag);
             if (flag)
                 ADIOI_Info_set(info, "striping_factor", value);
 
-            ADIOI_Info_get(users_info, "start_iodevice", MPI_MAX_INFO_VAL,
+            MPI_Info_get(users_info, "start_iodevice", MPI_MAX_INFO_VAL,
                            value, &flag);
             if (flag)
                 ADIOI_Info_set(info, "start_iodevice", value);
 
             /* Lustre overstriping ratio. 0 or 1 means disabled */
-            ADIOI_Info_get(users_info, "lustre_overstriping_ratio",
+            MPI_Info_get(users_info, "lustre_overstriping_ratio",
                            MPI_MAX_INFO_VAL, value, &flag);
             if (flag)
                 ADIOI_Info_set(info, "lustre_overstriping_ratio", value);
