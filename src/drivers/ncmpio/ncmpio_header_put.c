@@ -567,7 +567,7 @@ int ncmpio_write_header(NC *ncp)
                 if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
                     if (ncp->adio_fh == NULL) continue;
 
-                    err = ADIO_File_write_at_all(ncp->adio_fh, offset, buf_ptr, writeLen,
+                    err = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf_ptr, writeLen,
                                                 MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
                 }
@@ -645,7 +645,7 @@ int ncmpio_write_header(NC *ncp)
             for (i=0; i<ntimes; i++) {
                 if (ncp->adio_fh == NULL) continue;
 
-                err = ADIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
+                err = PNCIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
             }
