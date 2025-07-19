@@ -377,7 +377,7 @@ hdr_fetch(bufferinfo *gbp) {
         }
         else {
             if (gbp->fstype != ADIO_FSTYPE_MPIIO) {
-                err = ADIO_File_read_at(gbp->adio_fh, gbp->offset, readBuf,
+                err = PNCIO_File_read_at(gbp->adio_fh, gbp->offset, readBuf,
                                        readLen, MPI_BYTE, &mpistatus);
             }
             else {
