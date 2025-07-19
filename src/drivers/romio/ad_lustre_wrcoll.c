@@ -856,10 +856,10 @@ double curT = MPI_Wtime();
                 ADIOI_Free(flat_fview.off);
 
 #ifdef WKL_DEBUG
-            printf("%s %d: SWITCH to ADIO_WriteContig !!!\n",__func__,__LINE__);
+            printf("%s %d: SWITCH to PNCIO_WriteContig !!!\n",__func__,__LINE__);
 #endif
 
-            ADIO_WriteContig(fd, buf, count, buftype, off, status, error_code);
+            PNCIO_WriteContig(fd, buf, count, buftype, off, status, error_code);
         } else {
             if (free_flat_fview && flat_fview.count > 0)
                 ADIOI_Free(flat_fview.off);
@@ -1850,7 +1850,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
                     ADIOI_Assert(srt_off_len[j].off[i] < range_off + range_size &&
                                  srt_off_len[j].off[i] >= range_off);
 
-                    ADIO_WriteContig(fd,
+                    PNCIO_WriteContig(fd,
                                      write_buf[j] + (srt_off_len[j].off[i] - range_off),
                                      srt_off_len[j].len[i],
                                      MPI_BYTE,

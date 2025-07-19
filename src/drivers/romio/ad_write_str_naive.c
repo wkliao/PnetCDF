@@ -69,7 +69,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
     bufsize = buftype_size * count;
 
     /* Contiguous both in buftype and filetype should have been handled in a
-     * call to ADIO_WriteContig() earlier.
+     * call to PNCIO_WriteContig() earlier.
      */
     ADIOI_Assert(!(buftype_is_contig && filetype_is_contig));
 
@@ -99,7 +99,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                 req_off = off;
                 req_len = flat_buf->blocklens[b_index];
 
-                ADIO_WriteContig(fd, (char *) buf + userbuf_off, req_len, MPI_BYTE,
+                PNCIO_WriteContig(fd, (char *) buf + userbuf_off, req_len, MPI_BYTE,
                                  req_off, &status1, error_code);
                 if (*error_code != MPI_SUCCESS)
                     return;
@@ -217,7 +217,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                     req_off = off;
                     req_len = fwr_size;
 
-                    ADIO_WriteContig(fd, (char *) buf + userbuf_off, req_len, MPI_BYTE,
+                    PNCIO_WriteContig(fd, (char *) buf + userbuf_off, req_len, MPI_BYTE,
                                      req_off, &status1, error_code);
                     if (*error_code != MPI_SUCCESS)
                         return;
@@ -274,7 +274,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                     req_len = size;
                     userbuf_off = i_offset;
 
-                    ADIO_WriteContig(fd, (char *) buf + userbuf_off, req_len, MPI_BYTE,
+                    PNCIO_WriteContig(fd, (char *) buf + userbuf_off, req_len, MPI_BYTE,
                                      req_off, &status1, error_code);
                     if (*error_code != MPI_SUCCESS)
                         return;
