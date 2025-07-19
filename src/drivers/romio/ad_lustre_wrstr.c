@@ -204,7 +204,7 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
     /* Different buftype to different filetype */
     if (!buftype_is_contig && filetype_is_contig) {
         /* noncontiguous in memory, contiguous in file. */
-        flat_buf = ADIOI_Flatten_and_find(datatype);
+        flat_buf = PNCIO_Flatten_and_find(datatype);
 
         off = fd->disp + offset;
 
@@ -376,7 +376,7 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
             }
         } else {
 /* noncontiguous in memory as well as in file */
-            flat_buf = ADIOI_Flatten_and_find(datatype);
+            flat_buf = PNCIO_Flatten_and_find(datatype);
 
             k = num = buf_count = 0;
             i_offset = flat_buf->indices[0];

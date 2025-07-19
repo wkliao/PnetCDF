@@ -77,7 +77,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
         int b_count;
         /* noncontiguous in memory, contiguous in file. */
 
-        flat_buf = ADIOI_Flatten_and_find(buftype);
+        flat_buf = PNCIO_Flatten_and_find(buftype);
 
         off = fd->disp + offset;
 
@@ -251,7 +251,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
             MPI_Offset i_offset, tmp_bufsize = 0;
             /* noncontiguous in memory as well as in file */
 
-            flat_buf = ADIOI_Flatten_and_find(buftype);
+            flat_buf = PNCIO_Flatten_and_find(buftype);
 
             b_index = buf_count = 0;
             i_offset = flat_buf->indices[0];

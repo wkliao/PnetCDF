@@ -272,7 +272,7 @@ int PNCIO_Type_ispredef(MPI_Datatype datatype, int *flag);
 
 int PNCIO_Type_dispose(MPI_Datatype * datatype);
 
-ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype);
+ADIOI_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype);
 
 int ADIOI_Lustre_create(ADIO_File fd, int access_mode);
 int ADIOI_Lustre_open(ADIO_File fd);

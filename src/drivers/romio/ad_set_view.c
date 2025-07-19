@@ -141,7 +141,7 @@ int PNCIO_File_set_view(ADIO_File     fd,
         PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
         /* check filetype only if it is not a predefined MPI datatype */
-        fd->flat_file = ADIOI_Flatten_and_find(fd->filetype);
+        fd->flat_file = PNCIO_Flatten_and_find(fd->filetype);
         err = check_type(fd->flat_file, fd->access_mode, "filetype");
         if (err != NC_NOERR)
             return err;
