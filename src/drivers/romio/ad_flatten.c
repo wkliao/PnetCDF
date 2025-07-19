@@ -206,7 +206,7 @@ static void flatlist_node_grow(ADIOI_Flatlist_node * flat, MPI_Count idx)
 
 static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count * curr_index);
 static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
-                          ADIO_Offset st_offset, MPI_Count * curr_index);
+                          MPI_Offset st_offset, MPI_Count * curr_index);
 static void ADIOI_Optimize_flattened(ADIOI_Flatlist_node * flat_type);
 /* flatten datatype and add it to Flatlist */
 static ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
@@ -447,15 +447,15 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
  * Assumption: input datatype is not a basic!!!!
  */
 static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
-                          ADIO_Offset st_offset, MPI_Count * curr_index)
+                          MPI_Offset st_offset, MPI_Count * curr_index)
 {
     int k, m, n, is_hindexed_block = 0;
     int lb_updated = 0;
     int combiner, old_is_predef, old_is_contig;
     int nints, nadds, ntypes;
-    /* By using ADIO_Offset we preserve +/- sign and
+    /* By using MPI_Offset we preserve +/- sign and
      * avoid >2G integer arithmetic problems */
-    ADIO_Offset top_count;
+    MPI_Offset top_count;
     MPI_Count i, j, old_size, prev_index, basic_num, num, nonzeroth;
     MPI_Aint lb, old_extent;    /* Assume extents are non-negative */
     int *ints;
@@ -570,9 +570,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             if (prev_index == *curr_index) {
 /* simplest case, vector of basic or contiguous types */
-                /* By using ADIO_Offset we preserve +/- sign and
+                /* By using MPI_Offset we preserve +/- sign and
                  * avoid >2G integer arithmetic problems */
-                ADIO_Offset blocklength = ints[1], stride = ints[2];
+                MPI_Offset blocklength = ints[1], stride = ints[2];
                 j = *curr_index;
                 flatlist_node_grow(flat, j);
                 flat->indices[j] = st_offset;
@@ -586,9 +586,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
                 *curr_index = i;
             } else {
 /* vector of noncontiguous derived types */
-                /* By using ADIO_Offset we preserve +/- sign and
+                /* By using MPI_Offset we preserve +/- sign and
                  * avoid >2G integer arithmetic problems */
-                ADIO_Offset blocklength = ints[1], stride = ints[2];
+                MPI_Offset blocklength = ints[1], stride = ints[2];
 
                 j = *curr_index;
                 num = *curr_index - prev_index;
@@ -639,9 +639,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             if (prev_index == *curr_index) {
 /* simplest case, vector of basic or contiguous types */
-                /* By using ADIO_Offset we preserve +/- sign and
+                /* By using MPI_Offset we preserve +/- sign and
                  * avoid >2G integer arithmetic problems */
-                ADIO_Offset blocklength = ints[1];
+                MPI_Offset blocklength = ints[1];
                 j = *curr_index;
                 flatlist_node_grow(flat, j);
                 flat->indices[j] = st_offset;
@@ -655,9 +655,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
                 *curr_index = i;
             } else {
 /* vector of noncontiguous derived types */
-                /* By using ADIO_Offset we preserve +/- sign and
+                /* By using MPI_Offset we preserve +/- sign and
                  * avoid >2G integer arithmetic problems */
-                ADIO_Offset blocklength = ints[1];
+                MPI_Offset blocklength = ints[1];
 
                 j = *curr_index;
                 num = *curr_index - prev_index;
@@ -701,9 +701,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig)) {
-                /* By using ADIO_Offset we preserve +/- sign and
+                /* By using MPI_Offset we preserve +/- sign and
                  * avoid >2G integer arithmetic problems */
-                ADIO_Offset stride = ints[top_count + 1];
+                MPI_Offset stride = ints[top_count + 1];
                 ADIOI_Flatten(types[0], flat,
                               st_offset + stride * ADIOI_AINT_CAST_TO_OFFSET old_extent,
                               curr_index);
@@ -713,9 +713,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 /* simplest case, indexed type made up of basic or contiguous types */
                 j = *curr_index;
                 for (i = j, nonzeroth = i; i < j + top_count; i++) {
-                    /* By using ADIO_Offset we preserve +/- sign and
+                    /* By using MPI_Offset we preserve +/- sign and
                      * avoid >2G integer arithmetic problems */
-                    ADIO_Offset blocklength = ints[1 + i - j], stride = ints[top_count + 1 + i - j];
+                    MPI_Offset blocklength = ints[1 + i - j], stride = ints[top_count + 1 + i - j];
                     if (blocklength > 0) {
                         flatlist_node_grow(flat, nonzeroth);
                         flat->indices[nonzeroth] =
@@ -756,9 +756,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
                     num = *curr_index - prev_index;
                     prev_index = *curr_index;
                     for (m = 0; m < basic_num; m++) {
-                        /* By using ADIO_Offset we preserve +/- sign and
+                        /* By using MPI_Offset we preserve +/- sign and
                          * avoid >2G integer arithmetic problems */
-                        ADIO_Offset stride = ints[top_count + 1 + i] - ints[top_count + i];
+                        MPI_Offset stride = ints[top_count + 1 + i] - ints[top_count + i];
                         if (flat->blocklens[j - num] > 0) {
                             flatlist_node_grow(flat, nonzeroth);
                             flat->indices[nonzeroth] =
@@ -804,9 +804,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig)) {
-                /* By using ADIO_Offset we preserve +/- sign and
+                /* By using MPI_Offset we preserve +/- sign and
                  * avoid >2G integer arithmetic problems */
-                ADIO_Offset stride = ints[1 + 1];
+                MPI_Offset stride = ints[1 + 1];
                 if (is_hindexed_block) {
                     ADIOI_Flatten(types[0], flat, st_offset + adds[0], curr_index);
                 } else {
@@ -820,14 +820,14 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 /* simplest case, indexed type made up of basic or contiguous types */
                 j = *curr_index;
                 for (i = j; i < j + top_count; i++) {
-                    /* By using ADIO_Offset we preserve +/- sign and
+                    /* By using MPI_Offset we preserve +/- sign and
                      * avoid >2G integer arithmetic problems */
-                    ADIO_Offset blocklength = ints[1];
+                    MPI_Offset blocklength = ints[1];
                     if (is_hindexed_block) {
                         flatlist_node_grow(flat, i);
                         flat->indices[i] = st_offset + adds[i - j];
                     } else {
-                        ADIO_Offset stride = ints[1 + 1 + i - j];
+                        MPI_Offset stride = ints[1 + 1 + i - j];
                         flatlist_node_grow(flat, i);
                         flat->indices[i] = st_offset +
                             stride * ADIOI_AINT_CAST_TO_OFFSET old_extent;
@@ -867,9 +867,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
                             flatlist_node_grow(flat, j);
                             flat->indices[j] = flat->indices[j - num] + adds[i] - adds[i - 1];
                         } else {
-                            /* By using ADIO_Offset we preserve +/- sign and
+                            /* By using MPI_Offset we preserve +/- sign and
                              * avoid >2G integer arithmetic problems */
-                            ADIO_Offset stride = ints[2 + i] - ints[1 + i];
+                            MPI_Offset stride = ints[2 + i] - ints[1 + i];
                             flatlist_node_grow(flat, j);
                             flat->indices[j] = flat->indices[j - num] +
                                 stride * ADIOI_AINT_CAST_TO_OFFSET old_extent;
@@ -904,9 +904,9 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
                 MPI_Type_size_x(types[0], &old_size);
                 for (i = j, nonzeroth = j; i < j + top_count; i++) {
                     if (ints[1 + i - j] > 0) {
-                        /* By using ADIO_Offset we preserve +/- sign and
+                        /* By using MPI_Offset we preserve +/- sign and
                          * avoid >2G integer arithmetic problems */
-                        ADIO_Offset blocklength = ints[1 + i - j];
+                        MPI_Offset blocklength = ints[1 + i - j];
                         flatlist_node_grow(flat, nonzeroth);
                         flat->indices[nonzeroth] = st_offset + adds[i - j];
                         flat->blocklens[nonzeroth] = blocklength * old_size;
@@ -990,10 +990,10 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
                 if (prev_index == *curr_index) {
 /* simplest case, current type is basic or contiguous types */
-                    /* By using ADIO_Offset we preserve +/- sign and
+                    /* By using MPI_Offset we preserve +/- sign and
                      * avoid >2G integer arithmetic problems */
                     if (ints[1 + n] > 0) {
-                        ADIO_Offset blocklength = ints[1 + n];
+                        MPI_Offset blocklength = ints[1 + n];
                         j = *curr_index;
                         flatlist_node_grow(flat, j);
                         flat->indices[j] = st_offset + adds[n];
