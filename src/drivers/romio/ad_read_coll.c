@@ -167,7 +167,7 @@ double curT = MPI_Wtime();
                 off = fd->disp + offset;
             PNCIO_ReadContig(fd, buf, count, datatype, off, status, error_code);
         } else
-            ADIO_ReadStrided(fd, buf, count, datatype, offset, status, error_code);
+            PNCIO_GEN_ReadStrided(fd, buf, count, datatype, offset, status, error_code);
 
 // printf("%s at %d: SWITCH indep READ ------------------ off=%lld count=%ld\n",__func__,__LINE__, off, count);
         return;
