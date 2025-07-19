@@ -126,7 +126,7 @@ PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 
                 /* Check for overlapping regions */
                 if (flat->indices[j] + flat->blocklens[j] > flat->indices[i]) {
-                    flat->flag |= ADIOI_TYPE_OVERLAP;
+                    flat->flag |= PNCIO_TYPE_OVERLAP;
                 }
             }
         }
@@ -1413,7 +1413,7 @@ static void ADIOI_Optimize_flattened(PNCIO_Flatlist_node * flat_type)
 
         /* Check for overlapping regions */
         if (flat_type->indices[j] + flat_type->blocklens[j] > flat_type->indices[i])
-            flat_type->flag |= ADIOI_TYPE_OVERLAP;
+            flat_type->flag |= PNCIO_TYPE_OVERLAP;
 
         j = i;  /* j is the previous non-zero-length block index */
     }
