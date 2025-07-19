@@ -583,7 +583,7 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
 
 void PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
                                    MPI_Aint count, MPI_Datatype buftype,
-                                   MPI_Offset offset, ADIO_Status *status,
+                                   MPI_Offset offset, MPI_Status *status,
                                    int *error_code)
 {
     /* Uses a generalized version of the extended two-phase method described in

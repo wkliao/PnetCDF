@@ -23,7 +23,7 @@ int PNCIO_ReadContig(PNCIO_File    *fd,
                      MPI_Aint      count,
                      MPI_Datatype  bufType,
                      MPI_Offset   offset,
-                     ADIO_Status  *status,
+                     MPI_Status  *status,
                      int          *error_code)
 {
     ssize_t err = 0;

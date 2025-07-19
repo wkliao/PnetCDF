@@ -11,7 +11,7 @@
 
 void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf, MPI_Aint count,
                                   MPI_Datatype buftype, MPI_Offset offset,
-                                  ADIO_Status *status, int *error_code)
+                                  MPI_Status *status, int *error_code)
 {
     /* offset is in units of etype relative to the filetype. */
 
@@ -28,7 +28,7 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf, MPI_Aint coun
     int buf_count, buftype_is_contig, filetype_is_contig;
     MPI_Offset userbuf_off;
     MPI_Offset off, req_off, disp, end_offset = 0, start_off;
-    ADIO_Status status1;
+    MPI_Status status1;
 
     *error_code = MPI_SUCCESS;  /* changed below if error */
 
