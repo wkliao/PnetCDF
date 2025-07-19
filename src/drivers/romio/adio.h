@@ -312,8 +312,8 @@ int PNCIO_ReadContig(ADIO_File fd, void *buf, MPI_Aint count,
                 int *error_code);
 
 
-#define ADIO_ReadStrided ADIOI_GEN_ReadStrided
-void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
+#define ADIO_ReadStrided PNCIO_GEN_ReadStrided
+void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
                 MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
