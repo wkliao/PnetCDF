@@ -314,7 +314,7 @@ void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
                 MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
-void ADIOI_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount,
+void PNCIO_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount,
                 MPI_Datatype datatype, MPI_Offset offset,
                 MPI_Offset **offset_list_ptr,
 #ifdef HAVE_MPI_LARGE_COUNT
