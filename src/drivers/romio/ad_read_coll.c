@@ -854,10 +854,10 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
             if (recv_size[i]) {
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Irecv_c(((char *) buf) + buf_idx[i], recv_size[i],
-                            MPI_BYTE, i, ADIOI_COLL_TAG(i, iter), fd->comm, requests + j);
+                            MPI_BYTE, i, 0, fd->comm, requests + j);
 #else
                 MPI_Irecv(((char *) buf) + buf_idx[i], recv_size[i],
-                            MPI_BYTE, i, ADIOI_COLL_TAG(i, iter), fd->comm, requests + j);
+                            MPI_BYTE, i, 0, fd->comm, requests + j);
 #endif
                 j++;
                 buf_idx[i] += recv_size[i];
@@ -875,10 +875,10 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
             if (recv_size[i]) {
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Irecv_c(recv_buf[i], recv_size[i], MPI_BYTE, i,
-                            ADIOI_COLL_TAG(i, iter), fd->comm, requests + j);
+                            0, fd->comm, requests + j);
 #else
                 MPI_Irecv(recv_buf[i], recv_size[i], MPI_BYTE, i,
-                            ADIOI_COLL_TAG(i, iter), fd->comm, requests + j);
+                            0, fd->comm, requests + j);
 #endif
                 j++;
             }
@@ -911,7 +911,7 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
 #endif
             /* absolute displacement; use MPI_BOTTOM in send */
             MPI_Type_commit(&send_type);
-            MPI_Isend(MPI_BOTTOM, 1, send_type, i, ADIOI_COLL_TAG(i, iter),
+            MPI_Isend(MPI_BOTTOM, 1, send_type, i, 0,
                       fd->comm, requests + nprocs_recv + j);
             MPI_Type_free(&send_type);
             if (partial_send[i])

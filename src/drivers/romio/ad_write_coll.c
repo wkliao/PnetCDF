@@ -718,7 +718,7 @@ double curT = MPI_Wtime();
             if (recv_size[i] == 0)
                 continue;
             if (i != myrank) {
-                MPI_Irecv(MPI_BOTTOM, 1, recv_types[j], i, ADIOI_COLL_TAG(i, iter),
+                MPI_Irecv(MPI_BOTTOM, 1, recv_types[j], i, 0,
                           fd->comm, requests + j);
                 j++;
             } else if (buftype_is_contig) {
@@ -749,10 +749,10 @@ double curT = MPI_Wtime();
                 ADIOI_Assert(buf_idx[i] != -1);
 #if MPI_VERSION >= 4
                 MPI_Isend_c((char *) buf + buf_idx[i], send_size[i],
-                            MPI_BYTE, i, ADIOI_COLL_TAG(i, iter), fd->comm, send_req + j);
+                            MPI_BYTE, i, 0, fd->comm, send_req + j);
 #else
                 MPI_Isend((char *) buf + buf_idx[i], send_size[i],
-                            MPI_BYTE, i, ADIOI_COLL_TAG(i, iter), fd->comm, send_req + j);
+                            MPI_BYTE, i, 0, fd->comm, send_req + j);
 #endif
                 j++;
                 buf_idx[i] += send_size[i];
@@ -786,7 +786,7 @@ double curT = MPI_Wtime();
             if (recv_size[i] == 0)
                 continue;
             if (i != myrank) {
-                MPI_Recv(MPI_BOTTOM, 1, recv_types[j++], i, ADIOI_COLL_TAG(i, iter),
+                MPI_Recv(MPI_BOTTOM, 1, recv_types[j++], i, 0,
                          fd->comm, &status);
             } else {
                 /* sen/recv to/from self uses MPI_Unpack() */
@@ -977,10 +977,10 @@ void ADIOI_Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                     if (send_buf_idx[p] == send_size[p] && p != myrank) {
 #if MPI_VERSION >= 4
                         MPI_Isend_c(send_buf[p], send_size[p], MPI_BYTE, p,
-                                    ADIOI_COLL_TAG(p, iter), fd->comm, &requests[jj++]);
+                                    0, fd->comm, &requests[jj++]);
 #else
                         MPI_Isend(send_buf[p], send_size[p], MPI_BYTE, p,
-                                    ADIOI_COLL_TAG(p, iter), fd->comm, &requests[jj++]);
+                                    0, fd->comm, &requests[jj++]);
 #endif
                     }
                 } else {
