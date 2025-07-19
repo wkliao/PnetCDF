@@ -56,7 +56,7 @@ int PNCIO_Type_ispredef(MPI_Datatype datatype, int *flag)
  * MPI_DATATYPE_NULL and predefined datatypes are ignored,
  * datatype is set to MPI_DATATYPE_NULL upon return */
 
-int ADIOI_Type_dispose(MPI_Datatype * datatype)
+int PNCIO_Type_dispose(MPI_Datatype * datatype)
 {
     int ret, flag;
     if (*datatype == MPI_DATATYPE_NULL)

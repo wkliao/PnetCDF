@@ -36,7 +36,7 @@ int PNCIO_File_close(ADIO_File *fh)
         MPI_Info_free(&((*fh)->info));
     if ((*fh)->io_buf != NULL)
         ADIOI_Free((*fh)->io_buf);
-    ADIOI_Type_dispose(&(*fh)->filetype);
+    PNCIO_Type_dispose(&(*fh)->filetype);
 
     if (ADIOI_Flattened_type_keyval != MPI_KEYVAL_INVALID) {
         MPI_Type_free_keyval(&ADIOI_Flattened_type_keyval);

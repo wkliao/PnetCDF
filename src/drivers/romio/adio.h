@@ -270,7 +270,7 @@ void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag);
 
 int PNCIO_Type_ispredef(MPI_Datatype datatype, int *flag);
 
-int ADIOI_Type_dispose(MPI_Datatype * datatype);
+int PNCIO_Type_dispose(MPI_Datatype * datatype);
 
 ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype);
 

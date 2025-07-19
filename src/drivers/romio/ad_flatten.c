@@ -1093,7 +1093,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
     }
 
     for (i = 0; i < ntypes; i++) {
-        ADIOI_Type_dispose(types + i);
+        PNCIO_Type_dispose(types + i);
     }
 
     ADIOI_Free(ints);
@@ -1363,7 +1363,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
     }
 
     for (i = 0; i < ntypes; i++) {
-        ADIOI_Type_dispose(types + i);
+        PNCIO_Type_dispose(types + i);
     }
 
     ADIOI_Free(ints);

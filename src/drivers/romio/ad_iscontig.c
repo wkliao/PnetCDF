@@ -48,7 +48,7 @@ void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 #endif
                 PNCIO_Datatype_iscontig(types[0], flag);
 
-                ADIOI_Type_dispose(types);
+                PNCIO_Type_dispose(types);
                 ADIOI_Free(ints);
                 ADIOI_Free(adds);
                 ADIOI_Free(cnts);
