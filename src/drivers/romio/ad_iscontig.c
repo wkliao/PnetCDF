@@ -36,10 +36,10 @@ void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag)
                 int nints, nadds, ncnts = 0, ntypes;
                 MPI_Type_get_envelope(datatype, &nints, &nadds, &ntypes, &combiner);
 #endif
-                ints = (int *) ADIOI_Malloc((nints + 1) * sizeof(int));
-                adds = (MPI_Aint *) ADIOI_Malloc((nadds + 1) * sizeof(MPI_Aint));
-                cnts = (MPI_Count *) ADIOI_Malloc((ncnts + 1) * sizeof(MPI_Count));
-                types = (MPI_Datatype *) ADIOI_Malloc((ntypes + 1) * sizeof(MPI_Datatype));
+                ints = (int *) NCI_Malloc((nints + 1) * sizeof(int));
+                adds = (MPI_Aint *) NCI_Malloc((nadds + 1) * sizeof(MPI_Aint));
+                cnts = (MPI_Count *) NCI_Malloc((ncnts + 1) * sizeof(MPI_Count));
+                types = (MPI_Datatype *) NCI_Malloc((ntypes + 1) * sizeof(MPI_Datatype));
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Type_get_contents_c(datatype, nints, nadds, ncnts, ntypes, ints, adds, cnts,
                                         types);

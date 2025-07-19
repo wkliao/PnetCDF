@@ -200,11 +200,11 @@ void ADIOI_LUSTRE_Calc_my_req(PNCIO_File     *fd,
      */
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(int) + sizeof(MPI_Offset);
-    aggr_ranks = (int*) ADIOI_Malloc(alloc_sz * flat_fview.count);
+    aggr_ranks = (int*) NCI_Malloc(alloc_sz * flat_fview.count);
     avail_lens = (MPI_Offset*) (aggr_ranks + flat_fview.count);
 #else
     alloc_sz = sizeof(int) * 2;
-    aggr_ranks = (int*) ADIOI_Malloc(alloc_sz * flat_fview.count);
+    aggr_ranks = (int*) NCI_Malloc(alloc_sz * flat_fview.count);
     avail_lens = aggr_ranks + flat_fview.count;
 #endif
 
@@ -272,7 +272,7 @@ Alternative: especially for when flat_fview.count is large
      * This allows sends to be done without extra buffer.
      */
     if (buf_idx != NULL && buf_is_contig) {
-        buf_idx[0] = (MPI_Offset *) ADIOI_Malloc(nelems * sizeof(MPI_Offset));
+        buf_idx[0] = (MPI_Offset *) NCI_Malloc(nelems * sizeof(MPI_Offset));
         for (i = 1; i < cb_nodes; i++)
             buf_idx[i] = buf_idx[i - 1] + my_req[i - 1].count;
     }
@@ -280,7 +280,7 @@ Alternative: especially for when flat_fview.count is large
     /* allocate space for my_req and its members offsets and lens */
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(MPI_Offset) * 2;
-    my_req[0].offsets = (MPI_Offset*) ADIOI_Malloc(alloc_sz * nelems);
+    my_req[0].offsets = (MPI_Offset*) NCI_Malloc(alloc_sz * nelems);
     my_req[0].lens    = my_req[0].offsets + my_req[0].count;
     for (i=1; i<cb_nodes; i++) {
         my_req[i].offsets = my_req[i-1].offsets + my_req[i-1].count * 2;
@@ -290,7 +290,7 @@ Alternative: especially for when flat_fview.count is large
     my_req[cb_nodes-1].count = 0;
 #else
     alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-    my_req[0].offsets = (MPI_Offset*) ADIOI_Malloc(alloc_sz * nelems);
+    my_req[0].offsets = (MPI_Offset*) NCI_Malloc(alloc_sz * nelems);
     my_req[0].lens    = (int*) (my_req[0].offsets + my_req[0].count);
 
     char *ptr = (char*) my_req[0].offsets + alloc_sz * my_req[0].count;
@@ -379,7 +379,7 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
-    others_req = (PNCIO_Access *) ADIOI_Malloc(nprocs * sizeof(PNCIO_Access));
+    others_req = (PNCIO_Access *) NCI_Malloc(nprocs * sizeof(PNCIO_Access));
     *others_req_ptr = others_req;
 
     /* Use my_req[i].count (the number of noncontiguous requests fall in
@@ -414,7 +414,7 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
 #ifdef HAVE_MPI_LARGE_COUNT
     pair_sz = sizeof(MPI_Offset) * 2;
     alloc_sz = pair_sz + sizeof(MPI_Count);
-    others_req[0].offsets  = (MPI_Offset*) ADIOI_Malloc(npairs * alloc_sz);
+    others_req[0].offsets  = (MPI_Offset*) NCI_Malloc(npairs * alloc_sz);
     others_req[0].lens     = others_req[0].offsets + others_req[0].count;
     others_req[0].mem_ptrs = (MPI_Count*) (others_req[0].offsets + npairs * 2);
     for (i=1; i<nprocs; i++) {
@@ -425,7 +425,7 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
 #else
     pair_sz = sizeof(MPI_Offset) + sizeof(int);
     alloc_sz = pair_sz + sizeof(MPI_Aint);
-    others_req[0].offsets  = (MPI_Offset*) ADIOI_Malloc(npairs * alloc_sz);
+    others_req[0].offsets  = (MPI_Offset*) NCI_Malloc(npairs * alloc_sz);
     others_req[0].lens     = (int*) (others_req[0].offsets + others_req[0].count);
     char *ptr = (char*) others_req[0].offsets + pair_sz * npairs;
     others_req[0].mem_ptrs = (MPI_Aint*)ptr;
@@ -508,7 +508,7 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
     else { /* instead of using alltoall, use MPI_Issend and MPI_Irecv */
         int nreqs;
         MPI_Request *requests = (MPI_Request *)
-            ADIOI_Malloc((nprocs + fd->hints->cb_nodes) * sizeof(MPI_Request));
+            NCI_Malloc((nprocs + fd->hints->cb_nodes) * sizeof(MPI_Request));
 
         nreqs = 0;
         for (i = 0; i < nprocs; i++) {
@@ -572,7 +572,7 @@ void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
             MPI_Waitall(nreqs, requests, MPI_STATUSES_IGNORE);
 #else
             MPI_Status *statuses = (MPI_Status *)
-                                   ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+                                   NCI_Malloc(nreqs * sizeof(MPI_Status));
             MPI_Waitall(nreqs, requests, statuses);
             ADIOI_Free(statuses);
 #endif
@@ -755,7 +755,7 @@ double curT = MPI_Wtime();
          */
         st_end[0] = start_offset;
         st_end[1] = end_offset;
-        st_end_all = (MPI_Offset *) ADIOI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
+        st_end_all = (MPI_Offset *) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
         MPI_Allgather(st_end, 2, MPI_OFFSET, st_end_all, 2, MPI_OFFSET, fd->comm);
 
         /* The loop below does the followings.
@@ -923,7 +923,7 @@ double curT = MPI_Wtime();
     MPI_Offset **buf_idx = NULL;
 
     if (flat_bview.is_contig)
-        buf_idx = (MPI_Offset **) ADIOI_Malloc(fd->hints->cb_nodes *
+        buf_idx = (MPI_Offset **) NCI_Malloc(fd->hints->cb_nodes *
                                                 sizeof(MPI_Offset*));
 
     /* Calculate the portions of this rank's write requests that fall into the
@@ -1084,13 +1084,13 @@ double curT = MPI_Wtime();
     MPI_Aint *iDisp;                                                         \
     ADIOI_Assert(count <= 2147483647); /* overflow 4-byte int */             \
     iCount = (int)count;                                                     \
-    iBklen = (int*) ADIOI_Malloc(sizeof(int) * iCount);                      \
+    iBklen = (int*) NCI_Malloc(sizeof(int) * iCount);                      \
     for (kk=0; kk<iCount; kk++) {                                            \
         ADIOI_Assert(bklen[kk] <= 2147483647); /* overflow 4-byte int */     \
         iBklen[kk] = (int)bklen[kk];                                         \
     }                                                                        \
     if (sizeof(MPI_Aint) < sizeof(MPI_Count)) {                              \
-        iDisp = (MPI_Aint*) ADIOI_Malloc(sizeof(MPI_Aint) * iCount);         \
+        iDisp = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * iCount);         \
         for (kk=0; kk<iCount; kk++) {                                        \
             ADIOI_Assert(disp[kk] <= 2147483647); /* overflow 4-byte int */  \
             iDisp[kk] = (MPI_Aint)disp[kk];                                  \
@@ -1144,7 +1144,7 @@ void comm_phase_alltoallw(PNCIO_File     *fd,
     rdispls = sdispls + nprocs;
 
     /* allocate send/recv derived type arrays */
-    sendTypes = (MPI_Datatype*)ADIOI_Malloc(sizeof(MPI_Datatype) * nprocs * 2);
+    sendTypes = (MPI_Datatype*)NCI_Malloc(sizeof(MPI_Datatype) * nprocs * 2);
     recvTypes = sendTypes + nprocs;
 
     for (i=0; i<nprocs; i++)
@@ -1247,7 +1247,7 @@ void commit_comm_phase(PNCIO_File     *fd,
 
     nreqs = fd->hints->cb_nodes;
     nreqs += (fd->is_agg) ? nprocs : 0;
-    reqs = (MPI_Request *)ADIOI_Malloc(sizeof(MPI_Request) * nreqs);
+    reqs = (MPI_Request *)NCI_Malloc(sizeof(MPI_Request) * nreqs);
     nreqs = 0;
 
     /* receiving part */
@@ -1347,7 +1347,7 @@ void commit_comm_phase(PNCIO_File     *fd,
         MPI_Waitall(nreqs, reqs, MPI_STATUSES_IGNORE);
 #else
         MPI_Status *statuses = (MPI_Status *)
-                               ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+                               NCI_Malloc(nreqs * sizeof(MPI_Status));
         MPI_Waitall(nreqs, reqs, statuses);
         ADIOI_Free(statuses);
 #endif
@@ -1463,7 +1463,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
      *     may not be aligned with file stripe boundaries.
      * end_loc is the ending file offset of this aggregator's file domain.
      */
-    off_list = (MPI_Offset *) ADIOI_Malloc(ntimes * sizeof(MPI_Offset));
+    off_list = (MPI_Offset *) NCI_Malloc(ntimes * sizeof(MPI_Offset));
     end_loc = -1;
     for (m = 0; m < ntimes; m++)
         off_list[m] = max_end_loc;
@@ -1481,16 +1481,16 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
      * send_list[i].len: length in bytes.
      * send_list[i].disp: displacement (send buffer address).
      */
-    send_list = (disp_len_list*) ADIOI_Malloc(sizeof(disp_len_list) * cb_nodes);
+    send_list = (disp_len_list*) NCI_Malloc(sizeof(disp_len_list) * cb_nodes);
     for (i = 0; i < cb_nodes; i++) {
         send_list[i].count = 0;
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(MPI_Count) * 2;
-        send_list[i].disp = (MPI_Count*) ADIOI_Malloc(alloc_sz * nbufs);
+        send_list[i].disp = (MPI_Count*) NCI_Malloc(alloc_sz * nbufs);
         send_list[i].len  = send_list[i].disp + nbufs;
 #else
         alloc_sz = sizeof(MPI_Aint) + sizeof(int);
-        send_list[i].disp = (MPI_Aint*) ADIOI_Malloc(alloc_sz * nbufs);
+        send_list[i].disp = (MPI_Aint*) NCI_Malloc(alloc_sz * nbufs);
         send_list[i].len  = (int*) (send_list[i].disp + nbufs);
 #endif
     }
@@ -1512,16 +1512,16 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
          */
         ADIOI_Assert(fd->is_agg);
 
-        recv_list = (disp_len_list*) ADIOI_Malloc(sizeof(disp_len_list) * nprocs);
+        recv_list = (disp_len_list*) NCI_Malloc(sizeof(disp_len_list) * nprocs);
         for (i = 0; i < nprocs; i++) {
             recv_list[i].count = 0;
 #ifdef HAVE_MPI_LARGE_COUNT
             alloc_sz = sizeof(MPI_Count) * 2;
-            recv_list[i].disp = (MPI_Count*) ADIOI_Malloc(alloc_sz * nbufs);
+            recv_list[i].disp = (MPI_Count*) NCI_Malloc(alloc_sz * nbufs);
             recv_list[i].len  = recv_list[i].disp + nbufs;
 #else
             alloc_sz = sizeof(MPI_Aint) + sizeof(int);
-            recv_list[i].disp = (MPI_Aint*) ADIOI_Malloc(alloc_sz * nbufs);
+            recv_list[i].disp = (MPI_Aint*) NCI_Malloc(alloc_sz * nbufs);
             recv_list[i].len  = (int*) (recv_list[i].disp + nbufs);
 #endif
         }
@@ -1533,18 +1533,18 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
         ADIOI_Assert(fd->io_buf != NULL);
 
         /* divide collective buffer into nbufs sub-buffers */
-        write_buf = (char **) ADIOI_Malloc(nbufs * sizeof(char*));
+        write_buf = (char **) NCI_Malloc(nbufs * sizeof(char*));
         write_buf[0] = fd->io_buf;
 
         /* Similarly, receive buffer consists of nbufs sub-buffers */
-        recv_buf = (char **) ADIOI_Malloc(nbufs * sizeof(char*));
-        recv_buf[0] = (char *) ADIOI_Malloc(striping_unit);
+        recv_buf = (char **) NCI_Malloc(nbufs * sizeof(char*));
+        recv_buf[0] = (char *) NCI_Malloc(striping_unit);
 
         /* recv_count[j][i] is the number of off-len pairs to be received from
          * each proc i in round j
          */
-        recv_count    = (MPI_Count**) ADIOI_Malloc(3 * nbufs * sizeof(MPI_Count*));
-        recv_count[0] = (MPI_Count*)  ADIOI_Malloc(3 * nbufs * nprocs * sizeof(MPI_Count));
+        recv_count    = (MPI_Count**) NCI_Malloc(3 * nbufs * sizeof(MPI_Count*));
+        recv_count[0] = (MPI_Count*)  NCI_Malloc(3 * nbufs * nprocs * sizeof(MPI_Count));
 
         /* recv_size[j][i] is the receive size from proc i in round j */
         recv_size = recv_count + nbufs;
@@ -1559,7 +1559,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
         for (j = 1; j < nbufs; j++) {
             write_buf[j] = write_buf[j-1] + striping_unit;
             /* recv_buf[j] may be realloc in ADIOI_LUSTRE_W_Exchange_data() */
-            recv_buf[j]       = (char *) ADIOI_Malloc(striping_unit);
+            recv_buf[j]       = (char *) NCI_Malloc(striping_unit);
             recv_count[j]     = recv_count[j-1]     + nprocs;
             recv_size[j]      = recv_size[j-1]      + nprocs;
             recv_start_pos[j] = recv_start_pos[j-1] + nprocs;
@@ -1569,20 +1569,20 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
          * monotonically non-decreasing order (required by MPI-IO standard)
          * which is used when writing to the file
          */
-        srt_off_len = (off_len_list*) ADIOI_Malloc(nbufs * sizeof(off_len_list));
+        srt_off_len = (off_len_list*) NCI_Malloc(nbufs * sizeof(off_len_list));
     }
 
     /* send_buf[] will be allocated in ADIOI_LUSTRE_W_Exchange_data(), when the
      * use buffer is not contiguous.
      */
-    send_buf = (char **) ADIOI_Malloc(nbufs * sizeof(char*));
+    send_buf = (char **) NCI_Malloc(nbufs * sizeof(char*));
 
     /* this_buf_idx contains indices to the user write buffer for sending this
      * rank's write data to aggregators, one for each aggregator. It is used
      * only when user buffer is contiguous.
      */
     if (flat_bview->is_contig)
-        this_buf_idx = (MPI_Offset *) ADIOI_Malloc(sizeof(MPI_Offset) * cb_nodes);
+        this_buf_idx = (MPI_Offset *) NCI_Malloc(sizeof(MPI_Offset) * cb_nodes);
 
     /* array of data sizes to be sent to each aggregator in a 2-phase round */
     send_size = (MPI_Count *) ADIOI_Calloc(cb_nodes, sizeof(MPI_Count));
@@ -1946,7 +1946,7 @@ void heap_merge(const PNCIO_Access *others_req,
     heap_struct *a, tmp;
     int i, j, heapsize, l, r, k, smallest;
 
-    a = (heap_struct *) ADIOI_Malloc((nprocs_recv + 1) * sizeof(heap_struct));
+    a = (heap_struct *) NCI_Malloc((nprocs_recv + 1) * sizeof(heap_struct));
 
     j = 0;
     for (i = 0; i < nprocs; i++) {
@@ -2121,11 +2121,11 @@ void Exchange_data_recv(
         hole = 0;
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(MPI_Offset) + sizeof(MPI_Count);
-        srt_off_len->off = (MPI_Offset*) ADIOI_Malloc(alloc_sz);
+        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
         srt_off_len->len = (MPI_Count*) (srt_off_len->off + 1);
 #else
         alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-        srt_off_len->off = (MPI_Offset*) ADIOI_Malloc(alloc_sz);
+        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
         srt_off_len->len = (int*) (srt_off_len->off + 1);
 #endif
         srt_off_len->off[0] = others_req[j].offsets[start_pos[j]];
@@ -2181,11 +2181,11 @@ void Exchange_data_recv(
          */
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(MPI_Offset) + sizeof(MPI_Count);
-        srt_off_len->off = (MPI_Offset*) ADIOI_Malloc(alloc_sz * srt_off_len->num);
+        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz * srt_off_len->num);
         srt_off_len->len = (MPI_Count*) (srt_off_len->off + srt_off_len->num);
 #else
         alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-        srt_off_len->off = (MPI_Offset*) ADIOI_Malloc(alloc_sz * srt_off_len->num);
+        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz * srt_off_len->num);
         srt_off_len->len = (int*) (srt_off_len->off + srt_off_len->num);
 #endif
 
@@ -2230,11 +2230,11 @@ void Exchange_data_recv(
         if (srt_off_len->off == NULL) { /* if has not been malloc-ed yet */
 #ifdef HAVE_MPI_LARGE_COUNT
             alloc_sz = sizeof(MPI_Offset) + sizeof(MPI_Count);
-            srt_off_len->off = (MPI_Offset*) ADIOI_Malloc(alloc_sz);
+            srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
             srt_off_len->len = (MPI_Count*) (srt_off_len->off + 1);
 #else
             alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-            srt_off_len->off = (MPI_Offset*) ADIOI_Malloc(alloc_sz);
+            srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
             srt_off_len->len = (int*) (srt_off_len->off + 1);
 #endif
         }
@@ -2343,8 +2343,8 @@ void Exchange_data_send(
          * allocate send_buf[], a contiguous space, copy data to send_buf,
          * including ones to be sent to self, and then use send_buf to send.
          */
-        send_buf = (char **) ADIOI_Malloc(cb_nodes * sizeof(char *));
-        send_buf[0] = (char *) ADIOI_Malloc(send_total_size);
+        send_buf = (char **) NCI_Malloc(cb_nodes * sizeof(char *));
+        send_buf[0] = (char *) NCI_Malloc(send_total_size);
         for (i = 1; i < cb_nodes; i++)
             send_buf[i] = send_buf[i - 1] + send_size[i - 1];
 

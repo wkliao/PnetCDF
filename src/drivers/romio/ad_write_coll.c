@@ -122,7 +122,7 @@ double curT = MPI_Wtime();
          * processes. The result is an array each of start and end offsets stored
          * in order of process rank. */
 
-        st_offsets = (MPI_Offset *) ADIOI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
+        st_offsets = (MPI_Offset *) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
         end_offsets = st_offsets + nprocs;
 
         MPI_Allgather(&start_offset, 1, MPI_OFFSET, st_offsets, 1, MPI_OFFSET, fd->comm);
@@ -319,7 +319,7 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
    to be done by each process and the max among all processes.
    That gives the no. of communication phases as well. */
 
-    value = (char *) ADIOI_Malloc((MPI_MAX_INFO_VAL + 1) * sizeof(char));
+    value = (char *) NCI_Malloc((MPI_MAX_INFO_VAL + 1) * sizeof(char));
     MPI_Info_get(fd->info, "cb_buffer_size", MPI_MAX_INFO_VAL, value, &info_flag);
     coll_bufsize = atoi(value);
     ADIOI_Free(value);
@@ -595,10 +595,10 @@ double curT = MPI_Wtime();
             nprocs_send++;
     }
 
-    recv_types = (MPI_Datatype *) ADIOI_Malloc((nprocs_recv + 1) * sizeof(MPI_Datatype));
+    recv_types = (MPI_Datatype *) NCI_Malloc((nprocs_recv + 1) * sizeof(MPI_Datatype));
     /* +1 to avoid a 0-size malloc */
 
-    tmp_len = ADIOI_Malloc(nprocs * sizeof(*tmp_len));
+    tmp_len = NCI_Malloc(nprocs * sizeof(*tmp_len));
     j = 0;
     for (i = 0; i < nprocs; i++) {
         if (recv_size[i]) {
@@ -642,8 +642,8 @@ double curT = MPI_Wtime();
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         double timing = MPI_Wtime();
 #endif
-        srt_off = (MPI_Offset *) ADIOI_Malloc(sum * sizeof(MPI_Offset));
-        srt_len = ADIOI_Malloc(sum * sizeof(*srt_len));
+        srt_off = (MPI_Offset *) NCI_Malloc(sum * sizeof(MPI_Offset));
+        srt_len = NCI_Malloc(sum * sizeof(*srt_len));
 
         PNCIO_Heap_merge(others_req, count, srt_off, srt_len, start_pos, nprocs, nprocs_recv, sum);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -703,13 +703,13 @@ double curT = MPI_Wtime();
     if (fd->atomicity) {
         /* nreqs is the number of Isend and Irecv to be posted */
         nreqs = (send_size[myrank]) ? (nprocs_send - 1) : nprocs_send;
-        requests = (MPI_Request *) ADIOI_Malloc((nreqs + 1) * sizeof(MPI_Request));
+        requests = (MPI_Request *) NCI_Malloc((nreqs + 1) * sizeof(MPI_Request));
         send_req = requests;
     } else {
         nreqs = nprocs_send + nprocs_recv;
         if (send_size[myrank])  /* NO send to and recv from self */
             nreqs -= 2;
-        requests = (MPI_Request *) ADIOI_Malloc((nreqs + 1) * sizeof(MPI_Request));
+        requests = (MPI_Request *) NCI_Malloc((nreqs + 1) * sizeof(MPI_Request));
         /* +1 to avoid a 0-size malloc */
 
         /* post receives */
@@ -762,8 +762,8 @@ double curT = MPI_Wtime();
         size_t msgLen = 0;
         for (i = 0; i < nprocs; i++)
             msgLen += send_size[i];
-        send_buf = (char **) ADIOI_Malloc(nprocs * sizeof(char *));
-        send_buf[0] = (char *) ADIOI_Malloc(msgLen * sizeof(char));
+        send_buf = (char **) NCI_Malloc(nprocs * sizeof(char *));
+        send_buf[0] = (char *) NCI_Malloc(msgLen * sizeof(char));
         for (i = 1; i < nprocs; i++)
             send_buf[i] = send_buf[i - 1] + send_size[i - 1];
 
@@ -827,7 +827,7 @@ double curT = MPI_Wtime();
 #ifdef HAVE_MPI_STATUSES_IGNORE
     statuses = MPI_STATUSES_IGNORE;
 #else
-    statuses = (MPI_Status *) ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+    statuses = (MPI_Status *) NCI_Malloc(nreqs * sizeof(MPI_Status));
 #endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)

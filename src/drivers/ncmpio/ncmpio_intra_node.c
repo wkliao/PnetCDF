@@ -1072,7 +1072,7 @@ int ina_collect_md(NC          *ncp,
         TRACE_COMM(MPI_Waitall)(nreqs, req, MPI_STATUSES_IGNORE);
 #else
         MPI_Status *statuses = (MPI_Status *)
-                               ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+                               NCI_Malloc(nreqs * sizeof(MPI_Status));
         TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
         ADIOI_Free(statuses);
 #endif
@@ -1194,7 +1194,7 @@ int ina_collect_md(NC          *ncp,
         TRACE_COMM(MPI_Waitall)(nreqs, req, MPI_STATUSES_IGNORE);
 #else
         MPI_Status *statuses = (MPI_Status *)
-                               ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+                               NCI_Malloc(nreqs * sizeof(MPI_Status));
         TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
         ADIOI_Free(statuses);
 #endif
@@ -1559,7 +1559,7 @@ int ina_put(NC           *ncp,
             TRACE_COMM(MPI_Waitall)(nreqs, req, MPI_STATUSES_IGNORE);
 #else
             MPI_Status *statuses = (MPI_Status *)
-                                   ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+                                   NCI_Malloc(nreqs * sizeof(MPI_Status));
             TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
             ADIOI_Free(statuses);
 #endif
@@ -2346,7 +2346,7 @@ int ina_get(NC           *ncp,
     TRACE_COMM(MPI_Waitall)(nreqs, req, MPI_STATUSES_IGNORE);
 #else
     MPI_Status *statuses = (MPI_Status *)
-                           ADIOI_Malloc(nreqs * sizeof(MPI_Status));
+                           NCI_Malloc(nreqs * sizeof(MPI_Status));
     TRACE_COMM(MPI_Waitall)(nreqs, req, statuses);
     ADIOI_Free(statuses);
 #endif

@@ -211,7 +211,7 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
         start_off = off;
         end_offset = start_off + bufsize - 1;
         /* write stripe size buffer each time */
-        writebuf = (char *) ADIOI_Malloc(MPL_MIN(bufsize, stripe_size));
+        writebuf = (char *) NCI_Malloc(MPL_MIN(bufsize, stripe_size));
         writebuf_off = 0;
         writebuf_len = 0;
 
@@ -276,7 +276,7 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
             req_off = start_off;
             req_len = bufsize;
             end_offset = start_off + bufsize - 1;
-            writebuf = (char *) ADIOI_Malloc(MPL_MIN(bufsize, stripe_size));
+            writebuf = (char *) NCI_Malloc(MPL_MIN(bufsize, stripe_size));
             memset(writebuf, -1, MPL_MIN(bufsize, stripe_size));
             writebuf_off = 0;
             writebuf_len = 0;
@@ -330,7 +330,7 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
 
         writebuf_off = 0;
         writebuf_len = 0;
-        writebuf = (char *) ADIOI_Malloc(stripe_size);
+        writebuf = (char *) NCI_Malloc(stripe_size);
         memset(writebuf, -1, stripe_size);
 
         if (buftype_is_contig && !filetype_is_contig) {

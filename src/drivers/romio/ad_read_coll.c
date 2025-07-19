@@ -123,7 +123,7 @@ double curT = MPI_Wtime();
          * processes. The result is an array each of start and end offsets
          * stored in order of process rank. */
 
-        st_offsets = (MPI_Offset *) ADIOI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
+        st_offsets = (MPI_Offset *) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
         end_offsets = st_offsets + nprocs;
 
         MPI_Allgather(&start_offset, 1, MPI_OFFSET, st_offsets, 1, MPI_OFFSET, fd->comm);
@@ -355,11 +355,11 @@ assert(0);
         *contig_access_count_ptr = 1;
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(MPI_Offset) * 2;
-        *offset_list_ptr = (MPI_Offset *) ADIOI_Malloc(alloc_sz);
+        *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz);
         *len_list_ptr = (*offset_list_ptr + 1);
 #else
         alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-        *offset_list_ptr = (MPI_Offset *) ADIOI_Malloc(alloc_sz);
+        *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz);
         *len_list_ptr = (int*) (*offset_list_ptr + 1);
 #endif
 
@@ -421,11 +421,11 @@ assert(0);
 
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(MPI_Offset) * 2;
-        *offset_list_ptr = (MPI_Offset *) ADIOI_Malloc(alloc_sz * contig_access_count);
+        *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz * contig_access_count);
         *len_list_ptr = *offset_list_ptr + contig_access_count;
 #else
         alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-        *offset_list_ptr = (MPI_Offset *) ADIOI_Malloc(alloc_sz * contig_access_count);
+        *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz * contig_access_count);
         *len_list_ptr = (int*) (*offset_list_ptr + contig_access_count);
 #endif
 
@@ -758,13 +758,13 @@ static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
 
 
         if (for_next_iter) {
-            tmp_buf = (char *) ADIOI_Malloc(for_next_iter);
+            tmp_buf = (char *) NCI_Malloc(for_next_iter);
             ADIOI_Assert((((MPI_Offset) (uintptr_t) read_buf) + real_size - for_next_iter) ==
                          (MPI_Offset) (uintptr_t) (read_buf + real_size - for_next_iter));
             ADIOI_Assert((for_next_iter + coll_bufsize) == (size_t) (for_next_iter + coll_bufsize));
             memcpy(tmp_buf, read_buf + real_size - for_next_iter, for_next_iter);
             ADIOI_Free(fd->io_buf);
-            fd->io_buf = (char *) ADIOI_Malloc(for_next_iter + coll_bufsize);
+            fd->io_buf = (char *) NCI_Malloc(for_next_iter + coll_bufsize);
             memcpy(fd->io_buf, tmp_buf, for_next_iter);
             read_buf = fd->io_buf;
             ADIOI_Free(tmp_buf);
@@ -842,7 +842,7 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
     }
 
     requests = (MPI_Request *)
-        ADIOI_Malloc((nprocs_send + nprocs_recv + 1) * sizeof(MPI_Request));
+        NCI_Malloc((nprocs_send + nprocs_recv + 1) * sizeof(MPI_Request));
 /* +1 to avoid a 0-size malloc */
 
 /* post recvs. if buftype_is_contig, data can be directly recd. into
@@ -865,8 +865,8 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
         }
     } else {
         /* allocate memory for recv_buf and post receives */
-        recv_buf = (char **) ADIOI_Malloc(nprocs * sizeof(char *));
-        recv_buf[0] = (char *) ADIOI_Malloc(memLen);
+        recv_buf = (char **) NCI_Malloc(nprocs * sizeof(char *));
+        recv_buf[0] = (char *) NCI_Malloc(memLen);
         for (i = 1; i < nprocs; i++)
             recv_buf[i] = recv_buf[i - 1] + recv_size[i - 1];
 
@@ -925,7 +925,7 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
 
 
     /* +1 to avoid a 0-size malloc */
-    statuses = (MPI_Status *) ADIOI_Malloc((nprocs_send + nprocs_recv + 1) * sizeof(MPI_Status));
+    statuses = (MPI_Status *) NCI_Malloc((nprocs_send + nprocs_recv + 1) * sizeof(MPI_Status));
 
     /* wait on the receives */
     if (nprocs_recv) {
@@ -1069,7 +1069,7 @@ void ADIOI_Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
     recv_buf_idx[p] = current location in recv_buf of proc. p  */
     /* combining these three related arrays into a single memory allocation
      * (the "times 3" here) can help some highly noncontiguous workloads a bit */
-    curr_from_proc = ADIOI_Malloc(nprocs * 3 * sizeof(*curr_from_proc));
+    curr_from_proc = NCI_Malloc(nprocs * 3 * sizeof(*curr_from_proc));
     done_from_proc = curr_from_proc + nprocs;
     recv_buf_idx = done_from_proc + nprocs;
 
