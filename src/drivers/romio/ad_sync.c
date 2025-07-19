@@ -22,8 +22,8 @@
 #include <common.h>
 #include "adio.h"
 
-/*----< ADIO_File_sync() >---------------------------------------------------*/
-int ADIO_File_sync(ADIO_File fd)
+/*----< PNCIO_File_sync() >---------------------------------------------------*/
+int PNCIO_File_sync(ADIO_File fd)
 {
     int err = NC_NOERR;
 

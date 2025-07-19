@@ -39,7 +39,7 @@ ncmpio_file_sync(NC *ncp) {
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
         if (ncp->adio_fh == NULL)
             return NC_NOERR;
-        return ADIO_File_sync(ncp->adio_fh);
+        return PNCIO_File_sync(ncp->adio_fh);
     }
 
     /* the remaining of this subroutine are for when using MPI-IO */
