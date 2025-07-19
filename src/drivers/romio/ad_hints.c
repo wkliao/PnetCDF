@@ -262,8 +262,8 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
 
         /* buffer size for data sieving in independent writes */
         MPI_Info_set(info, "ind_wr_buffer_size",
-                       ADIOI_IND_WR_BUFFER_SIZE_DFLT);
-        fd->hints->ind_wr_buffer_size = atoi(ADIOI_IND_WR_BUFFER_SIZE_DFLT);
+                       PNCIO_IND_WR_BUFFER_SIZE_DFLT);
+        fd->hints->ind_wr_buffer_size = atoi(PNCIO_IND_WR_BUFFER_SIZE_DFLT);
 
         /* default is to let romio automatically decide when to use data
          * sieving
