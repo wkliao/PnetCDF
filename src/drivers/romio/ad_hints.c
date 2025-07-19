@@ -158,7 +158,7 @@ int ADIOI_Info_check_and_install_str(PNCIO_File   *fd,
     if (flag) {
         MPI_Info_set(fd->info, key, value);
         len = (strlen(value) + 1) * sizeof(char);
-        *local_cache = ADIOI_Malloc(len);
+        *local_cache = NCI_Malloc(len);
         if (*local_cache == NULL) {
             ret = NC_ENOMEM;
             goto fn_exit;
@@ -396,7 +396,7 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
     if (fd->hints->cb_config_list == NULL) {
         MPI_Info_set(fd->info, "cb_config_list", ADIOI_CB_CONFIG_LIST_DFLT);
         len = (strlen(ADIOI_CB_CONFIG_LIST_DFLT) + 1) * sizeof(char);
-        fd->hints->cb_config_list = ADIOI_Malloc(len);
+        fd->hints->cb_config_list = NCI_Malloc(len);
         if (fd->hints->cb_config_list == NULL)
             return NC_ENOMEM;
 

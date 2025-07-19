@@ -63,7 +63,7 @@ PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
 
     if (type_size == 0) {
         /* copy to flatlist */
-        flat = ADIOI_Malloc(sizeof(PNCIO_Flatlist_node));
+        flat = NCI_Malloc(sizeof(PNCIO_Flatlist_node));
         flat->count = 0;
         flat->blocklens = NULL;
         flat->indices = NULL;
@@ -77,22 +77,22 @@ PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
         ADIOI_Assert(actual == type_size);
 
         MPIX_Iov *iovs;
-        iovs = ADIOI_Malloc(num_iovs * sizeof(MPIX_Iov));
+        iovs = NCI_Malloc(num_iovs * sizeof(MPIX_Iov));
         ADIOI_Assert(iovs);
 
         MPIX_Type_iov(datatype, 0, iovs, num_iovs, &actual);
         ADIOI_Assert(actual == num_iovs);
 
         /* copy to flatlist */
-        flat = ADIOI_Malloc(sizeof(PNCIO_Flatlist_node));
+        flat = NCI_Malloc(sizeof(PNCIO_Flatlist_node));
         flat->count = num_iovs;
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(MPI_Count) * 2;
-        flat->indices   = (MPI_Count *) ADIOI_Malloc(alloc_sz * flat->count);
+        flat->indices   = (MPI_Count *) NCI_Malloc(alloc_sz * flat->count);
         flat->blocklens = flat->indices + flat->count;
 #else
         alloc_sz = sizeof(MPI_Aint) + sizeof(int);
-        flat->indices   = (MPI_Aint *) ADIOI_Malloc(alloc_sz * flat->count);
+        flat->indices   = (MPI_Aint *) NCI_Malloc(alloc_sz * flat->count);
         flat->blocklens = (int*) (flat->indices + flat->count);
 #endif
         flat->refct = 1;
@@ -144,7 +144,7 @@ static PNCIO_Flatlist_node *flatlist_node_new(MPI_Datatype datatype, MPI_Count c
 {
     size_t alloc_sz;
     PNCIO_Flatlist_node *flat;
-    flat = ADIOI_Malloc(sizeof(PNCIO_Flatlist_node));
+    flat = NCI_Malloc(sizeof(PNCIO_Flatlist_node));
 
     flat->lb_idx = flat->ub_idx = -1;
     flat->refct = 1;
@@ -291,10 +291,10 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
 
     MPI_Type_get_envelope_c(datatype, &nints_c, &nadds_c, &ncnts_c, &ntypes_c, combiner);
 
-    ints_c = (int *) ADIOI_Malloc((nints_c + 1) * sizeof(int));
-    adds_c = (MPI_Aint *) ADIOI_Malloc((nadds_c + 1) * sizeof(MPI_Aint));
-    cnts_c = (MPI_Count *) ADIOI_Malloc((ncnts_c + 1) * sizeof(MPI_Count));
-    types_c = (MPI_Datatype *) ADIOI_Malloc((ntypes_c + 1) * sizeof(MPI_Datatype));
+    ints_c = (int *) NCI_Malloc((nints_c + 1) * sizeof(int));
+    adds_c = (MPI_Aint *) NCI_Malloc((nadds_c + 1) * sizeof(MPI_Aint));
+    cnts_c = (MPI_Count *) NCI_Malloc((ncnts_c + 1) * sizeof(MPI_Count));
+    types_c = (MPI_Datatype *) NCI_Malloc((ntypes_c + 1) * sizeof(MPI_Datatype));
 
     switch (*combiner) {
         case MPI_COMBINER_NAMED:
@@ -353,8 +353,8 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
     if (ncnts_c > 0) {
         MPI_Count k, n, ip = 0, ap = 0, iq = 0, cq = 0;
 
-        *ints = (int *) ADIOI_Malloc((*nints + 1) * sizeof(int));
-        *adds = (MPI_Aint *) ADIOI_Malloc((*nadds + 1) * sizeof(MPI_Aint));
+        *ints = (int *) NCI_Malloc((*nints + 1) * sizeof(int));
+        *adds = (MPI_Aint *) NCI_Malloc((*nadds + 1) * sizeof(MPI_Aint));
 
         switch (*combiner) {
             case MPI_COMBINER_CONTIGUOUS:
@@ -435,9 +435,9 @@ static void ADIOI_Type_decode(MPI_Datatype datatype, int *combiner,
     ADIOI_Free(cnts_c);
 #else
     MPI_Type_get_envelope(datatype, nints, nadds, ntypes, combiner);
-    *ints = (int *) ADIOI_Malloc((*nints + 1) * sizeof(int));
-    *adds = (MPI_Aint *) ADIOI_Malloc((*nadds + 1) * sizeof(MPI_Aint));
-    *types = (MPI_Datatype *) ADIOI_Malloc((*ntypes + 1) * sizeof(MPI_Datatype));
+    *ints = (int *) NCI_Malloc((*nints + 1) * sizeof(int));
+    *adds = (MPI_Aint *) NCI_Malloc((*nadds + 1) * sizeof(MPI_Aint));
+    *types = (MPI_Datatype *) NCI_Malloc((*ntypes + 1) * sizeof(MPI_Datatype));
     MPI_Type_get_contents(datatype, *nints, *nadds, *ntypes, *ints, *adds, *types);
 #endif
 }

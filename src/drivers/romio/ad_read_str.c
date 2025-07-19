@@ -27,10 +27,10 @@
             ADIOI_Assert((readbuf_off + readbuf_len - req_off) ==       \
                          (MPI_Aint) (readbuf_off + readbuf_len - req_off)); \
             partial_read = (MPI_Aint) (readbuf_off + readbuf_len - req_off); \
-            tmp_buf = (char *) ADIOI_Malloc(partial_read);              \
+            tmp_buf = (char *) NCI_Malloc(partial_read);              \
             memcpy(tmp_buf, readbuf+readbuf_len-partial_read, partial_read); \
             ADIOI_Free(readbuf);                                        \
-            readbuf = (char *) ADIOI_Malloc(partial_read + max_bufsize); \
+            readbuf = (char *) NCI_Malloc(partial_read + max_bufsize); \
             memcpy(readbuf, tmp_buf, partial_read);                     \
             ADIOI_Free(tmp_buf);                                        \
             readbuf_off += readbuf_len-partial_read;                    \
@@ -128,7 +128,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
 
 /* get max_bufsize from the info object. */
 
-    value = (char *) ADIOI_Malloc((MPI_MAX_INFO_VAL + 1) * sizeof(char));
+    value = (char *) NCI_Malloc((MPI_MAX_INFO_VAL + 1) * sizeof(char));
     MPI_Info_get(fd->info, "ind_rd_buffer_size", MPI_MAX_INFO_VAL, value, &info_flag);
     max_bufsize = atoi(value);
     ADIOI_Free(value);
@@ -145,7 +145,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
         start_off = off;
         end_offset = off + bufsize - 1;
         readbuf_off = off;
-        readbuf = (char *) ADIOI_Malloc(max_bufsize);
+        readbuf = (char *) NCI_Malloc(max_bufsize);
         readbuf_len = (MPI_Aint) (MPL_MIN(max_bufsize, end_offset - readbuf_off + 1));
 
 /* if atomicity is true, lock (exclusive) the region to be accessed */
@@ -243,7 +243,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
 
         readbuf_off = 0;
         readbuf_len = 0;
-        readbuf = (char *) ADIOI_Malloc(max_bufsize);
+        readbuf = (char *) NCI_Malloc(max_bufsize);
 
         if (buftype_is_contig && !filetype_is_contig) {
 

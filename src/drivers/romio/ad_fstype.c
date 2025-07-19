@@ -99,7 +99,7 @@ static void PNCIO_FileSysType_parentdir(const char *filename, char **dirnamep)
         ssize_t namelen;
         char *linkbuf;
 
-        linkbuf = ADIOI_Malloc(PATH_MAX + 1);
+        linkbuf = NCI_Malloc(PATH_MAX + 1);
         namelen = readlink(filename, linkbuf, PATH_MAX + 1);
         if (namelen == -1) {
             /* something strange has happened between the time that

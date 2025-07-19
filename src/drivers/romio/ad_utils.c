@@ -73,13 +73,13 @@ int PNCIO_Type_dispose(MPI_Datatype * datatype)
     MPI_Aint *iDisp;                                                         \
     ADIOI_Assert(count <= 2147483647); /* overflow 4-byte int */             \
     iCount = (int)count;                                                     \
-    iBklen = (int*) ADIOI_Malloc(sizeof(int) * iCount);                      \
+    iBklen = (int*) NCI_Malloc(sizeof(int) * iCount);                      \
     for (kk=0; kk<iCount; kk++) {                                            \
         ADIOI_Assert(bklen[kk] <= 2147483647); /* overflow 4-byte int */     \
         iBklen[kk] = (int)bklen[kk];                                         \
     }                                                                        \
     if (sizeof(MPI_Aint) != sizeof(MPI_Count)) {                             \
-        iDisp = (MPI_Aint*) ADIOI_Malloc(sizeof(MPI_Aint) * iCount);         \
+        iDisp = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * iCount);         \
         for (kk=0; kk<iCount; kk++) {                                        \
             ADIOI_Assert(disp[kk] <= 2147483647); /* overflow 4-byte int */  \
             iDisp[kk] = (MPI_Aint)disp[kk];                                  \
@@ -161,7 +161,7 @@ void PNCIO_Heap_merge(PNCIO_Access * others_req, MPI_Count * count,
     heap_struct *a, tmp;
     int i, j, heapsize, l, r, k, smallest;
 
-    a = (heap_struct *) ADIOI_Malloc((nprocs_recv + 1) * sizeof(heap_struct));
+    a = (heap_struct *) NCI_Malloc((nprocs_recv + 1) * sizeof(heap_struct));
 
     j = 0;
     for (i = 0; i < nprocs; i++)
@@ -272,7 +272,7 @@ int PNCIO_Err_create_code(int lastcode, int fatal, const char fcname[],
     int idx = 0;
     char *buf;
 
-    buf = (char *) ADIOI_Malloc(1024);
+    buf = (char *) NCI_Malloc(1024);
     if (buf != NULL) {
         idx += snprintf(buf, 1023, "%s (line %d): ", fcname, line);
         if (specific_msg == NULL) {

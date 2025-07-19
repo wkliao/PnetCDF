@@ -154,7 +154,7 @@ void PNCIO_Calc_file_domains(MPI_Offset * st_offsets, MPI_Offset
     fd_size = ((max_end_offset - min_st_offset + 1) + nprocs_for_coll - 1) / nprocs_for_coll;
     /* ceiling division as in HPF block distribution */
 
-    *fd_start_ptr = (MPI_Offset *) ADIOI_Malloc(nprocs_for_coll * 2 * sizeof(MPI_Offset));
+    *fd_start_ptr = (MPI_Offset *) NCI_Malloc(nprocs_for_coll * 2 * sizeof(MPI_Offset));
     *fd_end_ptr = *fd_start_ptr + nprocs_for_coll;
 
     fd_start = *fd_start_ptr;
@@ -258,7 +258,7 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
    I'm allocating memory of size nprocs, so that I can do an
    MPI_Alltoall later on.*/
 
-    buf_idx = (MPI_Aint *) ADIOI_Malloc(nprocs * sizeof(MPI_Aint));
+    buf_idx = (MPI_Aint *) NCI_Malloc(nprocs * sizeof(MPI_Aint));
 /* buf_idx is relevant only if buftype_is_contig.
    buf_idx[i] gives the index into user_buf where data received
    from proc. i should be placed. This allows receives to be done
@@ -305,7 +305,7 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
 
 /* now allocate space for my_req, offset, and len */
 
-    *my_req_ptr = (PNCIO_Access *) ADIOI_Malloc(nprocs * sizeof(PNCIO_Access));
+    *my_req_ptr = (PNCIO_Access *) NCI_Malloc(nprocs * sizeof(PNCIO_Access));
     my_req = *my_req_ptr;
 
     /* combine offsets and lens into a single regions so we can make one
@@ -318,11 +318,11 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
 
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(MPI_Offset) * 2;
-    my_req[0].offsets = (MPI_Offset *) ADIOI_Malloc(memLen * alloc_sz);
+    my_req[0].offsets = (MPI_Offset *) NCI_Malloc(memLen * alloc_sz);
     my_req[0].lens = my_req[0].offsets + memLen;
 #else
     alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-    my_req[0].offsets = (MPI_Offset *) ADIOI_Malloc(memLen * alloc_sz);
+    my_req[0].offsets = (MPI_Offset *) NCI_Malloc(memLen * alloc_sz);
     my_req[0].lens = (int*) (my_req[0].offsets + memLen);
 #endif
 
@@ -438,12 +438,12 @@ void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
 #endif
 
 /* first find out how much to send/recv and from/to whom */
-    count_others_req_per_proc = ADIOI_Malloc(nprocs * sizeof(MPI_Count));
+    count_others_req_per_proc = NCI_Malloc(nprocs * sizeof(MPI_Count));
 
     MPI_Alltoall(count_my_req_per_proc, 1, MPI_COUNT,
                  count_others_req_per_proc, 1, MPI_COUNT, fd->comm);
 
-    *others_req_ptr = (PNCIO_Access *) ADIOI_Malloc(nprocs * sizeof(PNCIO_Access));
+    *others_req_ptr = (PNCIO_Access *) NCI_Malloc(nprocs * sizeof(PNCIO_Access));
     others_req = *others_req_ptr;
 
     memLen = 0;
@@ -452,12 +452,12 @@ void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
 
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(MPI_Offset) * 2 + sizeof(MPI_Count);
-    others_req[0].offsets = (MPI_Offset *) ADIOI_Malloc(memLen * alloc_sz);
+    others_req[0].offsets = (MPI_Offset *) NCI_Malloc(memLen * alloc_sz);
     others_req[0].lens = others_req[0].offsets + memLen;
     others_req[0].mem_ptrs = (MPI_Count*) (others_req[0].lens + memLen);
 #else
     alloc_sz = sizeof(MPI_Offset) + sizeof(int) + sizeof(MPI_Aint);
-    others_req[0].offsets = (MPI_Offset *) ADIOI_Malloc(memLen * alloc_sz);
+    others_req[0].offsets = (MPI_Offset *) NCI_Malloc(memLen * alloc_sz);
     others_req[0].lens = (int *) (others_req[0].offsets + memLen);
     others_req[0].mem_ptrs = (MPI_Aint*) (others_req[0].lens + memLen);
 #endif
@@ -484,7 +484,7 @@ void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
 /* now send the calculated offsets and lengths to respective processes */
 
     requests = (MPI_Request *)
-        ADIOI_Malloc((count_my_req_procs + count_others_req_procs) * 2 * sizeof(MPI_Request));
+        NCI_Malloc((count_my_req_procs + count_others_req_procs) * 2 * sizeof(MPI_Request));
 
     j = 0;
     for (i = 0; i < nprocs; i++) {
@@ -539,7 +539,7 @@ void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
 #ifdef HAVE_MPI_STATUSES_IGNORE
         MPI_Waitall(j, requests, MPI_STATUSES_IGNORE);
 #else
-        MPI_Status *statuses = (MPI_Status *) ADIOI_Malloc(j * sizeof(MPI_Status));
+        MPI_Status *statuses = (MPI_Status *) NCI_Malloc(j * sizeof(MPI_Status));
         MPI_Waitall(j, requests, statuses);
         ADIOI_Free(statuses);
 #endif

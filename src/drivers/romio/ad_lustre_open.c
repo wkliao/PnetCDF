@@ -93,7 +93,7 @@ int get_total_avail_osts(void)
 {
     char **members, *buffer, *pool="scratch.original";
     int num_OSTs, list_size = 1024;
-    members = (char**)ADIOI_Malloc(sizeof(char*) * list_size);
+    members = (char**)NCI_Malloc(sizeof(char*) * list_size);
     buffer = (char*)ADIOI_Calloc(list_size * 64, sizeof(char));
 
     num_OSTs = llapi_get_poolmembers(pool, members, list_size, buffer,
@@ -189,7 +189,7 @@ uint64_t get_striping(int         fd,
     }
 
     /* obtain all OST IDs */
-    osts = (uint64_t*) ADIOI_Malloc(sizeof(uint64_t) * (*stripe_count));
+    osts = (uint64_t*) NCI_Malloc(sizeof(uint64_t) * (*stripe_count));
     if (llapi_layout_ost_index_get(layout, 0, &osts[0]) != 0) {
         /* check if is a folder */
         struct stat path_stat;
@@ -343,8 +343,8 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
     for (i=0; i<nprocs; i++) nprocs_per_node[fd->node_ids[i]]++;
 
     /* construct rank IDs of MPI processes running on each node */
-    ranks_per_node = (int **) ADIOI_Malloc(sizeof(int*) * fd->num_nodes);
-    ranks_per_node[0] = (int *) ADIOI_Malloc(sizeof(int) * nprocs);
+    ranks_per_node = (int **) NCI_Malloc(sizeof(int*) * fd->num_nodes);
+    ranks_per_node[0] = (int *) NCI_Malloc(sizeof(int) * nprocs);
     for (i=1; i<fd->num_nodes; i++)
         ranks_per_node[i] = ranks_per_node[i - 1] + nprocs_per_node[i - 1];
 
@@ -447,7 +447,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
      * them into ranklist[]. Note fd->hints->ranklist will be freed in
      * PNCIO_File_close().
      */
-    fd->hints->ranklist = (int *) ADIOI_Malloc(num_aggr * sizeof(int));
+    fd->hints->ranklist = (int *) NCI_Malloc(num_aggr * sizeof(int));
     if (fd->hints->ranklist == NULL)
         return NC_ENOMEM;
 
@@ -519,7 +519,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
          */
         int *naggr_per_node, *idx_per_node, avg;
         idx_per_node = (int*) ADIOI_Calloc(fd->num_nodes, sizeof(int));
-        naggr_per_node = (int*) ADIOI_Malloc(fd->num_nodes * sizeof(int));
+        naggr_per_node = (int*) NCI_Malloc(fd->num_nodes * sizeof(int));
         for (i = 0; i < striping_factor % fd->num_nodes; i++)
             naggr_per_node[i] = striping_factor / fd->num_nodes + 1;
         for (; i < fd->num_nodes; i++)

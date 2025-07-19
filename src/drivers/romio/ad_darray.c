@@ -31,7 +31,7 @@ int PNCIO_Type_create_darray(int size, int rank, int ndims,
 
 /* calculate position in Cartesian grid as MPI would (row-major
    ordering) */
-    coords = (int *) ADIOI_Malloc(ndims * sizeof(int));
+    coords = (int *) NCI_Malloc(ndims * sizeof(int));
     procs = size;
     tmp_rank = rank;
     for (i = 0; i < ndims; i++) {
@@ -40,7 +40,7 @@ int PNCIO_Type_create_darray(int size, int rank, int ndims,
         tmp_rank = tmp_rank % procs;
     }
 
-    st_offsets = (MPI_Aint *) ADIOI_Malloc(ndims * sizeof(MPI_Aint));
+    st_offsets = (MPI_Aint *) NCI_Malloc(ndims * sizeof(MPI_Aint));
     type_old = oldtype;
 
     if (order == MPI_ORDER_FORTRAN) {
