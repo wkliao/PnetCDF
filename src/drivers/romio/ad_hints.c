@@ -230,8 +230,8 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         }
 
         /* buffer size for collective I/O */
-        MPI_Info_set(info, "cb_buffer_size", ADIOI_CB_BUFFER_SIZE_DFLT);
-        fd->hints->cb_buffer_size = atoi(ADIOI_CB_BUFFER_SIZE_DFLT);
+        MPI_Info_set(info, "cb_buffer_size", PNCIO_CB_BUFFER_SIZE_DFLT);
+        fd->hints->cb_buffer_size = atoi(PNCIO_CB_BUFFER_SIZE_DFLT);
 
         /* default is to let romio automatically decide when to use
          * collective buffering
