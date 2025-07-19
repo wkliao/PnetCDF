@@ -121,7 +121,7 @@ PNCIO_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
                 MPI_Count j = i - 1;
                 /* Check if displacements are in a monotonic nondecreasing order */
                 if (flat->indices[j] > flat->indices[i]) {
-                    flat->flag |= ADIOI_TYPE_DECREASE;
+                    flat->flag |= PNCIO_TYPE_DECREASE;
                 }
 
                 /* Check for overlapping regions */
@@ -1409,7 +1409,7 @@ static void ADIOI_Optimize_flattened(PNCIO_Flatlist_node * flat_type)
 
         /* Check if displacements are in a monotonic nondecreasing order */
         if (flat_type->indices[j] > flat_type->indices[i])
-            flat_type->flag |= ADIOI_TYPE_DECREASE;
+            flat_type->flag |= PNCIO_TYPE_DECREASE;
 
         /* Check for overlapping regions */
         if (flat_type->indices[j] + flat_type->blocklens[j] > flat_type->indices[i])

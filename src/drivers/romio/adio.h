@@ -101,7 +101,7 @@
 #define PNCIO_DS_WR_NAGGRS_LB 256
 #define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > PNCIO_DS_WR_NAGGRS_LB || (npairs) > PNCIO_DS_WR_NPAIRS_LB)
 
-#define ADIOI_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
+#define PNCIO_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
 #define ADIOI_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
 #define ADIOI_TYPE_NEGATIVE 0x00000004  /* if one of displacements is negative */
 
@@ -162,7 +162,7 @@ typedef struct {
     int refct;                  /* when storing flattened representation on a
                                  * type, attribute copy and delete routines
                                  * will manage refct */
-    int flag;                   /* ADIOI_TYPE_XXX */
+    int flag;                   /* PNCIO_TYPE_XXX */
 } PNCIO_Flatlist_node;
 
 typedef struct {
