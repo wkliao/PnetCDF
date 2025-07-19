@@ -113,7 +113,7 @@ ncmpio_write_numrecs(NC         *ncp,
      */
     if (ncp->rank > 0 && fIsSet(ncp->flags, NC_HCOLL)) {
         if (ncp->fstype != ADIO_FSTYPE_MPIIO)
-            ADIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
+            PNCIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
         else
             TRACE_IO(MPI_File_write_at_all, (fh, 0, NULL, 0, MPI_BYTE, &mpistatus));
         return NC_NOERR;
@@ -156,7 +156,7 @@ ncmpio_write_numrecs(NC         *ncp,
         /* root's file view always includes the entire file header */
         if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1) {
             if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-                err = ADIO_File_write_at_all(ncp->adio_fh, NC_NUMRECS_OFFSET, (void*)pos,
+                err = PNCIO_File_write_at_all(ncp->adio_fh, NC_NUMRECS_OFFSET, (void*)pos,
                                             len, MPI_BYTE, &mpistatus);
                 if (err != NC_NOERR) return err;
             }

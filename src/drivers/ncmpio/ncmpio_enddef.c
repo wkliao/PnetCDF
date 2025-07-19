@@ -312,7 +312,7 @@ move_file_block(NC         *ncp,
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
             err = NC_NOERR;
             if (do_coll)
-                err = ADIO_File_write_at_all(ncp->adio_fh, off_to, buf,
+                err = PNCIO_File_write_at_all(ncp->adio_fh, off_to, buf,
                                              get_count /* NOT bufcount */,
                                              MPI_BYTE, &mpistatus);
             else if (get_count > 0)
@@ -741,7 +741,7 @@ write_NC(NC *ncp)
             int bufCount = (int) MIN(remain, NC_MAX_INT);
             if (is_coll) {
                 if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-                    err = ADIO_File_write_at_all(ncp->adio_fh, offset, buf_ptr, bufCount,
+                    err = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf_ptr, bufCount,
                                                 MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
                 }
@@ -805,7 +805,7 @@ write_NC(NC *ncp)
         /* other processes participate the collective call */
         for (i=0; i<ntimes; i++) {
             if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-                err = ADIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
+                err = PNCIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
             }

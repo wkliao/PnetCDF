@@ -116,7 +116,7 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
     else { /* write request */
         if (ncp->nprocs > 1) {
             if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-                err = ADIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
+                err = PNCIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;
             }

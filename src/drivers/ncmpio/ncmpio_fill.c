@@ -237,7 +237,7 @@ fill_var_rec(NC         *ncp,
     /* write to variable collectively */
     if (nprocs > 1) {
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-            err = ADIO_File_write_at_all(ncp->adio_fh, offset, buf, (int)count, bufType,
+            err = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf, (int)count, bufType,
                                         &mpistatus);
             if (err != NC_NOERR && status == NC_NOERR) status = err;
         }
@@ -722,7 +722,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     /* write to variable collectively */
     if (nprocs > 1) {
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-            err = ADIO_File_write_at_all(ncp->adio_fh, 0, buf, (int)buf_len, bufType,
+            err = PNCIO_File_write_at_all(ncp->adio_fh, 0, buf, (int)buf_len, bufType,
                                         &mpistatus);
             if (err != NC_NOERR && status == NC_NOERR) status = err;
         }

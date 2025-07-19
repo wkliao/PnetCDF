@@ -178,12 +178,12 @@ int ADIO_File_write_at(ADIO_File     fh,
     return err;
 }
 
-/*----< ADIO_File_write_at_all() >-------------------------------------------*/
+/*----< PNCIO_File_write_at_all() >-------------------------------------------*/
 /* This is a collective call.
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int ADIO_File_write_at_all(ADIO_File    fh,
+int PNCIO_File_write_at_all(ADIO_File    fh,
                           MPI_Offset    offset,
                           const void   *buf,
                           int           count,
@@ -209,7 +209,7 @@ int ADIO_File_write_at_all(ADIO_File    fh,
         return NC_EFSTYPE;
 
     if (err != MPI_SUCCESS && st == NC_NOERR)
-        st = ncmpii_error_mpi2nc(err, "ADIO_File_write_at_all");
+        st = ncmpii_error_mpi2nc(err, "PNCIO_File_write_at_all");
 
     return st;
 }

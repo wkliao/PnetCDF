@@ -1737,7 +1737,7 @@ int ina_put(NC           *ncp,
     ncp->maxmem_put[4] = MAX(ncp->maxmem_put[4], mem_max);
 #endif
 
-    /* call MPI_File_write_at_all or ADIO_File_write_at_all */
+    /* call MPI_File_write_at_all or PNCIO_File_write_at_all */
     err = ncmpio_read_write(ncp, NC_REQ_WR, NC_REQ_COLL, disp, buf_count,
                             MPI_BYTE, wr_buf, 1);
     if (status == NC_NOERR) status = err;
