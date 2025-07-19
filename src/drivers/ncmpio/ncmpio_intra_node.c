@@ -1709,11 +1709,11 @@ int ina_put(NC           *ncp,
 
         /* When using PnetCDF's internal ADIO driver, a call to
          * ncmpio_file_set_view() will pass offsets[] and lengths[] to
-         * ADIO_File_set_view() to be reused as flattened fileType. This can
+         * PNCIO_File_set_view() to be reused as flattened fileType. This can
          * avoid re-create an MPI datatype and re-flattening it. See such
          * adaptation in ADIOI_Calc_my_off_len()
          *
-         * Here we use MPI_DATATYPE_NULL to tell ADIO_File_set_view() that it
+         * Here we use MPI_DATATYPE_NULL to tell PNCIO_File_set_view() that it
          * is called from the intra-node aggregation subroutine, so the ADIO
          * subroutines can reuse offsets[] and lengths[].
          */
@@ -2116,11 +2116,11 @@ int ina_get(NC           *ncp,
 
         /* When using PnetCDF's internal ADIO driver, a call to
          * ncmpio_file_set_view() will pass offsets[] and lengths[] to
-         * ADIO_File_set_view() to be reused as flattened fileType. This can
+         * PNCIO_File_set_view() to be reused as flattened fileType. This can
          * avoid re-create an MPI datatype and re-flattening it. See such
          * adaptation in ADIOI_Calc_my_off_len()
          *
-         * Here we use MPI_DATATYPE_NULL to tell ADIO_File_set_view() that it
+         * Here we use MPI_DATATYPE_NULL to tell PNCIO_File_set_view() that it
          * is called from the intra-node aggregation subroutine, so the ADIO
          * subroutines can reuse offsets[] and lengths[].
          */

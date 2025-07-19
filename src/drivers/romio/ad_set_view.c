@@ -60,7 +60,7 @@ err_check:
     return ncmpii_error_mpi2nc(MPI_ERR_IO, err_msg);
 }
 
-/*----< ADIO_File_set_view() >-----------------------------------------------*/
+/*----< PNCIO_File_set_view() >-----------------------------------------------*/
 /* For PnetCDF, this subroutine can become an independent call, because PnetCDF
  * only use the followings.
  *   Argument etype is always MPI_BYTE.
@@ -70,7 +70,7 @@ err_check:
  * This subroutine can be an independent call, because there is no need to
  * check the consistency of any of the above arguments among all processes.
  */
-int ADIO_File_set_view(ADIO_File     fd,
+int PNCIO_File_set_view(ADIO_File     fd,
                        MPI_Offset    disp,
                        MPI_Datatype  filetype,
                        MPI_Aint      npairs,
@@ -108,7 +108,7 @@ int ADIO_File_set_view(ADIO_File     fd,
     }
 
     if ((disp < 0) && (disp != MPI_DISPLACEMENT_CURRENT))
-        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "ADIO_File_set_view, disp");
+        return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNCIO_File_set_view, disp");
 
     /* When info is MPI_INFO_NULL, ADIO_File_SetInfo() is an independent call.
      * Otherwise, it is collective, because it checks hint consistency.

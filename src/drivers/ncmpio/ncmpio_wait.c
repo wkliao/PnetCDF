@@ -69,7 +69,7 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
     fh = ncp->collective_fh;
 
     if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
+        err = PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         if (err != NC_NOERR && status == NC_NOERR) status = err;
     }
     else {
