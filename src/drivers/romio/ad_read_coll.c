@@ -165,7 +165,7 @@ double curT = MPI_Wtime();
                 off = (fd->flat_file->count) ? fd->flat_file->indices[0] : 0;
             else
                 off = fd->disp + offset;
-            ADIO_ReadContig(fd, buf, count, datatype, off, status, error_code);
+            PNCIO_ReadContig(fd, buf, count, datatype, off, status, error_code);
         } else
             ADIO_ReadStrided(fd, buf, count, datatype, offset, status, error_code);
 
@@ -661,7 +661,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
             ADIOI_Assert(size == (int) size);
             /* This should be only reached by I/O aggregators only */
 
-            ADIO_ReadContig(fd, read_buf + for_curr_iter, (int) size, MPI_BYTE,
+            PNCIO_ReadContig(fd, read_buf + for_curr_iter, (int) size, MPI_BYTE,
                             off, &read_status, error_code);
 
             if (*error_code != MPI_SUCCESS) {

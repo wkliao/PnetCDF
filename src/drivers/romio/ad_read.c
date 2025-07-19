@@ -17,8 +17,8 @@
 
 #include "adio.h"
 
-/*----< ADIO_ReadContig() >--------------------------------------------------*/
-int ADIO_ReadContig(ADIO_File     fd,
+/*----< PNCIO_ReadContig() >--------------------------------------------------*/
+int PNCIO_ReadContig(ADIO_File     fd,
                     void         *buf,
                     MPI_Aint      count,
                     MPI_Datatype  bufType,
@@ -117,7 +117,7 @@ int file_read(ADIO_File     fd,
 
     if (buftype_is_contig && filetype_is_contig) {
         MPI_Aint rcount = (MPI_Aint)count * bufType_size;
-        err = ADIO_ReadContig(fd, buf, rcount, MPI_BYTE, offset, status, NULL);
+        err = PNCIO_ReadContig(fd, buf, rcount, MPI_BYTE, offset, status, NULL);
     }
     else {
         ADIO_ReadStrided(fd, buf, count, bufType, offset, status, &err);
