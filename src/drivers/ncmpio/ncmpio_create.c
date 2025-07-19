@@ -193,7 +193,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
 #else
                 err = NC_NOERR;
                 if (ncp->fstype != ADIO_FSTYPE_MPIIO)
-                    err = ADIO_File_delete(filename);
+                    err = PNCIO_File_delete(filename);
                 else {
                     TRACE_IO(MPI_File_delete, (path, MPI_INFO_NULL));
                     if (mpireturn != MPI_SUCCESS) {
