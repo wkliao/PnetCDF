@@ -12,55 +12,55 @@
 #include <adio.h>
 
 /* prototypes of functions used for collective reads only. */
-static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
-                                datatype, int nprocs,
-                                int myrank, PNCIO_Access *others_req,
-                                MPI_Offset * offset_list,
+static void Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
+                          datatype, int nprocs,
+                          int myrank, PNCIO_Access *others_req,
+                          MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                                MPI_Offset *len_list,
+                          MPI_Offset *len_list,
 #else
-                                int *len_list,
+                          int *len_list,
 #endif
-                                MPI_Count contig_access_count,
-                                MPI_Offset
-                                min_st_offset, MPI_Offset fd_size,
-                                MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                MPI_Aint * buf_idx, MPI_Status * status, int *error_code);
+                          MPI_Count contig_access_count,
+                          MPI_Offset
+                          min_st_offset, MPI_Offset fd_size,
+                          MPI_Offset * fd_start, MPI_Offset * fd_end,
+                          MPI_Aint * buf_idx, MPI_Status * status, int *error_code);
 
-static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                                  * flat_buf, MPI_Offset * offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                                  MPI_Offset *len_list,
-#else
-                                  int *len_list,
-#endif
-                                  MPI_Count * send_size, MPI_Count * recv_size,
-                                  MPI_Count * count, MPI_Count * start_pos,
-                                  MPI_Count * partial_send,
-                                  MPI_Count * recd_from_proc, int nprocs,
-                                  int myrank, int
-                                  buftype_is_contig, MPI_Count contig_access_count,
-                                  MPI_Offset min_st_offset,
-                                  MPI_Offset fd_size,
-                                  MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                  PNCIO_Access * others_req,
-                                  int iter, MPI_Aint buftype_extent, MPI_Aint * buf_idx,
-                                  MPI_Aint * actual_recved_bytes);
-void ADIOI_Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                            * flat_buf, char **recv_buf,
-                            MPI_Offset * offset_list,
+static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
+                            * flat_buf, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                             MPI_Offset *len_list,
 #else
                             int *len_list,
 #endif
-                            MPI_Count * recv_size,
-                            MPI_Request * requests, MPI_Status * statuses,
+                            MPI_Count * send_size, MPI_Count * recv_size,
+                            MPI_Count * count, MPI_Count * start_pos,
+                            MPI_Count * partial_send,
                             MPI_Count * recd_from_proc, int nprocs,
-                            MPI_Count contig_access_count,
+                            int myrank, int
+                            buftype_is_contig, MPI_Count contig_access_count,
                             MPI_Offset min_st_offset,
-                            MPI_Offset fd_size, MPI_Offset * fd_start,
-                            MPI_Offset * fd_end, MPI_Aint buftype_extent);
+                            MPI_Offset fd_size,
+                            MPI_Offset * fd_start, MPI_Offset * fd_end,
+                            PNCIO_Access * others_req,
+                            int iter, MPI_Aint buftype_extent, MPI_Aint * buf_idx,
+                            MPI_Aint * actual_recved_bytes);
+static void Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
+                             * flat_buf, char **recv_buf,
+                             MPI_Offset * offset_list,
+#ifdef HAVE_MPI_LARGE_COUNT
+                             MPI_Offset *len_list,
+#else
+                             int *len_list,
+#endif
+                             MPI_Count * recv_size,
+                             MPI_Request * requests, MPI_Status * statuses,
+                             MPI_Count * recd_from_proc, int nprocs,
+                             MPI_Count contig_access_count,
+                             MPI_Offset min_st_offset,
+                             MPI_Offset fd_size, MPI_Offset * fd_start,
+                             MPI_Offset * fd_end, MPI_Aint buftype_extent);
 
 void PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf, MPI_Aint count,
                                MPI_Datatype datatype, MPI_Offset offset,
@@ -227,14 +227,13 @@ double curT = MPI_Wtime();
     if (fd->is_agg) fd->read_timing[1] += MPI_Wtime() - curT;
 #endif
 
-    /* read data in sizes of no more than ADIOI_Coll_bufsize,
+    /* read data in sizes of no more than collective buffer size,
      * communicate, and fill user buf.
      */
-    ADIOI_Read_and_exch(fd, buf, datatype, nprocs, myrank,
-                        others_req, offset_list,
-                        len_list, contig_access_count, min_st_offset,
-                        fd_size, fd_start, fd_end, buf_idx, status, error_code);
-
+    Read_and_exch(fd, buf, datatype, nprocs, myrank,
+                  others_req, offset_list,
+                  len_list, contig_access_count, min_st_offset,
+                  fd_size, fd_start, fd_end, buf_idx, status, error_code);
 
     /* free all memory allocated for collective I/O */
     PNCIO_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
@@ -477,19 +476,19 @@ assert(0);
     }
 }
 
-static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
-                                datatype, int nprocs,
-                                int myrank, PNCIO_Access *others_req,
-                                MPI_Offset *offset_list,
+static void Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
+                          datatype, int nprocs,
+                          int myrank, PNCIO_Access *others_req,
+                          MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                                MPI_Offset *len_list,
+                          MPI_Offset *len_list,
 #else
-                                int *len_list,
+                          int *len_list,
 #endif
-                                MPI_Count contig_access_count,
-                                MPI_Offset min_st_offset, MPI_Offset fd_size,
-                                MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                MPI_Aint * buf_idx, MPI_Status * status, int *error_code)
+                          MPI_Count contig_access_count,
+                          MPI_Offset min_st_offset, MPI_Offset fd_size,
+                          MPI_Offset * fd_start, MPI_Offset * fd_end,
+                          MPI_Aint * buf_idx, MPI_Status * status, int *error_code)
 {
 /* Read in sizes of no more than coll_bufsize, an info parameter.
    Send data to appropriate processes.
@@ -582,8 +581,8 @@ static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
      * Of size nprocs so that I can use MPI_Alltoall later. */
 
     recd_from_proc = recv_size + nprocs;
-    /* amount of data recd. so far from each proc. Used in
-     * ADIOI_Fill_user_buffer. initialized to 0 here. */
+    /* amount of data recd. so far from each proc. Used in Fill_user_buffer.
+     * initialized to 0 here. */
 
     start_pos = recd_from_proc + nprocs;
     /* used to store the starting value of curr_offlen_ptr[i] in
@@ -747,13 +746,13 @@ static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
         for_curr_iter = for_next_iter;
 
         MPI_Aint recved_bytes = 0;
-        ADIOI_R_Exchange_data(fd, buf, flat_buf, offset_list, len_list,
-                              send_size, recv_size, count,
-                              start_pos, partial_send, recd_from_proc, nprocs,
-                              myrank,
-                              buftype_is_contig, contig_access_count,
-                              min_st_offset, fd_size, fd_start, fd_end,
-                              others_req, m, buftype_extent, buf_idx, &recved_bytes);
+        R_Exchange_data(fd, buf, flat_buf, offset_list, len_list,
+                        send_size, recv_size, count,
+                        start_pos, partial_send, recd_from_proc, nprocs,
+                        myrank,
+                        buftype_is_contig, contig_access_count,
+                        min_st_offset, fd_size, fd_start, fd_end,
+                        others_req, m, buftype_extent, buf_idx, &recved_bytes);
         actual_recved_bytes += recved_bytes;
 
 
@@ -779,13 +778,13 @@ static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
     for (m = ntimes; m < max_ntimes; m++) {
         /* nothing to send, but check for recv. */
         MPI_Aint recved_bytes = 0;
-        ADIOI_R_Exchange_data(fd, buf, flat_buf, offset_list, len_list,
-                              send_size, recv_size, count,
-                              start_pos, partial_send, recd_from_proc, nprocs,
-                              myrank,
-                              buftype_is_contig, contig_access_count,
-                              min_st_offset, fd_size, fd_start, fd_end,
-                              others_req, m, buftype_extent, buf_idx, &recved_bytes);
+        R_Exchange_data(fd, buf, flat_buf, offset_list, len_list,
+                        send_size, recv_size, count,
+                        start_pos, partial_send, recd_from_proc, nprocs,
+                        myrank,
+                        buftype_is_contig, contig_access_count,
+                        min_st_offset, fd_size, fd_start, fd_end,
+                        others_req, m, buftype_extent, buf_idx, &recved_bytes);
         actual_recved_bytes += recved_bytes;
     }
 
@@ -798,21 +797,21 @@ static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
     NCI_Free(curr_offlen_ptr);
 }
 
-static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                                  * flat_buf, MPI_Offset * offset_list,
+static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
+                            *flat_buf, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                                  MPI_Offset *len_list,
+                            MPI_Offset *len_list,
 #else
-                                  int *len_list,
+                            int *len_list,
 #endif
-                                  MPI_Count * send_size, MPI_Count * recv_size,
-                                  MPI_Count * count, MPI_Count * start_pos,
-                                  MPI_Count * partial_send, MPI_Count * recd_from_proc, int nprocs,
-                                  int myrank, int buftype_is_contig, MPI_Count contig_access_count,
-                                  MPI_Offset min_st_offset, MPI_Offset fd_size,
-                                  MPI_Offset * fd_start, MPI_Offset * fd_end,
-                                  PNCIO_Access * others_req, int iter, MPI_Aint buftype_extent,
-                                  MPI_Aint * buf_idx, MPI_Aint * actual_recved_bytes)
+                            MPI_Count * send_size, MPI_Count * recv_size,
+                            MPI_Count * count, MPI_Count * start_pos,
+                            MPI_Count * partial_send, MPI_Count * recd_from_proc, int nprocs,
+                            int myrank, int buftype_is_contig, MPI_Count contig_access_count,
+                            MPI_Offset min_st_offset, MPI_Offset fd_size,
+                            MPI_Offset * fd_start, MPI_Offset * fd_end,
+                            PNCIO_Access * others_req, int iter, MPI_Aint buftype_extent,
+                            MPI_Aint * buf_idx, MPI_Aint * actual_recved_bytes)
 {
     int i, nprocs_recv, nprocs_send;
     char **recv_buf = NULL;
@@ -955,11 +954,11 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
 
         /* if noncontiguous, to the copies from the recv buffers */
         if (!buftype_is_contig)
-            ADIOI_Fill_user_buffer(fd, buf, flat_buf, recv_buf,
-                                   offset_list, len_list, recv_size,
-                                   requests, statuses, recd_from_proc,
-                                   nprocs, contig_access_count,
-                                   min_st_offset, fd_size, fd_start, fd_end, buftype_extent);
+            Fill_user_buffer(fd, buf, flat_buf, recv_buf,
+                             offset_list, len_list, recv_size,
+                             requests, statuses, recd_from_proc,
+                             nprocs, contig_access_count,
+                             min_st_offset, fd_size, fd_start, fd_end, buftype_extent);
     }
 
     /* wait on the sends */
@@ -984,7 +983,7 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
     }
 }
 
-#define ADIOI_BUF_INCR                                                  \
+#define BUF_INCR                                                  \
     {                                                                   \
         while (buf_incr) {                                              \
             size_in_buf = MPL_MIN(buf_incr, flat_buf_sz);               \
@@ -1005,7 +1004,7 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
     }
 
 
-#define ADIOI_BUF_COPY                                                  \
+#define BUF_COPY                                                  \
     {                                                                   \
         while (size) {                                                  \
             size_in_buf = MPL_MIN(size, flat_buf_sz);                   \
@@ -1029,24 +1028,24 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
             size -= size_in_buf;                                        \
             buf_incr -= size_in_buf;                                    \
         }                                                               \
-        ADIOI_BUF_INCR                                                  \
+        BUF_INCR                                                  \
     }
 
-void ADIOI_Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                            * flat_buf, char **recv_buf, MPI_Offset
-                            * offset_list,
+static void Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
+                             *flat_buf, char **recv_buf, MPI_Offset
+                             *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                            MPI_Offset *len_list,
+                             MPI_Offset *len_list,
 #else
-                            int *len_list,
+                             int *len_list,
 #endif
-                            MPI_Count * recv_size,
-                            MPI_Request * requests, MPI_Status * statuses,
-                            MPI_Count * recd_from_proc, int nprocs,
-                            MPI_Count contig_access_count,
-                            MPI_Offset min_st_offset,
-                            MPI_Offset fd_size, MPI_Offset * fd_start,
-                            MPI_Offset * fd_end, MPI_Aint buftype_extent)
+                             MPI_Count * recv_size,
+                             MPI_Request * requests, MPI_Status * statuses,
+                             MPI_Count * recd_from_proc, int nprocs,
+                             MPI_Count contig_access_count,
+                             MPI_Offset min_st_offset,
+                             MPI_Offset fd_size, MPI_Offset * fd_start,
+                             MPI_Offset * fd_end, MPI_Aint buftype_extent)
 {
 
 /* this function is only called if buftype is not contig */
@@ -1106,20 +1105,25 @@ void ADIOI_Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                         size = MPL_MIN(curr_from_proc[p] + len -
                                        done_from_proc[p], recv_size[p] - recv_buf_idx[p]);
                         buf_incr = done_from_proc[p] - curr_from_proc[p];
-                        ADIOI_BUF_INCR buf_incr = curr_from_proc[p] + len - done_from_proc[p];
+                        BUF_INCR
+                        buf_incr = curr_from_proc[p] + len - done_from_proc[p];
                         curr_from_proc[p] = done_from_proc[p] + size;
-                    ADIOI_BUF_COPY} else {
+                        BUF_COPY
+                    } else {
                         size = MPL_MIN(len, recv_size[p] - recv_buf_idx[p]);
                         buf_incr = len;
                         curr_from_proc[p] += size;
-                    ADIOI_BUF_COPY}
+                        BUF_COPY
+                    }
                 } else {
                     curr_from_proc[p] += len;
                     buf_incr = len;
-                ADIOI_BUF_INCR}
+                    BUF_INCR
+                }
             } else {
                 buf_incr = len;
-            ADIOI_BUF_INCR}
+                BUF_INCR
+            }
             off += len;
             rem_len -= len;
         }
