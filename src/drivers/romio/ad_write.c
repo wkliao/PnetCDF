@@ -139,7 +139,7 @@ int file_write(PNCIO_File    *fd,
         MPI_Aint wcount = (MPI_Aint)count * bufType_size;
         err = PNCIO_WriteContig(fd, buf, wcount, MPI_BYTE, offset, status, NULL);
     }
-    else if (fd->file_system == ADIO_LUSTRE)
+    else if (fd->file_system == PNCIO_LUSTRE)
         PNCIO_LUSTRE_WriteStrided(fd, buf, count, bufType, offset, status, &err);
     else
         PNCIO_GEN_WriteStrided(fd, buf, count, bufType, offset, status, &err);
@@ -199,10 +199,10 @@ int PNCIO_File_write_at_all(PNCIO_File    *fh,
     if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
         st = NC_EPERM;
 
-    if (fh->file_system == ADIO_LUSTRE)
+    if (fh->file_system == PNCIO_LUSTRE)
         PNCIO_LUSTRE_WriteStridedColl(fh, buf, count, bufType, offset, status,
                                       &err);
-    else if (fh->file_system == ADIO_UFS)
+    else if (fh->file_system == PNCIO_UFS)
         PNCIO_GEN_WriteStridedColl(fh, buf, count, bufType, offset, status,
                                    &err);
     else

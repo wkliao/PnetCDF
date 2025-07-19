@@ -59,7 +59,7 @@ void ncmpio_hint_extract(NC       *ncp,
     ncp->num_aggrs_per_node = 0;
 
     /* file system type */
-    ncp->fstype = ADIO_FSTYPE_CHECK;
+    ncp->fstype = PNCIO_FSTYPE_CHECK;
 
     if (info == MPI_INFO_NULL) return;
 
@@ -222,7 +222,7 @@ void ncmpio_hint_extract(NC       *ncp,
      */
     MPI_Info_get(info, "nc_use_mpi_io", MPI_MAX_INFO_VAL-1, value, &flag);
     if (flag && strcasecmp(value, "true") == 0)
-        ncp->fstype = ADIO_FSTYPE_MPIIO;
+        ncp->fstype = PNCIO_FSTYPE_MPIIO;
 }
 
 /*----< ncmpio_hint_set() >--------------------------------------------------*/
@@ -300,7 +300,7 @@ void ncmpio_hint_set(NC       *ncp,
     MPI_Info_set(info, "nc_hash_size_vattr", int_str);
 
     /* Whether using MPI-IO instead of PnetCDF's internal ADIO driver. */
-    if (ncp->fstype == ADIO_FSTYPE_MPIIO)
+    if (ncp->fstype == PNCIO_FSTYPE_MPIIO)
         MPI_Info_set(info, "nc_use_mpi_io", "true");
     else
         MPI_Info_set(info, "nc_use_mpi_io", "false");

@@ -361,7 +361,7 @@ hdr_fetch(bufferinfo *gbp) {
         /* fileview is already entire file visible and MPI_File_read_at does
            not change the file pointer */
         if (gbp->coll_mode == 1) { /* collective read */
-            if (gbp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (gbp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_read_at_all(gbp->adio_fh, gbp->offset, readBuf,
                                            readLen, MPI_BYTE, &mpistatus);
             }
@@ -376,7 +376,7 @@ hdr_fetch(bufferinfo *gbp) {
             }
         }
         else {
-            if (gbp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (gbp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_read_at(gbp->adio_fh, gbp->offset, readBuf,
                                        readLen, MPI_BYTE, &mpistatus);
             }
@@ -428,7 +428,7 @@ hdr_fetch(bufferinfo *gbp) {
         /* Other ranks participate the collective call with a zero-sized
          * request.
          */
-        if (gbp->fstype != ADIO_FSTYPE_MPIIO) {
+        if (gbp->fstype != PNCIO_FSTYPE_MPIIO) {
             if (gbp->adio_fh != NULL)
                 /* adio_fh is NULL for non-aggregators when intra-node
                  * aggregation is enabled.

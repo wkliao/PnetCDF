@@ -613,7 +613,7 @@ first_ost_id = -1;
     MPI_Comm_rank(fd->comm, &rank);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; fflush(stdout);}
+static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fd->filename); wkl++; fflush(stdout);}
 #endif
 
     amode = O_CREAT;
@@ -798,7 +798,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
 
 err_out:
     MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
-    if (fd->file_system == ADIO_LUSTRE &&
+    if (fd->file_system == PNCIO_LUSTRE &&
         (stripin_info[0] == -1 || stripin_info[3] == 0)) {
         fprintf(stderr, "%s line %d: failed to create Lustre file %s\n",
                 __FILE__, __LINE__, fd->filename);
@@ -808,7 +808,7 @@ err_out:
     fd->hints->striping_unit   = stripin_info[0];
     fd->hints->striping_factor = stripin_info[1];
     fd->hints->start_iodevice  = stripin_info[2];
-    if (fd->file_system == ADIO_LUSTRE) {
+    if (fd->file_system == PNCIO_LUSTRE) {
         fd->hints->fs_hints.lustre.num_osts = stripin_info[3];
         fd->hints->fs_hints.lustre.overstriping_ratio = stripin_info[1] / stripin_info[3];
     }
@@ -855,7 +855,7 @@ first_ost_id = -1;
     MPI_Comm_rank(fd->comm, &rank);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == ADIO_LUSTRE)?"ADIO_LUSTRE":"ADIO_UFS",fd->filename); wkl++; fflush(stdout);}
+static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fd->filename); wkl++; fflush(stdout);}
 #endif
 
     old_mask = umask(022);
