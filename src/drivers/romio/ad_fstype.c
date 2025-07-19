@@ -45,7 +45,7 @@
 #include "adio.h"
 
 /*
- ADIO_FileSysType_parentdir - determines a string pathname for the
+ PNCIO_FileSysType_parentdir - determines a string pathname for the
  parent directory of a given filename.
 
 Input Parameters:
@@ -72,12 +72,12 @@ Output Parameters:
 #endif
 #endif /* !(S_ISLNK) */
 
-/* ADIO_FileSysType_parentdir
+/* PNCIO_FileSysType_parentdir
  *
  * Returns pointer to string in dirnamep; that string is allocated with
  * strdup and must be free()'d.
  */
-static void ADIO_FileSysType_parentdir(const char *filename, char **dirnamep)
+static void PNCIO_FileSysType_parentdir(const char *filename, char **dirnamep)
 {
     int err;
     char *dir = NULL, *slash;
@@ -190,7 +190,7 @@ static int romio_statfs(const char *filename, int64_t * file_id)
 /* Check if file system type from file name, using a system-dependent function
  * call.
  */
-int ADIO_FileSysType(const char *filename)
+int PNCIO_FileSysType(const char *filename)
 {
 
     int err, retry_cnt;
@@ -222,11 +222,11 @@ int ADIO_FileSysType(const char *filename)
          * 1) no directory entry for "filename"
          * 2) "filename" is a dangling symbolic link
          *
-         * ADIO_FileSysType_parentdir tries to deal with both cases.
+         * PNCIO_FileSysType_parentdir tries to deal with both cases.
          */
         if (errno == ENOENT) {
             char *dir;
-            ADIO_FileSysType_parentdir(filename, &dir);
+            PNCIO_FileSysType_parentdir(filename, &dir);
             err = romio_statfs(dir, &file_id);
             ADIOI_Free(dir);
         } else

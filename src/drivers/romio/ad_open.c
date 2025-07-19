@@ -223,7 +223,7 @@ int ADIO_File_open(MPI_Comm    comm,
                    MPI_Info    info,
                    ADIO_File   fd)
 {
-    /* Before reaching to this subroutine, ADIO_FileSysType() should have been
+    /* Before reaching to this subroutine, PNCIO_FileSysType() should have been
      * called to check the file system type.
      */
     char value[MPI_MAX_INFO_VAL + 1], int_str[16];

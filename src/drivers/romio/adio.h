@@ -240,7 +240,7 @@ typedef struct {
 extern int ADIOI_Flattened_type_keyval;
 
 /*---- APIs -----------------------------------------------------------------*/
-int ADIO_FileSysType(const char *filename);
+int PNCIO_FileSysType(const char *filename);
 int ADIO_File_open(MPI_Comm comm, const char *filename, int amode,
                 MPI_Info info, ADIO_File fh);
 int ADIO_File_close(ADIO_File *fh);
