@@ -257,8 +257,8 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
 
         /* buffer size for data sieving in independent reads */
         MPI_Info_set(info, "ind_rd_buffer_size",
-                       ADIOI_IND_RD_BUFFER_SIZE_DFLT);
-        fd->hints->ind_rd_buffer_size = atoi(ADIOI_IND_RD_BUFFER_SIZE_DFLT);
+                       PNCIO_IND_RD_BUFFER_SIZE_DFLT);
+        fd->hints->ind_rd_buffer_size = atoi(PNCIO_IND_RD_BUFFER_SIZE_DFLT);
 
         /* buffer size for data sieving in independent writes */
         MPI_Info_set(info, "ind_wr_buffer_size",
