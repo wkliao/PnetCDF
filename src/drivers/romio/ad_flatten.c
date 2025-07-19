@@ -503,7 +503,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
                 int dims = ints[2];
                 MPI_Datatype dtype;
 
-                ADIO_Type_create_darray(ints[0],        /* size */
+                PNCIO_Type_create_darray(ints[0],        /* size */
                                         ints[1],        /* rank */
                                         dims, &ints[3], /* gsizes */
                                         &ints[dims + 3],        /* distribs */
@@ -1162,7 +1162,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
                 int dims = ints[2];
                 MPI_Datatype dtype;
 
-                ADIO_Type_create_darray(ints[0],        /* size */
+                PNCIO_Type_create_darray(ints[0],        /* size */
                                         ints[1],        /* rank */
                                         dims, &ints[3], /* gsizes */
                                         &ints[dims + 3],        /* distribs */

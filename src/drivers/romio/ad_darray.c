@@ -18,7 +18,7 @@ static int MPIOI_Type_cyclic(const int *array_of_gsizes, int dim, int ndims, int
                              MPI_Datatype type_old, MPI_Datatype * type_new, MPI_Aint * st_offset);
 
 
-int ADIO_Type_create_darray(int size, int rank, int ndims,
+int PNCIO_Type_create_darray(int size, int rank, int ndims,
                             const int *array_of_gsizes, const int *array_of_distribs,
                             const int *array_of_dargs, const int *array_of_psizes,
                             int order, MPI_Datatype oldtype, MPI_Datatype * newtype)
