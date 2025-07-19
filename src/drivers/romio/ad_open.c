@@ -100,7 +100,7 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
     return 0;
 }
 
-/*----< ADIOI_GEN_create() >-------------------------------------------------*/
+/*----< GEN_create() >-------------------------------------------------------*/
 /*   1. root creates the file
  *   2. root sets and obtains striping info
  *   3. root broadcasts striping info
@@ -108,8 +108,8 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
  *   5. non-root processes opens the fie
  */
 static int
-ADIOI_GEN_create(PNCIO_File *fd,
-                 int       access_mode)
+GEN_create(PNCIO_File *fd,
+           int       access_mode)
 {
     int err=NC_NOERR, rank, amode, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
@@ -163,12 +163,12 @@ err_out:
     return err;
 }
 
-/*----< ADIOI_GEN_open() >---------------------------------------------------*/
+/*----< GEN_open() >---------------------------------------------------------*/
 /*   1. all processes open the file.
  *   2. root obtains striping info and broadcasts to all others
  */
 static int
-ADIOI_GEN_open(PNCIO_File *fd)
+GEN_open(PNCIO_File *fd)
 {
     int err=NC_NOERR, rank, perm, old_mask;
     int stripin_info[4] = {1048576, -1, -1, -1};
@@ -266,9 +266,9 @@ int PNCIO_File_open(MPI_Comm    comm,
     }
     else {
         if (amode & MPI_MODE_CREATE)
-            err = ADIOI_GEN_create(fd, amode);
+            err = GEN_create(fd, amode);
         else
-            err = ADIOI_GEN_open(fd);
+            err = GEN_open(fd);
     }
     if (err != NC_NOERR) goto err_out;
 
