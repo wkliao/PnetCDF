@@ -32,7 +32,7 @@ int check_type(PNCIO_Flatlist_node *flat_type,
 
     /* MPI standard requires the displacements of etype and filetype be
      * non-negative */
-    if (flat_type->flag & ADIOI_TYPE_NEGATIVE) {
+    if (flat_type->flag & PNCIO_TYPE_NEGATIVE) {
         sprintf(err_msg, "displacements of %s must be non-negative", type_kind);
         goto err_check;
     }
