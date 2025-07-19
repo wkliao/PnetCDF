@@ -645,7 +645,7 @@ ncmpio_file_set_view(const NC     *ncp,
 
 // printf("%s line %d: filetype = %s\n",__func__,__LINE__,(filetype == MPI_DATATYPE_NULL)?"NULL":"NOT NULL");
 
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO && filetype == MPI_DATATYPE_NULL) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO && filetype == MPI_DATATYPE_NULL) {
         /* When PnetCDF's internal ADIO driver is used and this is called from
          * intra_node_aggregation() which passes MPI_DATATYPE_NULL in argument
          * filetype to help this subroutine to tell this is called from
@@ -681,7 +681,7 @@ ncmpio_file_set_view(const NC     *ncp,
 
     if (filetype == MPI_BYTE) {
         /* filetype is a contiguous space, make the whole file visible */
-        if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
             return PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         }
         else {
@@ -747,7 +747,7 @@ ncmpio_file_set_view(const NC     *ncp,
 #ifndef HAVE_MPI_LARGE_COUNT
 err_out:
 #endif
-        if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
             err = PNCIO_File_set_view(ncp->adio_fh, 0, root_filetype, 0, NULL, NULL);
             if (status == NC_NOERR) status = err;
         }
@@ -766,7 +766,7 @@ err_out:
         *disp = ncp->begin_var;
     }
     else {
-        if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
             err = PNCIO_File_set_view(ncp->adio_fh, *disp, filetype, 0, NULL, NULL);
             if (status == NC_NOERR) status = err;
         }

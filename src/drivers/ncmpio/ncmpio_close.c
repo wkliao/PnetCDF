@@ -64,7 +64,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
 
     assert(ncp != NULL); /* this should never occur */
 
-    if (ncp->fstype == ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
         if (ncp->independent_fh != MPI_FILE_NULL) {
             TRACE_IO(MPI_File_close, (&ncp->independent_fh));
             if (mpireturn != MPI_SUCCESS)
@@ -94,7 +94,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
         /* called from ncmpi_abort, if the file is being created and is still
          * in define mode, the file is deleted */
         if (ncp->rank == 0) {
-            if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_delete(ncp->path);
                 if (err != NC_NOERR) return err;
             }

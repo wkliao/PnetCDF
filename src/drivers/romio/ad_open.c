@@ -256,9 +256,9 @@ int PNCIO_File_open(MPI_Comm    comm,
     }
 #endif
 
-    ADIOI_Assert(fd->file_system != ADIO_FSTYPE_MPIIO);
+    ADIOI_Assert(fd->file_system != PNCIO_FSTYPE_MPIIO);
 
-    if (fd->file_system == ADIO_LUSTRE) {
+    if (fd->file_system == PNCIO_LUSTRE) {
         if (amode & MPI_MODE_CREATE)
             err = PNCIO_Lustre_create(fd, amode);
         else

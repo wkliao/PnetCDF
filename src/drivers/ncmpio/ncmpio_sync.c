@@ -36,7 +36,7 @@ ncmpio_file_sync(NC *ncp) {
     char *mpi_name;
     int mpireturn;
 
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         if (ncp->adio_fh == NULL)
             return NC_NOERR;
         return PNCIO_File_sync(ncp->adio_fh);
@@ -112,7 +112,7 @@ ncmpio_write_numrecs(NC         *ncp,
      * processes participate the collective write call with zero-size requests.
      */
     if (ncp->rank > 0 && fIsSet(ncp->flags, NC_HCOLL)) {
-        if (ncp->fstype != ADIO_FSTYPE_MPIIO)
+        if (ncp->fstype != PNCIO_FSTYPE_MPIIO)
             PNCIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
         else
             TRACE_IO(MPI_File_write_at_all, (fh, 0, NULL, 0, MPI_BYTE, &mpistatus));
@@ -155,7 +155,7 @@ ncmpio_write_numrecs(NC         *ncp,
 
         /* root's file view always includes the entire file header */
         if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1) {
-            if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_write_at_all(ncp->adio_fh, NC_NUMRECS_OFFSET, (void*)pos,
                                             len, MPI_BYTE, &mpistatus);
                 if (err != NC_NOERR) return err;
@@ -170,7 +170,7 @@ ncmpio_write_numrecs(NC         *ncp,
             }
         }
         else {
-            if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_write_at(ncp->adio_fh, NC_NUMRECS_OFFSET, (void*)pos,
                                         len, MPI_BYTE, &mpistatus);
                 if (err != NC_NOERR) return err;

@@ -108,7 +108,7 @@ ncmpio_redef(void *ncdp)
     fSet(ncp->flags, NC_MODE_DEF);
 
     /* must reset fileview as header extent may later change in enddef() */
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         /* When intra-node aggregation is enabled, non-aggregators' adio_fh is
          * NULL.
          */
@@ -169,7 +169,7 @@ ncmpio_begin_indep_data(void *ncdp)
     /* raise independent flag */
     fSet(ncp->flags, NC_MODE_INDEP);
 
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         /* When using PnetCDF's ADIO driver, there are 2 scenarios:
          * 1. When intra-node aggregation (INA) is enabled, at the end of
          *    ncmpi_create/ncmpi_open, non-aggregators' adio_fh are NULL. Thus

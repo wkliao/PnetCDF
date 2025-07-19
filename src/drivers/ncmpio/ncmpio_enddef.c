@@ -240,7 +240,7 @@ move_file_block(NC         *ncp,
 
         /* read from file at off_from for amount of chunk_size */
         err = NC_NOERR;
-        if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
             if (do_coll)
                 err = PNCIO_File_read_at_all(ncp->adio_fh, off_from, buf,
                                             chunk_size, MPI_BYTE, &mpistatus);
@@ -309,7 +309,7 @@ move_file_block(NC         *ncp,
          * call to MPI_Get_count() above returns the actual amount of data read
          * from the file, i.e. get_count.
          */
-        if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
             err = NC_NOERR;
             if (do_coll)
                 err = PNCIO_File_write_at_all(ncp->adio_fh, off_to, buf,
@@ -740,7 +740,7 @@ write_NC(NC *ncp)
         for (i=0; i<ntimes; i++) {
             int bufCount = (int) MIN(remain, NC_MAX_INT);
             if (is_coll) {
-                if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+                if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                     err = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf_ptr, bufCount,
                                                 MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
@@ -758,7 +758,7 @@ write_NC(NC *ncp)
                 }
             }
             else {
-                if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+                if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                     err = PNCIO_File_write_at(ncp->adio_fh, offset, buf_ptr, bufCount,
                                             MPI_BYTE, &mpistatus);
                     if (err != NC_NOERR && status == NC_NOERR) status = err;
@@ -804,7 +804,7 @@ write_NC(NC *ncp)
     else if (is_coll) {
         /* other processes participate the collective call */
         for (i=0; i<ntimes; i++) {
-            if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
                                             &mpistatus);
                 if (err != NC_NOERR && status == NC_NOERR) status = err;

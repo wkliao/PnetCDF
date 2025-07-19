@@ -421,7 +421,7 @@ struct NC {
     MPI_File      collective_fh;  /* file handle for collective mode */
     MPI_File      independent_fh; /* file handle for independent mode */
     PNCIO_File    *adio_fh;        /* romio file handler */
-    int           fstype;         /* file system type: ADIO_LUSTRE, ADIO_UFS */
+    int           fstype;         /* file system type: PNCIO_LUSTRE, PNCIO_UFS */
 
     NC_dimarray   dims;     /* dimensions defined */
     NC_attrarray  attrs;    /* global attributes defined */
@@ -508,7 +508,7 @@ typedef struct bufferinfo {
     MPI_Comm    comm;
     MPI_File    collective_fh;
     PNCIO_File  *adio_fh;  /* romio file handler */
-    int         fstype;   /* file system type: ADIO_LUSTRE, ADIO_UFS */
+    int         fstype;   /* file system type: PNCIO_LUSTRE, PNCIO_UFS */
     MPI_Offset  get_size; /* amount of file read n bytes so far */
     MPI_Offset  offset;   /* current read/write offset in the file */
     int         chunk;    /* chunk size for reading the header */

@@ -82,15 +82,15 @@ ncmpio_open(MPI_Comm     comm,
      */
     ncmpio_hint_extract(ncp, user_info);
 
-    if (ncp->fstype == ADIO_FSTYPE_CHECK)
+    if (ncp->fstype == PNCIO_FSTYPE_CHECK)
         /* Check file system type. If the given file does not exist, check its
          * folder. Currently PnetCDF's ADIO drivers support Lustre
-         * (ADIO_LUSTRE) and Unix File System (ADIO_UFS).
+         * (PNCIO_LUSTRE) and Unix File System (PNCIO_UFS).
          */
         ncp->fstype = PNCIO_FileSysType(path);
 
 #ifdef WKL_DEBUG
-if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == ADIO_FSTYPE_MPIIO)? "ADIO_FSTYPE_MPIIO" : (ncp->fstype == ADIO_LUSTRE) ? "ADIO_LUSTRE" : "ADIO_UFS");
+if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == PNCIO_FSTYPE_MPIIO)? "PNCIO_FSTYPE_MPIIO" : (ncp->fstype == PNCIO_LUSTRE) ? "PNCIO_LUSTRE" : "PNCIO_UFS");
 #endif
 
     /* Remove the file system type prefix name if there is any. For example,
@@ -148,7 +148,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
      * PnetCDF collective put and get operations.
      */
     ncp->node_ids = NULL;
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO || ncp->num_aggrs_per_node != 0) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO || ncp->num_aggrs_per_node != 0) {
         err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
         if (err != NC_NOERR) return err;
 
@@ -201,7 +201,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
     }
 
     /* open file collectively ---------------------------------------------- */
-    if (ncp->fstype == ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
         TRACE_IO(MPI_File_open)(comm, path, mpiomode, user_info, &fh);
         if (mpireturn != MPI_SUCCESS)
             return ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
@@ -216,7 +216,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
             return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
     }
     else {
-        /* When ncp->fstype != ADIO_FSTYPE_MPIIO, use PnetCDF's ADIO driver */
+        /* When ncp->fstype != PNCIO_FSTYPE_MPIIO, use PnetCDF's ADIO driver */
         ncp->adio_fh = (PNCIO_File*) NCI_Calloc(1,sizeof(PNCIO_File));
         ncp->adio_fh->file_system = ncp->fstype;
         ncp->adio_fh->num_nodes   = ncp->num_nodes;

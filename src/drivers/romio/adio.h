@@ -55,10 +55,10 @@
 #endif
 
 
-#define ADIO_UFS           152    /* Unix file system */
-#define ADIO_LUSTRE        163    /* Lustre */
-#define ADIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
-#define ADIO_FSTYPE_CHECK  0      /* Use PnetCDF ADIO drivers */
+#define PNCIO_UFS           152    /* Unix file system */
+#define PNCIO_LUSTRE        163    /* Lustre */
+#define PNCIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
+#define PNCIO_FSTYPE_CHECK  0      /* Use PnetCDF ADIO drivers */
 
 #define ADIOI_Strdup NCI_Strdup
 #define ADIOI_Malloc NCI_Malloc

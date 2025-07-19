@@ -199,14 +199,14 @@ int PNCIO_FileSysType(const char *filename)
     char *colon = strchr(filename, ':');
     if (colon != NULL) { /* there is a prefix end with : */
         if (!strncmp(filename, "lustre", 6))
-            return ADIO_LUSTRE;
+            return PNCIO_LUSTRE;
         else if (!strncmp(filename, "ufs", 3))
-            return ADIO_UFS;
+            return PNCIO_UFS;
         else
             return 0;
     }
 #ifdef MIMIC_LUSTRE
-    return ADIO_LUSTRE;
+    return PNCIO_LUSTRE;
 #endif
 
 /* NFS can get stuck and end up returning ESTALE "forever" */
@@ -234,8 +234,8 @@ int PNCIO_FileSysType(const char *filename)
     }
 
     if (file_id == LL_SUPER_MAGIC)
-        return ADIO_LUSTRE;
+        return PNCIO_LUSTRE;
     else
-        return ADIO_UFS; /* UFS support if we don't know what else to use */
+        return PNCIO_UFS; /* UFS support if we don't know what else to use */
 }
 

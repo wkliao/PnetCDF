@@ -1640,7 +1640,7 @@ int ina_put(NC           *ncp,
         /* update number of pairs, now all off-len pairs are not overlapped */
         npairs = i+1;
 
-        if (ncp->fstype == ADIO_FSTYPE_MPIIO) {
+        if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
 
             if (npairs == 1) {
                 /* Need not create fileType if writing to a contiguous space,
@@ -1703,7 +1703,7 @@ int ina_put(NC           *ncp,
     fh = ncp->collective_fh;
 
     /* Preserve fd->filetype previously used */
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         disp = 0;
         saved_fileType = ncp->adio_fh->filetype;
 
@@ -1729,7 +1729,7 @@ int ina_put(NC           *ncp,
         if (status == NC_NOERR) status = err;
         buf_count = 0;
     }
-    if (ncp->fstype == ADIO_FSTYPE_MPIIO && fileType != MPI_BYTE)
+    if (ncp->fstype == PNCIO_FSTYPE_MPIIO && fileType != MPI_BYTE)
         MPI_Type_free(&fileType);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -1751,7 +1751,7 @@ int ina_put(NC           *ncp,
     ncp->maxmem_put[5] = MAX(ncp->maxmem_put[5], mem_max);
 #endif
     /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         NCI_Free(ncp->adio_fh->flat_file);
         ncp->adio_fh->flat_file = NULL;
 
@@ -2059,7 +2059,7 @@ int ina_get(NC           *ncp,
         ncp->maxmem_get[3] = MAX(ncp->maxmem_get[3], mem_max);
 #endif
 
-        if (ncp->fstype == ADIO_FSTYPE_MPIIO) {
+        if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
             /* When using MPI-IO, we need to create a fileType to set the file
              * view before read. The fileType is constructed based on the
              * offset-length pairs.
@@ -2110,7 +2110,7 @@ int ina_get(NC           *ncp,
     fh = ncp->collective_fh;
 
     /* Save fd->filetype previously used and will restore it later. */
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         disp = 0;
         saved_fileType = ncp->adio_fh->filetype;
 
@@ -2136,7 +2136,7 @@ int ina_get(NC           *ncp,
         if (status == NC_NOERR) status = err;
         buf_count = 0;
     }
-    if (ncp->fstype == ADIO_FSTYPE_MPIIO && fileType != MPI_BYTE)
+    if (ncp->fstype == PNCIO_FSTYPE_MPIIO && fileType != MPI_BYTE)
         MPI_Type_free(&fileType);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -2158,7 +2158,7 @@ int ina_get(NC           *ncp,
 #endif
 
     /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
-    if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         NCI_Free(ncp->adio_fh->flat_file);
         ncp->adio_fh->flat_file = NULL;
 

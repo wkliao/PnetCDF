@@ -143,7 +143,7 @@ ncmpio_read_write(NC           *ncp,
 
         err = NC_NOERR;
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
-            if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_read_at_all(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                            &mpistatus);
                 if (status == NC_NOERR) status = err;
@@ -164,7 +164,7 @@ ncmpio_read_write(NC           *ncp,
                 }
             }
         } else {
-            if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_read_at(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                        &mpistatus);
                 if (status == NC_NOERR) status = err;
@@ -307,7 +307,7 @@ ncmpio_read_write(NC           *ncp,
 
         err = NC_NOERR;
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL) {
-            if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_write_at_all(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                             &mpistatus);
                 if (status == NC_NOERR) status = err;
@@ -328,7 +328,7 @@ ncmpio_read_write(NC           *ncp,
                 }
             }
         } else {
-            if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
+            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
                 err = PNCIO_File_write_at(ncp->adio_fh, offset, xbuf, xlen, xbuf_type,
                                         &mpistatus);
                 if (status == NC_NOERR) status = err;
