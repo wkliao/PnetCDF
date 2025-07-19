@@ -44,9 +44,9 @@
 
 #if defined(F_SETLKW64)
 #define ADIOI_UNLOCK(fd, offset, whence, len) \
-        ADIOI_GEN_SetLock64(fd, F_SETLK, F_UNLCK, offset, whence, len)
+        PNCIO_GEN_SetLock64(fd, F_SETLK, F_UNLCK, offset, whence, len)
 #define ADIOI_WRITE_LOCK(fd, offset, whence, len) \
-        ADIOI_GEN_SetLock64(fd, F_SETLKW, F_WRLCK, offset, whence, len)
+        PNCIO_GEN_SetLock64(fd, F_SETLKW, F_WRLCK, offset, whence, len)
 #else
 #define ADIOI_UNLOCK(fd, offset, whence, len) \
         ADIOI_GEN_SetLock(fd, F_SETLK, F_UNLCK, offset, whence, len)
@@ -374,7 +374,7 @@ int PNCIO_Type_get_combiner(MPI_Datatype datatype, int *combiner);
 
 int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
-int ADIOI_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset,
+int PNCIO_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
 
 void ADIOI_Heap_merge(ADIOI_Access *others_req, MPI_Count *count,
