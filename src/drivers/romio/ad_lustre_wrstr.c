@@ -126,7 +126,7 @@
         }                                                               \
     }
 
-void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
+void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                                MPI_Datatype datatype, MPI_Offset offset,
                                ADIO_Status * status, int *error_code)
 {
@@ -147,7 +147,7 @@ void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
     ADIO_Status status1;
     MPI_Offset new_bwr_size, new_fwr_size, st_fwr_size, fwr_size = 0, bwr_size, req_len;
     int stripe_size;
-    static char myname[] = "ADIOI_LUSTRE_WriteStrided";
+    static char myname[] = "PNCIO_LUSTRE_WriteStrided";
 
     if (fd->hints->ds_write == ADIOI_HINT_DISABLE) {
         /* if user has disabled data sieving on writes, use naive

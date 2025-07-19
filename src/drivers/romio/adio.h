@@ -277,7 +277,7 @@ ADIOI_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype);
 int PNCIO_Lustre_create(ADIO_File fd, int access_mode);
 int PNCIO_Lustre_open(ADIO_File fd);
 
-void ADIOI_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
+void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                 MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 

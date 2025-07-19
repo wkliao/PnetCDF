@@ -864,11 +864,11 @@ double curT = MPI_Wtime();
             if (free_flat_fview && flat_fview.count > 0)
                 ADIOI_Free(flat_fview.off);
 #ifdef WKL_DEBUG
-            printf("%s %d: SWITCH to ADIOI_LUSTRE_WriteStrided !!!\n",
+            printf("%s %d: SWITCH to PNCIO_LUSTRE_WriteStrided !!!\n",
                    __func__,__LINE__);
 #endif
 
-            ADIOI_LUSTRE_WriteStrided(fd, buf, count, buftype, offset, status,
+            PNCIO_LUSTRE_WriteStrided(fd, buf, count, buftype, offset, status,
                                       error_code);
         }
 
