@@ -17,7 +17,7 @@
                 PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,  \
                                  writebuf_off, &status1, error_code);   \
                 if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
-                    ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
+                    PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
                 if (*error_code != MPI_SUCCESS) {                       \
                     *error_code = PNCIO_Err_create_code(*error_code,    \
                         MPIR_ERR_RECOVERABLE, myname, __LINE__,         \
@@ -49,7 +49,7 @@
             PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
                              writebuf_off, &status1, error_code);       \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
-                ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
+                PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = PNCIO_Err_create_code(*error_code,        \
                     MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
@@ -235,7 +235,7 @@ void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                          &status1, error_code);
 
         if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
-            ADIOI_UNLOCK(fd, start_off, SEEK_SET, bufsize);
+            PNCIO_UNLOCK(fd, start_off, SEEK_SET, bufsize);
         if (*error_code != MPI_SUCCESS) {
             ADIOI_Free(writebuf);
             return;
@@ -288,7 +288,7 @@ void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
             PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
                              writebuf_off, &status1, error_code);
             if (fd->hints->ds_write != ADIOI_HINT_DISABLE)
-                ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
+                PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
             MPI_Status_set_elements_x(status, datatype, count);
@@ -444,12 +444,12 @@ void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
             PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
                              writebuf_off, &status1, error_code);
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE)
-                ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
+                PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
             if (*error_code != MPI_SUCCESS)
                 return;
         }
         if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
-            ADIOI_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         ADIOI_Free(writebuf);
     }

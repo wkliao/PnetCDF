@@ -43,12 +43,12 @@
 #define ADIO_Feature(a, b) ((b == ADIO_LOCKS) ? 1 : 0)
 
 #if defined(F_SETLKW64)
-#define ADIOI_UNLOCK(fd, offset, whence, len) \
+#define PNCIO_UNLOCK(fd, offset, whence, len) \
         PNCIO_GEN_SetLock64(fd, F_SETLK, F_UNLCK, offset, whence, len)
 #define ADIOI_WRITE_LOCK(fd, offset, whence, len) \
         PNCIO_GEN_SetLock64(fd, F_SETLKW, F_WRLCK, offset, whence, len)
 #else
-#define ADIOI_UNLOCK(fd, offset, whence, len) \
+#define PNCIO_UNLOCK(fd, offset, whence, len) \
         PNCIO_GEN_SetLock(fd, F_SETLK, F_UNLCK, offset, whence, len)
 #define ADIOI_WRITE_LOCK(fd, offset, whence, len) \
         PNCIO_GEN_SetLock(fd, F_SETLKW, F_WRLCK, offset, whence, len)
