@@ -102,7 +102,7 @@
 #define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > PNCIO_DS_WR_NAGGRS_LB || (npairs) > PNCIO_DS_WR_NPAIRS_LB)
 
 #define PNCIO_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
-#define ADIOI_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
+#define PNCIO_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
 #define ADIOI_TYPE_NEGATIVE 0x00000004  /* if one of displacements is negative */
 
 enum {

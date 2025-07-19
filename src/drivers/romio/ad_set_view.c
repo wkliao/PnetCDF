@@ -49,7 +49,7 @@ int check_type(PNCIO_Flatlist_node *flat_type,
      * filetype is permitted to contain overlapping regions.
      */
     if (((access_mode & MPI_MODE_WRONLY) || (access_mode & MPI_MODE_RDWR)) &&
-        (flat_type->flag & ADIOI_TYPE_OVERLAP)) {
+        (flat_type->flag & PNCIO_TYPE_OVERLAP)) {
         sprintf(err_msg, "%s is not permitted to contain overlapping regions", type_kind);
         goto err_check;
     }
