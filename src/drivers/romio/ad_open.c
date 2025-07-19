@@ -239,7 +239,7 @@ int PNCIO_File_open(MPI_Comm    comm,
     fd->io_buf      = NULL; /* collective buffer used by aggregators only */
 
     /* create and initialize info object */
-    fd->hints = (ADIOI_Hints*) ADIOI_Calloc(1, sizeof(ADIOI_Hints));
+    fd->hints = (PNCIO_Hints*) ADIOI_Calloc(1, sizeof(PNCIO_Hints));
     if (info == MPI_INFO_NULL)
         MPI_Info_create(&fd->info);
     else
