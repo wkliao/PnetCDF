@@ -110,10 +110,10 @@ int PNCIO_File_set_view(ADIO_File     fd,
     if ((disp < 0) && (disp != MPI_DISPLACEMENT_CURRENT))
         return ncmpii_error_mpi2nc(MPI_ERR_ARG, "PNCIO_File_set_view, disp");
 
-    /* When info is MPI_INFO_NULL, ADIO_File_SetInfo() is an independent call.
+    /* When info is MPI_INFO_NULL, PNCIO_File_SetInfo() is an independent call.
      * Otherwise, it is collective, because it checks hint consistency.
      * PnetCDF always uses MPI_INFO_NULL when setting file view.
-    err = ADIO_File_SetInfo(fd, info);
+    err = PNCIO_File_SetInfo(fd, info);
     if (err != NC_NOERR)
         return err;
      */

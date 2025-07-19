@@ -637,7 +637,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
     int set_user_layout = 0, overstriping_ratio;
     int str_factor, str_unit, start_iodev;
 
-    /* In a call to ADIO_File_SetInfo() earlier, hints have been validated to
+    /* In a call to PNCIO_File_SetInfo() earlier, hints have been validated to
      * be consistent among all processes.
      */
 
