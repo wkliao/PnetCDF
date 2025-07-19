@@ -357,7 +357,7 @@ int ADIOI_Type_create_hindexed_x(MPI_Count count,
                 const MPI_Count array_of_displacements[],
                 MPI_Datatype oldtype, MPI_Datatype *newtype);
 
-int ADIOI_Calc_aggregator(ADIO_File fd, MPI_Offset off, MPI_Offset min_off,
+int PNCIO_Calc_aggregator(ADIO_File fd, MPI_Offset off, MPI_Offset min_off,
                 MPI_Offset *len, MPI_Offset fd_size, MPI_Offset *fd_start,
                 MPI_Offset *fd_end);
 

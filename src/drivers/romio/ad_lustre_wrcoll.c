@@ -2439,7 +2439,7 @@ int num_memcpy=0;
         while (rem_len != 0) {
             len = rem_len;
             q = ADIOI_LUSTRE_Calc_aggregator(fd, off, &len);
-            /* NOTE: len will be modified by ADIOI_Calc_aggregator() to be no
+            /* NOTE: len will be modified by PNCIO_Calc_aggregator() to be no
              * more than a file stripe unit size that aggregator "q" is
              * responsible for. Note q is not the MPI rank ID, It is the array
              * index to fd->hints->ranklist[].
