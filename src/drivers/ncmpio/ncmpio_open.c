@@ -87,7 +87,7 @@ ncmpio_open(MPI_Comm     comm,
          * folder. Currently PnetCDF's ADIO drivers support Lustre
          * (ADIO_LUSTRE) and Unix File System (ADIO_UFS).
          */
-        ncp->fstype = ADIO_FileSysType(path);
+        ncp->fstype = PNCIO_FileSysType(path);
 
 #ifdef WKL_DEBUG
 if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == ADIO_FSTYPE_MPIIO)? "ADIO_FSTYPE_MPIIO" : (ncp->fstype == ADIO_LUSTRE) ? "ADIO_LUSTRE" : "ADIO_UFS");
