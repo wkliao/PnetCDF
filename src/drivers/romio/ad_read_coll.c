@@ -62,7 +62,7 @@ void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, ADIOI_Flatlist_node
                             MPI_Offset fd_size, MPI_Offset * fd_start,
                             MPI_Offset * fd_end, MPI_Aint buftype_extent);
 
-void ADIOI_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
+void PNCIO_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
                                MPI_Datatype datatype, MPI_Offset offset,
                                ADIO_Status * status, int *error_code)
 {
