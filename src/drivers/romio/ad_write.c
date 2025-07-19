@@ -22,13 +22,13 @@ int first_ost_id;
 #endif
 
 /*----< PNCIO_WriteContig() >-------------------------------------------------*/
-int PNCIO_WriteContig(ADIO_File     fd,
-                     const void   *buf,
-                     MPI_Aint      count,
-                     MPI_Datatype  bufType,
-                     MPI_Offset   offset,
-                     ADIO_Status  *status,
-                     int          *error_code)
+int PNCIO_WriteContig(PNCIO_File    *fd,
+                      const void   *buf,
+                      MPI_Aint      count,
+                      MPI_Datatype  bufType,
+                      MPI_Offset   offset,
+                      ADIO_Status  *status,
+                      int          *error_code)
 {
     ssize_t err = 0;
     size_t w_count;
@@ -104,7 +104,7 @@ ioerr:
 /*----< file_write() >-------------------------------------------------------*/
 /* This is an independent call. */
 static
-int file_write(ADIO_File     fd,
+int file_write(PNCIO_File    *fd,
                MPI_Offset    offset,
                const void   *buf,
                int           count,
@@ -155,12 +155,12 @@ int file_write(ADIO_File     fd,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNCIO_File_write_at(ADIO_File     fh,
-                       MPI_Offset    offset,
-                       const void   *buf,
-                       int           count,
-                       MPI_Datatype  bufType,
-                       MPI_Status   *status)
+int PNCIO_File_write_at(PNCIO_File    *fh,
+                        MPI_Offset    offset,
+                        const void   *buf,
+                        int           count,
+                        MPI_Datatype  bufType,
+                        MPI_Status   *status)
 {
     int err = NC_NOERR;
 
@@ -183,12 +183,12 @@ int PNCIO_File_write_at(ADIO_File     fh,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNCIO_File_write_at_all(ADIO_File    fh,
-                          MPI_Offset    offset,
-                          const void   *buf,
-                          int           count,
-                          MPI_Datatype  bufType,
-                          MPI_Status   *status)
+int PNCIO_File_write_at_all(PNCIO_File    *fh,
+                            MPI_Offset    offset,
+                            const void   *buf,
+                            int           count,
+                            MPI_Datatype  bufType,
+                            MPI_Status   *status)
 {
     int err, st=NC_NOERR;
 

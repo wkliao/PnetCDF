@@ -12,7 +12,7 @@
 #include <adio.h>
 
 /* prototypes of functions used for collective reads only. */
-static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
+static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
                                 datatype, int nprocs,
                                 int myrank, PNCIO_Access *others_req,
                                 MPI_Offset * offset_list,
@@ -27,7 +27,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
                                 MPI_Offset * fd_start, MPI_Offset * fd_end,
                                 MPI_Aint * buf_idx, MPI_Status * status, int *error_code);
 
-static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, PNCIO_Flatlist_node
+static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                                   * flat_buf, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                   MPI_Offset *len_list,
@@ -46,7 +46,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, PNCIO_Flatlist_node
                                   PNCIO_Access * others_req,
                                   int iter, MPI_Aint buftype_extent, MPI_Aint * buf_idx,
                                   MPI_Aint * actual_recved_bytes);
-void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, PNCIO_Flatlist_node
+void ADIOI_Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                             * flat_buf, char **recv_buf,
                             MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -62,7 +62,7 @@ void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, PNCIO_Flatlist_node
                             MPI_Offset fd_size, MPI_Offset * fd_start,
                             MPI_Offset * fd_end, MPI_Aint buftype_extent);
 
-void PNCIO_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
+void PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf, MPI_Aint count,
                                MPI_Datatype datatype, MPI_Offset offset,
                                ADIO_Status * status, int *error_code)
 {
@@ -249,7 +249,7 @@ double curT = MPI_Wtime();
 #endif
 }
 
-void PNCIO_Calc_my_off_len(ADIO_File     fd,
+void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
                            MPI_Aint      bufcount,
                            MPI_Datatype  datatype,
                            MPI_Offset   offset,
@@ -477,7 +477,7 @@ assert(0);
     }
 }
 
-static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
+static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
                                 datatype, int nprocs,
                                 int myrank, PNCIO_Access *others_req,
                                 MPI_Offset *offset_list,
@@ -798,7 +798,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
     ADIOI_Free(curr_offlen_ptr);
 }
 
-static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, PNCIO_Flatlist_node
+static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                                   * flat_buf, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                                   MPI_Offset *len_list,
@@ -1032,7 +1032,7 @@ static void ADIOI_R_Exchange_data(ADIO_File fd, void *buf, PNCIO_Flatlist_node
         ADIOI_BUF_INCR                                                  \
     }
 
-void ADIOI_Fill_user_buffer(ADIO_File fd, void *buf, PNCIO_Flatlist_node
+void ADIOI_Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                             * flat_buf, char **recv_buf, MPI_Offset
                             * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT

@@ -234,8 +234,8 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
                  */
                 err = NC_NOERR;
                 if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-                    ADIO_File adio_fh;
-                    adio_fh = (ADIO_FileD*) NCI_Calloc(1,sizeof(ADIO_FileD));
+                    PNCIO_File adio_fh;
+                    adio_fh = (PNCIO_File*) NCI_Calloc(1,sizeof(PNCIO_File));
                     err = PNCIO_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDWR,
                                          MPI_INFO_NULL, adio_fh);
                     if (err == NC_NOERR)
@@ -444,7 +444,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
     }
     else {
         /* When ncp->fstype != ADIO_FSTYPE_MPIIO, use PnetCDF's ADIO driver */
-        ncp->adio_fh = (ADIO_FileD*) NCI_Calloc(1, sizeof(ADIO_FileD));
+        ncp->adio_fh = (PNCIO_File*) NCI_Calloc(1, sizeof(PNCIO_File));
         ncp->adio_fh->file_system = ncp->fstype;
         ncp->adio_fh->num_nodes   = ncp->num_nodes;
         ncp->adio_fh->node_ids    = ncp->node_ids;

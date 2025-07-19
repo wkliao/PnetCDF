@@ -70,16 +70,16 @@ err_check:
  * This subroutine can be an independent call, because there is no need to
  * check the consistency of any of the above arguments among all processes.
  */
-int PNCIO_File_set_view(ADIO_File     fd,
-                       MPI_Offset    disp,
-                       MPI_Datatype  filetype,
-                       MPI_Aint      npairs,
+int PNCIO_File_set_view(PNCIO_File    *fd,
+                        MPI_Offset    disp,
+                        MPI_Datatype  filetype,
+                        MPI_Aint      npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
-                       MPI_Count    *offsets,
-                       MPI_Count    *lengths
+                        MPI_Count    *offsets,
+                        MPI_Count    *lengths
 #else
-                       MPI_Offset   *offsets,
-                       int          *lengths
+                        MPI_Offset   *offsets,
+                        int          *lengths
 #endif
 )
 {

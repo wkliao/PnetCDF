@@ -79,7 +79,7 @@ typedef struct {
 } Flat_list;
 
 /* prototypes of functions used for collective writes only. */
-static void ADIOI_LUSTRE_Exch_and_write(ADIO_File fd,
+static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File *fd,
                                         const void *buf,
                                         Flat_list *flat_bview,
                                         PNCIO_Access *others_req,
@@ -90,7 +90,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File fd,
                                         MPI_Offset **buf_idx,
                                         int *error_code);
 
-static void ADIOI_LUSTRE_Fill_send_buffer(ADIO_File fd, const void *buf,
+static void ADIOI_LUSTRE_Fill_send_buffer(PNCIO_File *fd, const void *buf,
                                           Flat_list *flat_fview,
                                           Flat_list *flat_bview,
                                           char **send_buf,
@@ -99,7 +99,7 @@ static void ADIOI_LUSTRE_Fill_send_buffer(ADIO_File fd, const void *buf,
                                           char **self_buf,
                                           disp_len_list *send_list);
 
-static void Exchange_data_recv(ADIO_File             fd,
+static void Exchange_data_recv(PNCIO_File            *fd,
                                const void           *buf,
                                      char           *write_buf,
                                      char          **recv_buf,
@@ -116,7 +116,7 @@ static void Exchange_data_recv(ADIO_File             fd,
                                      disp_len_list  *recv_list,
                                      int            *error_code);
 
-static void Exchange_data_send(      ADIO_File       fd,
+static void Exchange_data_send(      PNCIO_File      *fd,
                                const void           *buf,
                                      char           *write_buf,
                                      char          **send_buf_ptr,
@@ -130,12 +130,12 @@ static void Exchange_data_send(      ADIO_File       fd,
                                      disp_len_list  *send_list);
 
 static
-int ADIOI_LUSTRE_Calc_aggregator(ADIO_File fd,
-                                 MPI_Offset off,
+int ADIOI_LUSTRE_Calc_aggregator(PNCIO_File  *fd,
+                                 MPI_Offset  off,
 #ifdef HAVE_MPI_LARGE_COUNT
                                  MPI_Offset *len
 #else
-                                 int *len
+                                 int        *len
 #endif
 )
 {
@@ -169,7 +169,7 @@ int ADIOI_LUSTRE_Calc_aggregator(ADIO_File fd,
  *        user_buf for data to be sent to each aggregator.
  */
 static
-void ADIOI_LUSTRE_Calc_my_req(ADIO_File      fd,
+void ADIOI_LUSTRE_Calc_my_req(PNCIO_File     *fd,
                               Flat_list      flat_fview,
                               int            buf_is_contig,
                               PNCIO_Access **my_req_ptr,
@@ -365,9 +365,9 @@ Alternative: especially for when flat_fview.count is large
  *        this aggregator's file domain.
  */
 static
-void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
-                                  const PNCIO_Access *my_req,
-                                  PNCIO_Access **others_req_ptr)
+void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
+                                  const PNCIO_Access  *my_req,
+                                  PNCIO_Access       **others_req_ptr)
 {
     int i, myrank, nprocs, do_alltoallv;
     MPI_Count *count_my_req_per_proc, *count_others_req_per_proc;
@@ -581,7 +581,7 @@ void ADIOI_LUSTRE_Calc_others_req(ADIO_File fd,
     }
 }
 
-void PNCIO_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
+void PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
                                    MPI_Aint count, MPI_Datatype buftype,
                                    MPI_Offset offset, ADIO_Status *status,
                                    int *error_code)
@@ -1105,7 +1105,7 @@ double curT = MPI_Wtime();
 }
 
 static
-void comm_phase_alltoallw(ADIO_File      fd,
+void comm_phase_alltoallw(PNCIO_File     *fd,
                           disp_len_list *send_list,  /* [cb_nodes] */
                           disp_len_list *recv_list)  /* [nprocs] */
 {
@@ -1220,7 +1220,7 @@ void comm_phase_alltoallw(ADIO_File      fd,
 }
 
 static
-void commit_comm_phase(ADIO_File      fd,
+void commit_comm_phase(PNCIO_File     *fd,
                        disp_len_list *send_list,  /* [cb_nodes] */
                        disp_len_list *recv_list)  /* [nprocs] */
 {
@@ -1380,7 +1380,7 @@ void commit_comm_phase(ADIO_File      fd,
  * for Collective I/O Based on Underlying Parallel File System Locking
  * Protocols", in The Supercomputing Conference, 2008.
  */
-static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
+static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
                                         const void    *buf,
                                         Flat_list     *flat_bview,
                                         PNCIO_Access  *others_req,
@@ -2045,7 +2045,7 @@ void heap_merge(const PNCIO_Access *others_req,
 
 static
 void Exchange_data_recv(
-          ADIO_File       fd,
+          PNCIO_File      *fd,
     const void           *buf,          /* user buffer */
           char           *write_buf,    /* OUT: internal buffer used to write
                                          * to file */
@@ -2290,7 +2290,7 @@ void Exchange_data_recv(
 
 static
 void Exchange_data_send(
-          ADIO_File       fd,
+          PNCIO_File      *fd,
     const void           *buf,          /* user buffer */
           char           *write_buf,    /* OUT: internal buffer used to write
                                          * to file, only matter when send to
@@ -2369,7 +2369,7 @@ void Exchange_data_send(
     }
 }
 
-static void ADIOI_LUSTRE_Fill_send_buffer(ADIO_File fd,
+static void ADIOI_LUSTRE_Fill_send_buffer(PNCIO_File *fd,
                                           const void *buf,
                                           Flat_list *flat_fview,
                                           Flat_list *flat_bview,

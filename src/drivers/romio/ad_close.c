@@ -18,25 +18,25 @@
 #include "adio.h"
 
 /*----< PNCIO_File_close() >--------------------------------------------------*/
-int PNCIO_File_close(ADIO_File *fh)
+int PNCIO_File_close(PNCIO_File *fh)
 {
     int err = NC_NOERR;
 
-    err = close((*fh)->fd_sys);
+    err = close(fh->fd_sys);
     if (err != 0)
         err = ncmpii_error_posix2nc("close");
 
-    if ((*fh)->hints->ranklist != NULL)
-        ADIOI_Free((*fh)->hints->ranklist);
-    if ((*fh)->hints->cb_config_list != NULL)
-        ADIOI_Free((*fh)->hints->cb_config_list);
-    if ((*fh)->hints != NULL)
-        ADIOI_Free((*fh)->hints);
-    if ((*fh)->info != MPI_INFO_NULL)
-        MPI_Info_free(&((*fh)->info));
-    if ((*fh)->io_buf != NULL)
-        ADIOI_Free((*fh)->io_buf);
-    PNCIO_Type_dispose(&(*fh)->filetype);
+    if (fh->hints->ranklist != NULL)
+        ADIOI_Free(fh->hints->ranklist);
+    if (fh->hints->cb_config_list != NULL)
+        ADIOI_Free(fh->hints->cb_config_list);
+    if (fh->hints != NULL)
+        ADIOI_Free(fh->hints);
+    if (fh->info != MPI_INFO_NULL)
+        MPI_Info_free(&(fh->info));
+    if (fh->io_buf != NULL)
+        ADIOI_Free(fh->io_buf);
+    PNCIO_Type_dispose(&fh->filetype);
 
     if (PNCIO_Flattened_type_keyval != MPI_KEYVAL_INVALID) {
         MPI_Type_free_keyval(&PNCIO_Flattened_type_keyval);
@@ -49,15 +49,15 @@ int PNCIO_File_close(ADIO_File *fh)
     MPI_Count max_ntimes, counter[NMEASURES*2], max_c[NMEASURES*2];
 
     /* print two-phase I/O timing breakdown */
-    MPI_Comm_rank((*fh)->comm, &rank);
+    MPI_Comm_rank(fh->comm, &rank);
     for (i=0; i<NMEASURES; i++) {
-        timing[i]  = (*fh)->write_timing[i];
-        counter[i] = (*fh)->write_counter[i];
-        timing[i+NMEASURES]  = (*fh)->read_timing[i];
-        counter[i+NMEASURES] = (*fh)->read_counter[i];
+        timing[i]  = fh->write_timing[i];
+        counter[i] = fh->write_counter[i];
+        timing[i+NMEASURES]  = fh->read_timing[i];
+        counter[i+NMEASURES] = fh->read_counter[i];
     }
-    MPI_Reduce(timing,  max_t, NMEASURES*2, MPI_DOUBLE, MPI_MAX, 0, (*fh)->comm);
-    MPI_Reduce(counter, max_c, NMEASURES*2, MPI_COUNT,  MPI_MAX, 0, (*fh)->comm);
+    MPI_Reduce(timing,  max_t, NMEASURES*2, MPI_DOUBLE, MPI_MAX, 0, fh->comm);
+    MPI_Reduce(counter, max_c, NMEASURES*2, MPI_COUNT,  MPI_MAX, 0, fh->comm);
 
     pread_t = max_t[NMEASURES+2];
     max_ntimes = max_c[0];

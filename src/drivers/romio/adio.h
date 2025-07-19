@@ -212,9 +212,7 @@ typedef struct {
     MPI_Count write_counter[NMEASURES];
     MPI_Count read_counter[NMEASURES];
 #endif
-} ADIO_FileD;
-
-typedef ADIO_FileD *ADIO_File;
+} PNCIO_File;
 
 typedef struct {
     MPI_Offset *offsets; /* array of offsets */
@@ -239,9 +237,9 @@ extern int PNCIO_Flattened_type_keyval;
 /*---- APIs -----------------------------------------------------------------*/
 int PNCIO_FileSysType(const char *filename);
 int PNCIO_File_open(MPI_Comm comm, const char *filename, int amode,
-                MPI_Info info, ADIO_File fh);
-int PNCIO_File_close(ADIO_File *fh);
-int PNCIO_File_set_view(ADIO_File fh, MPI_Offset disp, MPI_Datatype filetype,
+                MPI_Info info, PNCIO_File *fh);
+int PNCIO_File_close(PNCIO_File *fh);
+int PNCIO_File_set_view(PNCIO_File *fh, MPI_Offset disp, MPI_Datatype filetype,
                 MPI_Aint npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count *offsets, MPI_Count *lengths
@@ -249,21 +247,21 @@ int PNCIO_File_set_view(ADIO_File fh, MPI_Offset disp, MPI_Datatype filetype,
                 MPI_Offset *offsets, int *lengths
 #endif
 );
-int PNCIO_File_sync(ADIO_File fh);
+int PNCIO_File_sync(PNCIO_File *fh);
 int PNCIO_File_delete(const char *filename);
-int PNCIO_File_set_size(ADIO_File fh, MPI_Offset size);
-int PNCIO_File_get_size(ADIO_File fh, MPI_Offset *size);
-int PNCIO_File_get_info(ADIO_File fh, MPI_Info *info_used);
-int PNCIO_File_SetInfo(ADIO_File fh, MPI_Info  users_info);
+int PNCIO_File_set_size(PNCIO_File *fh, MPI_Offset size);
+int PNCIO_File_get_size(PNCIO_File *fh, MPI_Offset *size);
+int PNCIO_File_get_info(PNCIO_File *fh, MPI_Info *info_used);
+int PNCIO_File_SetInfo(PNCIO_File *fh, MPI_Info  users_info);
 
-int PNCIO_File_write_at(ADIO_File fh, MPI_Offset offset, const void *buf,
+int PNCIO_File_write_at(PNCIO_File *fh, MPI_Offset offset, const void *buf,
                 int count, MPI_Datatype  datatype, MPI_Status *status);
-int PNCIO_File_write_at_all(ADIO_File fh, MPI_Offset offset, const void *buf,
+int PNCIO_File_write_at_all(PNCIO_File *fh, MPI_Offset offset, const void *buf,
                 int count, MPI_Datatype  datatype, MPI_Status *status);
 
-int PNCIO_File_read_at(ADIO_File fh, MPI_Offset offset, void *buf,
+int PNCIO_File_read_at(PNCIO_File *fh, MPI_Offset offset, void *buf,
                 int count, MPI_Datatype  datatype, MPI_Status *status);
-int PNCIO_File_read_at_all(ADIO_File fh, MPI_Offset offset, void *buf,
+int PNCIO_File_read_at_all(PNCIO_File *fh, MPI_Offset offset, void *buf,
                 int count, MPI_Datatype  datatype, MPI_Status *status);
 
 void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag);
@@ -274,47 +272,47 @@ int PNCIO_Type_dispose(MPI_Datatype * datatype);
 
 PNCIO_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype);
 
-int PNCIO_Lustre_create(ADIO_File fd, int access_mode);
-int PNCIO_Lustre_open(ADIO_File fd);
+int PNCIO_Lustre_create(PNCIO_File *fd, int access_mode);
+int PNCIO_Lustre_open(PNCIO_File *fd);
 
-void PNCIO_LUSTRE_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
+void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
                 MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
-void PNCIO_LUSTRE_WriteStridedColl(ADIO_File fd, const void *buf,
+void PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
                 MPI_Aint count, MPI_Datatype buftype, MPI_Offset offset,
                 ADIO_Status *status, int *error_code);
 
 
-void PNCIO_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
+void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
                             MPI_Datatype datatype, MPI_Offset offset,
                             ADIO_Status *status, int *error_code);
 
-void PNCIO_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
+void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
                 MPI_Datatype buftype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
-void PNCIO_GEN_ReadStridedColl(ADIO_File fd, void *buf, MPI_Aint count,
+void PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf, MPI_Aint count,
                 MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
-void PNCIO_GEN_WriteStrided_naive(ADIO_File fd, const void *buf,
+void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
                 MPI_Aint count, MPI_Datatype buftype, MPI_Offset offset,
                 ADIO_Status *status, int *error_code);
 
-int PNCIO_WriteContig(ADIO_File fd, const void *buf, MPI_Aint count,
+int PNCIO_WriteContig(PNCIO_File *fd, const void *buf, MPI_Aint count,
                 MPI_Datatype bufType, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
-int PNCIO_ReadContig(ADIO_File fd, void *buf, MPI_Aint count,
+int PNCIO_ReadContig(PNCIO_File *fd, void *buf, MPI_Aint count,
                 MPI_Datatype bufType, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
-void PNCIO_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
+void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
                 MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
-void PNCIO_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount,
+void PNCIO_Calc_my_off_len(PNCIO_File *fd, MPI_Aint bufcount,
                 MPI_Datatype datatype, MPI_Offset offset,
                 MPI_Offset **offset_list_ptr,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -330,7 +328,7 @@ void PNCIO_Calc_file_domains(MPI_Offset * st_offsets,
                 MPI_Offset *min_st_offset_ptr, MPI_Offset **fd_start_ptr,
                 MPI_Offset **fd_end_ptr, MPI_Offset *fd_size_ptr,
                 int striping_unit);
-void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
+void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Offset *len_list,
 #else
@@ -342,7 +340,7 @@ void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
                 MPI_Count *count_my_req_procs_ptr,
                 MPI_Count **count_my_req_per_proc_ptr,
                 PNCIO_Access **my_req_ptr, MPI_Aint **buf_idx_ptr);
-void PNCIO_Calc_others_req(ADIO_File fd, MPI_Count count_my_req_procs,
+void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
                 MPI_Count *count_my_req_per_proc, PNCIO_Access *my_req,
                 int nprocs, int myrank, MPI_Count *count_others_req_procs_ptr,
                 MPI_Count **count_others_req_per_proc_ptr,
@@ -352,7 +350,7 @@ void PNCIO_Free_my_req(int nprocs, MPI_Count *count_my_req_per_proc,
 void PNCIO_Free_others_req(int nprocs, MPI_Count *count_others_req_per_proc,
                 PNCIO_Access *others_req);
 
-int PNCIO_Calc_aggregator(ADIO_File fd, MPI_Offset off, MPI_Offset min_off,
+int PNCIO_Calc_aggregator(PNCIO_File *fd, MPI_Offset off, MPI_Offset min_off,
                 MPI_Offset *len, MPI_Offset fd_size, MPI_Offset *fd_start,
                 MPI_Offset *fd_end);
 
@@ -367,16 +365,16 @@ int PNCIO_Type_create_darray(int size, int rank, int ndims,
 int PNCIO_Type_get_combiner(MPI_Datatype datatype, int *combiner);
 
 
-int PNCIO_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset,
+int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
-int PNCIO_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset,
+int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
 
 void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,
                 MPI_Offset *srt_off, MPI_Count *srt_len, MPI_Count *start_pos,
                 int nprocs, int nprocs_recv, MPI_Count total_elements);
 
-void PNCIO_GEN_WriteStridedColl(ADIO_File fd, const void *buf, MPI_Aint count,
+void PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf, MPI_Aint count,
                 MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 
