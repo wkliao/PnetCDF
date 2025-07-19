@@ -590,7 +590,7 @@ int ADIO_Lustre_set_cb_node_list(ADIO_File fd)
     return 0;
 }
 
-/*----< ADIOI_Lustre_create() >----------------------------------------------*/
+/*----< PNCIO_Lustre_create() >----------------------------------------------*/
 /*   1. root creates the file
  *   2. root sets and obtains striping info
  *   3. root broadcasts striping info
@@ -598,7 +598,7 @@ int ADIO_Lustre_set_cb_node_list(ADIO_File fd)
  *   5. non-root processes opens the fie
  */
 int
-ADIOI_Lustre_create(ADIO_File fd,
+PNCIO_Lustre_create(ADIO_File fd,
                     int       access_mode)
 {
     char int_str[16];
