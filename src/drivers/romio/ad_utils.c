@@ -68,48 +68,6 @@ int PNCIO_Type_dispose(MPI_Datatype * datatype)
     return ret;
 }
 
-/* utility function for creating large contiguous types: algorithim from BigMPI
- * https://github.com/jeffhammond/BigMPI */
-
-static int type_create_contiguous_x(MPI_Count count, MPI_Datatype oldtype, MPI_Datatype * newtype)
-{
-    /* to make 'count' fit MPI-3 type processing routines (which take integer
-     * counts), we construct a type consisting of N INT_MAX chunks followed by
-     * a remainder.  e.g for a count of 4000000000 bytes you would end up with
-     * one 2147483647-byte chunk followed immediately by a 1852516353-byte
-     * chunk */
-    MPI_Datatype chunks, remainder;
-    MPI_Aint lb, extent, disps[2];
-    int blocklens[2];
-    MPI_Datatype types[2];
-
-    /* truly stupendously large counts will overflow an integer with this math,
-     * but that is a problem for a few decades from now.  Sorry, few decades
-     * from now! */
-    ADIOI_Assert(count / INT_MAX == (int) (count / INT_MAX));
-    int c = (int) (count / INT_MAX);    /* OK to cast until 'count' is 256 bits */
-    int r = count % INT_MAX;
-
-    MPI_Type_vector(c, INT_MAX, INT_MAX, oldtype, &chunks);
-    MPI_Type_contiguous(r, oldtype, &remainder);
-
-    MPI_Type_get_extent(oldtype, &lb, &extent);
-
-    blocklens[0] = 1;
-    blocklens[1] = 1;
-    disps[0] = 0;
-    disps[1] = c * extent * INT_MAX;
-    types[0] = chunks;
-    types[1] = remainder;
-
-    MPI_Type_create_struct(2, blocklens, disps, types, newtype);
-
-    MPI_Type_free(&chunks);
-    MPI_Type_free(&remainder);
-
-    return MPI_SUCCESS;
-}
-
 #define CAST_INT32(func_name, count, bklen, disp, dType, newType) {          \
     int kk, iCount, *iBklen;                                                 \
     MPI_Aint *iDisp;                                                         \
