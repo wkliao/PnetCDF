@@ -222,7 +222,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
         ncp->adio_fh->num_nodes   = ncp->num_nodes;
         ncp->adio_fh->node_ids    = ncp->node_ids;
 
-        err = ADIO_File_open(comm, filename, mpiomode, user_info, ncp->adio_fh);
+        err = PNCIO_File_open(comm, filename, mpiomode, user_info, ncp->adio_fh);
         if (err != NC_NOERR) return err;
 
         /* Now the file has been successfully opened, obtain the I/O hints

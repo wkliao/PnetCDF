@@ -177,7 +177,7 @@ ncmpio_begin_indep_data(void *ncdp)
          *    store file handler of file opened with MPI_COMM_SELF. Note
          *    whether adio_fh is NULL or not does not tell whether INA is
          *    enabled or not.
-         * 2. When INA is disabled, all ranks calls ADIO_File_open() and thus
+         * 2. When INA is disabled, all ranks calls PNCIO_File_open() and thus
          *    adio_fh should not be NULL. In other word, this scenario should
          *    not reach here at all. Because PnetCDF's ADIO driver relaxes
          *    File_setview subroutine to be able to called independently, the
@@ -200,7 +200,7 @@ ncmpio_begin_indep_data(void *ncdp)
         ncp->adio_fh->node_ids = (int*) NCI_Malloc(sizeof(int));
         ncp->adio_fh->node_ids[0] = 0;
 
-        err = ADIO_File_open(MPI_COMM_SELF, filename, ncp->mpiomode,
+        err = PNCIO_File_open(MPI_COMM_SELF, filename, ncp->mpiomode,
                              ncp->mpiinfo, ncp->adio_fh);
         if (err != NC_NOERR)
             return err;
