@@ -83,7 +83,7 @@ int ADIOI_Info_check_and_install_enabled(PNCIO_File  *fd,
             *local_cache = PNCIO_HINT_ENABLE;
         } else if (!strcmp(value, "disable") || !strcmp(value, "DISABLE")) {
             MPI_Info_set(fd->info, key, value);
-            *local_cache = ADIOI_HINT_DISABLE;
+            *local_cache = PNCIO_HINT_DISABLE;
         } else if (!strcmp(value, "automatic") || !strcmp(value, "AUTOMATIC")) {
             MPI_Info_set(fd->info, key, value);
             *local_cache = PNCIO_HINT_AUTO;
@@ -301,18 +301,18 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
          */
         ADIOI_Info_check_and_install_enabled(fd, users_info, "romio_cb_read",
                                              &(fd->hints->cb_read));
-        if (fd->hints->cb_read == ADIOI_HINT_DISABLE) {
+        if (fd->hints->cb_read == PNCIO_HINT_DISABLE) {
             /* romio_cb_read overrides no_indep_rw */
             MPI_Info_set(fd->info, "romio_no_indep_rw", "false");
-            fd->hints->no_indep_rw = ADIOI_HINT_DISABLE;
+            fd->hints->no_indep_rw = PNCIO_HINT_DISABLE;
         }
 
         ADIOI_Info_check_and_install_enabled(fd, users_info, "romio_cb_write",
                                              &(fd->hints->cb_write));
-        if (fd->hints->cb_write == ADIOI_HINT_DISABLE) {
+        if (fd->hints->cb_write == PNCIO_HINT_DISABLE) {
             /* romio_cb_write overrides no_indep_rw */
             MPI_Info_set(fd->info, "romio_no_indep_rw", "false");
-            fd->hints->no_indep_rw = ADIOI_HINT_DISABLE;
+            fd->hints->no_indep_rw = PNCIO_HINT_DISABLE;
         }
 
         /* Has the user indicated all I/O will be done collectively? */
@@ -406,8 +406,8 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
      * explicitly disable collecitve buffering (two-phase) and does hint that
      * io w/o independent io is going on, we'll set this internal hint as a
      * convenience */
-    if (((fd->hints->cb_read != ADIOI_HINT_DISABLE)
-         && (fd->hints->cb_write != ADIOI_HINT_DISABLE)
+    if (((fd->hints->cb_read != PNCIO_HINT_DISABLE)
+         && (fd->hints->cb_write != PNCIO_HINT_DISABLE)
          && fd->hints->no_indep_rw)) {
         fd->hints->deferred_open = 1;
     } else {

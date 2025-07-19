@@ -15,7 +15,7 @@
             if (writebuf_len) {                                         \
                 PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,  \
                                  writebuf_off, &status1, error_code);   \
-                if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
+                if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                     PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
                 if (*error_code != MPI_SUCCESS) {                       \
                     *error_code = PNCIO_Err_create_code(*error_code,    \
@@ -26,7 +26,7 @@
             }                                                           \
             writebuf_off = req_off;                                     \
             writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
-            if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
+            if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                 PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
                             writebuf_off, &status1, error_code);        \
@@ -43,7 +43,7 @@
         while (write_sz != req_len) {                                   \
             PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
                              writebuf_off, &status1, error_code);       \
-            if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
+            if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                 PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = PNCIO_Err_create_code(*error_code,        \
@@ -55,7 +55,7 @@
             userbuf_off += write_sz;                                    \
             writebuf_off += writebuf_len;                               \
             writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
-            if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
+            if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                 PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
                             writebuf_off, &status1, error_code);        \
@@ -131,7 +131,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
     MPI_Offset new_bwr_size, new_fwr_size, st_fwr_size, fwr_size = 0, bwr_size, req_len;
     static char myname[] = "PNCIO_GEN_WriteStrided";
 
-    if (fd->hints->ds_write == ADIOI_HINT_DISABLE) {
+    if (fd->hints->ds_write == PNCIO_HINT_DISABLE) {
         /* if user has disabled data sieving on reads, use naive
          * approach instead.
          */
@@ -206,7 +206,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
 
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
-        if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
+        if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         for (j = 0; j < count; j++) {
@@ -225,7 +225,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
                              writebuf_off, &status1, error_code);
         }
 
-        if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
+        if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         if (*error_code != MPI_SUCCESS)
@@ -309,7 +309,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
 
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
-        if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
+        if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         writebuf_off = 0;
@@ -429,12 +429,12 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
         if (writebuf_len) {
             PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
                              writebuf_off, &status1, error_code);
-            if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE)
+            if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)
                 PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
             if (*error_code != MPI_SUCCESS)
                 goto fn_exit;
         }
-        if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
+        if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
     }
 

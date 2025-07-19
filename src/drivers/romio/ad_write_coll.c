@@ -107,7 +107,7 @@ double curT = MPI_Wtime();
     nprocs_for_coll = fd->hints->cb_nodes;
 
     /* only check for interleaving if cb_write isn't disabled */
-    if (fd->hints->cb_write != ADIOI_HINT_DISABLE) {
+    if (fd->hints->cb_write != PNCIO_HINT_DISABLE) {
         /* For this process's request, calculate the list of offsets and
          * lengths in the file and determine the start and end offsets. */
 
@@ -138,10 +138,10 @@ double curT = MPI_Wtime();
 
     PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
 
-    if (fd->hints->cb_write == ADIOI_HINT_DISABLE ||
+    if (fd->hints->cb_write == PNCIO_HINT_DISABLE ||
         (!interleave_count && (fd->hints->cb_write == PNCIO_HINT_AUTO))) {
         /* use independent accesses */
-        if (fd->hints->cb_write != ADIOI_HINT_DISABLE) {
+        if (fd->hints->cb_write != PNCIO_HINT_DISABLE) {
             if (fd->filetype != MPI_DATATYPE_NULL)
                 NCI_Free(offset_list);
             NCI_Free(st_offsets);

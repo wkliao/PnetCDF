@@ -738,7 +738,7 @@ double curT = MPI_Wtime();
             flat_bview.is_contig = 1;
     }
 
-    if (fd->hints->cb_write == ADIOI_HINT_DISABLE) {
+    if (fd->hints->cb_write == PNCIO_HINT_DISABLE) {
         /* collective write is explicitly disabled by user */
         do_collect = 0;
     }
@@ -933,7 +933,7 @@ double curT = MPI_Wtime();
     ADIOI_LUSTRE_Calc_my_req(fd, flat_fview, flat_bview.is_contig,
                              &my_req, buf_idx);
 
-    if (fd->hints->ds_write != ADIOI_HINT_DISABLE) {
+    if (fd->hints->ds_write != PNCIO_HINT_DISABLE) {
         /* When data sieving is considered, below check the current file size
          * first. If the aggregate access region of this collective write is
          * beyond the current file size, then we can safely skip the read of
@@ -2161,7 +2161,7 @@ void Exchange_data_recv(
             fd->write_counter[6] = MAX(fd->write_counter[6], nprocs_recv);
         }
 #endif
-    } else { /* if (fd->hints->ds_write == ADIOI_HINT_DISABLE) */
+    } else { /* if (fd->hints->ds_write == PNCIO_HINT_DISABLE) */
         /* User explicitly disable data sieving to skip read-modify-write.
          * Whether or not there is a hole is not important. However,
          * srt_off_len must be constructed to merge all others_req[] into a
@@ -2205,11 +2205,11 @@ void Exchange_data_recv(
         hole = (srt_off_len->num > 1);
     }
 
-// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d skip_read=%d srt_off_len->num=%lld\n",__func__,__LINE__, (fd->hints->ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,fd->skip_read,srt_off_len->num);
-// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d nprocs_recv=%d(PNCIO_DS_WR_NAGGRS_LB=%d) numx=%lld(PNCIO_DS_WR_NPAIRS_LB=%d)\n",__func__,__LINE__, (fd->hints->ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == ADIOI_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,nprocs_recv,PNCIO_DS_WR_NAGGRS_LB,numx,PNCIO_DS_WR_NPAIRS_LB);
+// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d skip_read=%d srt_off_len->num=%lld\n",__func__,__LINE__, (fd->hints->ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == PNCIO_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,fd->skip_read,srt_off_len->num);
+// printf("%s at %d: ds_write=%s build_srt_off_len=%d hole=%d nprocs_recv=%d(PNCIO_DS_WR_NAGGRS_LB=%d) numx=%lld(PNCIO_DS_WR_NPAIRS_LB=%d)\n",__func__,__LINE__, (fd->hints->ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fd->hints->ds_write == PNCIO_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,nprocs_recv,PNCIO_DS_WR_NAGGRS_LB,numx,PNCIO_DS_WR_NPAIRS_LB);
 
     /* data sieving */
-    if (fd->hints->ds_write != ADIOI_HINT_DISABLE && hole) {
+    if (fd->hints->ds_write != PNCIO_HINT_DISABLE && hole) {
         if (fd->skip_read)
             memset(write_buf, 0, range_size);
         else {
