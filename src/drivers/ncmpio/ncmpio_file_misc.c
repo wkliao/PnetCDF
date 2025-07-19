@@ -114,7 +114,7 @@ ncmpio_redef(void *ncdp)
          */
         if (ncp->adio_fh == NULL) return NC_NOERR;
 
-        err = ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
+        err = PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         DEBUG_ASSIGN_ERROR(status, err)
     }
     else {

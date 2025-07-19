@@ -676,13 +676,13 @@ ncmpio_file_set_view(const NC     *ncp,
          * flattened file type struct. This is avoid repeaated work of
          * constructing and flattening the same datatype.
          */
-        return ADIO_File_set_view(ncp->adio_fh, 0, filetype, npairs, offsets, lengths);
+        return PNCIO_File_set_view(ncp->adio_fh, 0, filetype, npairs, offsets, lengths);
     }
 
     if (filetype == MPI_BYTE) {
         /* filetype is a contiguous space, make the whole file visible */
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-            return ADIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
+            return PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
         }
         else {
             TRACE_IO(MPI_File_set_view, (fh, 0, MPI_BYTE, MPI_BYTE,
@@ -748,7 +748,7 @@ ncmpio_file_set_view(const NC     *ncp,
 err_out:
 #endif
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-            err = ADIO_File_set_view(ncp->adio_fh, 0, root_filetype, 0, NULL, NULL);
+            err = PNCIO_File_set_view(ncp->adio_fh, 0, root_filetype, 0, NULL, NULL);
             if (status == NC_NOERR) status = err;
         }
         else {
@@ -767,7 +767,7 @@ err_out:
     }
     else {
         if (ncp->fstype != ADIO_FSTYPE_MPIIO) {
-            err = ADIO_File_set_view(ncp->adio_fh, *disp, filetype, 0, NULL, NULL);
+            err = PNCIO_File_set_view(ncp->adio_fh, *disp, filetype, 0, NULL, NULL);
             if (status == NC_NOERR) status = err;
         }
         else {
