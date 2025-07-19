@@ -352,11 +352,6 @@ void PNCIO_Free_my_req(int nprocs, MPI_Count *count_my_req_per_proc,
 void PNCIO_Free_others_req(int nprocs, MPI_Count *count_others_req_per_proc,
                 PNCIO_Access *others_req);
 
-int ADIOI_Type_create_hindexed_x(MPI_Count count,
-                const MPI_Count array_of_blocklengths[],
-                const MPI_Count array_of_displacements[],
-                MPI_Datatype oldtype, MPI_Datatype *newtype);
-
 int PNCIO_Calc_aggregator(ADIO_File fd, MPI_Offset off, MPI_Offset min_off,
                 MPI_Offset *len, MPI_Offset fd_size, MPI_Offset *fd_start,
                 MPI_Offset *fd_end);
