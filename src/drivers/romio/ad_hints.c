@@ -394,13 +394,13 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
      * free/alloc and insures it is always set
      */
     if (fd->hints->cb_config_list == NULL) {
-        MPI_Info_set(fd->info, "cb_config_list", ADIOI_CB_CONFIG_LIST_DFLT);
-        len = (strlen(ADIOI_CB_CONFIG_LIST_DFLT) + 1) * sizeof(char);
+        MPI_Info_set(fd->info, "cb_config_list", PNCIO_CB_CONFIG_LIST_DFLT);
+        len = (strlen(PNCIO_CB_CONFIG_LIST_DFLT) + 1) * sizeof(char);
         fd->hints->cb_config_list = NCI_Malloc(len);
         if (fd->hints->cb_config_list == NULL)
             return NC_ENOMEM;
 
-        strncpy(fd->hints->cb_config_list, ADIOI_CB_CONFIG_LIST_DFLT, len);
+        strncpy(fd->hints->cb_config_list, PNCIO_CB_CONFIG_LIST_DFLT, len);
     }
     /* deferred_open won't be set by callers, but if the user doesn't
      * explicitly disable collecitve buffering (two-phase) and does hint that
