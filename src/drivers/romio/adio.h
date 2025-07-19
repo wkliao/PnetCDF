@@ -60,7 +60,6 @@
 #define PNCIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
 #define PNCIO_FSTYPE_CHECK  0      /* Use PnetCDF ADIO drivers */
 
-#define ADIOI_Strdup NCI_Strdup
 #define ADIOI_Malloc NCI_Malloc
 #define ADIOI_Calloc(a,b) NCI_Calloc((size_t)a,b)
 #define ADIOI_Realloc NCI_Realloc
