@@ -128,7 +128,7 @@
 
 void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
                                MPI_Datatype datatype, MPI_Offset offset,
-                               ADIO_Status * status, int *error_code)
+                               MPI_Status * status, int *error_code)
 {
     /* offset is in units of etype relative to the filetype. */
     PNCIO_Flatlist_node *flat_buf, *flat_file;
@@ -144,7 +144,7 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
     MPI_Offset off, req_off, disp, end_offset = 0, writebuf_off, start_off;
     char *writebuf;
     MPI_Count bufsize, writebuf_len, write_sz;
-    ADIO_Status status1;
+    MPI_Status status1;
     MPI_Offset new_bwr_size, new_fwr_size, st_fwr_size, fwr_size = 0, bwr_size, req_len;
     int stripe_size;
     static char myname[] = "PNCIO_LUSTRE_WriteStrided";

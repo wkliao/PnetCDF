@@ -53,7 +53,7 @@
 
 void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
                            MPI_Datatype datatype, MPI_Offset offset,
-                           ADIO_Status * status, int *error_code)
+                           MPI_Status * status, int *error_code)
 {
 
 
@@ -74,7 +74,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
     char *readbuf, *tmp_buf, *value;
     int info_flag;
     MPI_Aint max_bufsize, readbuf_len;
-    ADIO_Status status1;
+    MPI_Status status1;
     static char myname[] = "PNCIO_GEN_ReadStrided";
 
     if (fd->hints->ds_read == ADIOI_HINT_DISABLE) {

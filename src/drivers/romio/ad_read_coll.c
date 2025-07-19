@@ -64,7 +64,7 @@ void ADIOI_Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
 
 void PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf, MPI_Aint count,
                                MPI_Datatype datatype, MPI_Offset offset,
-                               ADIO_Status * status, int *error_code)
+                               MPI_Status * status, int *error_code)
 {
 /* Uses a generalized version of the extended two-phase method described
    in "An Extended Two-Phase Method for Accessing Sections of

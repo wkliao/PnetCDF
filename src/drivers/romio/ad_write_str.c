@@ -109,7 +109,7 @@
     }
 void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
                             MPI_Datatype datatype, MPI_Offset offset,
-                            ADIO_Status * status, int *error_code)
+                            MPI_Status * status, int *error_code)
 {
 
 /* offset is in units of etype relative to the filetype. */
@@ -127,7 +127,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
     char *writebuf = NULL;
     MPI_Aint writebuf_len, max_bufsize, write_sz;
     MPI_Aint bufsize;
-    ADIO_Status status1;
+    MPI_Status status1;
     MPI_Offset new_bwr_size, new_fwr_size, st_fwr_size, fwr_size = 0, bwr_size, req_len;
     static char myname[] = "PNCIO_GEN_WriteStrided";
 

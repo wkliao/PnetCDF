@@ -62,7 +62,7 @@ static void ADIOI_Fill_send_buffer(PNCIO_File *fd, void *buf,
 
 void PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf, MPI_Aint count,
                                 MPI_Datatype datatype, MPI_Offset offset,
-                                ADIO_Status * status, int *error_code)
+                                MPI_Status * status, int *error_code)
 {
 /* Uses a generalized version of the extended two-phase method described
    in "An Extended Two-Phase Method for Accessing Sections of

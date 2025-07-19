@@ -70,7 +70,6 @@
 #define ADIOI_Info_get MPI_Info_get
 #define ADIOI_Info_set MPI_Info_set
 #define ADIOI_Assert assert
-#define ADIO_Status MPI_Status
 #define ADIOI_COLL_TAG(rank,iter) 0
 #define ADIOI_AINT_CAST_TO_OFFSET (MPI_Offset)
 
@@ -276,40 +275,40 @@ int PNCIO_Lustre_create(PNCIO_File *fd, int access_mode);
 int PNCIO_Lustre_open(PNCIO_File *fd);
 
 void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
-                MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
+                MPI_Datatype datatype, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
 void PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
                 MPI_Aint count, MPI_Datatype buftype, MPI_Offset offset,
-                ADIO_Status *status, int *error_code);
+                MPI_Status *status, int *error_code);
 
 
 void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
                             MPI_Datatype datatype, MPI_Offset offset,
-                            ADIO_Status *status, int *error_code);
+                            MPI_Status *status, int *error_code);
 
 void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
-                MPI_Datatype buftype, MPI_Offset offset, ADIO_Status *status,
+                MPI_Datatype buftype, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
 void PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf, MPI_Aint count,
-                MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
+                MPI_Datatype datatype, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
 void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
                 MPI_Aint count, MPI_Datatype buftype, MPI_Offset offset,
-                ADIO_Status *status, int *error_code);
+                MPI_Status *status, int *error_code);
 
 int PNCIO_WriteContig(PNCIO_File *fd, const void *buf, MPI_Aint count,
-                MPI_Datatype bufType, MPI_Offset offset, ADIO_Status *status,
+                MPI_Datatype bufType, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
 int PNCIO_ReadContig(PNCIO_File *fd, void *buf, MPI_Aint count,
-                MPI_Datatype bufType, MPI_Offset offset, ADIO_Status *status,
+                MPI_Datatype bufType, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
 void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
-                MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
+                MPI_Datatype datatype, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
 void PNCIO_Calc_my_off_len(PNCIO_File *fd, MPI_Aint bufcount,
@@ -375,7 +374,7 @@ void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,
                 int nprocs, int nprocs_recv, MPI_Count total_elements);
 
 void PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf, MPI_Aint count,
-                MPI_Datatype datatype, MPI_Offset offset, ADIO_Status *status,
+                MPI_Datatype datatype, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
 #define MPIR_ERR_RECOVERABLE 0
