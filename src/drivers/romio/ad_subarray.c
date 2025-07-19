@@ -9,7 +9,7 @@
 
 #include <adio.h>
 
-int ADIO_Type_create_subarray(int ndims,
+int PNCIO_Type_create_subarray(int ndims,
                               const int *array_of_sizes,
                               const int *array_of_subsizes,
                               const int *array_of_starts,

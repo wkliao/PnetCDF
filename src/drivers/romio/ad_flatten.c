@@ -486,7 +486,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
                 int dims = ints[0];
                 MPI_Datatype stype;
 
-                ADIO_Type_create_subarray(dims, &ints[1],       /* sizes */
+                PNCIO_Type_create_subarray(dims, &ints[1],       /* sizes */
                                           &ints[dims + 1],      /* subsizes */
                                           &ints[2 * dims + 1],  /* starts */
                                           ints[3 * dims + 1],   /* order */
@@ -1141,7 +1141,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
                 int dims = ints[0];
                 MPI_Datatype stype;
 
-                ADIO_Type_create_subarray(dims, &ints[1],       /* sizes */
+                PNCIO_Type_create_subarray(dims, &ints[1],       /* sizes */
                                           &ints[dims + 1],      /* subsizes */
                                           &ints[2 * dims + 1],  /* starts */
                                           ints[3 * dims + 1],   /* order */
