@@ -71,7 +71,7 @@
  *     offset-length pairs over the non-aggregator senders to be received by an
  *     I/O aggregator to skip the potentially expensive heap-merge sort that
  *     determines whether or not data sieving write is necessary.
- * ADIOI_DS_WR_NAGGRS_LB is the lower bound of the number of non-aggregators
+ * PNCIO_DS_WR_NAGGRS_LB is the lower bound of the number of non-aggregators
  *     sending their offset-length pairs to an I/O aggregator.
  * Both conditions must be met to skip the heap-merge sort.
  *
@@ -98,8 +98,8 @@
  * sieving is set to the automatic mode.
  */
 #define PNCIO_DS_WR_NPAIRS_LB 8192
-#define ADIOI_DS_WR_NAGGRS_LB 256
-#define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > ADIOI_DS_WR_NAGGRS_LB || (npairs) > PNCIO_DS_WR_NPAIRS_LB)
+#define PNCIO_DS_WR_NAGGRS_LB 256
+#define DO_HEAP_MERGE(nrecv, npairs) ((nrecv) > PNCIO_DS_WR_NAGGRS_LB || (npairs) > PNCIO_DS_WR_NPAIRS_LB)
 
 #define ADIOI_TYPE_DECREASE 0x00000001  /* if not monotonic nondecreasing */
 #define ADIOI_TYPE_OVERLAP  0x00000002  /* if contains overlapping regions */
