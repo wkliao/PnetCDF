@@ -241,7 +241,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
                     if (err == NC_NOERR)
                         ADIO_File_set_size(adio_fh, 0); /* can be expensive */
                     else
-                        ADIO_File_close(&adio_fh);
+                        PNCIO_File_close(&adio_fh);
                     NCI_Free(adio_fh);
                 }
                 else {

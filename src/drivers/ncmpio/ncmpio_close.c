@@ -83,7 +83,7 @@ ncmpio_close_files(NC *ncp, int doUnlink) {
          * non-NULL ncp->adio_fh and non-aggregators has adio_fh == NULL.
          */
         if (ncp->adio_fh != NULL) {
-            err = ADIO_File_close(&ncp->adio_fh);
+            err = PNCIO_File_close(&ncp->adio_fh);
             NCI_Free(ncp->adio_fh);
             ncp->adio_fh = NULL;
             if (err != NC_NOERR) return err;
