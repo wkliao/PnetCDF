@@ -178,7 +178,7 @@ double curT = MPI_Wtime();
    done by (logically) dividing the file into file domains (FDs); each
    process may directly access only its own file domain. */
 
-    ADIOI_Calc_file_domains(st_offsets, end_offsets, nprocs,
+    PNCIO_Calc_file_domains(st_offsets, end_offsets, nprocs,
                             nprocs_for_coll, &min_st_offset,
                             &fd_start, &fd_end, &fd_size,
                             fd->hints->striping_unit);

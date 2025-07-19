@@ -175,7 +175,7 @@ double curT = MPI_Wtime();
 
 
     /* We're going to perform aggregation of I/O.  Here we call
-     * ADIOI_Calc_file_domains() to determine what processes will handle I/O
+     * PNCIO_Calc_file_domains() to determine what processes will handle I/O
      * to what regions.  We pass nprocs_for_coll into this function; it is
      * used to determine how many processes will perform I/O, which is also
      * the number of regions into which the range of bytes must be divided.
@@ -190,7 +190,7 @@ double curT = MPI_Wtime();
      * needs to be mapped to an actual rank in the communicator later.
      *
      */
-    ADIOI_Calc_file_domains(st_offsets, end_offsets, nprocs,
+    PNCIO_Calc_file_domains(st_offsets, end_offsets, nprocs,
                             nprocs_for_coll, &min_st_offset,
                             &fd_start, &fd_end,
                             &fd_size, fd->hints->striping_unit);

@@ -325,7 +325,7 @@ void PNCIO_Calc_my_off_len(ADIO_File fd, MPI_Aint bufcount,
                 MPI_Offset *start_offset_ptr, MPI_Offset *end_offset_ptr,
                 MPI_Count *contig_access_count_ptr);
 
-void ADIOI_Calc_file_domains(MPI_Offset * st_offsets,
+void PNCIO_Calc_file_domains(MPI_Offset * st_offsets,
                 MPI_Offset *end_offsets, int nprocs, int nprocs_for_coll,
                 MPI_Offset *min_st_offset_ptr, MPI_Offset **fd_start_ptr,
                 MPI_Offset **fd_end_ptr, MPI_Offset *fd_size_ptr,
