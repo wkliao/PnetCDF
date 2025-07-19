@@ -206,7 +206,7 @@ ncmpio_begin_indep_data(void *ncdp)
             return err;
 
         /* get the I/O hints used/modified by MPI-IO */
-        err = ADIO_File_get_info(ncp->adio_fh, &ncp->mpiinfo);
+        err = PNCIO_File_get_info(ncp->adio_fh, &ncp->mpiinfo);
         if (err != NC_NOERR) return err;
 
         /* Add PnetCDF hints into ncp->mpiinfo */

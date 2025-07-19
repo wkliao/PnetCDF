@@ -228,7 +228,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
         /* Now the file has been successfully opened, obtain the I/O hints
          * used/modified by ADIO driver.
          */
-        err = ADIO_File_get_info(ncp->adio_fh, &ncp->mpiinfo);
+        err = PNCIO_File_get_info(ncp->adio_fh, &ncp->mpiinfo);
         if (err != NC_NOERR) return err;
     }
 

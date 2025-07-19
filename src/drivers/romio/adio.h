@@ -256,7 +256,7 @@ int PNCIO_File_sync(ADIO_File fh);
 int PNCIO_File_delete(const char *filename);
 int PNCIO_File_set_size(ADIO_File fh, MPI_Offset size);
 int PNCIO_File_get_size(ADIO_File fh, MPI_Offset *size);
-int ADIO_File_get_info(ADIO_File fh, MPI_Info *info_used);
+int PNCIO_File_get_info(ADIO_File fh, MPI_Info *info_used);
 int ADIO_File_SetInfo(ADIO_File fh, MPI_Info  users_info);
 
 int ADIO_File_write(ADIO_File fh, const void *buf, int count,
