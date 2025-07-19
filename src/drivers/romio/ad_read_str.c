@@ -138,7 +138,7 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
 
 /* noncontiguous in memory, contiguous in file. */
 
-        flat_buf = ADIOI_Flatten_and_find(datatype);
+        flat_buf = PNCIO_Flatten_and_find(datatype);
 
         off = fd->disp + offset;
 
@@ -288,7 +288,7 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
         } else {
 /* noncontiguous in memory as well as in file */
 
-            flat_buf = ADIOI_Flatten_and_find(datatype);
+            flat_buf = PNCIO_Flatten_and_find(datatype);
 
             k = num = buf_count = 0;
             i_offset = flat_buf->indices[0];

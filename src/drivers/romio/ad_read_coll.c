@@ -591,7 +591,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
 
     PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
     if (!buftype_is_contig) {
-        flat_buf = ADIOI_Flatten_and_find(datatype);
+        flat_buf = PNCIO_Flatten_and_find(datatype);
     }
     MPI_Type_get_extent(datatype, &lb, &buftype_extent);
 

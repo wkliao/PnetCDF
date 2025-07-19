@@ -40,7 +40,7 @@ static int ADIOI_Flattened_type_delete(MPI_Datatype datatype,
 
 static ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype);
 
-ADIOI_Flatlist_node *ADIOI_Flatten_and_find(MPI_Datatype datatype)
+ADIOI_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype datatype)
 {
     if (ADIOI_Flattened_type_keyval == MPI_KEYVAL_INVALID) {
         /* ADIOI_End_call will take care of cleanup */
