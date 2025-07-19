@@ -9,12 +9,12 @@
 
 #include <adio.h>
 
-#define ADIOI_BUFFERED_WRITE                                            \
+#define BUFFERED_WRITE                                                  \
     {                                                                   \
         if (req_off >= writebuf_off + writebuf_len) {                   \
             if (writebuf_len) {                                         \
-                PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,  \
-                                 writebuf_off, &status1, error_code);   \
+                PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE, \
+                                  writebuf_off, &status1, error_code);  \
                 if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                     PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
                 if (*error_code != MPI_SUCCESS) {                       \
@@ -25,11 +25,11 @@
                 }                                                       \
             }                                                           \
             writebuf_off = req_off;                                     \
-            writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
+            writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1); \
             if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                 PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
-                            writebuf_off, &status1, error_code);        \
+            PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
+                             writebuf_off, &status1, error_code);       \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = PNCIO_Err_create_code(*error_code,        \
                     MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
@@ -41,8 +41,8 @@
         assert((MPI_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
         memcpy(writebuf+req_off-writebuf_off, (char *)buf +userbuf_off, write_sz); \
         while (write_sz != req_len) {                                   \
-            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                             writebuf_off, &status1, error_code);       \
+            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,     \
+                              writebuf_off, &status1, error_code);      \
             if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                 PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             if (*error_code != MPI_SUCCESS) {                           \
@@ -54,11 +54,11 @@
             req_len -= write_sz;                                        \
             userbuf_off += write_sz;                                    \
             writebuf_off += writebuf_len;                               \
-            writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
+            writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1); \
             if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                 PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
-                            writebuf_off, &status1, error_code);        \
+            PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
+                             writebuf_off, &status1, error_code);       \
             if (*error_code != MPI_SUCCESS) {                           \
                 *error_code = PNCIO_Err_create_code(*error_code,        \
                     MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
@@ -73,7 +73,7 @@
 
 /* this macro is used when filetype is contig and buftype is not contig.
    it does not do a read-modify-write and does not lock*/
-#define ADIOI_BUFFERED_WRITE_WITHOUT_READ                               \
+#define BUFFERED_WRITE_WITHOUT_READ                                     \
     {                                                                   \
         if (req_off >= writebuf_off + writebuf_len) {                   \
             PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
@@ -85,7 +85,7 @@
                 goto fn_exit;                                           \
             }                                                           \
             writebuf_off = req_off;                                     \
-            writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
+            writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1); \
         }                                                               \
         write_sz = (MPI_Aint) (MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
         assert((MPI_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
@@ -102,7 +102,7 @@
             req_len -= write_sz;                                        \
             userbuf_off += write_sz;                                    \
             writebuf_off += writebuf_len;                               \
-            writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize,end_offset-writebuf_off+1)); \
+            writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1); \
             write_sz = MPL_MIN(req_len, writebuf_len);                  \
             memcpy(writebuf, (char *)buf + userbuf_off, write_sz);      \
         }                                                               \
@@ -202,7 +202,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
         end_offset = off + bufsize - 1;
         writebuf_off = off;
         writebuf = (char *) NCI_Malloc(max_bufsize);
-        writebuf_len = (MPI_Aint) (MPL_MIN(max_bufsize, end_offset - writebuf_off + 1));
+        writebuf_len = MPL_MIN(max_bufsize, end_offset - writebuf_off + 1);
 
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
@@ -214,7 +214,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
                 userbuf_off = (MPI_Offset) j *(MPI_Offset) buftype_extent + flat_buf->indices[i];
                 req_off = off;
                 req_len = flat_buf->blocklens[i];
-                ADIOI_BUFFERED_WRITE_WITHOUT_READ;
+                BUFFERED_WRITE_WITHOUT_READ;
                 off += flat_buf->blocklens[i];
             }
         }
@@ -337,7 +337,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
                     req_off = off;
                     req_len = fwr_size;
                     userbuf_off = i_offset;
-                    ADIOI_BUFFERED_WRITE;
+                    BUFFERED_WRITE;
                 }
                 i_offset += fwr_size;
 
@@ -380,7 +380,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
                     req_off = off;
                     req_len = size;
                     userbuf_off = i_offset;
-                    ADIOI_BUFFERED_WRITE;
+                    BUFFERED_WRITE;
                 }
 
                 new_fwr_size = fwr_size;
@@ -445,7 +445,7 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
     MPI_Status_set_elements(status, MPI_BYTE, bufsize);
 #endif
     /* This is a temporary way of filling in status. The right way is to keep
-     * track of how much data was actually written by ADIOI_BUFFERED_WRITE.
+     * track of how much data was actually written by BUFFERED_WRITE.
      */
 
   fn_exit:
