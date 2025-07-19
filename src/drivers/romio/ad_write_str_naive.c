@@ -10,24 +10,24 @@
 #include <adio.h>
 
 void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
-                                  MPI_Datatype buftype, ADIO_Offset offset,
+                                  MPI_Datatype buftype, MPI_Offset offset,
                                   ADIO_Status *status, int *error_code)
 {
     /* offset is in units of etype relative to the filetype. */
 
     ADIOI_Flatlist_node *flat_buf, *flat_file;
     /* bwr == buffer write; fwr == file write */
-    ADIO_Offset bwr_size, fwr_size = 0, sum, size_in_filetype;
+    MPI_Offset bwr_size, fwr_size = 0, sum, size_in_filetype;
     int b_index;
     MPI_Count bufsize;
-    ADIO_Offset n_etypes_in_filetype;
-    ADIO_Offset size, n_filetypes, etype_in_filetype;
-    ADIO_Offset abs_off_in_filetype = 0, req_len;
+    MPI_Offset n_etypes_in_filetype;
+    MPI_Offset size, n_filetypes, etype_in_filetype;
+    MPI_Offset abs_off_in_filetype = 0, req_len;
     MPI_Count filetype_size, buftype_size;
     MPI_Aint lb, filetype_extent, buftype_extent;
     int buf_count, buftype_is_contig, filetype_is_contig;
-    ADIO_Offset userbuf_off;
-    ADIO_Offset off, req_off, disp, end_offset = 0, start_off;
+    MPI_Offset userbuf_off;
+    MPI_Offset off, req_off, disp, end_offset = 0, start_off;
     ADIO_Status status1;
 
     *error_code = MPI_SUCCESS;  /* changed below if error */
@@ -94,7 +94,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
          */
         for (b_count = 0; b_count < count; b_count++) {
             for (b_index = 0; b_index < flat_buf->count; b_index++) {
-                userbuf_off = (ADIO_Offset) b_count *(ADIO_Offset) buftype_extent +
+                userbuf_off = (MPI_Offset) b_count *(MPI_Offset) buftype_extent +
                     flat_buf->indices[b_index];
                 req_off = off;
                 req_len = flat_buf->blocklens[b_index];
@@ -116,7 +116,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
 
     else {      /* noncontiguous in file */
         int f_index, st_index = 0;
-        ADIO_Offset st_fwr_size, st_n_filetypes;
+        MPI_Offset st_fwr_size, st_n_filetypes;
 
         /* First we're going to calculate a set of values for use in all
          * the noncontiguous in file cases:
@@ -153,7 +153,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
         }
 
         /* abs. offset in bytes in the file */
-        start_off = disp + n_filetypes * (ADIO_Offset) filetype_extent + abs_off_in_filetype;
+        start_off = disp + n_filetypes * (MPI_Offset) filetype_extent + abs_off_in_filetype;
 
         st_fwr_size = fwr_size;
         st_n_filetypes = n_filetypes;
@@ -180,7 +180,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                 n_filetypes++;
             }
 
-            off = disp + flat_file->indices[f_index] + n_filetypes * (ADIO_Offset) filetype_extent;
+            off = disp + flat_file->indices[f_index] + n_filetypes * (MPI_Offset) filetype_extent;
             fwr_size = MPL_MIN(flat_file->blocklens[f_index], bufsize - userbuf_off);
         }
 
@@ -225,7 +225,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                 userbuf_off += fwr_size;
 
                 if (off + fwr_size < disp + flat_file->indices[f_index] +
-                    flat_file->blocklens[f_index] + n_filetypes * (ADIO_Offset) filetype_extent) {
+                    flat_file->blocklens[f_index] + n_filetypes * (MPI_Offset) filetype_extent) {
                     /* important that this value be correct, as it is
                      * used to set the offset in the fd near the end of
                      * this function.
@@ -243,12 +243,12 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                         n_filetypes++;
                     }
                     off = disp + flat_file->indices[f_index] +
-                        n_filetypes * (ADIO_Offset) filetype_extent;
+                        n_filetypes * (MPI_Offset) filetype_extent;
                     fwr_size = MPL_MIN(flat_file->blocklens[f_index], bufsize - userbuf_off);
                 }
             }
         } else {
-            ADIO_Offset i_offset, tmp_bufsize = 0;
+            MPI_Offset i_offset, tmp_bufsize = 0;
             /* noncontiguous in memory as well as in file */
 
             flat_buf = ADIOI_Flatten_and_find(buftype);
@@ -263,7 +263,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
 
             /* while we haven't read size * count bytes, keep going */
             while (tmp_bufsize < bufsize) {
-                ADIO_Offset new_bwr_size = bwr_size, new_fwr_size = fwr_size;
+                MPI_Offset new_bwr_size = bwr_size, new_fwr_size = fwr_size;
 
                 size = MPL_MIN(fwr_size, bwr_size);
                 /* keep max of a single read amount <= INT_MAX */
@@ -290,7 +290,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                     }
 
                     off = disp + flat_file->indices[f_index] +
-                        n_filetypes * (ADIO_Offset) filetype_extent;
+                        n_filetypes * (MPI_Offset) filetype_extent;
 
                     new_fwr_size = flat_file->blocklens[f_index];
                     if (size != bwr_size) {
@@ -305,7 +305,7 @@ void ADIOI_GEN_WriteStrided_naive(ADIO_File fd, const void *buf, MPI_Aint count,
                     b_index = (b_index + 1) % flat_buf->count;
                     buf_count++;
                     i_offset =
-                        (ADIO_Offset) buftype_extent *(ADIO_Offset) (buf_count / flat_buf->count) +
+                        (MPI_Offset) buftype_extent *(MPI_Offset) (buf_count / flat_buf->count) +
                         flat_buf->indices[b_index];
                     new_bwr_size = flat_buf->blocklens[b_index];
                     if (size != fwr_size) {

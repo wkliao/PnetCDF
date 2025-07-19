@@ -22,13 +22,13 @@ int PNCIO_ReadContig(ADIO_File     fd,
                     void         *buf,
                     MPI_Aint      count,
                     MPI_Datatype  bufType,
-                    ADIO_Offset   offset,
+                    MPI_Offset   offset,
                     ADIO_Status  *status,
                     int          *error_code)
 {
     ssize_t err = 0;
     size_t r_count;
-    ADIO_Offset off, len, bytes_xfered = 0;
+    MPI_Offset off, len, bytes_xfered = 0;
     char *p;
 
     if (error_code != NULL) *error_code = MPI_SUCCESS;

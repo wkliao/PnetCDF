@@ -60,8 +60,8 @@ const char *ADIOI_GEN_flock_type_to_string(int type)
 /* This assumes that lock will always remain in the common directory and
  * that the ntfs directory will always be called ad_ntfs. */
 #include "..\ad_ntfs\ad_ntfs.h"
-int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int whence,
-                      ADIO_Offset len)
+int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
+                      MPI_Offset len)
 {
     static char myname[] = "ADIOI_GEN_SetLock";
     FDTYPE fd_sys = fd->fd_sys;
@@ -130,8 +130,8 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int w
     return error_code;
 }
 #else
-int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int whence,
-                      ADIO_Offset len)
+int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
+                      MPI_Offset len)
 {
     FDTYPE fd_sys = fd->fd_sys;
     int err, error_code, err_count = 0, sav_errno;
@@ -143,7 +143,7 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int w
 
     /* Depending on the compiler flags and options, struct flock
      * may not be defined with types that are the same size as
-     * ADIO_Offsets.  */
+     * MPI_Offsets.  */
 /* FIXME: This is a temporary hack until we use flock64 where
    available. It also doesn't fix the broken Solaris header sys/types.h
    header file, which declares off_t as a UNION ! Configure tests to
@@ -208,8 +208,8 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int w
 }
 #endif
 
-int ADIOI_GEN_SetLock64(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int whence,
-                        ADIO_Offset len)
+int ADIOI_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
+                        MPI_Offset len)
 {
     FDTYPE fd_sys = fd->fd_sys;
     int err, error_code;

@@ -26,13 +26,13 @@ int PNCIO_WriteContig(ADIO_File     fd,
                      const void   *buf,
                      MPI_Aint      count,
                      MPI_Datatype  bufType,
-                     ADIO_Offset   offset,
+                     MPI_Offset   offset,
                      ADIO_Status  *status,
                      int          *error_code)
 {
     ssize_t err = 0;
     size_t w_count;
-    ADIO_Offset off, len, bytes_xfered = 0;
+    MPI_Offset off, len, bytes_xfered = 0;
     char *p;
 
     if (error_code != NULL) *error_code = MPI_SUCCESS;
@@ -54,7 +54,7 @@ int PNCIO_WriteContig(ADIO_File     fd,
 #ifdef WKL_DEBUG
 int rank; MPI_Comm_rank(MPI_COMM_WORLD,&rank);
 
-ADIO_Offset ost_id = (off / fd->hints->striping_unit) % fd->hints->striping_factor;
+MPI_Offset ost_id = (off / fd->hints->striping_unit) % fd->hints->striping_factor;
     if (first_ost_id == -1) {
         first_ost_id = ost_id;
         // printf("%2d %s file %s First pwrite off=%lld OST %d\n",rank,__func__,fd->filename,off,first_ost_id);
