@@ -371,9 +371,9 @@ void ADIOI_Heap_merge(ADIOI_Access * others_req, MPI_Count * count,
     ADIOI_Free(a);
 }
 
-int MPIO_Err_create_code(int lastcode, int fatal, const char fcname[],
-                         int line, int error_class, const char generic_msg[],
-                         const char specific_msg[], ...)
+int PNCIO_Err_create_code(int lastcode, int fatal, const char fcname[],
+                          int line, int error_class, const char generic_msg[],
+                          const char specific_msg[], ...)
 {
     va_list Argp;
     int idx = 0;
@@ -389,7 +389,7 @@ int MPIO_Err_create_code(int lastcode, int fatal, const char fcname[],
             vsnprintf(&buf[idx], 1023 - idx, specific_msg, Argp);
             va_end(Argp);
         }
-        FPRINTF(stderr, "%s", buf);
+        fprintf(stderr, "%s", buf);
         ADIOI_Free(buf);
     }
 

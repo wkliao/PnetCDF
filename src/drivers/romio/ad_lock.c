@@ -108,7 +108,7 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int w
     if (!ret_val) {
         char errMsg[ADIOI_NTFS_ERR_MSG_MAX];
         /*
-         * FPRINTF(stderr, "File locking failed in ADIOI_GEN_SetLock.\n");
+         * fprintf(stderr, "File locking failed in ADIOI_GEN_SetLock.\n");
          * MPI_Abort(MPI_COMM_WORLD, 1);
          */
         ret_val = GetLastError();
@@ -122,8 +122,8 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int w
             ret_val = GetLastError();
         }
         ADIOI_NTFS_Strerror(ret_val, errMsg, ADIOI_NTFS_ERR_MSG_MAX);
-        error_code = MPIO_Err_create_code(MPI_SUCCESS, MPIR_ERR_RECOVERABLE, myname, __LINE__,
-                                          MPI_ERR_IO, "**io", "**io %s", errMsg);
+        error_code = PNCIO_Err_create_code(MPI_SUCCESS, MPIR_ERR_RECOVERABLE, myname, __LINE__,
+                                           MPI_ERR_IO, "**io", "**io %s", errMsg);
     }
     CloseHandle(Overlapped.hEvent);
 
@@ -188,14 +188,14 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int w
     if (err && (errno != EBADF)) {
         /* FIXME: This should use the error message system,
          * especially for MPICH */
-        FPRINTF(stderr,
+        fprintf(stderr,
                 "This requires fcntl(2) to be implemented. As of 8/25/2011 it is not. Generic MPICH Message: File locking failed in ADIOI_GEN_SetLock(fd %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
                 "- If the file system is NFS, you need to use NFS version 3, ensure that the lockd daemon is running on all the machines, and mount the directory with the 'noac' option (no attribute caching).\n"
                 "- If the file system is LUSTRE, ensure that the directory is mounted with the 'flock' option.\n",
                 fd_sys, ADIOI_GEN_flock_cmd_to_string(cmd), cmd,
                 ADIOI_GEN_flock_type_to_string(type), type, whence, err, errno);
         perror("ADIOI_GEN_SetLock:");
-        FPRINTF(stderr, "ADIOI_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
+        fprintf(stderr, "ADIOI_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
                 (unsigned long long) len);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
@@ -232,13 +232,13 @@ int ADIOI_GEN_SetLock64(ADIO_File fd, int cmd, int type, ADIO_Offset offset, int
     } while (err && (errno == EINTR));
 
     if (err && (errno != EBADF)) {
-        FPRINTF(stderr,
+        fprintf(stderr,
                 "File locking failed in ADIOI_GEN_SetLock64(fd %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
                 "If the file system is NFS, you need to use NFS version 3, ensure that the lockd daemon is running on all the machines, and mount the directory with the 'noac' option (no attribute caching).\n",
                 fd_sys, ADIOI_GEN_flock_cmd_to_string(cmd), cmd,
                 ADIOI_GEN_flock_type_to_string(type), type, whence, err, errno);
         perror("ADIOI_GEN_SetLock64:");
-        FPRINTF(stderr, "ADIOI_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
+        fprintf(stderr, "ADIOI_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
                 (unsigned long long) len);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }

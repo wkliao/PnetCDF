@@ -14,14 +14,13 @@
         if (req_off >= writebuf_off + writebuf_len) {                   \
             if (writebuf_len) {                                         \
                 ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,  \
-                                 writebuf_off, &status1, error_code); \
+                                 writebuf_off, &status1, error_code);   \
                 if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                     ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
                 if (*error_code != MPI_SUCCESS) {                       \
-                    *error_code = MPIO_Err_create_code(*error_code,     \
-                                                       MPIR_ERR_RECOVERABLE, myname, \
-                                                       __LINE__, MPI_ERR_IO, \
-                                                       "**iowswc", 0);  \
+                    *error_code = PNCIO_Err_create_code(*error_code,    \
+                        MPIR_ERR_RECOVERABLE, myname, __LINE__,         \
+                        MPI_ERR_IO, "**iowswc", 0);                     \
                     goto fn_exit;                                       \
                 }                                                       \
             }                                                           \
@@ -30,12 +29,11 @@
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                 ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             ADIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
-                            writebuf_off, &status1, error_code); \
+                            writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = MPIO_Err_create_code(*error_code,         \
-                                                   MPIR_ERR_RECOVERABLE, myname, \
-                                                   __LINE__, MPI_ERR_IO, \
-                                                   "**iowsrc", 0);      \
+                *error_code = PNCIO_Err_create_code(*error_code,        \
+                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
+                    "**iowsrc", 0);                                     \
                 goto fn_exit;                                           \
             }                                                           \
         }                                                               \
@@ -44,14 +42,13 @@
         memcpy(writebuf+req_off-writebuf_off, (char *)buf +userbuf_off, write_sz); \
         while (write_sz != req_len) {                                   \
             ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                             writebuf_off, &status1, error_code); \
+                             writebuf_off, &status1, error_code);       \
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                 ADIOI_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = MPIO_Err_create_code(*error_code,         \
-                                                   MPIR_ERR_RECOVERABLE, myname, \
-                                                   __LINE__, MPI_ERR_IO, \
-                                                   "**iowswc", 0);      \
+                *error_code = PNCIO_Err_create_code(*error_code,        \
+                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
+                    "**iowswc", 0);                                     \
                 goto fn_exit;                                           \
             }                                                           \
             req_len -= write_sz;                                        \
@@ -61,12 +58,11 @@
             if (!fd->atomicity && fd->hints->ds_write == ADIOI_HINT_DISABLE) \
                 ADIOI_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
             ADIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,       \
-                            writebuf_off, &status1, error_code); \
+                            writebuf_off, &status1, error_code);        \
             if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = MPIO_Err_create_code(*error_code,         \
-                                                   MPIR_ERR_RECOVERABLE, myname, \
-                                                   __LINE__, MPI_ERR_IO, \
-                                                   "**iowsrc", 0);      \
+                *error_code = PNCIO_Err_create_code(*error_code,        \
+                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
+                    "**iowsrc", 0);                                     \
                 goto fn_exit;                                           \
             }                                                           \
             write_sz = MPL_MIN(req_len, writebuf_len);                  \
@@ -81,12 +77,11 @@
     {                                                                   \
         if (req_off >= writebuf_off + writebuf_len) {                   \
             ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                             writebuf_off, &status1, error_code); \
+                             writebuf_off, &status1, error_code);       \
             if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = MPIO_Err_create_code(*error_code,         \
-                                                   MPIR_ERR_RECOVERABLE, myname, \
-                                                   __LINE__, MPI_ERR_IO, \
-                                                   "**iowswc", 0);      \
+                *error_code = PNCIO_Err_create_code(*error_code,        \
+                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
+                    "**iowswc", 0);                                     \
                 goto fn_exit;                                           \
             }                                                           \
             writebuf_off = req_off;                                     \
@@ -97,12 +92,11 @@
         memcpy(writebuf+req_off-writebuf_off, (char *)buf +userbuf_off, write_sz); \
         while (write_sz != req_len) {                                   \
             ADIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                             writebuf_off, &status1, error_code); \
+                             writebuf_off, &status1, error_code);       \
             if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = MPIO_Err_create_code(*error_code,         \
-                                                   MPIR_ERR_RECOVERABLE, myname, \
-                                                   __LINE__, MPI_ERR_IO, \
-                                                   "**iowswc", 0);      \
+                *error_code = PNCIO_Err_create_code(*error_code,        \
+                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
+                    "**iowswc", 0);                                     \
                 goto fn_exit;                                           \
             }                                                           \
             req_len -= write_sz;                                        \

@@ -96,7 +96,7 @@ int ADIOI_Calc_aggregator(ADIO_File fd,
      * bigger than fd->hins->cb_nodes.   If we ever violate that, we're
      * overrunning arrays.  Obviously, we should never ever hit this abort */
     if (rank_index >= fd->hints->cb_nodes || rank_index < 0) {
-        FPRINTF(stderr,
+        fprintf(stderr,
                 "Error in ADIOI_Calc_aggregator(): rank_index(%d) >= fd->hints->cb_nodes (%d) fd_size=%lld off=%lld\n",
                 rank_index, fd->hints->cb_nodes, (long long) fd_size, (long long) off);
         MPI_Abort(MPI_COMM_WORLD, 1);

@@ -1088,7 +1088,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
         default:
             /* TODO: FIXME (requires changing prototypes to return errors...) */
-            DBG_FPRINTF(stderr, "Error: Unsupported datatype passed to ADIOI_Flatten\n");
+            fprintf(stderr, "Error: Unsupported datatype passed to ADIOI_Flatten\n");
             MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
@@ -1356,9 +1356,9 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
 
         default:
             /* TODO: FIXME */
-            DBG_FPRINTF(stderr,
-                        "Error: Unsupported datatype passed to ADIOI_Count_contiguous_blocks, combiner = %d\n",
-                        combiner);
+            fprintf(stderr,
+                    "Error: Unsupported datatype passed to ADIOI_Count_contiguous_blocks, combiner = %d\n",
+                    combiner);
             MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
