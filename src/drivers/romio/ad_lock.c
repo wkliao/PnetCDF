@@ -92,23 +92,6 @@ int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset, int 
     errno = 0;
     do {
         err = fcntl(fd_sys, cmd, &lock);
-#ifdef MPL_USE_DBG_LOGGING
-/*      if (MPL_DBG_SELECTED(ROMIO,TERSE)) */
-        {
-            if (err && ((errno == EINTR) || (errno == EINPROGRESS))) {
-                if ((err_count < 5) || (err_count > 9995)) {
-                    fprintf(stderr,
-                            "File locking failed in PNCIO_GEN_SetLock(fd %#X,cmd %s/%#X,type %s/%#X,whence %#X) with return value %#X and errno %#X.  Retry (%d).\n",
-                            fd_sys, ADIOI_GEN_flock_cmd_to_string(cmd), cmd,
-                            ADIOI_GEN_flock_type_to_string(type), type, whence, err, errno,
-                            err_count);
-                    perror("PNCIO_GEN_SetLock:");
-                    fprintf(stderr, "PNCIO_GEN_SetLock:offset %#llx, length %#llx\n",
-                            (unsigned long long) offset, (unsigned long long) len);
-                }
-            }
-        }
-#endif
     } while (err && ((errno == EINTR) || ((errno == EINPROGRESS) && (++err_count < 10000))));
 
     if (err && (errno != EBADF)) {
