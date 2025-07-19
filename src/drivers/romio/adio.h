@@ -61,7 +61,6 @@
 #define PNCIO_FSTYPE_CHECK  0      /* Use PnetCDF ADIO drivers */
 
 #define ADIOI_Calloc(a,b) NCI_Calloc((size_t)a,b)
-#define ADIOI_Realloc NCI_Realloc
 #define ADIOI_Free NCI_Free
 
 #define ADIOI_Strncpy strncpy

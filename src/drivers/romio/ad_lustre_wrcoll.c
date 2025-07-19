@@ -2255,7 +2255,7 @@ void Exchange_data_recv(
      */
     sum_recv -= recv_size[myrank];
     if (sum_recv > fd->hints->striping_unit)
-        *recv_buf = (char *) ADIOI_Realloc(*recv_buf, sum_recv);
+        *recv_buf = (char *) NCI_Realloc(*recv_buf, sum_recv);
     contig_buf = *recv_buf;
 
     /* cache displacement-length pairs of receive buffer */
