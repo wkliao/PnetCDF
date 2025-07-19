@@ -60,10 +60,10 @@ const char *ADIOI_GEN_flock_type_to_string(int type)
 /* This assumes that lock will always remain in the common directory and
  * that the ntfs directory will always be called ad_ntfs. */
 #include "..\ad_ntfs\ad_ntfs.h"
-int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
+int PNCIO_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
                       MPI_Offset len)
 {
-    static char myname[] = "ADIOI_GEN_SetLock";
+    static char myname[] = "PNCIO_GEN_SetLock";
     FDTYPE fd_sys = fd->fd_sys;
     int ret_val, error_code = MPI_SUCCESS;
     OVERLAPPED Overlapped;
@@ -108,7 +108,7 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int wh
     if (!ret_val) {
         char errMsg[ADIOI_NTFS_ERR_MSG_MAX];
         /*
-         * fprintf(stderr, "File locking failed in ADIOI_GEN_SetLock.\n");
+         * fprintf(stderr, "File locking failed in PNCIO_GEN_SetLock.\n");
          * MPI_Abort(MPI_COMM_WORLD, 1);
          */
         ret_val = GetLastError();
@@ -130,7 +130,7 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int wh
     return error_code;
 }
 #else
-int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
+int PNCIO_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int whence,
                       MPI_Offset len)
 {
     FDTYPE fd_sys = fd->fd_sys;
@@ -172,12 +172,12 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int wh
             if (err && ((errno == EINTR) || (errno == EINPROGRESS))) {
                 if ((err_count < 5) || (err_count > 9995)) {
                     fprintf(stderr,
-                            "File locking failed in ADIOI_GEN_SetLock(fd %#X,cmd %s/%#X,type %s/%#X,whence %#X) with return value %#X and errno %#X.  Retry (%d).\n",
+                            "File locking failed in PNCIO_GEN_SetLock(fd %#X,cmd %s/%#X,type %s/%#X,whence %#X) with return value %#X and errno %#X.  Retry (%d).\n",
                             fd_sys, ADIOI_GEN_flock_cmd_to_string(cmd), cmd,
                             ADIOI_GEN_flock_type_to_string(type), type, whence, err, errno,
                             err_count);
-                    perror("ADIOI_GEN_SetLock:");
-                    fprintf(stderr, "ADIOI_GEN_SetLock:offset %#llx, length %#llx\n",
+                    perror("PNCIO_GEN_SetLock:");
+                    fprintf(stderr, "PNCIO_GEN_SetLock:offset %#llx, length %#llx\n",
                             (unsigned long long) offset, (unsigned long long) len);
                 }
             }
@@ -189,13 +189,13 @@ int ADIOI_GEN_SetLock(ADIO_File fd, int cmd, int type, MPI_Offset offset, int wh
         /* FIXME: This should use the error message system,
          * especially for MPICH */
         fprintf(stderr,
-                "This requires fcntl(2) to be implemented. As of 8/25/2011 it is not. Generic MPICH Message: File locking failed in ADIOI_GEN_SetLock(fd %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
+                "This requires fcntl(2) to be implemented. As of 8/25/2011 it is not. Generic MPICH Message: File locking failed in PNCIO_GEN_SetLock(fd %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
                 "- If the file system is NFS, you need to use NFS version 3, ensure that the lockd daemon is running on all the machines, and mount the directory with the 'noac' option (no attribute caching).\n"
                 "- If the file system is LUSTRE, ensure that the directory is mounted with the 'flock' option.\n",
                 fd_sys, ADIOI_GEN_flock_cmd_to_string(cmd), cmd,
                 ADIOI_GEN_flock_type_to_string(type), type, whence, err, errno);
-        perror("ADIOI_GEN_SetLock:");
-        fprintf(stderr, "ADIOI_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
+        perror("PNCIO_GEN_SetLock:");
+        fprintf(stderr, "PNCIO_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
                 (unsigned long long) len);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
@@ -238,7 +238,7 @@ int PNCIO_GEN_SetLock64(ADIO_File fd, int cmd, int type, MPI_Offset offset, int 
                 fd_sys, ADIOI_GEN_flock_cmd_to_string(cmd), cmd,
                 ADIOI_GEN_flock_type_to_string(type), type, whence, err, errno);
         perror("PNCIO_GEN_SetLock64:");
-        fprintf(stderr, "ADIOI_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
+        fprintf(stderr, "PNCIO_GEN_SetLock:offset %llu, length %llu\n", (unsigned long long) offset,
                 (unsigned long long) len);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
