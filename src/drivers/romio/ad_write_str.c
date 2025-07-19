@@ -136,7 +136,7 @@ void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
          * approach instead.
          */
 
-        ADIOI_GEN_WriteStrided_naive(fd,
+        PNCIO_GEN_WriteStrided_naive(fd,
                                      buf,
                                      count, datatype, offset, status, error_code);
         return;
