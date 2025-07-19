@@ -9,7 +9,7 @@
 
 #include <adio.h>
 
-void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
+void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 {
     int combiner;
 
@@ -46,7 +46,7 @@ void ADIOI_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 #else
                 MPI_Type_get_contents(datatype, nints, nadds, ntypes, ints, adds, types);
 #endif
-                ADIOI_Datatype_iscontig(types[0], flag);
+                PNCIO_Datatype_iscontig(types[0], flag);
 
                 ADIOI_Type_dispose(types);
                 ADIOI_Free(ints);

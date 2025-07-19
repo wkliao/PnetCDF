@@ -161,7 +161,7 @@ void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         filetype_extent = 1;
     }
     else {
-        ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
         MPI_Type_size_x(fd->filetype, &filetype_size);
         if (!filetype_size) {
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
@@ -175,7 +175,7 @@ void ADIOI_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
         MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
     }
 
-    ADIOI_Datatype_iscontig(datatype, &buftype_is_contig);
+    PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
     MPI_Type_size_x(datatype, &buftype_size);
     MPI_Type_get_extent(datatype, &lb, &buftype_extent);
 

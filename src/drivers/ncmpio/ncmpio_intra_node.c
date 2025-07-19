@@ -2184,7 +2184,7 @@ int ina_get(NC           *ncp,
      * buffer is allocated and the read data is copied over, before unpacking
      * it to user's buffer.
      */
-    ADIOI_Datatype_iscontig(bufType, &buftype_is_contig);
+    PNCIO_Datatype_iscontig(bufType, &buftype_is_contig);
 
     if (buf != NULL && buftype_is_contig)
         ptr = buf;

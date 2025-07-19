@@ -30,8 +30,8 @@ void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
 
     *error_code = MPI_SUCCESS;  /* changed below if error */
 
-    ADIOI_Datatype_iscontig(buftype, &buftype_is_contig);
-    ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+    PNCIO_Datatype_iscontig(buftype, &buftype_is_contig);
+    PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     MPI_Type_size_x(fd->filetype, &filetype_size);
     if (!filetype_size) {

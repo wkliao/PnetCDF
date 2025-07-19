@@ -216,7 +216,7 @@ static ADIOI_Flatlist_node *ADIOI_Flatten_datatype(MPI_Datatype datatype)
     ADIOI_Flatlist_node *flat;
 
     /* is it entirely contiguous? */
-    ADIOI_Datatype_iscontig(datatype, &is_contig);
+    PNCIO_Datatype_iscontig(datatype, &is_contig);
 
     /* it would be great if ADIOI_Count_contiguous_blocks and the rest of the
      * flattening code operated on the built-in named types, but
@@ -475,7 +475,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 #ifdef MPIIMPL_HAVE_MPI_COMBINER_DUP
         case MPI_COMBINER_DUP:
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
             if ((!old_is_predef) && (!old_is_contig))
                 ADIOI_Flatten(types[0], flat, st_offset, curr_index);
             break;
@@ -522,7 +522,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig))
@@ -562,7 +562,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig))
@@ -631,7 +631,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig))
@@ -696,7 +696,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
             MPI_Type_get_extent(types[0], &lb, &old_extent);
 
             prev_index = *curr_index;
@@ -799,7 +799,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
             MPI_Type_get_extent(types[0], &lb, &old_extent);
 
             prev_index = *curr_index;
@@ -891,7 +891,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
 
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig)) {
@@ -982,7 +982,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
             top_count = ints[0];
             for (n = 0; n < top_count; n++) {
                 ADIOI_Type_ispredef(types[n], &old_is_predef);
-                ADIOI_Datatype_iscontig(types[n], &old_is_contig);
+                PNCIO_Datatype_iscontig(types[n], &old_is_contig);
 
                 prev_index = *curr_index;
                 if ((!old_is_predef) && (!old_is_contig))
@@ -1053,7 +1053,7 @@ static void ADIOI_Flatten(MPI_Datatype datatype, ADIOI_Flatlist_node * flat,
             /* handle the datatype */
 
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             if ((!old_is_predef) && (!old_is_contig)) {
                 ADIOI_Flatten(types[0], flat, st_offset + adds[0], curr_index);
@@ -1126,7 +1126,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
 #ifdef MPIIMPL_HAVE_MPI_COMBINER_DUP
         case MPI_COMBINER_DUP:
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
             if ((!old_is_predef) && (!old_is_contig))
                 count = ADIOI_Count_contiguous_blocks(types[0], curr_index);
             else {
@@ -1181,7 +1181,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
         case MPI_COMBINER_CONTIGUOUS:
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig))
@@ -1207,7 +1207,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
 #endif
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig))
@@ -1243,7 +1243,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
 #endif
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig))
@@ -1278,7 +1278,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
         case MPI_COMBINER_INDEXED_BLOCK:
             top_count = ints[0];
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             prev_index = *curr_index;
             if ((!old_is_predef) && (!old_is_contig))
@@ -1313,7 +1313,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
             count = 0;
             for (n = 0; n < top_count; n++) {
                 ADIOI_Type_ispredef(types[n], &old_is_predef);
-                ADIOI_Datatype_iscontig(types[n], &old_is_contig);
+                PNCIO_Datatype_iscontig(types[n], &old_is_contig);
 
                 prev_index = *curr_index;
                 if ((!old_is_predef) && (!old_is_contig))
@@ -1343,7 +1343,7 @@ static MPI_Count ADIOI_Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count 
 
             /* add for datatype */
             ADIOI_Type_ispredef(types[0], &old_is_predef);
-            ADIOI_Datatype_iscontig(types[0], &old_is_contig);
+            PNCIO_Datatype_iscontig(types[0], &old_is_contig);
 
             if ((!old_is_predef) && (!old_is_contig)) {
                 count += ADIOI_Count_contiguous_blocks(types[0], curr_index);

@@ -137,7 +137,7 @@ double curT = MPI_Wtime();
          * for the moment. */
     }
 
-    ADIOI_Datatype_iscontig(datatype, &buftype_is_contig);
+    PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
 
     if (fd->hints->cb_read == ADIOI_HINT_DISABLE
         || (!interleave_count && (fd->hints->cb_read == ADIOI_HINT_AUTO))) {
@@ -152,7 +152,7 @@ double curT = MPI_Wtime();
         else if (fd->filetype == MPI_BYTE)
             filetype_is_contig = 1;
         else
-            ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+            PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
         *error_code = MPI_SUCCESS;
         if (count == 0) return;
@@ -338,7 +338,7 @@ void ADIOI_Calc_my_off_len(ADIO_File     fd,
         filetype_extent = 1;
     }
     else {
-        ADIOI_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
         MPI_Type_size_x(fd->filetype, &filetype_size);
         MPI_Type_get_extent(fd->filetype, &filetype_lb, &filetype_extent);
     }
@@ -589,7 +589,7 @@ static void ADIOI_Read_and_exch(ADIO_File fd, void *buf, MPI_Datatype
     /* used to store the starting value of curr_offlen_ptr[i] in
      * this iteration */
 
-    ADIOI_Datatype_iscontig(datatype, &buftype_is_contig);
+    PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
     if (!buftype_is_contig) {
         flat_buf = ADIOI_Flatten_and_find(datatype);
     }
