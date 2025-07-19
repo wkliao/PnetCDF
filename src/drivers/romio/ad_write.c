@@ -178,30 +178,6 @@ int ADIO_File_write_at(ADIO_File     fh,
     return err;
 }
 
-/*----< ADIO_File_write() >--------------------------------------------------*/
-/* This is an independent call. */
-int ADIO_File_write(ADIO_File     fh,
-                    const void   *buf,
-                    int           count,
-                    MPI_Datatype  bufType,
-                    MPI_Status   *status)
-{
-    int err = NC_NOERR;
-
-    ADIOI_Assert(fh != NULL);
-
-    if (count == 0) return NC_NOERR;
-
-    if (count < 0) return NC_ENEGATIVECNT;
-
-    if (fh->access_mode & MPI_MODE_RDONLY)
-        return NC_EPERM;
-
-    err = file_write(fh, 0, buf, count, bufType, status);
-
-    return err;
-}
-
 /*----< ADIO_File_write_at_all() >-------------------------------------------*/
 /* This is a collective call.
  * offset is a position in the file relative to the current view, expressed as
@@ -238,33 +214,4 @@ int ADIO_File_write_at_all(ADIO_File    fh,
     return st;
 }
 
-/*----< ADIO_File_write_all() >----------------------------------------------*/
-/* This is a collective call. */
-int ADIO_File_write_all(ADIO_File    fh,
-                       const void   *buf,
-                       int           count,
-                       MPI_Datatype  bufType,
-                       MPI_Status   *status)
-{
-    int err, st=NC_NOERR;
-
-    ADIOI_Assert(fh != NULL);
-
-    if (count < 0) st = NC_ENEGATIVECNT;
-
-    if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
-        st = NC_EPERM;
-
-    if (fh->file_system == ADIO_LUSTRE)
-        ADIOI_LUSTRE_WriteStridedColl(fh, buf, count, bufType, 0, status, &err);
-    else if (fh->file_system == ADIO_UFS)
-        ADIOI_GEN_WriteStridedColl(fh, buf, count, bufType, 0, status, &err);
-    else
-        return NC_EFSTYPE;
-
-    if (err != MPI_SUCCESS && st == NC_NOERR)
-        st = ncmpii_error_mpi2nc(err, "ADIO_File_write_all");
-
-    return st;
-}
 

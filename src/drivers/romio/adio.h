@@ -259,21 +259,13 @@ int PNCIO_File_get_size(ADIO_File fh, MPI_Offset *size);
 int PNCIO_File_get_info(ADIO_File fh, MPI_Info *info_used);
 int PNCIO_File_SetInfo(ADIO_File fh, MPI_Info  users_info);
 
-int ADIO_File_write(ADIO_File fh, const void *buf, int count,
-                MPI_Datatype datatype, MPI_Status *status);
 int ADIO_File_write_at(ADIO_File fh, MPI_Offset offset, const void *buf,
                 int count, MPI_Datatype  datatype, MPI_Status *status);
-int ADIO_File_write_all(ADIO_File fh, const void *buf, int count,
-                MPI_Datatype datatype, MPI_Status *status);
 int ADIO_File_write_at_all(ADIO_File fh, MPI_Offset offset, const void *buf,
                 int count, MPI_Datatype  datatype, MPI_Status *status);
 
-int ADIO_File_read(ADIO_File fh, void *buf, int count,
-                MPI_Datatype datatype, MPI_Status *status);
 int ADIO_File_read_at(ADIO_File fh, MPI_Offset offset, void *buf,
                 int count, MPI_Datatype  datatype, MPI_Status *status);
-int ADIO_File_read_all(ADIO_File fh, void *buf, int count,
-                MPI_Datatype datatype, MPI_Status *status);
 int ADIO_File_read_at_all(ADIO_File fh, MPI_Offset offset, void *buf,
                 int count, MPI_Datatype  datatype, MPI_Status *status);
 
