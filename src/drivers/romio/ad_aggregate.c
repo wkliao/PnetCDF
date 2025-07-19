@@ -13,7 +13,7 @@
  *
  * ADIOI_Calc_aggregator()
  * PNCIO_Calc_file_domains()
- * ADIOI_Calc_my_req()
+ * PNCIO_Calc_my_req()
  * ADIOI_Free_my_req()
  * ADIOI_Calc_others_req()
  * ADIOI_Free_others_req()
@@ -45,7 +45,7 @@
  *
  * The intention here is to implement a function which provides basically
  * the same functionality as in Rajeev's original version of
- * ADIOI_Calc_my_req().  He used a ceiling division approach to assign the
+ * PNCIO_Calc_my_req().  He used a ceiling division approach to assign the
  * file domains, and we use the same approach here when calculating the
  * location of an offset/len in a specific file domain.  Further we assume
  * this same distribution when calculating the rank_index, which is later
@@ -219,11 +219,11 @@ void PNCIO_Calc_file_domains(MPI_Offset * st_offsets, MPI_Offset
 }
 
 
-/* ADIOI_Calc_my_req() - calculate what portions of the access requests
+/* PNCIO_Calc_my_req() - calculate what portions of the access requests
  * of this process are located in the file domains of various processes
  * (including this one)
  */
-void ADIOI_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
+void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                        MPI_Offset *len_list,
 #else

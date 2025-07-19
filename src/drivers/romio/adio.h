@@ -330,7 +330,7 @@ void PNCIO_Calc_file_domains(MPI_Offset * st_offsets,
                 MPI_Offset *min_st_offset_ptr, MPI_Offset **fd_start_ptr,
                 MPI_Offset **fd_end_ptr, MPI_Offset *fd_size_ptr,
                 int striping_unit);
-void ADIOI_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
+void PNCIO_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Offset *len_list,
 #else

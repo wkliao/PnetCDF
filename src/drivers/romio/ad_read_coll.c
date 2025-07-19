@@ -207,7 +207,7 @@ double curT = MPI_Wtime();
      * buf_idx[] - array of locations into which data can be directly moved;
      *     this is only valid for contiguous buffer case
      */
-    ADIOI_Calc_my_req(fd, offset_list, len_list, contig_access_count,
+    PNCIO_Calc_my_req(fd, offset_list, len_list, contig_access_count,
                       min_st_offset, fd_start, fd_end, fd_size,
                       nprocs, &count_my_req_procs, &count_my_req_per_proc, &my_req, &buf_idx);
 
