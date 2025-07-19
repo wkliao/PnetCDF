@@ -93,9 +93,9 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
             j++;
         }
     }
-    ADIOI_Free(ranks_per_node[0]);
-    ADIOI_Free(ranks_per_node);
-    ADIOI_Free(nprocs_per_node);
+    NCI_Free(ranks_per_node[0]);
+    NCI_Free(ranks_per_node);
+    NCI_Free(nprocs_per_node);
 
     return 0;
 }
@@ -322,11 +322,11 @@ err_out:
     if (min_err < 0) {
         if (err == 0) /* close file if opened successfully */
             close(fd->fd_sys);
-        ADIOI_Free(fd->hints);
+        NCI_Free(fd->hints);
         if (fd->info != MPI_INFO_NULL)
             MPI_Info_free(&(fd->info));
         if (fd->io_buf != NULL)
-            ADIOI_Free(fd->io_buf);
+            NCI_Free(fd->io_buf);
     }
     return err;
 }

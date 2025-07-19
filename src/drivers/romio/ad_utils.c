@@ -88,9 +88,9 @@ int PNCIO_Type_dispose(MPI_Datatype * datatype)
     else                                                                     \
         iDisp = (MPI_Aint*)disp;                                             \
     ret = func_name(iCount, iBklen, iDisp, dType, newType);                  \
-    ADIOI_Free(iBklen);                                                      \
+    NCI_Free(iBklen);                                                      \
     if (sizeof(MPI_Aint) != sizeof(MPI_Count))                               \
-        ADIOI_Free(iDisp);                                                   \
+        NCI_Free(iDisp);                                                   \
 }
 
 /* some systems do not have pread/pwrite, or requrie XOPEN_SOURCE set higher
@@ -261,7 +261,7 @@ void PNCIO_Heap_merge(PNCIO_Access * others_req, MPI_Count * count,
                 break;
         }
     }
-    ADIOI_Free(a);
+    NCI_Free(a);
 }
 
 int PNCIO_Err_create_code(int lastcode, int fatal, const char fcname[],
@@ -283,7 +283,7 @@ int PNCIO_Err_create_code(int lastcode, int fatal, const char fcname[],
             va_end(Argp);
         }
         fprintf(stderr, "%s", buf);
-        ADIOI_Free(buf);
+        NCI_Free(buf);
     }
 
     return error_class;

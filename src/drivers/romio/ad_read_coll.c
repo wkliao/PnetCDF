@@ -143,8 +143,8 @@ double curT = MPI_Wtime();
         || (!interleave_count && (fd->hints->cb_read == ADIOI_HINT_AUTO))) {
         /* don't do aggregation */
         if (fd->hints->cb_read != ADIOI_HINT_DISABLE) {
-            if (free_flat_fview) ADIOI_Free(offset_list);
-            ADIOI_Free(st_offsets);
+            if (free_flat_fview) NCI_Free(offset_list);
+            NCI_Free(st_offsets);
         }
 
         if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL)
@@ -240,9 +240,9 @@ double curT = MPI_Wtime();
     PNCIO_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
     PNCIO_Free_others_req(nprocs, count_others_req_per_proc, others_req);
 
-    if (free_flat_fview) ADIOI_Free(offset_list);
-    ADIOI_Free(st_offsets);
-    ADIOI_Free(fd_start);
+    if (free_flat_fview) NCI_Free(offset_list);
+    NCI_Free(st_offsets);
+    NCI_Free(fd_start);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     if (fd->is_agg) fd->read_timing[0] += MPI_Wtime() - curT;
@@ -763,11 +763,11 @@ static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
                          (MPI_Offset) (uintptr_t) (read_buf + real_size - for_next_iter));
             ADIOI_Assert((for_next_iter + coll_bufsize) == (size_t) (for_next_iter + coll_bufsize));
             memcpy(tmp_buf, read_buf + real_size - for_next_iter, for_next_iter);
-            ADIOI_Free(fd->io_buf);
+            NCI_Free(fd->io_buf);
             fd->io_buf = (char *) NCI_Malloc(for_next_iter + coll_bufsize);
             memcpy(fd->io_buf, tmp_buf, for_next_iter);
             read_buf = fd->io_buf;
-            ADIOI_Free(tmp_buf);
+            NCI_Free(tmp_buf);
         }
 
         off += size;
@@ -795,7 +795,7 @@ static void ADIOI_Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
     MPI_Status_set_elements(status, MPI_BYTE, actual_recved_bytes);
 #endif
 
-    ADIOI_Free(curr_offlen_ptr);
+    NCI_Free(curr_offlen_ptr);
 }
 
 static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
@@ -975,12 +975,12 @@ static void ADIOI_R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
     if (fd->is_agg) fd->read_timing[3] += MPI_Wtime() - curT;
 #endif
 
-    ADIOI_Free(statuses);
-    ADIOI_Free(requests);
+    NCI_Free(statuses);
+    NCI_Free(requests);
 
     if (!buftype_is_contig) {
-        ADIOI_Free(recv_buf[0]);
-        ADIOI_Free(recv_buf);
+        NCI_Free(recv_buf[0]);
+        NCI_Free(recv_buf);
     }
 }
 
@@ -1128,5 +1128,5 @@ void ADIOI_Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
         if (recv_size[i])
             recd_from_proc[i] = curr_from_proc[i];
 
-    ADIOI_Free(curr_from_proc);
+    NCI_Free(curr_from_proc);
 }

@@ -22,7 +22,7 @@
                     *error_code = PNCIO_Err_create_code(*error_code,    \
                         MPIR_ERR_RECOVERABLE, myname, __LINE__,         \
                         MPI_ERR_IO, "**iowswc", 0);                     \
-                    ADIOI_Free(writebuf);                               \
+                    NCI_Free(writebuf);                               \
                     return;                                             \
                 }                                                       \
             }                                                           \
@@ -39,7 +39,7 @@
                 *error_code = PNCIO_Err_create_code(*error_code,        \
                     MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
                     "**iowsrc", 0);                                     \
-                ADIOI_Free(writebuf);                                   \
+                NCI_Free(writebuf);                                   \
                 return;                                                 \
             }                                                           \
         }                                                               \
@@ -54,7 +54,7 @@
                 *error_code = PNCIO_Err_create_code(*error_code,        \
                     MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
                     "**iowswc", 0);                                     \
-                ADIOI_Free(writebuf);                                   \
+                NCI_Free(writebuf);                                   \
                 return;                                                 \
             }                                                           \
             req_len -= write_sz;                                        \
@@ -72,7 +72,7 @@
                 *error_code = PNCIO_Err_create_code(*error_code,        \
                     MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
                     "**iowsrc", 0);                                     \
-                ADIOI_Free(writebuf);                                   \
+                NCI_Free(writebuf);                                   \
                 return;                                                 \
             }                                                           \
             write_sz = MPL_MIN(req_len, writebuf_len);                  \
@@ -92,7 +92,7 @@
                 *error_code = PNCIO_Err_create_code(*error_code,        \
                     MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
                     "**iowswc", 0);                                     \
-                ADIOI_Free(writebuf);                                   \
+                NCI_Free(writebuf);                                   \
                 return;                                                 \
             }                                                           \
             writebuf_off = req_off;                                     \
@@ -111,7 +111,7 @@
                 *error_code = PNCIO_Err_create_code(*error_code,        \
                     MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
                     "**iowswc", 0);                                     \
-                ADIOI_Free(writebuf);                                   \
+                NCI_Free(writebuf);                                   \
                 return;                                                 \
             }                                                           \
             req_len -= write_sz;                                        \
@@ -237,10 +237,10 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
         if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, bufsize);
         if (*error_code != MPI_SUCCESS) {
-            ADIOI_Free(writebuf);
+            NCI_Free(writebuf);
             return;
         }
-        ADIOI_Free(writebuf);
+        NCI_Free(writebuf);
     } else {
         /* noncontiguous in file */
         flat_file = fd->flat_file;
@@ -295,7 +295,7 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
 #else
             MPI_Status_set_elements(status, datatype, count);
 #endif
-            ADIOI_Free(writebuf);
+            NCI_Free(writebuf);
             return;
         }
 
@@ -451,7 +451,7 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
         if (fd->atomicity || fd->hints->ds_write != ADIOI_HINT_DISABLE)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
-        ADIOI_Free(writebuf);
+        NCI_Free(writebuf);
     }
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X

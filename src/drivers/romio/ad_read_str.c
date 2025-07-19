@@ -29,10 +29,10 @@
             partial_read = (MPI_Aint) (readbuf_off + readbuf_len - req_off); \
             tmp_buf = (char *) NCI_Malloc(partial_read);              \
             memcpy(tmp_buf, readbuf+readbuf_len-partial_read, partial_read); \
-            ADIOI_Free(readbuf);                                        \
+            NCI_Free(readbuf);                                        \
             readbuf = (char *) NCI_Malloc(partial_read + max_bufsize); \
             memcpy(readbuf, tmp_buf, partial_read);                     \
-            ADIOI_Free(tmp_buf);                                        \
+            NCI_Free(tmp_buf);                                        \
             readbuf_off += readbuf_len-partial_read;                    \
             readbuf_len = (MPI_Aint) (partial_read +                    \
                           MPL_MIN(max_bufsize, end_offset-readbuf_off+1)); \
@@ -131,7 +131,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
     value = (char *) NCI_Malloc((MPI_MAX_INFO_VAL + 1) * sizeof(char));
     MPI_Info_get(fd->info, "ind_rd_buffer_size", MPI_MAX_INFO_VAL, value, &info_flag);
     max_bufsize = atoi(value);
-    ADIOI_Free(value);
+    NCI_Free(value);
 
 
     if (!buftype_is_contig && filetype_is_contig) {
@@ -169,7 +169,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
-        ADIOI_Free(readbuf);
+        NCI_Free(readbuf);
     }
 
     else {      /* noncontiguous in file */
@@ -354,7 +354,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
-        ADIOI_Free(readbuf);    /* malloced in the buffered_read macro */
+        NCI_Free(readbuf);    /* malloced in the buffered_read macro */
     }
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X

@@ -143,8 +143,8 @@ double curT = MPI_Wtime();
         /* use independent accesses */
         if (fd->hints->cb_write != ADIOI_HINT_DISABLE) {
             if (fd->filetype != MPI_DATATYPE_NULL)
-                ADIOI_Free(offset_list);
-            ADIOI_Free(st_offsets);
+                NCI_Free(offset_list);
+            NCI_Free(st_offsets);
         }
         if (count == 0) {
             *error_code = MPI_SUCCESS;
@@ -245,9 +245,9 @@ double curT = MPI_Wtime();
     PNCIO_Free_others_req(nprocs, count_others_req_per_proc, others_req);
 
     if (fd->filetype != MPI_DATATYPE_NULL)
-        ADIOI_Free(offset_list);
-    ADIOI_Free(st_offsets);
-    ADIOI_Free(fd_start);
+        NCI_Free(offset_list);
+    NCI_Free(st_offsets);
+    NCI_Free(fd_start);
 
     if (status) {
         /* This is a temporary way of filling in status. The right way is to
@@ -322,7 +322,7 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
     value = (char *) NCI_Malloc((MPI_MAX_INFO_VAL + 1) * sizeof(char));
     MPI_Info_get(fd->info, "cb_buffer_size", MPI_MAX_INFO_VAL, value, &info_flag);
     coll_bufsize = atoi(value);
-    ADIOI_Free(value);
+    NCI_Free(value);
 
 
     for (i = 0; i < nprocs; i++) {
@@ -532,7 +532,7 @@ static void ADIOI_Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
             return;
     }
 
-    ADIOI_Free(curr_offlen_ptr);
+    NCI_Free(curr_offlen_ptr);
 }
 
 
@@ -657,7 +657,7 @@ double curT = MPI_Wtime();
             MPI_Count k = start_pos[i] + count[i] - 1;
             others_req[i].lens[k] = tmp_len[i];
         }
-    ADIOI_Free(tmp_len);
+    NCI_Free(tmp_len);
 
     /* check if there are any holes. If yes, must do read-modify-write.
      * holes can be in three places.  'middle' is what you'd expect: the
@@ -683,8 +683,8 @@ double curT = MPI_Wtime();
                 *hole = 1;
         }
 
-        ADIOI_Free(srt_off);
-        ADIOI_Free(srt_len);
+        NCI_Free(srt_off);
+        NCI_Free(srt_len);
     }
 
     if (nprocs_recv) {
@@ -819,7 +819,7 @@ double curT = MPI_Wtime();
 
     for (i = 0; i < num_rtypes; i++)
         MPI_Type_free(recv_types + i);
-    ADIOI_Free(recv_types);
+    NCI_Free(recv_types);
 
     if (self_recv_type != MPI_DATATYPE_NULL)
         MPI_Type_free(&self_recv_type);
@@ -840,12 +840,12 @@ double curT = MPI_Wtime();
 #endif
 
 #ifndef HAVE_MPI_STATUSES_IGNORE
-    ADIOI_Free(statuses);
+    NCI_Free(statuses);
 #endif
-    ADIOI_Free(requests);
+    NCI_Free(requests);
     if (!buftype_is_contig && nprocs_send) {
-        ADIOI_Free(send_buf[0]);
-        ADIOI_Free(send_buf);
+        NCI_Free(send_buf[0]);
+        NCI_Free(send_buf);
     }
 }
 
