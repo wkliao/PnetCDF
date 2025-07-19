@@ -252,7 +252,7 @@ int PNCIO_File_set_view(ADIO_File fh, MPI_Offset disp, MPI_Datatype filetype,
                 MPI_Offset *offsets, int *lengths
 #endif
 );
-int ADIO_File_sync(ADIO_File fh);
+int PNCIO_File_sync(ADIO_File fh);
 int ADIO_File_delete(const char *filename);
 int ADIO_File_set_size(ADIO_File fh, MPI_Offset size);
 int ADIO_File_get_size(ADIO_File fh, MPI_Offset *size);
