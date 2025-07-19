@@ -12,7 +12,7 @@
 /* This file contains four functions:
  *
  * ADIOI_Calc_aggregator()
- * ADIOI_Calc_file_domains()
+ * PNCIO_Calc_file_domains()
  * ADIOI_Calc_my_req()
  * ADIOI_Free_my_req()
  * ADIOI_Calc_others_req()
@@ -85,7 +85,7 @@ int ADIOI_Calc_aggregator(ADIO_File fd,
     if (fd->hints->striping_unit > 0) {
         /* wkliao: implementation for file domain alignment
          * fd_start[] and fd_end[] have been aligned with file lock
-         * boundaries when returned from ADIOI_Calc_file_domains() so cannot
+         * boundaries when returned from PNCIO_Calc_file_domains() so cannot
          * just use simple arithmetic as above */
         rank_index = 0;
         while (off > fd_end[rank_index])
@@ -122,7 +122,7 @@ int ADIOI_Calc_aggregator(ADIO_File fd,
     return rank;
 }
 
-void ADIOI_Calc_file_domains(MPI_Offset * st_offsets, MPI_Offset
+void PNCIO_Calc_file_domains(MPI_Offset * st_offsets, MPI_Offset
                              * end_offsets, int nprocs, int nprocs_for_coll,
                              MPI_Offset * min_st_offset_ptr,
                              MPI_Offset ** fd_start_ptr, MPI_Offset
