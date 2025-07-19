@@ -61,7 +61,7 @@ void PNCIO_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
         end_offset = off + bufsize - 1;
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if ((fd->atomicity) && ADIO_Feature(fd, PNCIO_LOCKS)) {
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS)) {
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
         }
 
@@ -90,7 +90,7 @@ void PNCIO_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
             }
         }
 
-        if ((fd->atomicity) && ADIO_Feature(fd, PNCIO_LOCKS)) {
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS)) {
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
         }
     }
@@ -176,7 +176,7 @@ void PNCIO_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
          */
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if ((fd->atomicity) && ADIO_Feature(fd, PNCIO_LOCKS)) {
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS)) {
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
         }
 
@@ -312,7 +312,7 @@ void PNCIO_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
         }
 
         /* unlock the file region if we locked it */
-        if ((fd->atomicity) && ADIO_Feature(fd, PNCIO_LOCKS)) {
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS)) {
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
         }
     }   /* end of (else noncontiguous in file) */
