@@ -269,7 +269,7 @@ void ADIOI_Calc_my_req(ADIO_File fd, MPI_Offset * offset_list,
         buf_idx[i] = -1;
 
     /* one pass just to calculate how much space to allocate for my_req;
-     * contig_access_count was calculated way back in ADIOI_Calc_my_off_len()
+     * contig_access_count was calculated way back in PNCIO_Calc_my_off_len()
      */
     for (MPI_Count i = 0; i < contig_access_count; i++) {
         /* short circuit offset/len processing if len == 0

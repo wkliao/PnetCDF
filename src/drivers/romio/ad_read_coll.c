@@ -115,7 +115,7 @@ double curT = MPI_Wtime();
         /* Note: end_offset points to the last byte-offset that will be accessed.
          * e.g., if start_offset=0 and 100 bytes to be read, end_offset=99 */
 
-        ADIOI_Calc_my_off_len(fd, count, datatype, offset, &offset_list,
+        PNCIO_Calc_my_off_len(fd, count, datatype, offset, &offset_list,
                               &len_list, &start_offset, &end_offset,
                               &contig_access_count);
 
@@ -249,7 +249,7 @@ double curT = MPI_Wtime();
 #endif
 }
 
-void ADIOI_Calc_my_off_len(ADIO_File     fd,
+void PNCIO_Calc_my_off_len(ADIO_File     fd,
                            MPI_Aint      bufcount,
                            MPI_Datatype  datatype,
                            MPI_Offset   offset,

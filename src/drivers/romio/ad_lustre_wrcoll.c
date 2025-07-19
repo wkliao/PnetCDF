@@ -196,7 +196,7 @@ void ADIOI_LUSTRE_Calc_my_req(ADIO_File      fd,
 
     /* First pass is just to calculate how much space is needed to allocate
      * my_req. Note that flat_fview.count has been calculated way back in
-     * ADIOI_Calc_my_off_len()
+     * PNCIO_Calc_my_off_len()
      */
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(int) + sizeof(MPI_Offset);
@@ -648,15 +648,15 @@ double curT = MPI_Wtime();
      * write, end_offset == (start_offset - 1)
      *
      * When PnetCDF intra-node aggregation (INA) is not enabled, the below call
-     * to ADIOI_Calc_my_off_len() will allocate new buffers for flat_fview.
+     * to PNCIO_Calc_my_off_len() will allocate new buffers for flat_fview.
      *
      * When INA is enabled, flat_fview will simply reuse the offsets and
      * lengths buffers already flattened by the INA subroutines. This avoids
      * additional memory allocation.
      *
-     * ADIOI_Calc_my_off_len() performs no inter-process communication.
+     * PNCIO_Calc_my_off_len() performs no inter-process communication.
      */
-    ADIOI_Calc_my_off_len(fd, count, buftype, offset, &flat_fview.off,
+    PNCIO_Calc_my_off_len(fd, count, buftype, offset, &flat_fview.off,
                           &flat_fview.len, &start_offset, &end_offset,
                           &flat_fview.count);
     flat_fview.idx = 0;
@@ -673,10 +673,10 @@ double curT = MPI_Wtime();
      * enough to fall into one of the contiguous segment of the fileview.
      * Thus, flat_fview.count being 1 or not is the TRUE indicator of whether
      * or not this rank's write request is contiguous in the file space. This
-     * is because ADIOI_Calc_my_off_len has taken into account of both fileview
+     * is because PNCIO_Calc_my_off_len has taken into account of both fileview
      * and user buffer type.
      *
-     * Note ADIOI_Calc_my_off_len() checks whether a fileview is contiguous or
+     * Note PNCIO_Calc_my_off_len() checks whether a fileview is contiguous or
      * not by calling
      *     PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
      * However, a filetype being contiguous or not is not equal to whether or
@@ -847,7 +847,7 @@ double curT = MPI_Wtime();
             /* both buffer and fileview are contiguous */
             MPI_Offset off = 0;
             off = flat_fview.off[0];
-            /* In ADIOI_Calc_my_off_len(), (offset * fd->etype_size) has been
+            /* In PNCIO_Calc_my_off_len(), (offset * fd->etype_size) has been
              * counted into flat_fview.off[]. Similarly, fd->disp has been
              * counted into flat_fview.off[].
              */
