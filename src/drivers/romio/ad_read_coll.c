@@ -218,7 +218,7 @@ double curT = MPI_Wtime();
      * count_others_req_per_proc[] - number of separate contiguous
      *     requests from proc i lie in this process's file domain.
      */
-    ADIOI_Calc_others_req(fd, count_my_req_procs,
+    PNCIO_Calc_others_req(fd, count_my_req_procs,
                           count_my_req_per_proc, my_req,
                           nprocs, myrank, &count_others_req_procs, &count_others_req_per_proc,
                           &others_req);
