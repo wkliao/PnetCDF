@@ -22,8 +22,8 @@
 #include <common.h>
 #include "adio.h"
 
-/*----< ADIO_File_delete() >-------------------------------------------------*/
-int ADIO_File_delete(const char *filename)
+/*----< PNCIO_File_delete() >-------------------------------------------------*/
+int PNCIO_File_delete(const char *filename)
 {
     int err = NC_NOERR;
     char *path = ncmpii_remove_file_system_type_prefix(filename);
