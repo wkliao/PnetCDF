@@ -15,7 +15,7 @@
 /* utility function to query a datatype for its combiner,
  * convenience wrapper around MPI_Type_get_envelope[_c] */
 
-int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner)
+int PNCIO_Type_get_combiner(MPI_Datatype datatype, int *combiner)
 {
     int ret;
 
@@ -37,7 +37,7 @@ int ADIOI_Type_get_combiner(MPI_Datatype datatype, int *combiner)
 int PNCIO_Type_ispredef(MPI_Datatype datatype, int *flag)
 {
     int ret, combiner;
-    ret = ADIOI_Type_get_combiner(datatype, &combiner);
+    ret = PNCIO_Type_get_combiner(datatype, &combiner);
     switch (combiner) {
         case MPI_COMBINER_NAMED:
         case MPI_COMBINER_F90_INTEGER:

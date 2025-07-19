@@ -13,7 +13,7 @@ void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 {
     int combiner;
 
-    ADIOI_Type_get_combiner(datatype, &combiner);
+    PNCIO_Type_get_combiner(datatype, &combiner);
 
     switch (combiner) {
         case MPI_COMBINER_NAMED:
