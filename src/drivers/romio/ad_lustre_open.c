@@ -681,7 +681,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
              */
             int dd;
             char *dirc, *dname;
-            dirc = ADIOI_Strdup(fd->filename);
+            dirc = NCI_Strdup(fd->filename);
             dname = dirname(dirc);
 
             dd = open(dname, O_RDONLY, 0600);

@@ -89,7 +89,7 @@ static void PNCIO_FileSysType_parentdir(const char *filename, char **dirnamep)
         /* no such file, or file is not a link; these are the "normal"
          * cases where we can just return the parent directory.
          */
-        dir = ADIOI_Strdup(filename);
+        dir = NCI_Strdup(filename);
     } else {
         /* filename is a symlink.  we've presumably already tried
          * to stat it and found it to be missing (dangling link),
@@ -106,11 +106,11 @@ static void PNCIO_FileSysType_parentdir(const char *filename, char **dirnamep)
              * we determined that this was a link and the time that
              * we attempted to read it; punt and use the old name.
              */
-            dir = ADIOI_Strdup(filename);
+            dir = NCI_Strdup(filename);
         } else {
             /* successfully read the link */
             linkbuf[namelen] = '\0';    /* readlink doesn't null terminate */
-            dir = ADIOI_Strdup(linkbuf);
+            dir = NCI_Strdup(linkbuf);
         }
         ADIOI_Free(linkbuf);
     }
