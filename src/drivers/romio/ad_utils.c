@@ -251,7 +251,7 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
 }
 #endif
 
-void ADIOI_Heap_merge(ADIOI_Access * others_req, MPI_Count * count,
+void PNCIO_Heap_merge(ADIOI_Access * others_req, MPI_Count * count,
                       MPI_Offset * srt_off, MPI_Count * srt_len, MPI_Count * start_pos,
                       int nprocs, int nprocs_recv, MPI_Count total_elements)
 {

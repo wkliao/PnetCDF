@@ -1911,7 +1911,7 @@ static void ADIOI_LUSTRE_Exch_and_write(ADIO_File      fd,
 #endif
 }
 
-/* This subroutine is copied from ADIOI_Heap_merge(), but modified to coalesce
+/* This subroutine is copied from PNCIO_Heap_merge(), but modified to coalesce
  * sorted offset-length pairs whenever possible.
  *
  * Heapify(a, i, heapsize); Algorithm from Cormen et al. pg. 143 modified for a
