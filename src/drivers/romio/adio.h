@@ -290,7 +290,7 @@ void PNCIO_GEN_WriteStrided(ADIO_File fd, const void *buf, MPI_Aint count,
                             MPI_Datatype datatype, MPI_Offset offset,
                             ADIO_Status *status, int *error_code);
 
-void ADIOI_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
+void PNCIO_GEN_ReadStrided_naive(ADIO_File fd, void *buf, MPI_Aint count,
                 MPI_Datatype buftype, MPI_Offset offset, ADIO_Status *status,
                 int *error_code);
 

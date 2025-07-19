@@ -81,7 +81,7 @@ void ADIOI_GEN_ReadStrided(ADIO_File fd, void *buf, MPI_Aint count,
         /* if user has disabled data sieving on reads, use naive
          * approach instead.
          */
-        ADIOI_GEN_ReadStrided_naive(fd,
+        PNCIO_GEN_ReadStrided_naive(fd,
                                     buf,
                                     count, datatype, offset, status, error_code);
         return;
