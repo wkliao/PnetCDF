@@ -80,7 +80,7 @@ int ADIOI_Info_check_and_install_enabled(PNCIO_File  *fd,
     if (flag) {
         if (!strcmp(value, "enable") || !strcmp(value, "ENABLE")) {
             MPI_Info_set(fd->info, key, value);
-            *local_cache = ADIOI_HINT_ENABLE;
+            *local_cache = PNCIO_HINT_ENABLE;
         } else if (!strcmp(value, "disable") || !strcmp(value, "DISABLE")) {
             MPI_Info_set(fd->info, key, value);
             *local_cache = ADIOI_HINT_DISABLE;
@@ -93,7 +93,7 @@ int ADIOI_Info_check_and_install_enabled(PNCIO_File  *fd,
              */
         } else if (!strcmp(value, "requested") || !strcmp(value, "REQUESTED")) {
             MPI_Info_set(fd->info, key, "enable");
-            *local_cache = ADIOI_HINT_ENABLE;
+            *local_cache = PNCIO_HINT_ENABLE;
         }
 
         tmp_val = *local_cache;
@@ -324,8 +324,8 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
              * then we have to do collective  */
             MPI_Info_set(fd->info, "romio_cb_write", "enable");
             MPI_Info_set(fd->info, "romio_cb_read", "enable");
-            fd->hints->cb_read = ADIOI_HINT_ENABLE;
-            fd->hints->cb_write = ADIOI_HINT_ENABLE;
+            fd->hints->cb_read = PNCIO_HINT_ENABLE;
+            fd->hints->cb_write = PNCIO_HINT_ENABLE;
         }
         /* new hints for enabling/disabling data sieving on
          * reads/writes
