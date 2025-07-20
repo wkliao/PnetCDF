@@ -28,8 +28,6 @@ int PNCIO_File_close(PNCIO_File *fh)
 
     if (fh->hints->ranklist != NULL)
         NCI_Free(fh->hints->ranklist);
-    if (fh->hints->cb_config_list != NULL)
-        NCI_Free(fh->hints->cb_config_list);
     if (fh->hints != NULL)
         NCI_Free(fh->hints);
     if (fh->info != MPI_INFO_NULL)

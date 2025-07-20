@@ -125,7 +125,6 @@ typedef struct {
     int ind_wr_buffer_size;
     int deferred_open;
     int start_iodevice;
-    char *cb_config_list;
     int *ranklist;
 
     union {
@@ -188,7 +187,7 @@ typedef struct {
     int atomicity;          /* true=atomic, false=nonatomic */
     char *io_buf;           /* two-phase buffer allocated out of i/o path */
     int is_agg;             /* bool: if I am an aggregator */
-    int my_cb_nodes_index;  /* my index into cb_config_list. -1 if N/A */
+    int my_cb_nodes_index;  /* my index into fd->hints->ranklist[]. -1 if N/A */
     PNCIO_Hints *hints;     /* structure containing fs-indep. info values */
     MPI_Info info;
 

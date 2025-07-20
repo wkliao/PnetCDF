@@ -143,6 +143,7 @@ fn_exit:
     return ret;
 }
 
+#if 0
 /*----< Info_check_and_install_str() >---------------------------------------*/
 static
 int Info_check_and_install_str(PNCIO_File   *fd,
@@ -165,13 +166,10 @@ int Info_check_and_install_str(PNCIO_File   *fd,
         }
         strncpy(*local_cache, value, len);
     }
-    /* if it has been set already, we ignore it the second time.
-     * otherwise we would get an error if someone used the same
-     * info value with a cb_config_list value in it in a couple
-     * of calls, which would be irritating. */
 fn_exit:
     return ret;
 }
+#endif
 
 /*----< PNCIO_File_SetInfo() >------------------------------------------------*/
 /* For PnetCDF, a file info object can only be passed at file create or open
@@ -186,7 +184,7 @@ int
 PNCIO_File_SetInfo(PNCIO_File *fd,
                    MPI_Info   users_info)
 {
-    int flag, nprocs = 0, len;
+    int nprocs = 0;
     char value[MPI_MAX_INFO_VAL + 1];
 
     if (fd->hints->initialized && users_info == MPI_INFO_NULL)
@@ -216,8 +214,6 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         fd->hints->cb_read = PNCIO_HINT_AUTO;
         MPI_Info_set(info, "romio_cb_write", "automatic");
         fd->hints->cb_write = PNCIO_HINT_AUTO;
-
-        fd->hints->cb_config_list = NULL;
 
         /* cb_nodes may be set later right after file open call */
         fd->hints->cb_nodes = 0;
@@ -335,19 +331,6 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         Info_check_and_install_int(fd, users_info, "ind_rd_buffer_size",
                                    &(fd->hints->ind_rd_buffer_size));
 
-        if (fd->hints->cb_config_list == NULL) {
-            /* only set cb_config_list if it isn't already set.  Note that
-             * since we set it below, this ensures that the cb_config_list hint
-             * will be set at file open time either by the user or to the
-             * default */
-            /* if it has been set already, we ignore it the second time.
-             * otherwise we would get an error if someone used the same info
-             * value with a cb_config_list value in it in a couple of calls,
-             * which would be irritating. */
-            Info_check_and_install_str(fd, users_info, "cb_config_list",
-                                       &(fd->hints->cb_config_list));
-
-        }
         /* Now we use striping information in common code so we should
          * process hints for it. */
         Info_check_and_install_int(fd, users_info, "striping_unit",
@@ -364,21 +347,13 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
                          &(fd->hints->fs_hints.lustre.overstriping_ratio));
     }
 
+    /* PnetCDF ignores the following hints.
+     *    cb_config_list
+     */
+
     /* Begin hint post-processing: some hints take precedence over or conflict
      * with others, or aren't supported by some file systems */
 
-    /* handle cb_config_list default value here; avoids an extra
-     * free/alloc and insures it is always set
-     */
-    if (fd->hints->cb_config_list == NULL) {
-        MPI_Info_set(fd->info, "cb_config_list", PNCIO_CB_CONFIG_LIST_DFLT);
-        len = (strlen(PNCIO_CB_CONFIG_LIST_DFLT) + 1) * sizeof(char);
-        fd->hints->cb_config_list = NCI_Malloc(len);
-        if (fd->hints->cb_config_list == NULL)
-            return NC_ENOMEM;
-
-        strncpy(fd->hints->cb_config_list, PNCIO_CB_CONFIG_LIST_DFLT, len);
-    }
     /* deferred_open won't be set by callers, but if the user doesn't
      * explicitly disable collective buffering (two-phase) and does hint that
      * io w/o independent io is going on, we'll set this internal hint as a

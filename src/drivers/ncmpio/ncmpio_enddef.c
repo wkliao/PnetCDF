@@ -1215,7 +1215,7 @@ read_hints(NC *ncp)
 
     /* get hints from the environment variable PNETCDF_HINTS, a string of
      * hints separated by ";" and each hint is in the form of hint=value. E.g.
-     * "cb_nodes=16;cb_config_list=*:6". If this environment variable is set,
+     * "cb_nodes=16;romio_ds_write=true". If this environment variable is set,
      * it overrides the same hints that were set by MPI_Info_set() called in
      * the application program.
      */
