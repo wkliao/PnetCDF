@@ -349,28 +349,8 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
 
     /* PnetCDF ignores the following hints.
      *    cb_config_list
+     *    deferred_open
      */
-
-    /* Begin hint post-processing: some hints take precedence over or conflict
-     * with others, or aren't supported by some file systems */
-
-    /* deferred_open won't be set by callers, but if the user doesn't
-     * explicitly disable collective buffering (two-phase) and does hint that
-     * io w/o independent io is going on, we'll set this internal hint as a
-     * convenience */
-    if (((fd->hints->cb_read != PNCIO_HINT_DISABLE)
-         && (fd->hints->cb_write != PNCIO_HINT_DISABLE)
-         && fd->hints->no_indep_rw)) {
-        fd->hints->deferred_open = 1;
-    } else {
-        /* setting romio_no_indep_rw enable and romio_cb_{read,write}
-         * disable at the same time doesn't make sense. honor
-         * romio_cb_{read,write} and force the no_indep_rw hint to
-         * 'disable' */
-        MPI_Info_set(fd->info, "romio_no_indep_rw", "false");
-        fd->hints->no_indep_rw = 0;
-        fd->hints->deferred_open = 0;
-    }
 
     return NC_NOERR;
 }
