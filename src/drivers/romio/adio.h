@@ -123,7 +123,6 @@ typedef struct {
     int no_indep_rw;
     int ind_rd_buffer_size;
     int ind_wr_buffer_size;
-    int deferred_open;
     int start_iodevice;
     int *ranklist;
 
