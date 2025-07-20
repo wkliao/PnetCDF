@@ -79,25 +79,25 @@ typedef struct {
 } Flat_list;
 
 /* prototypes of functions used for collective writes only. */
-static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File *fd,
-                                        const void *buf,
-                                        Flat_list *flat_bview,
-                                        PNCIO_Access *others_req,
-                                        PNCIO_Access *my_req,
-                                        Flat_list *flat_fview,
-                                        MPI_Offset min_st_loc,
-                                        MPI_Offset max_end_loc,
-                                        MPI_Offset **buf_idx,
-                                        int *error_code);
+static void LUSTRE_Exch_and_write(PNCIO_File *fd,
+                                  const void *buf,
+                                  Flat_list *flat_bview,
+                                  PNCIO_Access *others_req,
+                                  PNCIO_Access *my_req,
+                                  Flat_list *flat_fview,
+                                  MPI_Offset min_st_loc,
+                                  MPI_Offset max_end_loc,
+                                  MPI_Offset **buf_idx,
+                                  int *error_code);
 
-static void ADIOI_LUSTRE_Fill_send_buffer(PNCIO_File *fd, const void *buf,
-                                          Flat_list *flat_fview,
-                                          Flat_list *flat_bview,
-                                          char **send_buf,
-                                          size_t send_total_size,
-                                          const MPI_Count *send_size,
-                                          char **self_buf,
-                                          disp_len_list *send_list);
+static void LUSTRE_Fill_send_buffer(PNCIO_File *fd, const void *buf,
+                                    Flat_list *flat_fview,
+                                    Flat_list *flat_bview,
+                                    char **send_buf,
+                                    size_t send_total_size,
+                                    const MPI_Count *send_size,
+                                    char **self_buf,
+                                    disp_len_list *send_list);
 
 static void Exchange_data_recv(PNCIO_File            *fd,
                                const void           *buf,
@@ -130,12 +130,12 @@ static void Exchange_data_send(      PNCIO_File      *fd,
                                      disp_len_list  *send_list);
 
 static
-int ADIOI_LUSTRE_Calc_aggregator(PNCIO_File  *fd,
-                                 MPI_Offset  off,
+int LUSTRE_Calc_aggregator(PNCIO_File  *fd,
+                           MPI_Offset  off,
 #ifdef HAVE_MPI_LARGE_COUNT
-                                 MPI_Offset *len
+                           MPI_Offset *len
 #else
-                                 int        *len
+                           int        *len
 #endif
 )
 {
@@ -153,7 +153,7 @@ int ADIOI_LUSTRE_Calc_aggregator(PNCIO_File  *fd,
     return (stripe_id % fd->hints->cb_nodes);
 }
 
-/*----< ADIOI_LUSTRE_Calc_my_req() >-----------------------------------------*/
+/*----< LUSTRE_Calc_my_req() >-----------------------------------------------*/
 /* calculates what portions of the read/write requests of this process fall
  * into the file domains of all I/O aggregators.
  *   IN: flat_fview: this rank's flattened write requests
@@ -169,11 +169,11 @@ int ADIOI_LUSTRE_Calc_aggregator(PNCIO_File  *fd,
  *        user_buf for data to be sent to each aggregator.
  */
 static
-void ADIOI_LUSTRE_Calc_my_req(PNCIO_File     *fd,
-                              Flat_list      flat_fview,
-                              int            buf_is_contig,
-                              PNCIO_Access **my_req_ptr,
-                              MPI_Offset  **buf_idx)
+void LUSTRE_Calc_my_req(PNCIO_File    *fd,
+                        Flat_list      flat_fview,
+                        int            buf_is_contig,
+                        PNCIO_Access **my_req_ptr,
+                        MPI_Offset   **buf_idx)
 {
     int aggr, *aggr_ranks, cb_nodes;
     MPI_Count i, l;
@@ -218,7 +218,7 @@ void ADIOI_LUSTRE_Calc_my_req(PNCIO_File     *fd,
 Alternative: especially for when flat_fview.count is large
 1 This rank's aggregate file access region is from start_offset to end_offset.
 2 start with the 1st aggregator ID and keep assign aggregator until next stripe.
-  This can avoid too many calls to ADIOI_LUSTRE_Calc_aggregator()
+  This can avoid too many calls to LUSTRE_Calc_aggregator()
 */
 
     /* nelems will be the number of offset-length pairs for my_req[] */
@@ -230,19 +230,19 @@ Alternative: especially for when flat_fview.count is large
 
         off = flat_fview.off[i];
         avail_len = flat_fview.len[i];
-        /* ADIOI_LUSTRE_Calc_aggregator() modifies the value of 'avail_len' to
-         * the amount that is only covered by the aggr's file domain. The
-         * remaining (tail) will continue to be processed to determine to whose
-         * file domain it belongs. As ADIOI_LUSTRE_Calc_aggregator() can be
-         * expensive for large value of flat_fview.count, we keep a copy of
-         * the returned values of 'aggr' and 'avail_len' in aggr_ranks[] and
-         * avail_lens[] to be used in the next for loop (not next iteration).
+        /* LUSTRE_Calc_aggregator() modifies the value of 'avail_len' to the
+         * amount that is only covered by the aggr's file domain. The remaining
+         * (tail) will continue to be processed to determine to whose file
+         * domain it belongs. As LUSTRE_Calc_aggregator() can be expensive for
+         * large value of flat_fview.count, we keep a copy of the returned
+         * values of 'aggr' and 'avail_len' in aggr_ranks[] and avail_lens[] to
+         * be used in the next for loop (not next iteration).
          *
          * Note the returned value in 'aggr' is the index to ranklist[], i.e.
          * the 'aggr'th element of array ranklist[], rather than the
          * aggregator's MPI rank ID in fd->comm.
          */
-        aggr = ADIOI_LUSTRE_Calc_aggregator(fd, off, &avail_len);
+        aggr = LUSTRE_Calc_aggregator(fd, off, &avail_len);
         aggr_ranks[i] = aggr;          /* first aggregator ID of this request */
         avail_lens[i] = avail_len;     /* length covered, may be < flat_fview.len[i] */
         assert(aggr >= 0 && aggr <= cb_nodes);
@@ -259,7 +259,7 @@ Alternative: especially for when flat_fview.count is large
         while (rem_len > 0) {
             off += avail_len;    /* move forward to first remaining byte */
             avail_len = rem_len; /* save remaining size, pass to calc */
-            aggr = ADIOI_LUSTRE_Calc_aggregator(fd, off, &avail_len);
+            aggr = LUSTRE_Calc_aggregator(fd, off, &avail_len);
             my_req[aggr].count++;
             nelems++;
             rem_len -= avail_len;/* reduce remaining length by amount from fd */
@@ -338,7 +338,7 @@ Alternative: especially for when flat_fview.count is large
         while (rem_len != 0) {
             off += avail_len;
             avail_len = rem_len;
-            aggr = ADIOI_LUSTRE_Calc_aggregator(fd, off, &avail_len);
+            aggr = LUSTRE_Calc_aggregator(fd, off, &avail_len);
             assert(aggr >= 0 && aggr <= cb_nodes);
             l = my_req[aggr].count;
             if (buf_idx != NULL && buf_is_contig) {
@@ -355,7 +355,7 @@ Alternative: especially for when flat_fview.count is large
     NCI_Free(aggr_ranks);
 }
 
-/* ADIOI_LUSTRE_Calc_others_req() calculates what requests from each of other
+/* LUSTRE_Calc_others_req() calculates what requests from each of other
  * processes fall in this aggregator's file domain.
  *   IN: my_req[cb_nodes]: offset-length pairs of this rank's requests fall
  *       into each of aggregators
@@ -365,9 +365,9 @@ Alternative: especially for when flat_fview.count is large
  *        this aggregator's file domain.
  */
 static
-void ADIOI_LUSTRE_Calc_others_req(PNCIO_File           *fd,
-                                  const PNCIO_Access  *my_req,
-                                  PNCIO_Access       **others_req_ptr)
+void LUSTRE_Calc_others_req(PNCIO_File          *fd,
+                            const PNCIO_Access  *my_req,
+                            PNCIO_Access       **others_req_ptr)
 {
     int i, myrank, nprocs, do_alltoallv;
     MPI_Count *count_my_req_per_proc, *count_others_req_per_proc;
@@ -928,10 +928,9 @@ double curT = MPI_Wtime();
 
     /* Calculate the portions of this rank's write requests that fall into the
      * file domains of each I/O aggregator. No inter-process communication is
-     * performed in ADIOI_LUSTRE_Calc_my_req().
+     * performed in LUSTRE_Calc_my_req().
      */
-    ADIOI_LUSTRE_Calc_my_req(fd, flat_fview, flat_bview.is_contig,
-                             &my_req, buf_idx);
+    LUSTRE_Calc_my_req(fd, flat_fview, flat_bview.is_contig, &my_req, buf_idx);
 
     if (fd->hints->ds_write != PNCIO_HINT_DISABLE) {
         /* When data sieving is considered, below check the current file size
@@ -973,7 +972,7 @@ double curT = MPI_Wtime();
      * Inter-process communication is required to construct others_req[],
      * including MPI_Alltoall, MPI_Issend, MPI_Irecv, and MPI_Waitall.
      */
-    ADIOI_LUSTRE_Calc_others_req(fd, my_req, &others_req);
+    LUSTRE_Calc_others_req(fd, my_req, &others_req);
 
     /* Two-phase I/O: first communication phase to exchange write data from all
      * ranks to the I/O aggregators, followed by the write phase where only I/O
@@ -981,7 +980,7 @@ double curT = MPI_Wtime();
      *
      * Unless MPI_Alltoallw() is used (when use_alltoallw is set to 1), there
      * is no collective MPI communication beyond this point, as
-     * ADIOI_LUSTRE_Exch_and_write() calls only MPI_Issend, MPI_Irecv, and
+     * LUSTRE_Exch_and_write() calls only MPI_Issend, MPI_Irecv, and
      * MPI_Waitall. Thus it is safe for those non-aggregators making zero-sized
      * request to skip the call.
      */
@@ -1009,9 +1008,9 @@ double curT = MPI_Wtime();
         /* This rank participates exchange and write only when it has non-zero
          * data to write or is an I/O aggregator
          */
-        ADIOI_LUSTRE_Exch_and_write(fd, buf, &flat_bview, others_req,
-                                    my_req, &flat_fview, min_st_loc,
-                                    max_end_loc, buf_idx, error_code);
+        LUSTRE_Exch_and_write(fd, buf, &flat_bview, others_req, my_req,
+                              &flat_fview, min_st_loc, max_end_loc, buf_idx,
+                              error_code);
 
     /* free all memory allocated */
     NCI_Free(others_req[0].offsets);
@@ -1364,7 +1363,7 @@ void commit_comm_phase(PNCIO_File     *fd,
             recv_list[i].count = 0;
 }
 
-/*----< ADIOI_LUSTRE_Exch_and_write() >--------------------------------------*/
+/*----< LUSTRE_Exch_and_write() >--------------------------------------------*/
 /* Each process sends all its write requests to I/O aggregators based on the
  * file domain assignment to the aggregators. In this implementation, a file is
  * first divided into stripes which are assigned to the aggregators in a
@@ -1380,16 +1379,16 @@ void commit_comm_phase(PNCIO_File     *fd,
  * for Collective I/O Based on Underlying Parallel File System Locking
  * Protocols", in The Supercomputing Conference, 2008.
  */
-static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
-                                        const void    *buf,
-                                        Flat_list     *flat_bview,
-                                        PNCIO_Access  *others_req,
-                                        PNCIO_Access  *my_req,
-                                        Flat_list     *flat_fview,
-                                        MPI_Offset    min_st_loc,
-                                        MPI_Offset    max_end_loc,
-                                        MPI_Offset  **buf_idx,
-                                        int           *error_code)
+static void LUSTRE_Exch_and_write(PNCIO_File    *fd,
+                                  const void    *buf,
+                                  Flat_list     *flat_bview,
+                                  PNCIO_Access  *others_req,
+                                  PNCIO_Access  *my_req,
+                                  Flat_list     *flat_fview,
+                                  MPI_Offset     min_st_loc,
+                                  MPI_Offset     max_end_loc,
+                                  MPI_Offset   **buf_idx,
+                                  int           *error_code)
 {
     char **write_buf = NULL, **recv_buf = NULL, **send_buf = NULL;
     size_t alloc_sz;
@@ -1501,8 +1500,8 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
      * only by aggregators to receive requests from non-aggregators. Its size
      * may be larger then the file stripe size, in case when writes from
      * non-aggregators overlap. In this case, it will be realloc-ed in
-     * ADIOI_LUSTRE_W_Exchange_data(). The received data is later copied over
-     * to write_buf, whose contents will be written to file.
+     * LUSTRE_W_Exchange_data(). The received data is later copied over to
+     * write_buf, whose contents will be written to file.
      */
     if (end_loc >= 0 && nbufs > 0) {
         /* Allocate displacement-length pair arrays, describing the recv buffer.
@@ -1558,7 +1557,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
 
         for (j = 1; j < nbufs; j++) {
             write_buf[j] = write_buf[j-1] + striping_unit;
-            /* recv_buf[j] may be realloc in ADIOI_LUSTRE_W_Exchange_data() */
+            /* recv_buf[j] may be realloc in LUSTRE_W_Exchange_data() */
             recv_buf[j]       = (char *) NCI_Malloc(striping_unit);
             recv_count[j]     = recv_count[j-1]     + nprocs;
             recv_size[j]      = recv_size[j-1]      + nprocs;
@@ -1572,8 +1571,8 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
         srt_off_len = (off_len_list*) NCI_Malloc(nbufs * sizeof(off_len_list));
     }
 
-    /* send_buf[] will be allocated in ADIOI_LUSTRE_W_Exchange_data(), when the
-     * use buffer is not contiguous.
+    /* send_buf[] will be allocated in LUSTRE_W_Exchange_data(), when the use
+     * buffer is not contiguous.
      */
     send_buf = (char **) NCI_Malloc(nbufs * sizeof(char*));
 
@@ -1781,7 +1780,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
             if (fd->is_agg) fd->write_timing[3] += MPI_Wtime() - curT;
 #endif
 
-            /* free send_buf allocated in ADIOI_LUSTRE_W_Exchange_data() */
+            /* free send_buf allocated in LUSTRE_W_Exchange_data() */
             for (j = 0; j < numBufs; j++) {
                 if (send_buf[j] != NULL) {
                     NCI_Free(send_buf[j]);
@@ -1838,7 +1837,7 @@ static void ADIOI_LUSTRE_Exch_and_write(PNCIO_File     *fd,
                  * each offset-length pair. Note the offset-length pairs
                  * (represented by srt_off_len[j].off, srt_off_len[j].len, and
                  * srt_off_len[j].num) have been coalesced in
-                 * ADIOI_LUSTRE_W_Exchange_data().
+                 * LUSTRE_W_Exchange_data().
                  */
                 for (i = 0; i < srt_off_len[j].num; i++) {
                     MPI_Status status;
@@ -2247,11 +2246,12 @@ void Exchange_data_recv(
      * remote processes overlap. Receiving messages into overlapped regions of
      * the same write_buffer may cause a problem. To avoid it, we allocate a
      * temporary buffer big enough to receive all messages into disjointed
-     * regions. Earlier in ADIOI_LUSTRE_Exch_and_write(), write_buf is already
-     * allocated with twice amount of the file stripe size, with the second half
-     * to be used to receive messages. If sum_recv is smaller than file stripe
-     * size, we can reuse that space. But if sum_recv is bigger (an overlap
-     * case, which is rare), we allocate a separate buffer of size sum_recv.
+     * regions. Earlier in LUSTRE_Exch_and_write(), write_buf is already
+     * allocated with twice amount of the file stripe size, with the second
+     * half to be used to receive messages. If sum_recv is smaller than file
+     * stripe size, we can reuse that space. But if sum_recv is bigger (an
+     * overlap case, which is rare), we allocate a separate buffer of size
+     * sum_recv.
      */
     sum_recv -= recv_size[myrank];
     if (sum_recv > fd->hints->striping_unit)
@@ -2348,11 +2348,11 @@ void Exchange_data_send(
         for (i = 1; i < cb_nodes; i++)
             send_buf[i] = send_buf[i - 1] + send_size[i - 1];
 
-        ADIOI_LUSTRE_Fill_send_buffer(fd, buf, flat_fview, flat_bview,
-                                      send_buf, send_total_size, send_size,
-                                      &self_buf, send_list);
+        LUSTRE_Fill_send_buffer(fd, buf, flat_fview, flat_bview, send_buf,
+                                send_total_size, send_size, &self_buf,
+                                send_list);
         /* Send buffers must not be touched before MPI_Waitall() is completed,
-         * and thus send_buf will be freed in ADIOI_LUSTRE_Exch_and_write()
+         * and thus send_buf will be freed in LUSTRE_Exch_and_write()
          */
 
         if (fd->my_cb_nodes_index >= 0 && send_size[fd->my_cb_nodes_index] > 0) {
@@ -2369,15 +2369,15 @@ void Exchange_data_send(
     }
 }
 
-static void ADIOI_LUSTRE_Fill_send_buffer(PNCIO_File *fd,
-                                          const void *buf,
-                                          Flat_list *flat_fview,
-                                          Flat_list *flat_bview,
-                                          char **send_buf,
-                                          size_t send_total_size,
-                                          const MPI_Count *send_size,
-                                          char **self_buf,
-                                          disp_len_list *send_list)
+static void LUSTRE_Fill_send_buffer(PNCIO_File       *fd,
+                                    const void       *buf,
+                                    Flat_list        *flat_fview,
+                                    Flat_list        *flat_bview,
+                                    char            **send_buf,
+                                    size_t            send_total_size,
+                                    const MPI_Count  *send_size,
+                                    char            **self_buf,
+                                    disp_len_list    *send_list)
 {
     /* this function is only called if buftype is not contiguous */
     int q, first_q=-1, isUserBuf=0;
@@ -2438,7 +2438,7 @@ int num_memcpy=0;
         /* this off-len request may span to more than one I/O aggregator */
         while (rem_len != 0) {
             len = rem_len;
-            q = ADIOI_LUSTRE_Calc_aggregator(fd, off, &len);
+            q = LUSTRE_Calc_aggregator(fd, off, &len);
             /* NOTE: len will be modified by PNCIO_Calc_aggregator() to be no
              * more than a file stripe unit size that aggregator "q" is
              * responsible for. Note q is not the MPI rank ID, It is the array
