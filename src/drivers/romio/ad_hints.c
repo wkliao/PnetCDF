@@ -174,8 +174,11 @@ fn_exit:
 }
 
 /*----< PNCIO_File_SetInfo() >------------------------------------------------*/
-/* When users_info == MPI_INFO_NULL, this subroutine is an independent call.
- * When users_info != MPI_INFO_NULL, this subroutine is a collective call.
+/* For PnetCDF, a file info object can only be passed at file create or open
+ * call, i.e. I/O hints cannot be overwritten after file create/open.
+ *
+ * When users_info == MPI_INFO_NULL, this subroutine is an independent call.
+ * When users_info != MPI_INFO_NULL, this subroutine is a collective call,
  * because it calls Info_check_and_install_xxx(), which checks the consistency
  * of all hints values set in user's info object.
  */
@@ -201,33 +204,6 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         MPI_Info_create(&(fd->info));
 
         info = fd->info;
-
-        /* has user specified striping or server buffering parameters
-         * and do they have the same value on all processes? */
-        if (users_info != MPI_INFO_NULL) {
-
-            /* striping information */
-            MPI_Info_get(users_info, "striping_unit", MPI_MAX_INFO_VAL,
-                           value, &flag);
-            if (flag)
-                MPI_Info_set(info, "striping_unit", value);
-
-            MPI_Info_get(users_info, "striping_factor", MPI_MAX_INFO_VAL,
-                           value, &flag);
-            if (flag)
-                MPI_Info_set(info, "striping_factor", value);
-
-            MPI_Info_get(users_info, "start_iodevice", MPI_MAX_INFO_VAL,
-                           value, &flag);
-            if (flag)
-                MPI_Info_set(info, "start_iodevice", value);
-
-            /* Lustre overstriping ratio. 0 or 1 means disabled */
-            MPI_Info_get(users_info, "lustre_overstriping_ratio",
-                           MPI_MAX_INFO_VAL, value, &flag);
-            if (flag)
-                MPI_Info_set(info, "lustre_overstriping_ratio", value);
-        }
 
         /* buffer size for collective I/O */
         MPI_Info_set(info, "cb_buffer_size", PNCIO_CB_BUFFER_SIZE_DFLT);
@@ -273,8 +249,11 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         MPI_Info_set(info, "romio_ds_write", "automatic");
         fd->hints->ds_write = PNCIO_HINT_AUTO;
 
-        /* still to do: tune this a bit for a variety of file systems. there's
-         * no good default value so just leave it unset */
+        /* File striping parameters will be retrieved from the file system set,
+         * once the file is opened. These parameters can also be customized by
+         * a user's info. Thus, default values used below are to indicate
+         * whether or not they have been customized by the users.
+         */
         fd->hints->striping_unit = 0;
         fd->hints->striping_factor = 0;
         fd->hints->start_iodevice = -1;
@@ -335,7 +314,7 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
                                        &(fd->hints->ds_write));
 
         if (fd->hints->cb_nodes == 0) { /* never set before */
-            /* MPI_File_open path sets up some data structrues that don't
+            /* MPI_File_open path sets up some data structures that don't
              * get resized in the MPI_File_set_view path, so ignore
              * cb_nodes in the set_view case */
             Info_check_and_install_int(fd, users_info, "cb_nodes",
@@ -385,7 +364,7 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
                          &(fd->hints->fs_hints.lustre.overstriping_ratio));
     }
 
-    /* Begin hint post-processig: some hints take precedence over or conflict
+    /* Begin hint post-processing: some hints take precedence over or conflict
      * with others, or aren't supported by some file systems */
 
     /* handle cb_config_list default value here; avoids an extra
@@ -401,7 +380,7 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         strncpy(fd->hints->cb_config_list, PNCIO_CB_CONFIG_LIST_DFLT, len);
     }
     /* deferred_open won't be set by callers, but if the user doesn't
-     * explicitly disable collecitve buffering (two-phase) and does hint that
+     * explicitly disable collective buffering (two-phase) and does hint that
      * io w/o independent io is going on, we'll set this internal hint as a
      * convenience */
     if (((fd->hints->cb_read != PNCIO_HINT_DISABLE)
