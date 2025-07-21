@@ -634,8 +634,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
      */
 
 #ifdef HAVE_LUSTRE
-    int set_user_layout = 0, overstriping_ratio;
-    int str_factor, str_unit, start_iodev;
+    int overstriping_ratio, str_factor, str_unit, start_iodev;
 
     /* In a call to PNCIO_File_SetInfo() earlier, hints have been validated to
      * be consistent among all processes.
@@ -651,18 +650,6 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
     if (str_factor > total_num_OSTs) str_factor = total_num_OSTs;
 #endif
 
-    /* when no file striping hint is set, their values are:
-     * fd->hints->striping_unit = 0;
-     * fd->hints->striping_factor = 0;
-     * fd->hints->start_iodevice = -1;
-     * fd->hints->fs_hints.lustre.overstriping_ratio = 1;
-     */
-
-    /* if user has set the file striping hints */
-    if ((str_factor > 0) || (str_unit > 0) || (start_iodev >= 0) ||
-        (overstriping_ratio > 1))
-        set_user_layout = 1;
-
     uint64_t numOSTs=0;
     uint64_t pattern = LLAPI_LAYOUT_DEFAULT;
     uint64_t stripe_count = LLAPI_LAYOUT_DEFAULT;
@@ -671,60 +658,34 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
 
     fd->fd_sys = -1;
 
-    if (set_user_layout) {
-        /* user has set striping hints, grant wish */
+    /* When no file striping hint is set, their default values are:
+     * fd->hints->striping_unit = 0;
+     * fd->hints->striping_factor = 0;
+     * fd->hints->start_iodevice = -1;
+     * fd->hints->fs_hints.lustre.overstriping_ratio = 1;
+     */
 
-        if ((str_factor == 0) || (str_unit == 0) || (start_iodev == -1) ||
-            (overstriping_ratio < 0)) {
-            /* For those striping hints are not set by the user, inherit
-             * striping settings from the directory containing the file.
-             */
-            int dd;
-            char *dirc, *dname;
-            dirc = NCI_Strdup(fd->filename);
-            dname = dirname(dirc);
+    if (str_factor == 0 || str_unit == 0 ||
+        (overstriping_ratio > 1 && start_iodev < 0)) {
+        /* When not all of the striping parameters are set by users, inherit
+         * those missing ones from the folder.
+         */
+        int dd;
+        char *dirc, *dname;
+        dirc = NCI_Strdup(fd->filename);
+        dname = dirname(dirc);
 
-            dd = open(dname, O_RDONLY, 0600);
+        dd = open(dname, O_RDONLY, 0600);
 
-            numOSTs = get_striping(dd, dname, &pattern,
-                                       &stripe_count,
-                                       &stripe_size,
-                                       &start_iodevice);
-            close(dd);
-            NCI_Free(dirc);
-
-            /* in case of default striping setting is used */
-            if (numOSTs == 0) numOSTs = 1;
-        }
-
-        if (str_factor == 0 && stripe_count == LLAPI_LAYOUT_DEFAULT)
-            stripe_count = 1;
-        else if (str_factor > 0)
-            stripe_count = str_factor;
-
-        if (overstriping_ratio > 1) {
-            pattern = LLAPI_LAYOUT_OVERSTRIPING;
-            if (stripe_count < overstriping_ratio)
-                numOSTs = 1;
-            else
-                numOSTs = stripe_count / overstriping_ratio;
-        }
-        if (overstriping_ratio == 0 || numOSTs == stripe_count) {
-            numOSTs = stripe_count;
-            pattern = LLAPI_LAYOUT_RAID0;
-        }
-
-        if (str_unit == 0 && stripe_size == LLAPI_LAYOUT_DEFAULT)
-            stripe_size = LLAPI_LAYOUT_DEFAULT;
-        else if (str_unit > 0)
-            stripe_size = str_unit;
-
-        if (start_iodev == -1 && start_iodevice == LLAPI_LAYOUT_DEFAULT)
-            start_iodevice = LLAPI_LAYOUT_DEFAULT;
-        else if (start_iodev > 0)
-            start_iodevice = start_iodev;
+        numOSTs = get_striping(dd, dname, &pattern,
+                                   &stripe_count,
+                                   &stripe_size,
+                                   &start_iodevice);
+        close(dd);
+        NCI_Free(dirc);
 
 #ifdef DEBUG
+        printf("line %d: use parent folder's striping to set file's:\n",__LINE__);
         printf("\tnumOSTs\t\t = %ld\n",numOSTs);
         PRINT_VAL(stripe_count, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
         PRINT_VAL(stripe_size, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
@@ -743,21 +704,81 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
         else
         printf("\tpattern\t\t = unknown\n");
 #endif
-
-        /* create a new file and set striping */
-        fd->fd_sys = set_striping(fd->filename, pattern,
-                                                numOSTs,
-                                                stripe_count,
-                                                stripe_size,
-                                                start_iodevice);
+        /* in case of default striping setting is used */
+        if (numOSTs == 0) numOSTs = 1;
     }
 
-    if (!set_user_layout || fd->fd_sys < 0) {
-        /* User did not set any file striping hint. Inherit from the folder.
-         * Or set_striping() fails.
+    /* If hint striping_factor is not set by the user and the new file's folder
+     * has not set its striping parameters, then we set the number of unique
+     * OSTs, numOSTs, to the number of compute nodes allocated to this job,
+     * which sets stripe_count to (numOSTs * overstriping_ratio).
+     */
+    if (str_factor == 0 && stripe_count == LLAPI_LAYOUT_DEFAULT) {
+        stripe_count = MIN(fd->num_nodes, PNCIO_LUSTRE_MAX_OSTS);
+        if (overstriping_ratio > 1) stripe_count *= overstriping_ratio;
+    }
+    else if (str_factor > 0)
+        stripe_count = str_factor;
+
+    /* When overstriping is requested by the user, calculate the number of
+     * unique OSTs.
+     */
+    if (overstriping_ratio > 1) {
+        pattern = LLAPI_LAYOUT_OVERSTRIPING;
+        if (stripe_count < overstriping_ratio)
+            numOSTs = 1;
+        else
+            numOSTs = stripe_count / overstriping_ratio;
+    }
+    /* If ill values are detected, fall back to no overstriping */
+    if (overstriping_ratio <= 1 || numOSTs == stripe_count) {
+        numOSTs = stripe_count;
+        pattern = LLAPI_LAYOUT_RAID0;
+    }
+
+    if (str_unit == 0 && stripe_size == LLAPI_LAYOUT_DEFAULT)
+        stripe_size = LLAPI_LAYOUT_DEFAULT;
+    else if (str_unit > 0)
+        stripe_size = str_unit;
+
+    if (start_iodev == -1 && start_iodevice == LLAPI_LAYOUT_DEFAULT)
+        start_iodevice = LLAPI_LAYOUT_DEFAULT;
+    else if (start_iodev > 0)
+        start_iodevice = start_iodev;
+
+#ifdef DEBUG
+    printf("\n\tAfter adjust striping parameters become:\n");
+    printf("\tnumOSTs\t\t = %ld\n",numOSTs);
+    PRINT_VAL(stripe_count, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
+    PRINT_VAL(stripe_size, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
+    PRINT_VAL(start_iodevice, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
+
+    if (pattern == LLAPI_LAYOUT_DEFAULT)
+        printf("\tpattern\t\t = LLAPI_LAYOUT_DEFAULT\n");
+    else if (pattern == LLAPI_LAYOUT_RAID0)
+        printf("\tpattern\t\t = LLAPI_LAYOUT_RAID0\n");
+    else if (pattern == LLAPI_LAYOUT_MDT)
+        printf("\tpattern\t\t = LLAPI_LAYOUT_MDT\n");
+    else if (pattern == LLAPI_LAYOUT_OVERSTRIPING)
+        printf("\tpattern\t\t = LLAPI_LAYOUT_OVERSTRIPING\n");
+    else if (pattern == LLAPI_LAYOUT_SPECIFIC)
+        printf("\tpattern\t\t = LLAPI_LAYOUT_SPECIFIC\n");
+    else
+    printf("\tpattern\t\t = unknown\n");
+#endif
+
+    /* create a new file and set striping */
+    fd->fd_sys = set_striping(fd->filename, pattern,
+                                            numOSTs,
+                                            stripe_count,
+                                            stripe_size,
+                                            start_iodevice);
+
+    if (fd->fd_sys < 0)
+        /* If explicitly setting file striping failed, inherit the striping
+         * from the folder by simply creating the file.
          */
         fd->fd_sys = open(fd->filename, amode, perm);
-    }
 
     if (fd->fd_sys < 0) {
         fprintf(stderr,"%s line %d: fails to create file %s (%s)\n",
@@ -766,7 +787,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
         goto err_out;
     }
 
-    /* get Lustre file striping */
+    /* Obtain Lustre file striping parameters actually set. */
     numOSTs = get_striping(fd->fd_sys, fd->filename, &pattern,
                                        &stripe_count,
                                        &stripe_size,
