@@ -60,6 +60,10 @@
 #define PNCIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
 #define PNCIO_FSTYPE_CHECK  0      /* Use PnetCDF ADIO drivers */
 
+#define PNCIO_LUSTRE_MAX_OSTS 256  /* Maximum number of Lustre OSTs if hint
+                                    * striping_factor is not set by user.
+                                    */
+
 #define PNCIO_CB_BUFFER_SIZE_DFLT     "16777216"
 #define PNCIO_IND_RD_BUFFER_SIZE_DFLT "4194304"
 #define PNCIO_IND_WR_BUFFER_SIZE_DFLT "524288"
