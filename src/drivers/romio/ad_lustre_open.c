@@ -44,14 +44,49 @@
  */
 #include <lustre/lustreapi.h>
 
-#define PRINT_VAL(val, default_val, invalid_val) { \
-    if (val == default_val) \
-        printf("\t%s\t = %s\n",#val,#default_val); \
-    else if (val == invalid_val) \
-        printf("\t%s\t = %s\n",#val,#invalid_val); \
-    else \
-        printf("\t%s\t = %ld\n",#val,val); \
+#define PATTERN_STR(pattern, int_str) ( \
+    (pattern == LLAPI_LAYOUT_DEFAULT)      ? "LLAPI_LAYOUT_DEFAULT" : \
+    (pattern == LLAPI_LAYOUT_RAID0)        ? "LLAPI_LAYOUT_RAID0" : \
+    (pattern == LLAPI_LAYOUT_WIDE)         ? "LLAPI_LAYOUT_WIDE" : \
+    (pattern == LLAPI_LAYOUT_MDT)          ? "LLAPI_LAYOUT_MDT" : \
+    (pattern == LLAPI_LAYOUT_OVERSTRIPING) ? "LLAPI_LAYOUT_OVERSTRIPING" : \
+    (pattern == LLAPI_LAYOUT_SPECIFIC)     ? "LLAPI_LAYOUT_SPECIFIC" : \
+    int_str)
+
+#define PRINT_LAYOUT(val) { \
+    char int_str[32]; \
+    snprintf(int_str, 32, "%lu", val); \
+    printf("\t%-14s = %-25s (0x%lx)\n",#val,PATTERN_STR(val, int_str),val); \
 }
+
+#ifdef LUSTRE_QUERY_POOL_SIZE
+/*----< get_total_avail_osts() >---------------------------------------------*/
+static
+int get_total_avail_osts(void)
+{
+    char **members, *buffer, *pool="scratch.original";
+    int num_OSTs, list_size = 1024;
+    members = (char**)NCI_Malloc(sizeof(char*) * list_size);
+    buffer = (char*)NCI_Calloc(list_size * 64, sizeof(char));
+
+    num_OSTs = llapi_get_poolmembers(pool, members, list_size, buffer,
+                                     list_size * 64);
+#ifdef DEBUG
+    int i;
+    printf("Lustre pool %s has %d OSTs\n",pool, num_OSTs);
+    printf("\tFirst %d OSTs and last are\n",10);
+    for (i=0; i<10; i++)
+        printf("\t\tmember[%3d] %s\n",i,members[i]);
+    printf("\t ...\tmember[%3d] %s\n",num_OSTs-1,members[num_OSTs-1]);
+    printf("------------------------------------\n\n");
+#endif
+
+    NCI_Free(buffer);
+    NCI_Free(members);
+
+    return num_OSTs;
+}
+#endif
 
 static
 int compare(const void *a, const void *b)
@@ -86,35 +121,6 @@ int sort_ost_ids(struct llapi_layout *layout,
     return (numOSTs + 1);
 }
 
-#ifdef LUSTRE_QUERY_POOL_SIZE
-/*----< get_total_avail_osts() >---------------------------------------------*/
-static
-int get_total_avail_osts(void)
-{
-    char **members, *buffer, *pool="scratch.original";
-    int num_OSTs, list_size = 1024;
-    members = (char**)NCI_Malloc(sizeof(char*) * list_size);
-    buffer = (char*)NCI_Calloc(list_size * 64, sizeof(char));
-
-    num_OSTs = llapi_get_poolmembers(pool, members, list_size, buffer,
-                                     list_size * 64);
-#ifdef DEBUG
-    int i;
-    printf("Lustre pool %s has %d OSTs\n",pool, num_OSTs);
-    printf("\tFirst %d OSTs and last are\n",10);
-    for (i=0; i<10; i++)
-        printf("\t\tmember[%3d] %s\n",i,members[i]);
-    printf("\t ...\tmember[%3d] %s\n",num_OSTs-1,members[num_OSTs-1]);
-    printf("------------------------------------\n\n");
-#endif
-
-    NCI_Free(buffer);
-    NCI_Free(members);
-
-    return num_OSTs;
-}
-#endif
-
 /*----< get_striping() >-----------------------------------------------------*/
 static
 uint64_t get_striping(int         fd,
@@ -143,36 +149,27 @@ uint64_t get_striping(int         fd,
 
     err = llapi_layout_pattern_get(layout, pattern);
     if (err != 0) {
+        snprintf(int_str, 32, "%lu", *pattern);
         fprintf(stderr,"Error at %s (%d) llapi_layout_pattern_get() fails to get patter %s\n",
-                __FILE__, __LINE__,
-        (*pattern == LLAPI_LAYOUT_DEFAULT)      ? "LLAPI_LAYOUT_DEFAULT" :
-        (*pattern == LLAPI_LAYOUT_RAID0)        ? "LLAPI_LAYOUT_RAID0" :
-        (*pattern == LLAPI_LAYOUT_MDT)          ? "LLAPI_LAYOUT_MDT" :
-        (*pattern == LLAPI_LAYOUT_OVERSTRIPING) ? "LLAPI_LAYOUT_OVERSTRIPING" :
-        (*pattern == LLAPI_LAYOUT_SPECIFIC)     ? "LLAPI_LAYOUT_SPECIFIC" :
-        "unknown");
+                __FILE__, __LINE__, PATTERN_STR(*pattern, int_str));
         goto err_out;
     }
 
     /* obtain file striping count */
     err = llapi_layout_stripe_count_get(layout, stripe_count);
     if (err != 0) {
-        snprintf(int_str, 32, "%ld", *stripe_count);
+        snprintf(int_str, 32, "%lu", *stripe_count);
         fprintf(stderr,"Error at %s (%d) llapi_layout_stripe_count_get() fails to get stripe count %s\n",
-            __FILE__, __LINE__,
-            (*stripe_count == LLAPI_LAYOUT_DEFAULT) ? "LLAPI_LAYOUT_DEFAULT" :
-            int_str);
+            __FILE__, __LINE__, PATTERN_STR(*stripe_count, int_str));
         goto err_out;
     }
 
     /* obtain file striping unit size */
     err = llapi_layout_stripe_size_get(layout, stripe_size);
     if (err != 0) {
-        snprintf(int_str, 32, "%ld", *stripe_size);
+        snprintf(int_str, 32, "%lu", *stripe_size);
         fprintf(stderr,"Error at %s (%d) llapi_layout_stripe_size_get() fails to get stripe size %s\n",
-            __FILE__,__LINE__,
-            (*stripe_size == LLAPI_LAYOUT_DEFAULT) ? "LLAPI_LAYOUT_DEFAULT" :
-            int_str);
+            __FILE__,__LINE__, PATTERN_STR(*stripe_size, int_str));
         goto err_out;
     }
 
@@ -183,8 +180,10 @@ uint64_t get_striping(int         fd,
      * Therefore, the default stripe_size is (SEL_UNIT_SIZE * 1024)
      */
 
-    if (*stripe_count == LLAPI_LAYOUT_DEFAULT ||
-        *stripe_count == LLAPI_LAYOUT_INVALID) {
+    if (*stripe_count == LLAPI_LAYOUT_DEFAULT ||  /* not set */
+        *stripe_count == LLAPI_LAYOUT_INVALID ||  /* invalid */
+        *stripe_count == LLAPI_LAYOUT_WIDE    ||  /* all system's OSTs */
+        *stripe_count > 1048576) {                /* abnormally large number */
         return 0;
     }
 
@@ -235,6 +234,7 @@ int set_striping(const char *path,
                  uint64_t    stripe_size,
                  uint64_t    start_iodevice)
 {
+    char int_str[32];
     int fd=-1, err=0;
 
     struct llapi_layout *layout = llapi_layout_alloc();
@@ -291,14 +291,9 @@ int set_striping(const char *path,
 
     err = llapi_layout_pattern_set(layout, pattern);
     if (err != 0) {
+        snprintf(int_str, 32, "%lu", pattern);
         fprintf(stderr,"Error at %s (%d) llapi_layout_pattern_set() fails ito set pattern %s (%s)\n",
-                __FILE__, __LINE__,
-        (pattern == LLAPI_LAYOUT_DEFAULT) ? "LLAPI_LAYOUT_DEFAULT" :
-        (pattern == LLAPI_LAYOUT_RAID0) ? "LLAPI_LAYOUT_RAID0" :
-        (pattern == LLAPI_LAYOUT_MDT) ? "LLAPI_LAYOUT_MDT" :
-        (pattern == LLAPI_LAYOUT_OVERSTRIPING) ? "LLAPI_LAYOUT_OVERSTRIPING" :
-        (pattern == LLAPI_LAYOUT_SPECIFIC) ? "LLAPI_LAYOUT_SPECIFIC" :
-        "unknown", strerror(errno));
+                __FILE__, __LINE__, PATTERN_STR(pattern, int_str), strerror(errno));
         goto err_out;
     }
 
@@ -640,9 +635,9 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
      * be consistent among all processes.
      */
 
-    str_unit = fd->hints->striping_unit;
-    str_factor = fd->hints->striping_factor;
-    start_iodev = fd->hints->start_iodevice;
+    str_unit           = fd->hints->striping_unit;
+    str_factor         = fd->hints->striping_factor;
+    start_iodev        = fd->hints->start_iodevice;
     overstriping_ratio = fd->hints->fs_hints.lustre.overstriping_ratio;
 
 #ifdef LUSTRE_QUERY_POOL_SIZE
@@ -659,8 +654,8 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
     fd->fd_sys = -1;
 
     /* When no file striping hint is set, their default values are:
-     * fd->hints->striping_unit = 0;
      * fd->hints->striping_factor = 0;
+     * fd->hints->striping_unit = 0;
      * fd->hints->start_iodevice = -1;
      * fd->hints->fs_hints.lustre.overstriping_ratio = 1;
      */
@@ -686,23 +681,11 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
 
 #ifdef DEBUG
         printf("line %d: use parent folder's striping to set file's:\n",__LINE__);
-        printf("\tnumOSTs\t\t = %ld\n",numOSTs);
-        PRINT_VAL(stripe_count, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
-        PRINT_VAL(stripe_size, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
-        PRINT_VAL(start_iodevice, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
-
-        if (pattern == LLAPI_LAYOUT_DEFAULT)
-            printf("\tpattern\t\t = LLAPI_LAYOUT_DEFAULT\n");
-        else if (pattern == LLAPI_LAYOUT_RAID0)
-            printf("\tpattern\t\t = LLAPI_LAYOUT_RAID0\n");
-        else if (pattern == LLAPI_LAYOUT_MDT)
-            printf("\tpattern\t\t = LLAPI_LAYOUT_MDT\n");
-        else if (pattern == LLAPI_LAYOUT_OVERSTRIPING)
-            printf("\tpattern\t\t = LLAPI_LAYOUT_OVERSTRIPING\n");
-        else if (pattern == LLAPI_LAYOUT_SPECIFIC)
-            printf("\tpattern\t\t = LLAPI_LAYOUT_SPECIFIC\n");
-        else
-        printf("\tpattern\t\t = unknown\n");
+        PRINT_LAYOUT(numOSTs);
+        PRINT_LAYOUT(stripe_count);
+        PRINT_LAYOUT(stripe_size);
+        PRINT_LAYOUT(start_iodevice);
+        PRINT_LAYOUT(pattern);
 #endif
         /* in case of default striping setting is used */
         if (numOSTs == 0) numOSTs = 1;
@@ -713,7 +696,8 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
      * OSTs, numOSTs, to the number of compute nodes allocated to this job,
      * which sets stripe_count to (numOSTs * overstriping_ratio).
      */
-    if (str_factor == 0 && stripe_count == LLAPI_LAYOUT_DEFAULT) {
+    if (str_factor == 0 && (stripe_count == LLAPI_LAYOUT_DEFAULT ||
+                            stripe_count == LLAPI_LAYOUT_WIDE)) {
         stripe_count = MIN(fd->num_nodes, PNCIO_LUSTRE_MAX_OSTS);
         if (overstriping_ratio > 1) stripe_count *= overstriping_ratio;
     }
@@ -736,11 +720,17 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
         pattern = LLAPI_LAYOUT_RAID0;
     }
 
+    /* If user has not set hint striping_unit and the folder's striping size is
+     * also not set, then use the default.
+     */
     if (str_unit == 0 && stripe_size == LLAPI_LAYOUT_DEFAULT)
         stripe_size = LLAPI_LAYOUT_DEFAULT;
     else if (str_unit > 0)
         stripe_size = str_unit;
 
+    /* If user has not set hint start_iodevice and the folder's start_iodevice
+     * is also not set, then use the default.
+     */
     if (start_iodev == -1 && start_iodevice == LLAPI_LAYOUT_DEFAULT)
         start_iodevice = LLAPI_LAYOUT_DEFAULT;
     else if (start_iodev > 0)
@@ -748,23 +738,11 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
 
 #ifdef DEBUG
     printf("\n\tAfter adjust striping parameters become:\n");
-    printf("\tnumOSTs\t\t = %ld\n",numOSTs);
-    PRINT_VAL(stripe_count, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
-    PRINT_VAL(stripe_size, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
-    PRINT_VAL(start_iodevice, LLAPI_LAYOUT_DEFAULT, LLAPI_LAYOUT_INVALID)
-
-    if (pattern == LLAPI_LAYOUT_DEFAULT)
-        printf("\tpattern\t\t = LLAPI_LAYOUT_DEFAULT\n");
-    else if (pattern == LLAPI_LAYOUT_RAID0)
-        printf("\tpattern\t\t = LLAPI_LAYOUT_RAID0\n");
-    else if (pattern == LLAPI_LAYOUT_MDT)
-        printf("\tpattern\t\t = LLAPI_LAYOUT_MDT\n");
-    else if (pattern == LLAPI_LAYOUT_OVERSTRIPING)
-        printf("\tpattern\t\t = LLAPI_LAYOUT_OVERSTRIPING\n");
-    else if (pattern == LLAPI_LAYOUT_SPECIFIC)
-        printf("\tpattern\t\t = LLAPI_LAYOUT_SPECIFIC\n");
-    else
-    printf("\tpattern\t\t = unknown\n");
+    PRINT_LAYOUT(numOSTs);
+    PRINT_LAYOUT(stripe_count);
+    PRINT_LAYOUT(stripe_size);
+    PRINT_LAYOUT(start_iodevice);
+    PRINT_LAYOUT(pattern);
 #endif
 
     /* create a new file and set striping */
@@ -781,7 +759,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
         fd->fd_sys = open(fd->filename, amode, perm);
 
     if (fd->fd_sys < 0) {
-        fprintf(stderr,"%s line %d: fails to create file %s (%s)\n",
+        fprintf(stderr,"Error at %s (%d) fails to create file %s (%s)\n",
                 __FILE__,__LINE__, fd->filename, strerror(errno));
         err = ncmpii_error_posix2nc("Lustre set striping");
         goto err_out;
