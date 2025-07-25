@@ -318,8 +318,8 @@ err_out:
 
 /*----< Lustre_set_cb_node_list() >------------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
- *   fd->hints->ranklist[].
  *   fd->hints->cb_nodes and set file info for hint cb_nodes.
+ *   fd->hints->ranklist[], an int array of size fd->hints->cb_nodes.
  *   fd->is_agg: indicating whether this rank is an I/O aggregator
  *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
  */
@@ -358,7 +358,8 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
      * aggregators, so we can save a call to MPI_Bcast().
      * Given the number of nodes, fd->num_nodes, and processes per node,
      * nprocs_per_node, we can now set num_aggr, the number of I/O aggregators.
-     * At this moment, root should have obtained the file striping settings.
+     * At this moment, all processes should have obtained the Lustre file
+     * striping settings.
      */
     striping_factor = fd->hints->striping_factor;
 
@@ -395,7 +396,16 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
          * also applies to collective reads to allow more/less aggregators. In
          * most cases, more aggregators yields better read performance.
          */
-        if (fd->hints->cb_nodes <= striping_factor) {
+        if (fd->hints->cb_nodes == 0) {
+            /* User did not set hint "cb_nodes" */
+            if (nprocs > striping_factor * 8 && nprocs/fd->num_nodes > 8)
+                num_aggr = striping_factor * 8;
+            else if (nprocs > striping_factor * 2 && nprocs/fd->num_nodes > 2)
+                num_aggr = striping_factor * 2;
+            else
+                num_aggr = striping_factor;
+        }
+        else if (fd->hints->cb_nodes <= striping_factor) {
             /* User has set hint cb_nodes and cb_nodes <= striping_factor.
              * Ignore user's hint and try to set cb_nodes to be at least
              * striping_factor.
@@ -408,34 +418,65 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
                 num_aggr = nprocs; /* BAD cb_nodes set by users */
             else
                 num_aggr = fd->hints->cb_nodes;
-
-            /* Number of processes per node may not be enough to be picked
-             * as aggregators. If this case, reduce num_aggr (cb_nodes).
-             * Consider the following case: number of processes = 18,
-             * number of nodes = 7, striping_factor = 8, cb_nodes = 16.
-             * cb_nodes should be reduced to 8 and the ranks of aggregators
-             * should be 0, 3, 6, 9, 12, 14, 16, 1.
-             * If the number of processes changes to 25, then cb_nodes
-             * should be 16 and the ranks of aggregators should be 0, 4, 8,
-             * 12, 16, 19, 22, 1, 2, 6, 10, 14, 18, 21, 24, 3.
-             */
-            int max_nprocs_node = 0;
-            for (i = 0; i < fd->num_nodes; i++)
-                max_nprocs_node = MAX(max_nprocs_node, nprocs_per_node[i]);
-            int max_naggr_node = striping_factor / fd->num_nodes;
-            if (striping_factor % fd->num_nodes) max_naggr_node++;
-            /* max_naggr_node is the max number of processes per node to be
-             * picked as aggregator in each round.
-             */
-            int rounds = num_aggr / striping_factor;
-            if (num_aggr % striping_factor) rounds++;
-            while (max_naggr_node * rounds > max_nprocs_node) rounds--;
-            num_aggr = striping_factor * rounds;
         }
+
+        /* Number of processes per node may not be enough to be picked as
+         * aggregators. If this case, reduce num_aggr (cb_nodes). Consider the
+         * following case:
+         *   number of nodes = 7,
+         *   number of processes = 18,
+         *   striping_factor = 8,
+         *   cb_nodes = 16.
+         * Nodes in this case, nodes 0, 1, 2, 3 run 3 processes each and nodes
+         * 4, 5, 6 run 2 processes each. In order to keep each OST only
+         * accessed by one or more aggregators running on the same compute
+         * node, cb_nodes should be reduced to 8. Thus the ranks of aggregators
+         * become 0, 3, 6, 9, 12, 14, 16, 1. The aggregator-OST mapping
+         * becomes below.
+         *   Aggregator  0, running on node 0, access OST 0.
+         *   Aggregator  3, running on node 1, access OST 1.
+         *   Aggregator  6, running on node 2, access OST 2.
+         *   Aggregator  9, running on node 3, access OST 3.
+         *   Aggregator 12, running on node 4, access OST 4.
+         *   Aggregator 14, running on node 5, access OST 5.
+         *   Aggregator 16, running on node 6, access OST 6.
+         *   Aggregator  1, running on node 0, access OST 7.
+         *
+         * Another case (the total number of processes changes to 25):
+         *   number of nodes = 7,
+         *   number of processes = 25,
+         *   striping_factor = 8,
+         *   cb_nodes = 16.
+         * In this case, nodes 0, 1, 2, 3 run 4 processes each and nodes 4, 5,
+         * 6 run 3 processes each. cb_nodes should remain 16 and the ranks of
+         * aggregators become 0, 4, 8, 12, 16, 19, 22, 1, 2, 6, 10, 14, 18, 21,
+         * 24, 3. The aggregator-OST mapping becomes below.
+         *   Aggregators  0,  2, running on node 0, access OST 0.
+         *   Aggregators  4,  6, running on node 1, access OST 1.
+         *   Aggregators  8, 10, running on node 2, access OST 2.
+         *   Aggregators 12, 14, running on node 3, access OST 3.
+         *   Aggregators 16, 18, running on node 4, access OST 4.
+         *   Aggregators 19, 21, running on node 5, access OST 5.
+         *   Aggregators 22, 24, running on node 6, access OST 6.
+         *   Aggregator   3,     running on node 0, access OST 7.
+         */
+        int max_nprocs_node = 0;
+        for (i=0; i<fd->num_nodes; i++)
+            max_nprocs_node = MAX(max_nprocs_node, nprocs_per_node[i]);
+        int max_naggr_node = striping_factor / fd->num_nodes;
+        if (striping_factor % fd->num_nodes) max_naggr_node++;
+        /* max_naggr_node is the max number of processes per node to be picked
+         * as aggregator in each round.
+         */
+        int rounds = num_aggr / striping_factor;
+        if (num_aggr % striping_factor) rounds++;
+        while (max_naggr_node * rounds > max_nprocs_node) rounds--;
+        num_aggr = striping_factor * rounds;
     }
 
-    /* TODO: the above setting for num_aggr is for collective writes. Reads
-     * should be the number of nodes.
+    /* TODO: the above setting for num_aggr is for collective writes. Should
+     * collective reads use the same?  Or just set cb_nodes to the number of
+     * nodes.
      */
 
     /* Next step is to determine the MPI rank IDs of I/O aggregators and add
