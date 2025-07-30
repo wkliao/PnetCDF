@@ -398,9 +398,11 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
          */
         if (fd->hints->cb_nodes == 0) {
             /* User did not set hint "cb_nodes" */
-            if (nprocs > striping_factor * 8 && nprocs/fd->num_nodes > 8)
+            if (nprocs >= striping_factor * 8 && nprocs/fd->num_nodes >= 8)
                 num_aggr = striping_factor * 8;
-            else if (nprocs > striping_factor * 2 && nprocs/fd->num_nodes > 2)
+            else if (nprocs >= striping_factor * 4 && nprocs/fd->num_nodes >= 4)
+                num_aggr = striping_factor * 4;
+            else if (nprocs >= striping_factor * 2 && nprocs/fd->num_nodes >= 2)
                 num_aggr = striping_factor * 2;
             else
                 num_aggr = striping_factor;
