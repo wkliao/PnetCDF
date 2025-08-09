@@ -202,18 +202,18 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
 
     /* open file collectively ---------------------------------------------- */
     if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
-        TRACE_IO(MPI_File_open)(comm, path, mpiomode, user_info, &fh);
+        TRACE_IO(MPI_File_open, (comm, path, mpiomode, user_info, &fh));
         if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
+            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
 
         /* Now the file has been successfully opened */
         ncp->collective_fh  = fh;
         ncp->independent_fh = (nprocs > 1) ? MPI_FILE_NULL : fh;
 
         /* get the I/O hints used/modified by MPI-IO */
-        mpireturn = MPI_File_get_info(fh, &ncp->mpiinfo);
+        TRACE_IO(MPI_File_get_info, (fh, &ncp->mpiinfo));
         if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
+            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
     }
     else {
         /* When ncp->fstype != PNCIO_FSTYPE_MPIIO, use PnetCDF's ADIO driver */
