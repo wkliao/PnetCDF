@@ -438,7 +438,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
         ncp->independent_fh = (nprocs == 1) ? fh : MPI_FILE_NULL;
 
         /* get the I/O hints used/modified by MPI-IO */
-        TRACE_IO(MPI_File_get_info, (fh, &info_used));
+        TRACE_IO(MPI_File_get_info, (fh, &ncp->mpiinfo));
         if (mpireturn != MPI_SUCCESS)
             return ncmpii_error_mpi2nc(mpireturn, mpi_name);
     }
