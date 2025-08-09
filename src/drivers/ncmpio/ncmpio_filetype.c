@@ -771,7 +771,7 @@ err_out:
             if (status == NC_NOERR) status = err;
         }
         else {
-            TRACE_IO(MPI_File_set_view, (fh, *offset, MPI_BYTE, filetype, "native",
+            TRACE_IO(MPI_File_set_view, (fh, *disp, MPI_BYTE, filetype, "native",
                                          MPI_INFO_NULL));
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
