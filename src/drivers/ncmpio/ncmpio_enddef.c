@@ -256,12 +256,14 @@ move_file_block(NC         *ncp,
         }
         else {
             mpireturn = MPI_SUCCESS;
-            if (do_coll)
+            if (do_coll) {
                 TRACE_IO(MPI_File_read_at_all, (fh, off_from, buf, chunk_size,
                                                 MPI_BYTE, &mpistatus));
-            else if (chunk_size > 0)
+            }
+            else if (chunk_size > 0) {
                 TRACE_IO(MPI_File_read_at, (fh, off_from, buf, chunk_size,
                                             MPI_BYTE, &mpistatus));
+            }
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
                 if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(status, NC_EREAD)
@@ -313,11 +315,11 @@ move_file_block(NC         *ncp,
             err = NC_NOERR;
             if (do_coll)
                 err = PNCIO_File_write_at_all(ncp->adio_fh, off_to, buf,
-                                             get_count /* NOT bufcount */,
+                                             get_count, /* NOT bufcount */
                                              MPI_BYTE, &mpistatus);
             else if (get_count > 0)
                 err = PNCIO_File_write_at(ncp->adio_fh, off_to, buf,
-                                             get_count /* NOT bufcount */,
+                                             get_count, /* NOT bufcount */
                                              MPI_BYTE, &mpistatus);
             if (err != NC_NOERR) {
                 if (status == NC_NOERR)
@@ -326,14 +328,16 @@ move_file_block(NC         *ncp,
         }
         else {
             mpireturn = MPI_SUCCESS;
-            if (do_coll)
+            if (do_coll) {
                 TRACE_IO(MPI_File_write_at_all, (fh, off_to, buf,
-                                                 get_size /* NOT chunk_size */,
+                                                 get_count, /* NOT chunk_size */
                                                  MPI_BYTE, &mpistatus));
-            else if (get_count > 0)
+            }
+            else if (get_count > 0) {
                 TRACE_IO(MPI_File_write_at, (fh, off_to, buf,
-                                             get_size /* NOT chunk_size */,
+                                             get_count, /* NOT chunk_size */
                                              MPI_BYTE, &mpistatus));
+            }
             if (mpireturn != MPI_SUCCESS) {
                 err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
                 if (status == NC_NOERR && err == NC_EFILE)
