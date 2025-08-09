@@ -127,7 +127,7 @@ ncmpio_redef(void *ncdp)
             TRACE_IO(MPI_File_set_view, (ncp->independent_fh, 0, MPI_BYTE,
                                          MPI_BYTE, "native", MPI_INFO_NULL));
             if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+                err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
                 DEBUG_ASSIGN_ERROR(status, err)
             }
         }
@@ -136,7 +136,7 @@ ncmpio_redef(void *ncdp)
             TRACE_IO(MPI_File_set_view, (ncp->collective_fh, 0, MPI_BYTE,
                                          MPI_BYTE, "native", MPI_INFO_NULL));
             if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_set_view");
+                err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
                 DEBUG_ASSIGN_ERROR(status, err)
             }
         }
@@ -150,7 +150,6 @@ ncmpio_redef(void *ncdp)
 int
 ncmpio_begin_indep_data(void *ncdp)
 {
-    char *mpi_name;
     NC *ncp = (NC*)ncdp;
 
     if (NC_indef(ncp))  /* must not be in define mode */
@@ -226,6 +225,7 @@ ncmpio_begin_indep_data(void *ncdp)
      * called.
      */
     if (ncp->independent_fh == MPI_FILE_NULL) {
+        char *mpi_name;
         int mpireturn;
         TRACE_IO(MPI_File_open, (MPI_COMM_SELF, ncp->path,
                                  ncp->mpiomode, ncp->mpiinfo,
@@ -236,7 +236,7 @@ ncmpio_begin_indep_data(void *ncdp)
         /* get the I/O hints used/modified by MPI-IO */
         mpireturn = MPI_File_get_info(ncp->independent_fh, &ncp->mpiinfo);
         if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_get_info");
+            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
 
         /* Copy MPI-IO hints into ncp->mpiinfo */
         ncmpio_hint_set(ncp, ncp->mpiinfo);
