@@ -148,9 +148,6 @@ static int romio_statfs(const char *filename, int64_t * file_id)
      * system as a string, not an identifier */
     struct statfs fsbuf;
 #endif
-#if defined (HAVE_STRUCT_STAT_ST_FSTYPE)
-    struct stat sbuf;
-#endif
 
     *file_id = UNKNOWN_SUPER_MAGIC;
 
@@ -167,22 +164,28 @@ static int romio_statfs(const char *filename, int64_t * file_id)
  * we'll ignore that result and check the f_fstypename field  */
 #ifdef HAVE_STRUCT_STATFS_F_TYPE
     err = statfs(filename, &fsbuf);
-    if (err == 0)
+    if (err == 0) {
         *file_id = fsbuf.f_type;
+        return 0;
+    }
 #endif
 
-#if defined(HAVE_STRUCT_STATFS_F_FSTYPENAME) || defined(HAVE_STRUCT_STAT_ST_FSTYPE)
-    /* these stat routines store the file system type in a string */
-    char *fstype;
 #ifdef HAVE_STRUCT_STATFS_F_FSTYPENAME
+    /* these stat routines store the file system type in a string */
     err = statfs(filename, &fsbuf);
-    fstype = fsbuf.f_fstypename;
-#else
-    err = stat(filename, &sbuf);
-    fstype = sbuf.st_fstype;
-#endif
-    if (err == 0 && !strncasecmp(fstype, "lustre", 6))
+    if (err == 0 && !strncasecmp(fsbuf.f_fstypename, "lustre", 6)) {
         *file_id = LL_SUPER_MAGIC;
+        return 0;
+    }
+#endif
+
+#ifdef HAVE_STRUCT_STAT_ST_FSTYPE
+    struct stat sbuf;
+    err = stat(filename, &sbuf);
+    if (err == 0) {
+        *file_id = sbuf.st_fstype;
+        return 0;
+    }
 #endif
     return err;
 }
