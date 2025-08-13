@@ -473,7 +473,7 @@ static void Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
      on datatype bounds or extent.  */
 
     switch (combiner) {
-#ifdef MPIIMPL_HAVE_MPI_COMBINER_DUP
+#ifdef HAVE_MPI_COMBINER_DUP
         case MPI_COMBINER_DUP:
             PNCIO_Type_ispredef(types[0], &old_is_predef);
             PNCIO_Datatype_iscontig(types[0], &old_is_contig);
@@ -481,7 +481,7 @@ static void Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
                 Flatten(types[0], flat, st_offset, curr_index);
             break;
 #endif
-#ifdef MPIIMPL_HAVE_MPI_COMBINER_SUBARRAY
+#ifdef HAVE_MPI_COMBINER_SUBARRAY
         case MPI_COMBINER_SUBARRAY:
             if (ints[0] > 0) {
                 int dims = ints[0];
@@ -498,7 +498,7 @@ static void Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
             }
             break;
 #endif
-#ifdef MPIIMPL_HAVE_MPI_COMBINER_DARRAY
+#ifdef HAVE_MPI_COMBINER_DARRAY
         case MPI_COMBINER_DARRAY:
             if (ints[2] > 0) {
                 int dims = ints[2];
@@ -781,7 +781,7 @@ static void Flatten(MPI_Datatype datatype, PNCIO_Flatlist_node * flat,
             }
             break;
 
-#if defined HAVE_DECL_MPI_COMBINER_HINDEXED_BLOCK && HAVE_DECL_MPI_COMBINER_HINDEXED_BLOCK
+#ifdef HAVE_MPI_COMBINER_HINDEXED_BLOCK
         case MPI_COMBINER_HINDEXED_BLOCK:
             is_hindexed_block = 1;
 #endif
@@ -1112,7 +1112,7 @@ static MPI_Count Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count * curr
     Type_decode(datatype, &combiner, &nints, &nadds, &ntypes, &ints, &adds, &types);
 
     switch (combiner) {
-#ifdef MPIIMPL_HAVE_MPI_COMBINER_DUP
+#ifdef HAVE_MPI_COMBINER_DUP
         case MPI_COMBINER_DUP:
             PNCIO_Type_ispredef(types[0], &old_is_predef);
             PNCIO_Datatype_iscontig(types[0], &old_is_contig);
@@ -1124,7 +1124,7 @@ static MPI_Count Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count * curr
             }
             break;
 #endif
-#ifdef MPIIMPL_HAVE_MPI_COMBINER_SUBARRAY
+#ifdef HAVE_MPI_COMBINER_SUBARRAY
         case MPI_COMBINER_SUBARRAY:
             {
                 int dims = ints[0];
@@ -1145,7 +1145,7 @@ static MPI_Count Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count * curr
             }
             break;
 #endif
-#ifdef MPIIMPL_HAVE_MPI_COMBINER_DARRAY
+#ifdef HAVE_MPI_COMBINER_DARRAY
         case MPI_COMBINER_DARRAY:
             {
                 int dims = ints[2];
@@ -1261,7 +1261,7 @@ static MPI_Count Count_contiguous_blocks(MPI_Datatype datatype, MPI_Count * curr
             }
             break;
 
-#if defined HAVE_DECL_MPI_COMBINER_HINDEXED_BLOCK && HAVE_DECL_MPI_COMBINER_HINDEXED_BLOCK
+#ifdef HAVE_MPI_COMBINER_HINDEXED_BLOCK
         case MPI_COMBINER_HINDEXED_BLOCK:
 #endif
         case MPI_COMBINER_INDEXED_BLOCK:
