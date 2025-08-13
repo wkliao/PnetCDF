@@ -765,10 +765,6 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
 
     NCI_Free(buf);
     if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
-    if (mpireturn != MPI_SUCCESS) {
-        err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-        if (status == NC_NOERR) status = err;
-    }
 
     if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         err = PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
