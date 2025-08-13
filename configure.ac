@@ -1466,6 +1466,14 @@ if test "$mpi_version" -ge "3" ; then
                           [], [], [[#include <mpi.h>]])
 fi
 
+# check some MPI combiner types that are used internally in PnetCDF
+UD_CHECK_MPI_CONSTANTS([MPI_COMBINER_DUP,
+                        MPI_COMBINER_SUBARRAY,
+                        MPI_COMBINER_DARRAY,
+                        MPI_COMBINER_INDEXED_BLOCK,
+                        MPI_COMBINER_HINDEXED_BLOCK],
+                       [], [], [[#include <mpi.h>]])
+
 dnl Check presence of various MPI error classes. Introduced in MPI 2.0.
 dnl These could be enums, so we have to do compile checks.
 dnl AC_CHECK_DECLS([MPI_ERR_FILE_EXISTS,
