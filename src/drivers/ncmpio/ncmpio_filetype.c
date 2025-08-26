@@ -624,6 +624,9 @@ ncmpio_filetype_create_vars(const NC         *ncp,
  *       Its value will be changed to the following when returned.
  *           For root, disp will be set to ncp->begin_var;
  *           For others, disp will be set to 0.
+ *       It will be used in the successive MPI-IO calls to read/write variables
+ *       in the data section (by all processes) or metadata in the header
+ *       section (by root only).
  */
 int
 ncmpio_file_set_view(const NC     *ncp,
