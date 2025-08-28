@@ -121,7 +121,6 @@ put_varm(NC               *ncp,
     int coll_indep, xtype_is_contig=1, can_swap_in_place;
     MPI_Offset nelems=0, bnelems=0, nbytes=0, offset=0;
     MPI_Datatype itype, xtype=MPI_BYTE, imaptype, filetype=MPI_BYTE;
-    MPI_File fh;
 
     /* decode buftype to obtain the followings:
      * itype:    element data type (MPI primitive type) in buftype
@@ -297,15 +296,12 @@ err_check:
          * at a time.
          */
 
-        fh = ncp->independent_fh;
         coll_indep = NC_REQ_INDEP;
-        if (ncp->nprocs > 1 && fIsSet(reqMode, NC_REQ_COLL)) {
-            fh = ncp->collective_fh;
+        if (ncp->nprocs > 1 && fIsSet(reqMode, NC_REQ_COLL))
             coll_indep = NC_REQ_COLL;
-        }
 
         /* MPI_File_set_view is collective */
-        err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
+        err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
         if (err != NC_NOERR) {
             nelems = 0; /* skip this request */
             if (status == NC_NOERR) status = err;
@@ -400,7 +396,6 @@ get_varm(NC               *ncp,
     int el_size, buftype_is_contig, need_swap=0, need_convert=0;
     MPI_Offset nelems=0, bnelems=0, nbytes=0, offset=0;
     MPI_Datatype itype, xtype=MPI_BYTE, filetype=MPI_BYTE, imaptype=MPI_DATATYPE_NULL;
-    MPI_File fh;
 
     /* decode buftype to see if we can use buf to read from file.
      * itype:    element data type (MPI primitive type) in buftype
@@ -544,15 +539,12 @@ err_check:
          * have to process this one record at a time.
          */
 
-        fh = ncp->independent_fh;
         coll_indep = NC_REQ_INDEP;
-        if (ncp->nprocs > 1 && fIsSet(reqMode, NC_REQ_COLL)) {
-            fh = ncp->collective_fh;
+        if (ncp->nprocs > 1 && fIsSet(reqMode, NC_REQ_COLL))
             coll_indep = NC_REQ_COLL;
-        }
 
         /* MPI_File_set_view is collective */
-        err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
+        err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
         if (err != NC_NOERR) {
             nelems = 0; /* skip this request */
             if (status == NC_NOERR) status = err;

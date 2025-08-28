@@ -1694,7 +1694,6 @@ req_aggregation(NC     *ncp,
     void *buf; /* point to starting buffer, used by MPI-IO call */
     MPI_Aint      b_begin, b_addr;
     MPI_Datatype  filetype, buf_type, *ftypes, *btypes;
-    MPI_File fh;
     MPI_Offset max_end, offset;
 
     if (num_reqs == 0) { /* only NC_REQ_COLL can reach here for 0 request */
@@ -2007,13 +2006,9 @@ req_aggregation(NC     *ncp,
     }
     NCI_Free(reqs);
 
-    fh = ncp->independent_fh;
-    if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL)
-        fh = ncp->collective_fh;
-
     /* set the MPI-IO fileview, this is a collective call */
     offset = 0;
-    err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
+    err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
     if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
@@ -2030,8 +2025,6 @@ req_aggregation(NC     *ncp,
 
     /* No longer need to reset the file view, as the root's fileview includes
      * the whole file header.
-     TRACE_IO(MPI_File_set_view, (fh, 0, MPI_BYTE, MPI_BYTE, "native",
-                                  MPI_INFO_NULL));
      */
 
     return status;
@@ -2166,7 +2159,6 @@ mgetput(NC     *ncp,
     NC_lead_req *lead_list;
     MPI_Datatype filetype, buf_type=MPI_BYTE;
     MPI_Offset offset=0, buf_count=0;
-    MPI_File fh;
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *blocklens;
@@ -2350,12 +2342,8 @@ mgetput(NC     *ncp,
 mpi_io:
     NCI_Free(reqs);
 
-    fh = ncp->independent_fh;
-    if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL)
-        fh = ncp->collective_fh;
-
     /* set the MPI-IO fileview, this is a collective call */
-    err = ncmpio_file_set_view(ncp, fh, &offset, filetype, 0, NULL, NULL);
+    err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
     if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
@@ -2372,8 +2360,6 @@ mpi_io:
 
     /* No longer need to reset the file view, as the root's fileview includes
      * the whole file header.
-     TRACE_IO(MPI_File_set_view, (fh, 0, MPI_BYTE, MPI_BYTE, "native",
-                                  MPI_INFO_NULL));
      */
 
     return status;

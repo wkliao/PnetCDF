@@ -548,8 +548,7 @@ ncmpio_filetype_create_vars(const NC* ncp, const NC_var* varp,
                 MPI_Datatype *filetype, int *is_filetype_contig);
 
 extern int
-ncmpio_file_set_view(const NC *ncp, MPI_File fh, MPI_Offset *disp,
-                MPI_Datatype filetype,
+ncmpio_file_set_view(const NC *ncp, MPI_Offset *disp, MPI_Datatype filetype,
                 MPI_Aint npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count *offsets, MPI_Count *lengths
@@ -633,11 +632,7 @@ ncmpio_inq_var_fill(NC_var *varp, void *fill_value);
 extern int
 ncmpio_fill_vars(NC *ncp);
 
-/* Begin defined in ncmpio_nonblocking.c ------------------------------------*/
-extern int
-ncmpio_getput_zero_req(NC *ncp, int rw_flag);
-
-/* Begin defined in ncmpio_close.c */
+/* Begin defined in ncmpio_close.c ------------------------------------------*/
 extern int
 ncmpio_close_files(NC *ncp, int doUnlink);
 
@@ -684,6 +679,9 @@ ncmpio_calc_start_end(const NC *ncp, const NC_var *varp,
                       MPI_Offset *end_off);
 
 /* Begin defined in ncmpio_file_io.c ----------------------------------------*/
+extern int
+ncmpio_getput_zero_req(NC *ncp, int rw_flag);
+
 extern int
 ncmpio_read_write(NC *ncp, int rw_flag, int coll_indep, MPI_Offset offset,
                   MPI_Offset buf_count, MPI_Datatype buf_type, void *buf,

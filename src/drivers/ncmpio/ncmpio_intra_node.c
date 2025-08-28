@@ -1298,7 +1298,6 @@ int ina_put(NC           *ncp,
     MPI_Aint npairs=0, *meta=NULL, *count=NULL;
     MPI_Offset disp=0, buf_count=0;
     MPI_Datatype saved_fileType, fileType=MPI_BYTE;
-    MPI_File fh;
     MPI_Request *req=NULL;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -1699,9 +1698,6 @@ int ina_put(NC           *ncp,
     if (ncp->rank != ncp->my_aggr)
         return status;
 
-    /* intra-node aggregation only takes effect in collective data mode */
-    fh = ncp->collective_fh;
-
     /* Preserve fd->filetype previously used */
     if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         disp = 0;
@@ -1722,9 +1718,9 @@ int ina_put(NC           *ncp,
 
     /* Set the MPI-IO fileview (this is a collective call). This call returns
      * disp which points to the very first file offset to be written.
+     * Intra-node aggregation only takes effect in collective data mode.
      */
-    err = ncmpio_file_set_view(ncp, fh, &disp, fileType, npairs, offsets,
-                               lengths);
+    err = ncmpio_file_set_view(ncp, &disp, fileType, npairs, offsets, lengths);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
         buf_count = 0;
@@ -1821,7 +1817,6 @@ int ina_get(NC           *ncp,
     MPI_Aint npairs=0, max_npairs, *meta=NULL, *count=NULL;
     MPI_Offset disp=0, buf_count=0;
     MPI_Datatype saved_fileType, fileType=MPI_BYTE;
-    MPI_File fh;
     MPI_Request *req=NULL;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -2106,9 +2101,6 @@ int ina_get(NC           *ncp,
      * participate the collective MPI-IO calls.
      */
 
-    /* intra-node aggregation only takes effect in collective data mode */
-    fh = ncp->collective_fh;
-
     /* Save fd->filetype previously used and will restore it later. */
     if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         disp = 0;
@@ -2129,9 +2121,9 @@ int ina_get(NC           *ncp,
 
     /* Set the MPI-IO fileview (this is a collective call). This call returns
      * disp which points to the very first file offset to be read.
+     * Intra-node aggregation only takes effect in collective data mode.
      */
-    err = ncmpio_file_set_view(ncp, fh, &disp, fileType, npairs, offsets,
-                               lengths);
+    err = ncmpio_file_set_view(ncp, &disp, fileType, npairs, offsets, lengths);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
         buf_count = 0;
