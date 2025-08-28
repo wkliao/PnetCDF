@@ -243,13 +243,13 @@ void ncmpio_hint_set(NC       *ncp,
 
     /* aligns starting file offsets of entire data section */
     if (ncp->info_v_align != -1) {
-        snprintf(int_str, MAX_INT_LEN, "%lld", ncp->info_v_align);
+        snprintf(int_str, MAX_INT_LEN, OFFFMT, ncp->info_v_align);
         MPI_Info_set(info, "nc_var_align_size", int_str);
     }
 
     /* aligns starting file offset of the record variable section */
     if (ncp->info_r_align != -1) {
-        snprintf(int_str, MAX_INT_LEN, "%lld", ncp->info_r_align);
+        snprintf(int_str, MAX_INT_LEN, OFFFMT, ncp->info_r_align);
         MPI_Info_set(info, "nc_record_align_size", int_str);
     }
 
@@ -270,7 +270,7 @@ void ncmpio_hint_set(NC       *ncp,
     /* Temporal buffer size used to pack non-contiguous aggregated user buffers
      * when calling ncmpi_wait/wait_all. Default PNC_DEFAULT_IBUF_SIZE.
      */
-    snprintf(int_str, MAX_INT_LEN, "%lld", ncp->ibuf_size);
+    snprintf(int_str, MAX_INT_LEN, OFFFMT, ncp->ibuf_size);
     MPI_Info_set(info, "nc_ibuf_size", int_str);
 
 #ifdef ENABLE_SUBFILING
