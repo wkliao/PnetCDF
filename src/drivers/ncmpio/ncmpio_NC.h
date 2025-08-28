@@ -683,7 +683,7 @@ extern int
 ncmpio_getput_zero_req(NC *ncp, int rw_flag);
 
 extern int
-ncmpio_read_write(NC *ncp, int rw_flag, int coll_indep, MPI_Offset offset,
+ncmpio_read_write(NC *ncp, int rw_flag, MPI_Offset offset,
                   MPI_Offset buf_count, MPI_Datatype buf_type, void *buf,
                   int buftype_is_contig);
 

@@ -55,7 +55,7 @@ getput_vard(NC               *ncp,
     void *xbuf=NULL;
     int mpireturn, status=NC_NOERR, err=NC_NOERR, xtype_is_contig=1;
     int el_size, buftype_is_contig=0, need_swap_back_buf=0;
-    int need_convert=0, need_swap=0, coll_indep, rw_flag;
+    int need_convert=0, need_swap=0, rw_flag;
     MPI_Offset nelems=0, fnelems=0, bnelems=0, offset=0;
     MPI_Datatype etype=MPI_DATATYPE_NULL, xtype=MPI_BYTE;
     MPI_Offset filetype_size=0;
@@ -309,10 +309,6 @@ err_check:
     }
     status = err;
 
-    coll_indep = NC_REQ_INDEP;
-    if (ncp->nprocs > 1 && fIsSet(reqMode, NC_REQ_COLL))
-        coll_indep = NC_REQ_COLL;
-
     /* set the MPI-IO fileview, this is a collective call */
     err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
     if (err != NC_NOERR) {
@@ -322,8 +318,8 @@ err_check:
 
     rw_flag = (fIsSet(reqMode, NC_REQ_RD)) ? NC_REQ_RD : NC_REQ_WR;
 
-    err = ncmpio_read_write(ncp, rw_flag, coll_indep, offset, nelems,
-                            xtype, xbuf, xtype_is_contig);
+    err = ncmpio_read_write(ncp, rw_flag, offset, nelems, xtype, xbuf,
+                            xtype_is_contig);
     if (status == NC_NOERR) status = err;
 
     /* No longer need to reset the file view, as the root's fileview includes
