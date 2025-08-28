@@ -135,7 +135,6 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
 int
 ncmpio_read_write(NC           *ncp,
                   int           rw_flag,     /* NC_REQ_WR or NC_REQ_RD */
-                  int           coll_indep,  /* NC_REQ_COLL or NC_REQ_INDEP */
                   MPI_Offset    offset,
                   MPI_Offset    buf_count,
                   MPI_Datatype  buf_type,
@@ -143,7 +142,7 @@ ncmpio_read_write(NC           *ncp,
                   int           buftype_is_contig)
 {
     char *mpi_name;
-    int status=NC_NOERR, err=NC_NOERR, mpireturn;
+    int status=NC_NOERR, err=NC_NOERR, mpireturn, coll_indep;
     MPI_Status mpistatus;
     MPI_File fh;
     MPI_Offset req_size;
@@ -175,6 +174,10 @@ ncmpio_read_write(NC           *ncp,
 #endif
         DEBUG_ASSIGN_ERROR(err, NC_EINTOVERFLOW)
     }
+
+    coll_indep = NC_REQ_INDEP;
+    if (ncp->nprocs > 1 && !fIsSet(ncp->flags, NC_MODE_INDEP))
+        coll_indep = NC_REQ_COLL;
 
     if (err != NC_NOERR) {
         if (coll_indep == NC_REQ_COLL) {

@@ -2017,8 +2017,8 @@ req_aggregation(NC     *ncp,
     }
 
     /* call MPI_File_read_at_all/MPI_File_write_at_all */
-    err = ncmpio_read_write(ncp, rw_flag, coll_indep, offset, buf_len, buf_type,
-                            buf, ((buf_type == MPI_BYTE) ? 1 : 0));
+    err = ncmpio_read_write(ncp, rw_flag, offset, buf_len, buf_type, buf,
+                            ((buf_type == MPI_BYTE) ? 1 : 0));
     if (status == NC_NOERR) status = err;
 
     if (buf_type != MPI_BYTE) MPI_Type_free(&buf_type);
@@ -2352,8 +2352,8 @@ mpi_io:
     }
 
     /* call MPI_File_read_at_all/MPI_File_write_at_all */
-    err = ncmpio_read_write(ncp, rw_flag, coll_indep, offset, buf_count,
-                            buf_type, buf, ((buf_type == MPI_BYTE) ? 1 : 0));
+    err = ncmpio_read_write(ncp, rw_flag, offset, buf_count, buf_type, buf,
+                            ((buf_type == MPI_BYTE) ? 1 : 0));
     if (status == NC_NOERR) status = err;
 
     if (buf_type != MPI_BYTE) MPI_Type_free(&buf_type);

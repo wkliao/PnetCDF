@@ -1734,8 +1734,8 @@ int ina_put(NC           *ncp,
 #endif
 
     /* call MPI_File_write_at_all or PNCIO_File_write_at_all */
-    err = ncmpio_read_write(ncp, NC_REQ_WR, NC_REQ_COLL, disp, buf_count,
-                            MPI_BYTE, wr_buf, 1);
+    err = ncmpio_read_write(ncp, NC_REQ_WR, disp, buf_count, MPI_BYTE, wr_buf,
+                            1);
     if (status == NC_NOERR) status = err;
 
     if (wr_buf  != NULL) NCI_Free(wr_buf);
@@ -2139,8 +2139,8 @@ int ina_get(NC           *ncp,
 #endif
 
     /* call MPI_File_read_at_all */
-    err = ncmpio_read_write(ncp, NC_REQ_RD, NC_REQ_COLL, disp, buf_count,
-                            MPI_BYTE, rd_buf, 1);
+    err = ncmpio_read_write(ncp, NC_REQ_RD, disp, buf_count, MPI_BYTE, rd_buf,
+                            1);
     if (status == NC_NOERR) status = err;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)

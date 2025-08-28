@@ -118,7 +118,7 @@ put_varm(NC               *ncp,
     void *xbuf=NULL;
     int mpireturn, err=NC_NOERR, status=NC_NOERR, buftype_is_contig;
     int el_size, need_convert=0, need_swap=0, need_swap_back_buf=0;
-    int coll_indep, xtype_is_contig=1, can_swap_in_place;
+    int xtype_is_contig=1, can_swap_in_place;
     MPI_Offset nelems=0, bnelems=0, nbytes=0, offset=0;
     MPI_Datatype itype, xtype=MPI_BYTE, imaptype, filetype=MPI_BYTE;
 
@@ -296,10 +296,6 @@ err_check:
          * at a time.
          */
 
-        coll_indep = NC_REQ_INDEP;
-        if (ncp->nprocs > 1 && fIsSet(reqMode, NC_REQ_COLL))
-            coll_indep = NC_REQ_COLL;
-
         /* MPI_File_set_view is collective */
         err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
         if (err != NC_NOERR) {
@@ -312,8 +308,8 @@ err_check:
          * written to the variable defined in file. Note data stored in xbuf
          * is in the external data type, ready to be written to file.
          */
-        err = ncmpio_read_write(ncp, NC_REQ_WR, coll_indep, offset, nelems,
-                                xtype, xbuf, xtype_is_contig);
+        err = ncmpio_read_write(ncp, NC_REQ_WR, offset, nelems, xtype, xbuf,
+                                xtype_is_contig);
         if (status == NC_NOERR) status = err;
     }
 
@@ -392,7 +388,7 @@ get_varm(NC               *ncp,
          int               reqMode) /* WR/RD/COLL/INDEP */
 {
     void *xbuf=NULL;
-    int err=NC_NOERR, status=NC_NOERR, coll_indep, xtype_is_contig=1;
+    int err=NC_NOERR, status=NC_NOERR, xtype_is_contig=1;
     int el_size, buftype_is_contig, need_swap=0, need_convert=0;
     MPI_Offset nelems=0, bnelems=0, nbytes=0, offset=0;
     MPI_Datatype itype, xtype=MPI_BYTE, filetype=MPI_BYTE, imaptype=MPI_DATATYPE_NULL;
@@ -539,10 +535,6 @@ err_check:
          * have to process this one record at a time.
          */
 
-        coll_indep = NC_REQ_INDEP;
-        if (ncp->nprocs > 1 && fIsSet(reqMode, NC_REQ_COLL))
-            coll_indep = NC_REQ_COLL;
-
         /* MPI_File_set_view is collective */
         err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
         if (err != NC_NOERR) {
@@ -555,8 +547,8 @@ err_check:
          * read from the variable defined in file. Note xbuf will contain data
          * read from the file and hence is in the external data type.
          */
-        err = ncmpio_read_write(ncp, NC_REQ_RD, coll_indep, offset, nelems,
-                                xtype, xbuf, xtype_is_contig);
+        err = ncmpio_read_write(ncp, NC_REQ_RD, offset, nelems, xtype, xbuf,
+                                xtype_is_contig);
         if (status == NC_NOERR) status = err;
     }
 
