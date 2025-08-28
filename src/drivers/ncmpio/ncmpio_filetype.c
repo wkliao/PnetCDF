@@ -630,8 +630,7 @@ ncmpio_filetype_create_vars(const NC         *ncp,
  */
 int
 ncmpio_file_set_view(const NC     *ncp,
-                     MPI_File      fh,
-                     MPI_Offset   *disp,  /* IN/OUT */
+                     MPI_Offset   *disp,    /* IN/OUT */
                      MPI_Datatype  filetype,
                      MPI_Aint      npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -645,11 +644,12 @@ ncmpio_file_set_view(const NC     *ncp,
 {
     char *mpi_name;
     int err, mpireturn, status=NC_NOERR;
+    MPI_File fh;
 
 // printf("%s line %d: filetype = %s\n",__func__,__LINE__,(filetype == MPI_DATATYPE_NULL)?"NULL":"NOT NULL");
 
     if (ncp->fstype != PNCIO_FSTYPE_MPIIO && filetype == MPI_DATATYPE_NULL) {
-        /* When PnetCDF's internal ADIO driver is used and this is called from
+        /* When PnetCDF's internal I/O driver is used and this is called from
          * intra_node_aggregation() which passes MPI_DATATYPE_NULL in argument
          * filetype to help this subroutine to tell this is called from
          * intra_node_aggregation(). In this case, this rank's fileview has
@@ -681,6 +681,10 @@ ncmpio_file_set_view(const NC     *ncp,
          */
         return PNCIO_File_set_view(ncp->adio_fh, 0, filetype, npairs, offsets, lengths);
     }
+
+    /* when ncp->nprocs == 1, ncp->collective_fh == ncp->independent_fh */
+    fh = (ncp->nprocs > 1 && !fIsSet(ncp->flags, NC_MODE_INDEP))
+       ? ncp->collective_fh : ncp->independent_fh;
 
     if (filetype == MPI_BYTE) {
         /* filetype is a contiguous space, make the whole file visible */
