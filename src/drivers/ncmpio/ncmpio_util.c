@@ -18,6 +18,7 @@
 
 #include <pnc_debug.h>
 #include <common.h>
+#include <ncx.h>
 #include "ncmpio_NC.h"
 
 #define MAX_INT_LEN 24
@@ -116,6 +117,9 @@ void ncmpio_hint_extract(NC       *ncp,
                 ncp->chunk = NC_MAX_INT;
             else
                 ncp->chunk = (int)llval;
+
+            /* CDF-5's minimum header size is 4 bytes more than CDF-1 2's */
+            ncp->chunk = PNETCDF_RNDUP(MAX(MIN_NC_XSZ+4, ncp->chunk), X_ALIGN);
         }
     }
 

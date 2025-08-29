@@ -56,61 +56,6 @@ ncmpio_free_NC(NC *ncp)
     NCI_Free(ncp);
 }
 
-/*----< ncmpio_close_files() >-----------------------------------------------*/
-int
-ncmpio_close_files(NC *ncp, int doUnlink) {
-    char *mpi_name;
-    int err=NC_NOERR, mpireturn=MPI_SUCCESS;
-
-    assert(ncp != NULL); /* this should never occur */
-
-    if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
-        if (ncp->independent_fh != MPI_FILE_NULL) {
-            TRACE_IO(MPI_File_close, (&ncp->independent_fh));
-            if (mpireturn != MPI_SUCCESS)
-                return ncmpii_error_mpi2nc(mpireturn, mpi_name);
-        }
-
-        if (ncp->nprocs > 1 && ncp->collective_fh != MPI_FILE_NULL) {
-            /* when ncp->nprocs == 1, collective_fh == independent_fh */
-            TRACE_IO(MPI_File_close, (&ncp->collective_fh));
-            if (mpireturn != MPI_SUCCESS)
-                return ncmpii_error_mpi2nc(mpireturn, mpi_name);
-        }
-    }
-    else {
-        /* When intra-node aggregation is enabled, only aggregators have a
-         * non-NULL ncp->adio_fh and non-aggregators has adio_fh == NULL.
-         */
-        if (ncp->adio_fh != NULL) {
-            err = PNCIO_File_close(ncp->adio_fh);
-            NCI_Free(ncp->adio_fh);
-            ncp->adio_fh = NULL;
-            if (err != NC_NOERR) return err;
-        }
-    }
-
-    if (doUnlink) {
-        /* called from ncmpi_abort, if the file is being created and is still
-         * in define mode, the file is deleted */
-        if (ncp->rank == 0) {
-            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-                err = PNCIO_File_delete(ncp->path);
-                if (err != NC_NOERR) return err;
-            }
-            else {
-                TRACE_IO(MPI_File_delete, ((char *)ncp->path, ncp->mpiinfo));
-                if (mpireturn != MPI_SUCCESS)
-                    return ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            }
-        }
-        if (ncp->nprocs > 1)
-            MPI_Barrier(ncp->comm);
-    }
-
-    return NC_NOERR;
-}
-
 /*----< ncmpio_close() >------------------------------------------------------*/
 /* This function is collective */
 int
@@ -240,8 +185,8 @@ ncmpio_close(void *ncdp)
     }
 #endif
 
-    /* calling MPI_File_close() */
-    err = ncmpio_close_files(ncp, 0);
+    /* close the file */
+    err = ncmpio_file_close(ncp);
     if (status == NC_NOERR) status = err;
 
     /* file is open for write and no variable has been defined */

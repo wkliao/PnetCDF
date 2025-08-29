@@ -290,7 +290,7 @@ fn_exit:
     err = ncmpio_hdr_get_NC(ncp);
     if (err == NC_ENULLPAD) status = NC_ENULLPAD; /* non-fatal error */
     else if (err != NC_NOERR) { /* fatal error */
-        ncmpio_close_files(ncp, 0);
+        ncmpio_file_close(ncp);
         ncmpio_free_NC(ncp);
         return err;
     }

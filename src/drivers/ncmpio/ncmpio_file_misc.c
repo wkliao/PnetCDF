@@ -81,8 +81,8 @@ dup_NC(const NC *ref)
 int
 ncmpio_redef(void *ncdp)
 {
-    char *mpi_name;
-    int err, status=NC_NOERR, mpireturn;
+    int err, status=NC_NOERR;
+    MPI_Offset disp;
     NC *ncp = (NC*)ncdp;
 
 #if 0
@@ -100,7 +100,7 @@ ncmpio_redef(void *ncdp)
     if (NC_indep(ncp)) /* exit independent mode, if in independent mode */
         ncmpio_end_indep_data(ncp);
 
-    /* duplicate a header to be used in enddef() for checking if header grows */
+    /* duplicate header to be used in enddef() for checking if header grows */
     ncp->old = dup_NC(ncp);
     if (ncp->old == NULL) DEBUG_RETURN_ERROR(NC_ENOMEM)
 
@@ -108,39 +108,9 @@ ncmpio_redef(void *ncdp)
     fSet(ncp->flags, NC_MODE_DEF);
 
     /* must reset fileview as header extent may later change in enddef() */
-    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        /* When intra-node aggregation is enabled, non-aggregators' adio_fh is
-         * NULL.
-         */
-        if (ncp->adio_fh == NULL) return NC_NOERR;
-
-        err = PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
-        DEBUG_ASSIGN_ERROR(status, err)
-    }
-    else {
-        /* When intra-node aggregation (INA) is enabled, non-aggregators'
-         * collective_fh is MPI_FILE_NULL. However, independent_fh may not be
-         * MPI_FILE_NULL, as INA is disabled in independent mode, which use
-         * independent_fh.
-         */
-        if (ncp->independent_fh != MPI_FILE_NULL) {
-            TRACE_IO(MPI_File_set_view, (ncp->independent_fh, 0, MPI_BYTE,
-                                         MPI_BYTE, "native", MPI_INFO_NULL));
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                DEBUG_ASSIGN_ERROR(status, err)
-            }
-        }
-
-        if (ncp->collective_fh != MPI_FILE_NULL) {
-            TRACE_IO(MPI_File_set_view, (ncp->collective_fh, 0, MPI_BYTE,
-                                         MPI_BYTE, "native", MPI_INFO_NULL));
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                DEBUG_ASSIGN_ERROR(status, err)
-            }
-        }
-    }
+    disp = 0;
+    err = ncmpio_file_set_view(ncp, &disp, MPI_BYTE, 0, NULL, NULL);
+    DEBUG_ASSIGN_ERROR(status, err)
 
     return status;
 }
@@ -317,8 +287,13 @@ ncmpio_abort(void *ncdp)
     }
 
     /* close the file */
-    err = ncmpio_close_files(ncp, doUnlink);
+    err = ncmpio_file_close(ncp);
     if (status == NC_NOERR ) status = err;
+
+    if (doUnlink) {
+        err = ncmpio_file_delete(ncp);
+        status = (status == NC_NOERR) ? err : status;
+    }
 
     /* free up space occupied by the header metadata */
     ncmpio_free_NC(ncp);
