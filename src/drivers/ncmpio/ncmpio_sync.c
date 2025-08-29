@@ -27,49 +27,6 @@
 #include <ncx.h>
 #include "ncmpio_NC.h"
 
-/*----< ncmpio_file_sync() >-------------------------------------------------*/
-/* This function must be called collectively, no matter if it is in collective
- * or independent data mode.
- */
-int
-ncmpio_file_sync(NC *ncp) {
-    char *mpi_name;
-    int mpireturn;
-
-    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        if (ncp->adio_fh == NULL)
-            return NC_NOERR;
-        return PNCIO_File_sync(ncp->adio_fh);
-    }
-
-    /* the remaining of this subroutine are for when using MPI-IO */
-
-    if (ncp->independent_fh != MPI_FILE_NULL) {
-        TRACE_IO(MPI_File_sync, (ncp->independent_fh));
-        if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
-    }
-    /* when nprocs == 1, ncp->collective_fh == ncp->independent_fh */
-    if (ncp->nprocs == 1) return NC_NOERR;
-
-    /* When intra-node aggregation is enabled, non-aggregator's
-     * ncp->collective_fh is always MPI_FILE_NULL. When disabled,
-     * ncp->collective_fh on all ranks is never MPI_FILE_NULL as collective
-     * mode is default in PnetCDF.
-     */
-    if (ncp->collective_fh != MPI_FILE_NULL) {
-        TRACE_IO(MPI_File_sync, (ncp->collective_fh));
-        if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
-    }
-
-    /* Barrier is not necessary ...
-    TRACE_COMM(MPI_Barrier)(ncp->comm);
-     */
-
-    return NC_NOERR;
-}
-
 #define NC_NUMRECS_OFFSET 4
 
 /*----< ncmpio_write_numrecs() >---------------------------------------------*/
@@ -82,9 +39,7 @@ int
 ncmpio_write_numrecs(NC         *ncp,
                      MPI_Offset  new_numrecs)
 {
-    char *mpi_name;
-    int mpireturn, err;
-    MPI_File fh;
+    int mpireturn, err=NC_NOERR;
     MPI_Status mpistatus;
 
     /* return now if there is no record variable defined */
@@ -103,21 +58,11 @@ ncmpio_write_numrecs(NC         *ncp,
     if (!fIsSet(ncp->flags, NC_HCOLL) && ncp->rank > 0)
         return NC_NOERR;
 
-    /* select the right file handler based on the current data mode */
-    fh = ncp->independent_fh;
-    if (ncp->nprocs > 1 && !NC_indep(ncp))
-        fh = ncp->collective_fh;
-
     /* If collective MPI-IO is required for all MPI-IO calls, then all non-root
      * processes participate the collective write call with zero-size requests.
      */
-    if (ncp->rank > 0 && fIsSet(ncp->flags, NC_HCOLL)) {
-        if (ncp->fstype != PNCIO_FSTYPE_MPIIO)
-            PNCIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE, &mpistatus);
-        else
-            TRACE_IO(MPI_File_write_at_all, (fh, 0, NULL, 0, MPI_BYTE, &mpistatus));
-        return NC_NOERR;
-    }
+    if (ncp->rank > 0 && fIsSet(ncp->flags, NC_HCOLL))
+        return ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
 
     if (new_numrecs > ncp->numrecs || NC_ndirty(ncp)) {
         int len;
@@ -154,40 +99,15 @@ ncmpio_write_numrecs(NC         *ncp,
             return NC_NOERR;
 
         /* root's file view always includes the entire file header */
-        if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1) {
-            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-                err = PNCIO_File_write_at_all(ncp->adio_fh, NC_NUMRECS_OFFSET, (void*)pos,
-                                            len, MPI_BYTE, &mpistatus);
-                if (err != NC_NOERR) return err;
-            }
-            else {
-                TRACE_IO(MPI_File_write_at_all, (fh, NC_NUMRECS_OFFSET, (void*)pos,
-                                                 len, MPI_BYTE, &mpistatus));
-                if (mpireturn != MPI_SUCCESS) {
-                    err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                    if (err == NC_EFILE) DEBUG_RETURN_ERROR(NC_EWRITE)
-                }
-            }
-        }
+        if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1)
+            err = ncmpio_file_write_at_all(ncp, NC_NUMRECS_OFFSET, (void*)pos,
+                                           len, MPI_BYTE, &mpistatus);
+        else
+            err = ncmpio_file_write_at(ncp, NC_NUMRECS_OFFSET, (void*)pos,
+                                           len, MPI_BYTE, &mpistatus);
+        if (err != NC_NOERR)
+            DEBUG_RETURN_ERROR(err)
         else {
-            if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-                err = PNCIO_File_write_at(ncp->adio_fh, NC_NUMRECS_OFFSET, (void*)pos,
-                                        len, MPI_BYTE, &mpistatus);
-                if (err != NC_NOERR) return err;
-            }
-            else {
-                TRACE_IO(MPI_File_write_at, (fh, NC_NUMRECS_OFFSET, (void*)pos,
-                                             len, MPI_BYTE, &mpistatus));
-                if (mpireturn != MPI_SUCCESS) {
-                    err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                    if (err == NC_EFILE) DEBUG_RETURN_ERROR(NC_EWRITE)
-                }
-                else
-                    err = NC_NOERR;
-            }
-        }
-
-        if (err == NC_NOERR) {
             /* update the number of bytes written since file open.
              * Because the above MPI write writes either 4 or 8 bytes,
              * calling MPI_Get_count() is sufficient. No need to call
@@ -208,7 +128,7 @@ ncmpio_write_numrecs(NC         *ncp,
                 ncp->put_size += put_count;
         }
     }
-    return NC_NOERR;
+    return err;
 }
 
 /*----< ncmpio_sync_numrecs() >-----------------------------------------------*/

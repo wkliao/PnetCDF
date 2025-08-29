@@ -144,11 +144,9 @@ fill_var_rec(NC         *ncp,
              NC_var     *varp,
              MPI_Offset  recno) /* record number */
 {
-    char *mpi_name;
     int err, status=NC_NOERR, mpireturn;
     void *buf;
     MPI_Offset var_len, start, count, offset;
-    MPI_File fh;
     MPI_Status mpistatus;
     MPI_Datatype bufType;
 
@@ -199,28 +197,16 @@ fill_var_rec(NC         *ncp,
         status = err;
     }
 
+    /* make the entire file visible */
+    offset = 0;
+    err = ncmpio_file_set_view(ncp, &offset, MPI_BYTE, 0, NULL, NULL);
+    status = (status == NC_NOERR) ? err : status;
+
     /* calculate the starting file offset for each process */
     offset = varp->begin;
     if (IS_RECVAR(varp))
         offset += ncp->recsize * recno;
     offset += start * varp->xsz;
-
-    /* when nprocs == 1, we keep I/O mode in independent mode at all time */
-    fh = ncp->collective_fh;
-
-    /* make the entire file visible */
-    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        err = PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
-        if (err != NC_NOERR && status == NC_NOERR) status = err;
-    }
-    else {
-        TRACE_IO(MPI_File_set_view, (fh, 0, MPI_BYTE, MPI_BYTE, "native",
-                                     MPI_INFO_NULL));
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            if (status == NC_NOERR) status = err;
-        }
-    }
 
     count *= varp->xsz;
 
@@ -235,48 +221,11 @@ fill_var_rec(NC         *ncp,
 #endif
 
     /* write to variable collectively */
-    if (nprocs > 1) {
-        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-            err = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf, (int)count, bufType,
-                                        &mpistatus);
-            if (err != NC_NOERR && status == NC_NOERR) status = err;
-        }
-        else {
-#ifdef HAVE_MPI_LARGE_COUNT
-            TRACE_IO(MPI_File_write_at_all_c, (fh, offset, buf, (MPI_Count)count,
-                                               bufType, &mpistatus));
-#else
-            TRACE_IO(MPI_File_write_at_all, (fh, offset, buf, (int)count,
-                                             bufType, &mpistatus));
-#endif
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                /* return the first encountered error if there is any */
-                if (status == NC_NOERR) status = err;
-            }
-        }
-    }
-    else {
-        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-            err = PNCIO_File_write_at(ncp->adio_fh, offset, buf, (int)count, bufType,
-                                    &mpistatus);
-            if (err != NC_NOERR && status == NC_NOERR) status = err;
-        }
-        else {
-#ifdef HAVE_MPI_LARGE_COUNT
-            TRACE_IO(MPI_File_write_at_c, (fh, offset, buf, (MPI_Count)count,
-                                           bufType, &mpistatus));
-#else
-            TRACE_IO(MPI_File_write_at, (fh, offset, buf, (int)count,
-                                         bufType, &mpistatus));
-#endif
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                /* return the first encountered error if there is any */
-                if (status == NC_NOERR) status = err;
-            }
-        }
-    }
+    if (nprocs > 1)
+        err = ncmpio_file_write_at_all(ncp, offset, buf, count, bufType, &mpistatus);
+    else
+        err = ncmpio_file_write_at(ncp, offset, buf, count, bufType, &mpistatus);
+    status = (status != NC_NOERR) ? status : err;
     NCI_Free(buf);
     if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
 
@@ -407,12 +356,11 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
 {
     int i, j, k, mpireturn, err, status=NC_NOERR;
     int start_vid, recno, nVarsFill;
-    char *buf_ptr, *noFill, *mpi_name;
+    char *buf_ptr, *noFill;
     void *buf;
     size_t nsegs;
-    MPI_Offset buf_len, var_len, nrecs, start, *count;
+    MPI_Offset buf_len, var_len, nrecs, start, *count, disp;
     MPI_Datatype filetype, bufType;
-    MPI_File fh;
     MPI_Status mpistatus;
     NC_var *varp;
 
@@ -679,21 +627,10 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     NCI_Free(count);
     NCI_Free(offset);
 
-    /* when nprocs == 1, we keep I/O mode in independent mode at all time */
-    fh = ncp->collective_fh;
+    disp = 0;
+    err = ncmpio_file_set_view(ncp, &disp, filetype, 0, NULL, NULL);
+    status = (status == NC_NOERR) ? err : status;
 
-    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        err = PNCIO_File_set_view(ncp->adio_fh, 0, filetype, 0, NULL, NULL);
-        if (err != NC_NOERR && status == NC_NOERR) status = err;
-    }
-    else {
-        TRACE_IO(MPI_File_set_view, (fh, 0, MPI_BYTE, filetype, "native",
-                                     MPI_INFO_NULL));
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            if (status == NC_NOERR) status = err;
-        }
-    }
     if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
 
     bufType = MPI_BYTE;
@@ -720,64 +657,19 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     }
 
     /* write to variable collectively */
-    if (nprocs > 1) {
-        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-            err = PNCIO_File_write_at_all(ncp->adio_fh, 0, buf, (int)buf_len, bufType,
-                                        &mpistatus);
-            if (err != NC_NOERR && status == NC_NOERR) status = err;
-        }
-        else {
-#ifdef HAVE_MPI_LARGE_COUNT
-            TRACE_IO(MPI_File_write_at_all_c, (fh, 0, buf, (MPI_Count)buf_len,
-                                               bufType, &mpistatus));
-#else
-            TRACE_IO(MPI_File_write_at_all, (fh, 0, buf, (int)buf_len,
-                                             bufType, &mpistatus));
-#endif
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                /* return the first encountered error if there is any */
-                if (status == NC_NOERR) status = err;
-            }
-        }
-    }
-    else {
-        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-            err = PNCIO_File_write_at(ncp->adio_fh, 0, buf, (int)buf_len, bufType,
-                                    &mpistatus);
-            if (err != NC_NOERR && status == NC_NOERR) status = err;
-        }
-        else {
-#ifdef HAVE_MPI_LARGE_COUNT
-            TRACE_IO(MPI_File_write_at_c, (fh, 0, buf, (MPI_Count)buf_len,
-                                           bufType, &mpistatus));
-#else
-            TRACE_IO(MPI_File_write_at, (fh, 0, buf, (int)buf_len,
-                                         bufType, &mpistatus));
-#endif
-            if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                /* return the first encountered error if there is any */
-                if (status == NC_NOERR) status = err;
-            }
-        }
-    }
+    if (nprocs > 1)
+        err = ncmpio_file_write_at_all(ncp, disp, buf, buf_len, bufType, &mpistatus);
+    else
+        err = ncmpio_file_write_at(ncp, disp, buf, buf_len, bufType, &mpistatus);
+    status = (status != NC_NOERR) ? status : err;
 
     NCI_Free(buf);
     if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
 
-    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        err = PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
-        if (err != NC_NOERR && status == NC_NOERR) status = err;
-    }
-    else {
-        TRACE_IO(MPI_File_set_view, (fh, 0, MPI_BYTE, MPI_BYTE, "native",
-                                     MPI_INFO_NULL));
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            if (status == NC_NOERR) status = err;
-        }
-    }
+    /* reset fileview to make the entire file visible */
+    disp = 0;
+    err = ncmpio_file_set_view(ncp, &disp, MPI_BYTE, 0, NULL, NULL);
+    status = (status == NC_NOERR) ? err : status;
 
     return status;
 }

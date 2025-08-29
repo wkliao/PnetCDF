@@ -473,6 +473,14 @@ struct NC {
 #endif
 };
 
+typedef struct bufferinfo {
+    NC         *ncp;
+    MPI_Offset  offset;   /* current read/write offset in the file */
+    char       *base;     /* beginning of read/write buffer */
+    char       *pos;      /* current position in buffer */
+    char       *end;      /* end position of buffer */
+} bufferinfo;
+
 #define NC_readonly(ncp)   fIsSet((ncp)->flags, NC_MODE_RDONLY)
 #define NC_IsNew(ncp)      fIsSet((ncp)->flags, NC_MODE_CREATE)
 #define NC_indef(ncp)      fIsSet((ncp)->flags, NC_MODE_DEF)
@@ -491,9 +499,6 @@ struct NC {
         (NC_EMULTIDEFINE_FIRST >= (err) && (err) >= NC_EMULTIDEFINE_LAST)
 
 /* Begin defined in nc.c ----------------------------------------------------*/
-extern void
-ncmpio_free_NC(NC *ncp);
-
 extern int
 ncmpio_NC_check_vlen(NC_var *varp, MPI_Offset vlen_max);
 
@@ -504,22 +509,6 @@ extern int
 ncmpio_NC_check_voffs(NC *ncp);
 
 /* Begin defined in ncmpio_header_get.c -------------------------------------*/
-typedef struct bufferinfo {
-    MPI_Comm    comm;
-    MPI_File    collective_fh;
-    PNCIO_File  *adio_fh;  /* romio file handler */
-    int         fstype;   /* file system type: PNCIO_LUSTRE, PNCIO_UFS */
-    MPI_Offset  get_size; /* amount of file read n bytes so far */
-    MPI_Offset  offset;   /* current read/write offset in the file */
-    int         chunk;    /* chunk size for reading the header */
-    int         version;  /* 1, 2, and 5 for CDF-1, 2, and 5 respectively */
-    int         safe_mode;/* 0: disabled, 1: enabled */
-    int         coll_mode;/* 0: independent, 1: collective */
-    char       *base;     /* beginning of read/write buffer */
-    char       *pos;      /* current position in buffer */
-    char       *end;      /* end position of buffer */
-} bufferinfo;
-
 extern MPI_Offset
 ncmpio_hdr_len_NC(const NC *ncp);
 
@@ -535,9 +524,6 @@ ncmpio_write_header(NC *ncp);
 
 /* Begin defined in ncmpio_sync.c -------------------------------------------*/
 extern int
-ncmpio_file_sync(NC *ncp);
-
-extern int
 ncmpio_write_numrecs(NC *ncp, MPI_Offset new_numrecs);
 
 /* Begin defined in ncmpio_filetype.c ---------------------------------------*/
@@ -546,16 +532,6 @@ ncmpio_filetype_create_vars(const NC* ncp, const NC_var* varp,
                 const MPI_Offset start[], const MPI_Offset count[],
                 const MPI_Offset stride[], MPI_Offset *offset,
                 MPI_Datatype *filetype, int *is_filetype_contig);
-
-extern int
-ncmpio_file_set_view(const NC *ncp, MPI_Offset *disp, MPI_Datatype filetype,
-                MPI_Aint npairs,
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count *offsets, MPI_Count *lengths
-#else
-                MPI_Offset *offsets, int *lengths
-#endif
-);
 
 /* Begin defined in ncmpio_igetput.m4 ---------------------------------------*/
 extern int
@@ -633,8 +609,8 @@ extern int
 ncmpio_fill_vars(NC *ncp);
 
 /* Begin defined in ncmpio_close.c ------------------------------------------*/
-extern int
-ncmpio_close_files(NC *ncp, int doUnlink);
+extern void
+ncmpio_free_NC(NC *ncp);
 
 /* Begin defined in ncmpio_utils.c ------------------------------------------*/
 extern void
@@ -680,12 +656,71 @@ ncmpio_calc_start_end(const NC *ncp, const NC_var *varp,
 
 /* Begin defined in ncmpio_file_io.c ----------------------------------------*/
 extern int
+ncmpio_file_read_at(NC *ncp, MPI_Offset offset, void *buf,
+#ifdef HAVE_MPI_LARGE_COUNT
+                    MPI_Count     count,
+#else
+                    int           count,
+#endif
+                    MPI_Datatype  buftype, MPI_Status *mpistatus);
+
+extern int
+ncmpio_file_read_at_all(NC *ncp, MPI_Offset offset, void *buf,
+#ifdef HAVE_MPI_LARGE_COUNT
+                        MPI_Count     count,
+#else
+                        int           count,
+#endif
+                        MPI_Datatype  buftype, MPI_Status *mpistatus);
+
+extern int
+ncmpio_file_write_at(NC *ncp, MPI_Offset offset, void *buf,
+#ifdef HAVE_MPI_LARGE_COUNT
+                     MPI_Count     count,
+#else
+                     int           count,
+#endif
+                     MPI_Datatype  buftype, MPI_Status *mpistatus);
+
+extern int
+ncmpio_file_write_at_all(NC *ncp, MPI_Offset offset, void *buf,
+#ifdef HAVE_MPI_LARGE_COUNT
+                         MPI_Count     count,
+#else
+                         int           count,
+#endif
+                         MPI_Datatype  buftype, MPI_Status *mpistatus);
+
+extern int
 ncmpio_getput_zero_req(NC *ncp, int rw_flag);
 
 extern int
 ncmpio_read_write(NC *ncp, int rw_flag, MPI_Offset offset,
                   MPI_Offset buf_count, MPI_Datatype buf_type, void *buf,
                   int buftype_is_contig);
+
+extern int
+ncmpio_file_close(NC *ncp);
+
+extern int
+ncmpio_file_delete(NC *ncp);
+
+extern int
+ncmpio_file_sync(NC *ncp);
+
+extern int
+ncmpio_file_set_view(const NC *ncp, MPI_Offset *disp, MPI_Datatype filetype,
+                MPI_Aint npairs,
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Count *offsets, MPI_Count *lengths
+#else
+                MPI_Offset *offsets, int *lengths
+#endif
+);
+
+extern int
+ncmpio_file_open(NC *ncp, MPI_Comm comm, const char *path, int omode,
+                 MPI_Info info);
 
 /* Begin defined in ncmpio_intranode.c --------------------------------------*/
 extern int

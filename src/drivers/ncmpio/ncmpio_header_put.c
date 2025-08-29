@@ -49,7 +49,7 @@ hdr_put_NC_name(bufferinfo *pbp,
     size_t nchars = strlen(name);
 
     /* copy nelems */
-    if (pbp->version < 5)
+    if (pbp->ncp->format < 5)
         err = ncmpix_put_uint32((void**)(&pbp->pos), (uint)nchars);
     else
         err = ncmpix_put_uint64((void**)(&pbp->pos), (uint64)nchars);
@@ -78,7 +78,7 @@ hdr_put_NC_dim(bufferinfo   *pbp,
     if (err != NC_NOERR) return err;
 
     /* copy dim_length */
-    if (pbp->version < 5) {
+    if (pbp->ncp->format < 5) {
         /* TODO: Isn't checking dimension size already done in def_dim()? */
         if (dimp->size > NC_MAX_INT)
             DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
@@ -116,7 +116,7 @@ hdr_put_NC_dimarray(bufferinfo        *pbp,
         if (status != NC_NOERR) return status;
 
         /* put a ZERO or ZERO64 depending on which CDF format */
-        if (pbp->version < 5)
+        if (pbp->ncp->format < 5)
             status = ncmpix_put_uint32((void**)(&pbp->pos), 0);
         else
             status = ncmpix_put_uint64((void**)(&pbp->pos), 0);
@@ -128,7 +128,7 @@ hdr_put_NC_dimarray(bufferinfo        *pbp,
         if (status != NC_NOERR) return status;
 
         /* copy nelems */
-        if (pbp->version < 5)
+        if (pbp->ncp->format < 5)
             status = ncmpix_put_uint32((void**)(&pbp->pos), (uint)ncap->ndefined);
         else
             status = ncmpix_put_uint64((void**)(&pbp->pos), (uint64)ncap->ndefined);
@@ -175,7 +175,7 @@ hdr_put_NC_attrV(bufferinfo    *pbp,
     sz = attrp->nelems * xsz;
     padding = attrp->xsz - sz;
 
-    if (pbp->version < 5 && sz > NC_MAX_INT)
+    if (pbp->ncp->format < 5 && sz > NC_MAX_INT)
         DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
 
     memcpy(pbp->pos, attrp->xvalue, (size_t)sz);
@@ -214,7 +214,7 @@ hdr_put_NC_attr(bufferinfo    *pbp,
     if (status != NC_NOERR) return status;
 
     /* copy nelems */
-    if (pbp->version < 5) {
+    if (pbp->ncp->format < 5) {
         if (attrp->nelems  > NC_MAX_INT)
             DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
         status = ncmpix_put_uint32((void**)(&pbp->pos), (uint)attrp->nelems);
@@ -258,7 +258,7 @@ hdr_put_NC_attrarray(bufferinfo         *pbp,
         if (status != NC_NOERR) return status;
 
         /* put a ZERO or ZERO64 depending on which CDF format */
-        if (pbp->version < 5)
+        if (pbp->ncp->format < 5)
             status = ncmpix_put_uint32((void**)(&pbp->pos), 0);
         else
             status = ncmpix_put_uint64((void**)(&pbp->pos), 0);
@@ -270,7 +270,7 @@ hdr_put_NC_attrarray(bufferinfo         *pbp,
         if (status != NC_NOERR) return status;
 
         /* copy nelems */
-        if (pbp->version < 5)
+        if (pbp->ncp->format < 5)
             status = ncmpix_put_uint32((void**)(&pbp->pos), (uint)ncap->ndefined);
         else
             status = ncmpix_put_uint64((void**)(&pbp->pos), (uint64)ncap->ndefined);
@@ -314,7 +314,7 @@ hdr_put_NC_var(bufferinfo   *pbp,
     if (status != NC_NOERR) return status;
 
     /* copy nelems */
-    if (pbp->version < 5)
+    if (pbp->ncp->format < 5)
         status = ncmpix_put_uint32((void**)(&pbp->pos), (uint)varp->ndims);
     else
         status = ncmpix_put_uint64((void**)(&pbp->pos), (uint64)varp->ndims);
@@ -322,7 +322,7 @@ hdr_put_NC_var(bufferinfo   *pbp,
 
     /* copy [dimid ...] */
     for (i=0; i<varp->ndims; i++) {
-        if (pbp->version < 5)
+        if (pbp->ncp->format < 5)
             status = ncmpix_put_uint32((void**)(&pbp->pos), (uint)varp->dimids[i]);
         else
             status = ncmpix_put_uint64((void**)(&pbp->pos), (uint64)varp->dimids[i]);
@@ -341,7 +341,7 @@ hdr_put_NC_var(bufferinfo   *pbp,
     /* in CDF-1 and CDF-2, a variable's size in the header is a 32-bit integer
      * in CDF-5, it is a 64-bit integer
      */
-    if (pbp->version < 5) {
+    if (pbp->ncp->format < 5) {
         /* Special case, when there is no record variable, the last fixed-size
          * variable can be larger than 2 GiB if its file starting offset is
          * less than 2 GiB. This checking has already been done in the call
@@ -367,7 +367,7 @@ hdr_put_NC_var(bufferinfo   *pbp,
     /* in CDF-1 header, a variable's starting file offset is a 32-bit integer
      * in CDF-2 and CDF-5, it is a 64-bit integer
      */
-    if (pbp->version == 1) {
+    if (pbp->ncp->format == 1) {
         if (varp->begin  > NC_MAX_INT)
             DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
         status = ncmpix_put_uint32((void**)(&pbp->pos), (uint)varp->begin);
@@ -407,7 +407,7 @@ hdr_put_NC_vararray(bufferinfo        *pbp,
         if (status != NC_NOERR) return status;
 
         /* put a ZERO or ZERO64 depending on which CDF format */
-        if (pbp->version < 5)
+        if (pbp->ncp->format < 5)
             status = ncmpix_put_uint32((void**)(&pbp->pos), 0);
         else
             status = ncmpix_put_uint64((void**)(&pbp->pos), 0);
@@ -419,7 +419,7 @@ hdr_put_NC_vararray(bufferinfo        *pbp,
         if (status != NC_NOERR) return status;
 
         /* copy nelems */
-        if (pbp->version < 5)
+        if (pbp->ncp->format < 5)
             status = ncmpix_put_uint32((void**)(&pbp->pos), (uint)ncap->ndefined);
         else
             status = ncmpix_put_uint64((void**)(&pbp->pos), (uint64)ncap->ndefined);
@@ -441,20 +441,14 @@ hdr_put_NC_vararray(bufferinfo        *pbp,
 int
 ncmpio_hdr_put_NC(NC *ncp, void *buf)
 {
-    int status;
+    int err;
     bufferinfo putbuf;
     MPI_Offset nrecs=0;
 
-    putbuf.comm          = ncp->comm;
-    putbuf.collective_fh = ncp->collective_fh;
-    putbuf.offset        = 0;
-    putbuf.pos           = buf;
-    putbuf.base          = buf;
-    putbuf.safe_mode     = ncp->safe_mode;
-    if (ncp->nprocs > 1 && fIsSet(ncp->flags, NC_HCOLL))
-        putbuf.coll_mode = 1;
-    else
-        putbuf.coll_mode = 0;
+    putbuf.ncp    = ncp;
+    putbuf.offset = 0;
+    putbuf.pos    = buf;
+    putbuf.base   = buf;
 
     /* netCDF file format:
      * netcdf_file  = header  data
@@ -462,43 +456,37 @@ ncmpio_hdr_put_NC(NC *ncp, void *buf)
      */
 
     /* copy "magic", 4 characters */
-    if (ncp->format == 5) {
-        putbuf.version = 5;
-        status = ncmpix_putn_text((void **)(&putbuf.pos), sizeof(ncmagic5), ncmagic5);
-    }
-    else if (ncp->format == 2) {
-        putbuf.version = 2;
-        status = ncmpix_putn_text((void **)(&putbuf.pos), sizeof(ncmagic2), ncmagic2);
-    }
-    else {
-        putbuf.version = 1;
-        status = ncmpix_putn_text((void **)(&putbuf.pos), sizeof(ncmagic1), ncmagic1);
-    }
-    if (status != NC_NOERR) return status;
+    if (ncp->format == 5)
+        err = ncmpix_putn_text((void **)(&putbuf.pos), sizeof(ncmagic5), ncmagic5);
+    else if (ncp->format == 2)
+        err = ncmpix_putn_text((void **)(&putbuf.pos), sizeof(ncmagic2), ncmagic2);
+    else
+        err = ncmpix_putn_text((void **)(&putbuf.pos), sizeof(ncmagic1), ncmagic1);
+    if (err != NC_NOERR) return err;
 
     /* copy numrecs, number of records */
     nrecs = ncp->numrecs;
     if (ncp->format < 5) {
         if (nrecs  > NC_MAX_INT)
             DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
-        status = ncmpix_put_uint32((void**)(&putbuf.pos), (uint)nrecs);
+        err = ncmpix_put_uint32((void**)(&putbuf.pos), (uint)nrecs);
     }
     else {
-        status = ncmpix_put_uint64((void**)(&putbuf.pos), (uint64)nrecs);
+        err = ncmpix_put_uint64((void**)(&putbuf.pos), (uint64)nrecs);
     }
-    if (status != NC_NOERR) return status;
+    if (err != NC_NOERR) return err;
 
     /* copy dim_list */
-    status = hdr_put_NC_dimarray(&putbuf, &ncp->dims);
-    if (status != NC_NOERR) return status;
+    err = hdr_put_NC_dimarray(&putbuf, &ncp->dims);
+    if (err != NC_NOERR) return err;
 
     /* copy gatt_list */
-    status = hdr_put_NC_attrarray(&putbuf, &ncp->attrs);
-    if (status != NC_NOERR) return status;
+    err = hdr_put_NC_attrarray(&putbuf, &ncp->attrs);
+    if (err != NC_NOERR) return err;
 
     /* copy var_list */
-    status = hdr_put_NC_vararray(&putbuf, &ncp->vars);
-    if (status != NC_NOERR) return status;
+    err = hdr_put_NC_vararray(&putbuf, &ncp->vars);
+    if (err != NC_NOERR) return err;
 
     return NC_NOERR;
 }
@@ -514,10 +502,8 @@ ncmpio_hdr_put_NC(NC *ncp, void *buf)
  */
 int ncmpio_write_header(NC *ncp)
 {
-    char *mpi_name;
     int status=NC_NOERR, mpireturn, err;
     size_t i, ntimes;
-    MPI_File fh;
     MPI_Status mpistatus;
 
     /* Write the entire header to the file. This function may be called from
@@ -525,10 +511,6 @@ int ncmpio_write_header(NC *ncp)
      * the file header, because if the file space occupied by the name shrinks,
      * all metadata following the new name must be moved ahead.
      */
-
-    fh = ncp->collective_fh;
-    if (NC_indep(ncp)) /* called in independent data mode */
-        fh = ncp->independent_fh;
 
     /* update file header size, as this subroutine may be called from a rename
      * API (var or attribute) and the new name is smaller/bigger which changes
@@ -563,54 +545,13 @@ int ncmpio_write_header(NC *ncp)
              */
             memset(&mpistatus, 0, sizeof(MPI_Status));
 
-            if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
-                if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-                    if (ncp->adio_fh == NULL) continue;
-
-                    err = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf_ptr, writeLen,
-                                                MPI_BYTE, &mpistatus);
-                    if (err != NC_NOERR && status == NC_NOERR) status = err;
-                }
-                else {
-                    if (fh == MPI_FILE_NULL) continue;
-
-                    TRACE_IO(MPI_File_write_at_all, (fh, offset, buf_ptr, writeLen,
-                                                     MPI_BYTE, &mpistatus));
-                    if (mpireturn != MPI_SUCCESS) {
-                        err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                        if (status == NC_NOERR) {
-                            err = (err == NC_EFILE) ? NC_EWRITE : err;
-                            DEBUG_ASSIGN_ERROR(status, err)
-                        }
-                    }
-                    else
-                        err = NC_NOERR;
-                }
-            }
-            else { /* header independent write */
-                if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-                    if (ncp->adio_fh == NULL) continue;
-
-                    err = PNCIO_File_write_at(ncp->adio_fh, offset, buf_ptr, writeLen,
-                                            MPI_BYTE, &mpistatus);
-                    if (err != NC_NOERR && status == NC_NOERR) status = err;
-                }
-                else {
-                    if (fh == MPI_FILE_NULL) continue;
-
-                    TRACE_IO(MPI_File_write_at, (fh, offset, buf_ptr, writeLen,
-                                                 MPI_BYTE, &mpistatus));
-                    if (mpireturn != MPI_SUCCESS) {
-                        err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                        if (status == NC_NOERR) {
-                            err = (err == NC_EFILE) ? NC_EWRITE : err;
-                            DEBUG_ASSIGN_ERROR(status, err)
-                        }
-                    }
-                    else
-                        err = NC_NOERR;
-                }
-            }
+            if (fIsSet(ncp->flags, NC_HCOLL)) /* header collective write */
+                err = ncmpio_file_write_at_all(ncp, offset, buf_ptr, writeLen,
+                                               MPI_BYTE, &mpistatus);
+            else /* header independent write */
+                err = ncmpio_file_write_at(ncp, offset, buf_ptr, writeLen,
+                                               MPI_BYTE, &mpistatus);
+            status = (status == NC_NOERR) ? err : status;
 
             if (err == NC_NOERR && writeLen > 0) {
                 /* update the number of bytes written since file open.
@@ -640,30 +581,9 @@ int ncmpio_write_header(NC *ncp)
         NCI_Free(buf);
     }
     else if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
-        /* collective write: other processes participate the collective call */
-        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-            for (i=0; i<ntimes; i++) {
-                if (ncp->adio_fh == NULL) continue;
-
-                err = PNCIO_File_write_at_all(ncp->adio_fh, 0, NULL, 0, MPI_BYTE,
-                                            &mpistatus);
-                if (err != NC_NOERR && status == NC_NOERR) status = err;
-            }
-        }
-        else {
-            for (i=0; i<ntimes; i++) {
-                if (fh == MPI_FILE_NULL) continue;
-
-                TRACE_IO(MPI_File_write_at_all, (fh, 0, NULL, 0, MPI_BYTE, &mpistatus));
-                if (mpireturn != MPI_SUCCESS) {
-                    err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-                    if (status == NC_NOERR) {
-                        err = (err == NC_EFILE) ? NC_EWRITE : err;
-                        DEBUG_ASSIGN_ERROR(status, err)
-                    }
-                }
-            }
-        }
+        /* collective write: non-root ranks participate the collective call */
+        err = ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
+        status = (status == NC_NOERR) ? err : status;
     }
 
     if (ncp->safe_mode == 1) {
