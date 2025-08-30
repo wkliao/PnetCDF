@@ -39,8 +39,7 @@ int
 ncmpio_write_numrecs(NC         *ncp,
                      MPI_Offset  new_numrecs)
 {
-    int mpireturn, err=NC_NOERR;
-    MPI_Status mpistatus;
+    int err=NC_NOERR;
 
     /* return now if there is no record variable defined */
     if (ncp->vars.num_rec_vars == 0) return NC_NOERR;
@@ -61,12 +60,15 @@ ncmpio_write_numrecs(NC         *ncp,
     /* If collective MPI-IO is required for all MPI-IO calls, then all non-root
      * processes participate the collective write call with zero-size requests.
      */
-    if (ncp->rank > 0 && fIsSet(ncp->flags, NC_HCOLL))
-        return ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
+    if (ncp->rank > 0 && fIsSet(ncp->flags, NC_HCOLL)) {
+        ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE);
+        return NC_NOERR;
+    }
 
     if (new_numrecs > ncp->numrecs || NC_ndirty(ncp)) {
         int len;
         char pos[8], *buf=pos;
+        MPI_Offset wlen;
 
         /* update ncp->numrecs */
         if (new_numrecs > ncp->numrecs) ncp->numrecs = new_numrecs;
@@ -85,13 +87,6 @@ ncmpio_write_numrecs(NC         *ncp,
         }
         /* ncmpix_put_xxx advances the 1st argument with size len */
 
-        /* explicitly initialize mpistatus object to 0. For zero-length read,
-         * MPI_Get_count may report incorrect result for some MPICH version,
-         * due to the uninitialized MPI_Status object passed to MPI-IO calls.
-         * Thus we initialize it above to work around.
-         */
-        memset(&mpistatus, 0, sizeof(MPI_Status));
-
         if (ncp->num_aggrs_per_node > 0 && ncp->rank != ncp->my_aggr)
             /* When intra-node aggregation is enabled, non-aggregators do not
              * participate the collective call.
@@ -100,33 +95,13 @@ ncmpio_write_numrecs(NC         *ncp,
 
         /* root's file view always includes the entire file header */
         if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1)
-            err = ncmpio_file_write_at_all(ncp, NC_NUMRECS_OFFSET, (void*)pos,
-                                           len, MPI_BYTE, &mpistatus);
+            wlen = ncmpio_file_write_at_all(ncp, NC_NUMRECS_OFFSET, (void*)pos,
+                                           len, MPI_BYTE);
         else
-            err = ncmpio_file_write_at(ncp, NC_NUMRECS_OFFSET, (void*)pos,
-                                           len, MPI_BYTE, &mpistatus);
-        if (err != NC_NOERR)
-            DEBUG_RETURN_ERROR(err)
-        else {
-            /* update the number of bytes written since file open.
-             * Because the above MPI write writes either 4 or 8 bytes,
-             * calling MPI_Get_count() is sufficient. No need to call
-             * MPI_Get_count_c()
-             */
-            int put_count;
-            mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_count);
-            if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
-                /* partial write: in this case MPI_Get_elements() is supposed
-                 * to be called to obtain the number of type map elements
-                 * actually written in order to calculate the true write
-                 * amount. Below skips this step and simply ignore the partial
-                 * write. See an example usage of MPI_Get_count() in Example
-                 * 5.12 from MPI standard document.
-                 */
-                ncp->put_size += len;
-            else
-                ncp->put_size += put_count;
-        }
+            wlen = ncmpio_file_write_at(ncp, NC_NUMRECS_OFFSET, (void*)pos,
+                                           len, MPI_BYTE);
+        if (wlen < 0)
+            DEBUG_RETURN_ERROR((int)wlen)
     }
     return err;
 }

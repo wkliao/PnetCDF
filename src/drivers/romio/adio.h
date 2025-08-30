@@ -243,14 +243,14 @@ int PNCIO_File_get_info(PNCIO_File *fh, MPI_Info *info_used);
 int PNCIO_File_SetInfo(PNCIO_File *fh, MPI_Info  users_info);
 
 int PNCIO_File_write_at(PNCIO_File *fh, MPI_Offset offset, const void *buf,
-                int count, MPI_Datatype  datatype, MPI_Status *status);
+                MPI_Offset count, MPI_Datatype  datatype, MPI_Status *status);
 int PNCIO_File_write_at_all(PNCIO_File *fh, MPI_Offset offset, const void *buf,
-                int count, MPI_Datatype  datatype, MPI_Status *status);
+                MPI_Offset count, MPI_Datatype  datatype, MPI_Status *status);
 
 int PNCIO_File_read_at(PNCIO_File *fh, MPI_Offset offset, void *buf,
-                int count, MPI_Datatype  datatype, MPI_Status *status);
+                MPI_Offset count, MPI_Datatype  datatype, MPI_Status *status);
 int PNCIO_File_read_at_all(PNCIO_File *fh, MPI_Offset offset, void *buf,
-                int count, MPI_Datatype  datatype, MPI_Status *status);
+                MPI_Offset count, MPI_Datatype  datatype, MPI_Status *status);
 
 void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag);
 
@@ -263,12 +263,12 @@ PNCIO_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype);
 int PNCIO_Lustre_create(PNCIO_File *fd, int access_mode);
 int PNCIO_Lustre_open(PNCIO_File *fd);
 
-void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
+void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count,
                 MPI_Datatype datatype, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
 void PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
-                MPI_Aint count, MPI_Datatype buftype, MPI_Offset offset,
+                MPI_Offset count, MPI_Datatype buftype, MPI_Offset offset,
                 MPI_Status *status, int *error_code);
 
 
@@ -285,10 +285,10 @@ void PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf, MPI_Aint count,
                 int *error_code);
 
 void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
-                MPI_Aint count, MPI_Datatype buftype, MPI_Offset offset,
+                MPI_Offset count, MPI_Datatype buftype, MPI_Offset offset,
                 MPI_Status *status, int *error_code);
 
-int PNCIO_WriteContig(PNCIO_File *fd, const void *buf, MPI_Aint count,
+int PNCIO_WriteContig(PNCIO_File *fd, const void *buf, MPI_Offset count,
                 MPI_Datatype bufType, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
@@ -300,7 +300,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
                 MPI_Datatype datatype, MPI_Offset offset, MPI_Status *status,
                 int *error_code);
 
-void PNCIO_Calc_my_off_len(PNCIO_File *fd, MPI_Aint bufcount,
+void PNCIO_Calc_my_off_len(PNCIO_File *fd, MPI_Offset bufcount,
                 MPI_Datatype datatype, MPI_Offset offset,
                 MPI_Offset **offset_list_ptr,
 #ifdef HAVE_MPI_LARGE_COUNT

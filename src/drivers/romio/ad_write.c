@@ -22,12 +22,12 @@ int first_ost_id;
 #endif
 
 /*----< PNCIO_WriteContig() >-------------------------------------------------*/
-int PNCIO_WriteContig(PNCIO_File    *fd,
+int PNCIO_WriteContig(PNCIO_File   *fd,
                       const void   *buf,
-                      MPI_Aint      count,
+                      MPI_Offset    count,
                       MPI_Datatype  bufType,
-                      MPI_Offset   offset,
-                      MPI_Status  *status,
+                      MPI_Offset    offset,
+                      MPI_Status   *status,
                       int          *error_code)
 {
     ssize_t err = 0;
@@ -107,7 +107,7 @@ static
 int file_write(PNCIO_File    *fd,
                MPI_Offset    offset,
                const void   *buf,
-               int           count,
+               MPI_Offset    count,
                MPI_Datatype  bufType,
                MPI_Status   *status)
 {
@@ -135,10 +135,9 @@ int file_write(PNCIO_File    *fd,
     else
         PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
-    if (buftype_is_contig && filetype_is_contig) {
-        MPI_Aint wcount = (MPI_Aint)count * bufType_size;
-        err = PNCIO_WriteContig(fd, buf, wcount, MPI_BYTE, offset, status, NULL);
-    }
+    if (buftype_is_contig && filetype_is_contig)
+        err = PNCIO_WriteContig(fd, buf, count * bufType_size, MPI_BYTE,
+                                offset, status, NULL);
     else if (fd->file_system == PNCIO_LUSTRE)
         PNCIO_LUSTRE_WriteStrided(fd, buf, count, bufType, offset, status, &err);
     else
@@ -158,7 +157,7 @@ int file_write(PNCIO_File    *fd,
 int PNCIO_File_write_at(PNCIO_File    *fh,
                         MPI_Offset    offset,
                         const void   *buf,
-                        int           count,
+                        MPI_Offset    count,
                         MPI_Datatype  bufType,
                         MPI_Status   *status)
 {
@@ -186,7 +185,7 @@ int PNCIO_File_write_at(PNCIO_File    *fh,
 int PNCIO_File_write_at_all(PNCIO_File    *fh,
                             MPI_Offset    offset,
                             const void   *buf,
-                            int           count,
+                            MPI_Offset    count,
                             MPI_Datatype  bufType,
                             MPI_Status   *status)
 {

@@ -87,7 +87,7 @@ static
 int file_read(PNCIO_File    *fd,
               MPI_Offset    offset,
               void         *buf,
-              int           count,
+              MPI_Offset    count,
               MPI_Datatype  bufType,
               MPI_Status   *status)
 {
@@ -137,7 +137,7 @@ int file_read(PNCIO_File    *fd,
 int PNCIO_File_read_at(PNCIO_File    *fh,
                        MPI_Offset    offset,
                        void         *buf,
-                       int           count,
+                       MPI_Offset    count,
                        MPI_Datatype  bufType,
                        MPI_Status   *status)
 {
@@ -165,7 +165,7 @@ int PNCIO_File_read_at(PNCIO_File    *fh,
 int PNCIO_File_read_at_all(PNCIO_File    *fh,
                            MPI_Offset    offset,
                            void         *buf,
-                           int           count,
+                           MPI_Offset    count,
                            MPI_Datatype  bufType,
                            MPI_Status   *status)
 {

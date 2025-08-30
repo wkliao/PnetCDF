@@ -9,9 +9,10 @@
 
 #include <adio.h>
 
-void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf, MPI_Aint count,
-                                  MPI_Datatype buftype, MPI_Offset offset,
-                                  MPI_Status *status, int *error_code)
+void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
+                                  MPI_Offset count, MPI_Datatype buftype,
+                                  MPI_Offset offset, MPI_Status *status,
+                                  int *error_code)
 {
     /* offset is in units of etype relative to the filetype. */
 

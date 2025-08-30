@@ -640,7 +640,7 @@ PNCIO_Lustre_create(PNCIO_File *fd,
                     int        access_mode)
 {
     char int_str[16];
-    int err=NC_NOERR, rank, amode, perm, old_mask;
+    int err=NC_NOERR, rank, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
 
 #ifdef WKL_DEBUG
@@ -654,8 +654,10 @@ first_ost_id = -1;
 static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fd->filename); wkl++; fflush(stdout);}
 #endif
 
-    amode = O_CREAT;
+#if defined(HAVE_LUSTRE) || defined(MIMIC_LUSTRE)
+    int amode = O_CREAT;
     if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
+#endif
 
     old_mask = umask(022);
     umask(old_mask);

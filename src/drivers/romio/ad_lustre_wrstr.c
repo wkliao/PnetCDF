@@ -126,7 +126,7 @@
         }                                                               \
     }
 
-void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
+void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count,
                                MPI_Datatype datatype, MPI_Offset offset,
                                MPI_Status * status, int *error_code)
 {
@@ -153,9 +153,8 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
         /* if user has disabled data sieving on writes, use naive
          * approach instead.
          */
-        PNCIO_GEN_WriteStrided_naive(fd,
-                                     buf,
-                                     count, datatype, offset, status, error_code);
+        PNCIO_GEN_WriteStrided_naive(fd, buf, count, datatype, offset, status,
+                                     error_code);
         return;
     }
 
