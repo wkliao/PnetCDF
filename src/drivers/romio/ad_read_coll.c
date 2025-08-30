@@ -249,18 +249,18 @@ double curT = MPI_Wtime();
 }
 
 void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
-                           MPI_Aint      bufcount,
-                           MPI_Datatype  datatype,
-                           MPI_Offset   offset,
-                           MPI_Offset **offset_list_ptr,
+                           MPI_Offset     bufcount,
+                           MPI_Datatype   datatype,
+                           MPI_Offset     offset,
+                           MPI_Offset   **offset_list_ptr,
 #ifdef HAVE_MPI_LARGE_COUNT
-                           MPI_Offset **len_list_ptr,
+                           MPI_Offset   **len_list_ptr,
 #else
-                           int         **len_list_ptr,
+                           int          **len_list_ptr,
 #endif
-                           MPI_Offset  *start_offset_ptr,
-                           MPI_Offset  *end_offset_ptr,
-                           MPI_Count    *contig_access_count_ptr)
+                           MPI_Offset    *start_offset_ptr,
+                           MPI_Offset    *end_offset_ptr,
+                           MPI_Count     *contig_access_count_ptr)
 {
     MPI_Count filetype_size;
     MPI_Count buftype_size;
@@ -366,8 +366,11 @@ assert(0);
         len_list = *len_list_ptr;
         offset_list[0] = fd->disp + offset;
 #ifdef HAVE_MPI_LARGE_COUNT
-        len_list[0] = (MPI_Offset) bufcount * buftype_size;
+        len_list[0] = bufcount * buftype_size;
 #else
+        /* TODO: check int overflow
+        if (bufcount > NC_MAX_INT) NC_EINTOVERFLOW
+        */
         len_list[0] = (int) bufcount * buftype_size;
 #endif
         *start_offset_ptr = offset_list[0];
@@ -406,7 +409,7 @@ assert(0);
         old_frd_size = frd_size;
         contig_access_count = i_offset = 0;
         j = st_index;
-        bufsize = (MPI_Offset) buftype_size *(MPI_Offset) bufcount;
+        bufsize = (MPI_Offset) buftype_size * bufcount;
         frd_size = MPL_MIN(frd_size, bufsize);
         while (i_offset < bufsize) {
             if (frd_size)

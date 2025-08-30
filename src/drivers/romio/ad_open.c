@@ -200,7 +200,8 @@ if (rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd->filen
         struct stat statbuf;
         err = fstat(fd->fd_sys, &statbuf);
         if (err >= 0)
-            stripin_info[0] = statbuf.st_blksize;
+            /* file system block size usually < MAX_INT */
+            stripin_info[0] = (int)statbuf.st_blksize;
     }
 
 err_out:

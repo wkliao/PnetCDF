@@ -17,23 +17,74 @@
 #include <common.h>
 #include "ncmpio_NC.h"
 
+/*----< get_count() >--------------------------------------------------------*/
+/* This subroutine is independent. On success, the number of bytes read/written
+ * is returned (zero indicates nothing was read/written). Like POSIX read()/
+ * write(), it is not an error if this number is smaller than the number of
+ * bytes requested. On error, a negative value, an NC error code, is returned.
+ */
+static
+MPI_Offset get_count(MPI_Status   *mpistatus,
+                     MPI_Datatype  datatype)
+{
+    int mpireturn;
+
+#ifdef HAVE_MPI_TYPE_SIZE_C
+    MPI_Count type_size;
+    /* MPI_Type_size_c is introduced in MPI 4.0 */
+    MPI_Type_size_c(datatype, &type_size);
+#elif defined(HAVE_MPI_TYPE_SIZE_X)
+    MPI_Count type_size;
+    /* MPI_Type_size_x is introduced in MPI 3.0 */
+    MPI_Type_size_x(datatype, &type_size);
+#else
+    int type_size;
+    MPI_Type_size(datatype, &type_size);
+#endif
+
+#ifdef HAVE_MPI_GET_COUNT_C
+    MPI_Count count;
+    mpireturn = MPI_Get_count_c(mpistatus, datatype, &count);
+#else
+    int count;
+    mpireturn = MPI_Get_count(mpistatus, datatype, &count);
+#endif
+
+    if (mpireturn != MPI_SUCCESS || count == MPI_UNDEFINED)
+        /* In case of partial read/write, MPI_Get_elements() is supposed to be
+         * called to obtain the number of type map elements actually
+         * read/written in order to calculate the true read/write amount. Below
+         * skips this step and simply returns the partial read/write amount.
+         * See an example usage of MPI_Get_count() in Example 5.12 from MPI
+         * standard document.
+         */
+        return NC_EFILE;
+
+    return (MPI_Offset)count * type_size;
+}
+
 /*----< ncmpio_file_read_at() >--------------------------------------------*/
 /*
  * This function is independent.
  */
-int
+/* TODO: move check count against MAX_INT and call _c API */
+MPI_Offset
 ncmpio_file_read_at(NC           *ncp,
                     MPI_Offset    offset,
                     void         *buf,
-#ifdef HAVE_MPI_LARGE_COUNT
-                    MPI_Count     count,
-#else
-                    int           count,
-#endif
-                    MPI_Datatype  buftype,
-                    MPI_Status   *mpistatus)
+                    MPI_Offset    count,
+                    MPI_Datatype  buftype)
 {
     int err=NC_NOERR, mpireturn;
+    MPI_Status mpistatus;
+
+    /* explicitly initialize mpistatus object to 0. For zero-length read/write,
+     * MPI_Get_count may report incorrect result for some MPICH version,
+     * due to the uninitialized MPI_Status object passed to MPI-IO calls.
+     * Thus we initialize it above to work around. See MPICH ticket:
+     * https://trac.mpich.org/projects/mpich/ticket/2332
+     */
+    memset(&mpistatus, 0, sizeof(MPI_Status));
 
     if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
         char *mpi_name;
@@ -43,11 +94,18 @@ ncmpio_file_read_at(NC           *ncp,
            ? ncp->independent_fh : ncp->collective_fh;
 
 #ifdef HAVE_MPI_LARGE_COUNT
-        TRACE_IO(MPI_File_read_at_c, (fh, offset, buf, count,
-                                      buftype, mpistatus));
+        TRACE_IO(MPI_File_read_at_c, (fh, offset, buf, (MPI_Count)count,
+                                      buftype, &mpistatus));
 #else
-        TRACE_IO(MPI_File_read_at, (fh, offset, buf, count,
-                                    buftype, mpistatus));
+        if (count > NC_MAX_INT) {
+#ifdef PNETCDF_DEBUG
+            fprintf(stderr,"%d: %s line %d:  NC_EINTOVERFLOW count="OFFFMT"\n",
+                    ncp->rank, __func__,__LINE__,count);
+#endif
+            DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
+        }
+        TRACE_IO(MPI_File_read_at, (fh, offset, buf, (int)count,
+                                    buftype, &mpistatus));
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
@@ -56,29 +114,42 @@ ncmpio_file_read_at(NC           *ncp,
     }
     else {
         err = PNCIO_File_read_at(ncp->adio_fh, offset, buf, count,
-                                 buftype, mpistatus);
+                                 buftype, &mpistatus);
     }
-    return err;
-}
 
+    /* update the number of bytes read since file open */
+    if (err == NC_NOERR) {
+        MPI_Offset amnt;
+        amnt = get_count(&mpistatus, buftype);
+        if (amnt >= 0) ncp->get_size += amnt;
+        /* else: ignore if error, as this error is not fatal */
+        return amnt;
+    }
+    else
+        return err;
+}
 
 /*----< ncmpio_file_read_at_all() >-----------------------------------------*/
 /*
  * This function is collective.
  */
-int
+MPI_Offset
 ncmpio_file_read_at_all(NC           *ncp,
                         MPI_Offset    offset,
                         void         *buf,
-#ifdef HAVE_MPI_LARGE_COUNT
-                        MPI_Count     count,
-#else
-                        int           count,
-#endif
-                        MPI_Datatype  buftype,
-                        MPI_Status   *mpistatus)
+                        MPI_Offset    count,
+                        MPI_Datatype  buftype)
 {
     int err=NC_NOERR, mpireturn;
+    MPI_Status mpistatus;
+
+    /* explicitly initialize mpistatus object to 0. For zero-length read/write,
+     * MPI_Get_count may report incorrect result for some MPICH version,
+     * due to the uninitialized MPI_Status object passed to MPI-IO calls.
+     * Thus we initialize it above to work around. See MPICH ticket:
+     * https://trac.mpich.org/projects/mpich/ticket/2332
+     */
+    memset(&mpistatus, 0, sizeof(MPI_Status));
 
     if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
         char *mpi_name;
@@ -88,11 +159,20 @@ ncmpio_file_read_at_all(NC           *ncp,
            ? ncp->independent_fh : ncp->collective_fh;
 
 #ifdef HAVE_MPI_LARGE_COUNT
-        TRACE_IO(MPI_File_read_at_all_c, (fh, offset, buf, count,
-                                          buftype, mpistatus));
+        TRACE_IO(MPI_File_read_at_all_c, (fh, offset, buf, (MPI_Count)count,
+                                          buftype, &mpistatus));
 #else
-        TRACE_IO(MPI_File_read_at_all, (fh, offset, buf, count,
-                                        buftype, mpistatus));
+        if (count > NC_MAX_INT) {
+#ifdef PNETCDF_DEBUG
+            fprintf(stderr,"%d: %s line %d:  NC_EINTOVERFLOW count="OFFFMT"\n",
+                    ncp->rank, __func__,__LINE__,count);
+#endif
+            DEBUG_ASSIGN_ERROR(err, NC_EINTOVERFLOW)
+            /* participate the collective call, but read nothing */
+            count = 0;
+        }
+        TRACE_IO(MPI_File_read_at_all, (fh, offset, buf, (int)count,
+                                        buftype, &mpistatus));
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
@@ -101,28 +181,42 @@ ncmpio_file_read_at_all(NC           *ncp,
     }
     else {
         err = PNCIO_File_read_at_all(ncp->adio_fh, offset, buf, count,
-                                     buftype, mpistatus);
+                                     buftype, &mpistatus);
     }
-    return err;
+
+    /* update the number of bytes read since file open */
+    if (err == NC_NOERR) {
+        MPI_Offset amnt;
+        amnt = get_count(&mpistatus, buftype);
+        if (amnt >= 0) ncp->get_size += amnt;
+        /* else: ignore if error, as this error is not fatal */
+        return amnt;
+    }
+    else
+        return err;
 }
 
 /*----< ncmpio_file_write_at() >--------------------------------------------*/
 /*
  * This function is independent.
  */
-int
+MPI_Offset
 ncmpio_file_write_at(NC           *ncp,
                      MPI_Offset    offset,
-                     void         *buf,
-#ifdef HAVE_MPI_LARGE_COUNT
-                     MPI_Count     count,
-#else
-                     int           count,
-#endif
-                     MPI_Datatype  buftype,
-                     MPI_Status   *mpistatus)
+                     const void   *buf,
+                     MPI_Offset    count,
+                     MPI_Datatype  buftype)
 {
     int err=NC_NOERR, mpireturn;
+    MPI_Status mpistatus;
+
+    /* explicitly initialize mpistatus object to 0. For zero-length read/write,
+     * MPI_Get_count may report incorrect result for some MPICH version,
+     * due to the uninitialized MPI_Status object passed to MPI-IO calls.
+     * Thus we initialize it above to work around. See MPICH ticket:
+     * https://trac.mpich.org/projects/mpich/ticket/2332
+     */
+    memset(&mpistatus, 0, sizeof(MPI_Status));
 
     if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
         char *mpi_name;
@@ -132,11 +226,18 @@ ncmpio_file_write_at(NC           *ncp,
            ? ncp->independent_fh : ncp->collective_fh;
 
 #ifdef HAVE_MPI_LARGE_COUNT
-        TRACE_IO(MPI_File_write_at_c, (fh, offset, buf, count,
-                                     buftype, mpistatus));
+        TRACE_IO(MPI_File_write_at_c, (fh, offset, buf, (MPI_Count)count,
+                                     buftype, &mpistatus));
 #else
-        TRACE_IO(MPI_File_write_at, (fh, offset, buf, count,
-                                     buftype, mpistatus));
+        if (count > NC_MAX_INT) {
+#ifdef PNETCDF_DEBUG
+            fprintf(stderr,"%d: %s line %d:  NC_EINTOVERFLOW count="OFFFMT"\n",
+                    ncp->rank, __func__,__LINE__,count);
+#endif
+            DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
+        }
+        TRACE_IO(MPI_File_write_at, (fh, offset, buf, (int)count,
+                                     buftype, &mpistatus));
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
@@ -145,29 +246,42 @@ ncmpio_file_write_at(NC           *ncp,
     }
     else {
         err = PNCIO_File_write_at(ncp->adio_fh, offset, buf, count,
-                                  buftype, mpistatus);
+                                  buftype, &mpistatus);
     }
-    return err;
-}
 
+    /* update the number of bytes written since file open */
+    if (err == NC_NOERR) {
+        MPI_Offset amnt;
+        amnt = get_count(&mpistatus, buftype);
+        if (amnt >= 0) ncp->put_size += amnt;
+        /* else: ignore if error, as this error is not fatal */
+        return amnt;
+    }
+    else
+        return err;
+}
 
 /*----< ncmpio_file_write_at_all() >-----------------------------------------*/
 /*
  * This function is collective.
  */
-int
+MPI_Offset
 ncmpio_file_write_at_all(NC           *ncp,
                          MPI_Offset    offset,
-                         void         *buf,
-#ifdef HAVE_MPI_LARGE_COUNT
-                         MPI_Count     count,
-#else
-                         int           count,
-#endif
-                         MPI_Datatype  buftype,
-                         MPI_Status   *mpistatus)
+                         const void   *buf,
+                         MPI_Offset    count,
+                         MPI_Datatype  buftype)
 {
     int err=NC_NOERR, mpireturn;
+    MPI_Status mpistatus;
+
+    /* explicitly initialize mpistatus object to 0. For zero-length read/write,
+     * MPI_Get_count may report incorrect result for some MPICH version,
+     * due to the uninitialized MPI_Status object passed to MPI-IO calls.
+     * Thus we initialize it above to work around. See MPICH ticket:
+     * https://trac.mpich.org/projects/mpich/ticket/2332
+     */
+    memset(&mpistatus, 0, sizeof(MPI_Status));
 
     if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
         char *mpi_name;
@@ -177,11 +291,20 @@ ncmpio_file_write_at_all(NC           *ncp,
            ? ncp->independent_fh : ncp->collective_fh;
 
 #ifdef HAVE_MPI_LARGE_COUNT
-        TRACE_IO(MPI_File_write_at_all_c, (fh, offset, buf, count,
-                                         buftype, mpistatus));
+        TRACE_IO(MPI_File_write_at_all_c, (fh, offset, buf, (MPI_Count)count,
+                                         buftype, &mpistatus));
 #else
-        TRACE_IO(MPI_File_write_at_all, (fh, offset, buf, count,
-                                         buftype, mpistatus));
+        if (count > NC_MAX_INT) {
+#ifdef PNETCDF_DEBUG
+            fprintf(stderr,"%d: %s line %d:  NC_EINTOVERFLOW count="OFFFMT"\n",
+                    ncp->rank, __func__,__LINE__,count);
+#endif
+            DEBUG_ASSIGN_ERROR(err, NC_EINTOVERFLOW)
+            /* participate the collective call, but write nothing */
+            count = 0;
+        }
+        TRACE_IO(MPI_File_write_at_all, (fh, offset, buf, (int)count,
+                                         buftype, &mpistatus));
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
@@ -190,9 +313,19 @@ ncmpio_file_write_at_all(NC           *ncp,
     }
     else {
         err = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf, count,
-                                      buftype, mpistatus);
+                                      buftype, &mpistatus);
     }
-    return err;
+
+    /* update the number of bytes written since file open */
+    if (err == NC_NOERR) {
+        MPI_Offset amnt;
+        amnt = get_count(&mpistatus, buftype);
+        if (amnt >= 0) ncp->put_size += amnt;
+        /* else: ignore if error, as this error is not fatal */
+        return amnt;
+    }
+    else
+        return err;
 }
 
 /*----< ncmpio_getput_zero_req() >-------------------------------------------*/
@@ -206,10 +339,8 @@ ncmpio_file_write_at_all(NC           *ncp,
 int
 ncmpio_getput_zero_req(NC *ncp, int reqMode)
 {
-    char *mpi_name;
-    int err, mpireturn, status=NC_NOERR;
-    MPI_Status mpistatus;
-    MPI_File fh;
+    int err, status=NC_NOERR;
+    MPI_Offset rlen, wlen;
 
     /* When intra-node aggregation is enabled, non-aggregators do not access
      * the file.
@@ -220,38 +351,26 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
     /* do nothing if this came from an independent API */
     if (fIsSet(reqMode, NC_REQ_INDEP)) return NC_NOERR;
 
-    fh = ncp->collective_fh;
-
-    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        err = PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL, NULL);
-        if (err != NC_NOERR && status == NC_NOERR) status = err;
-    }
-    else {
-        TRACE_IO(MPI_File_set_view, (fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL));
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
-            if (status == NC_NOERR) status = err;
-        }
-    }
+    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, 0, NULL, NULL);
+    if (status == NC_NOERR) status = err;
 
     if (fIsSet(reqMode, NC_REQ_RD)) {
         if (ncp->nprocs > 1)
-            err = ncmpio_file_read_at_all(ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
+            rlen = ncmpio_file_read_at_all(ncp, 0, NULL, 0, MPI_BYTE);
         else
-            err = ncmpio_file_read_at(ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
+            rlen = ncmpio_file_read_at(ncp, 0, NULL, 0, MPI_BYTE);
+        if (status == NC_NOERR && rlen < 0) status = (int)rlen;
     }
     else { /* write request */
         if (ncp->nprocs > 1)
-            err = ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
+            wlen = ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE);
         else
-            err = ncmpio_file_write_at(ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
+            wlen = ncmpio_file_write_at(ncp, 0, NULL, 0, MPI_BYTE);
+        if (status == NC_NOERR && wlen < 0) status = (int)wlen;
     }
-    status = (status == NC_NOERR) ? err : status;
 
     /* No longer need to reset the file view, as the root's fileview includes
      * the whole file header.
-     TRACE_IO(MPI_File_set_view, (fh, 0, MPI_BYTE, MPI_BYTE, "native",
-                                  MPI_INFO_NULL));
      */
 
     return status;
@@ -269,8 +388,7 @@ ncmpio_read_write(NC           *ncp,
 {
     char *mpi_name;
     int status=NC_NOERR, err=NC_NOERR, mpireturn, coll_indep;
-    MPI_Status mpistatus;
-    MPI_Offset req_size;
+    MPI_Offset req_size, rlen, wlen;
 
 #ifdef HAVE_MPI_TYPE_SIZE_C
     MPI_Count btype_size;
@@ -316,13 +434,6 @@ ncmpio_read_write(NC           *ncp,
 
     /* request size in bytes, may be > NC_MAX_INT */
     req_size = buf_count * btype_size;
-
-    /* explicitly initialize mpistatus object to 0. For zero-length read,
-     * MPI_Get_count may report incorrect result for some MPICH version,
-     * due to the uninitialized MPI_Status object passed to MPI-IO calls.
-     * Thus we initialize it above to work around.
-     */
-    memset(&mpistatus, 0, sizeof(MPI_Status));
 
     if (rw_flag == NC_REQ_RD) {
         void         *xbuf=buf;
@@ -379,45 +490,11 @@ ncmpio_read_write(NC           *ncp,
         }
 
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL)
-            err = ncmpio_file_read_at_all(ncp, offset, xbuf, xlen, xbuf_type, &mpistatus);
+            rlen = ncmpio_file_read_at_all(ncp, offset, xbuf, xlen, xbuf_type);
         else
-            err = ncmpio_file_read_at(ncp, offset, xbuf, xlen, xbuf_type, &mpistatus);
-        status = (status == NC_NOERR) ? err : status;
+            rlen = ncmpio_file_read_at(ncp, offset, xbuf, xlen, xbuf_type);
+        if (status == NC_NOERR && rlen < 0) status = (int)rlen;
 
-        if (err == NC_NOERR) {
-            /* update the number of bytes read since file open */
-#ifdef HAVE_MPI_TYPE_SIZE_C
-            MPI_Count xbuf_type_size;
-            /* MPI_Type_size_c is introduced in MPI 4.0 */
-            MPI_Type_size_c(xbuf_type, &xbuf_type_size);
-#elif defined(HAVE_MPI_TYPE_SIZE_X)
-            MPI_Count xbuf_type_size;
-            /* MPI_Type_size_x is introduced in MPI 3.0 */
-            MPI_Type_size_x(xbuf_type, &xbuf_type_size);
-#else
-            int xbuf_type_size;
-            MPI_Type_size(xbuf_type, &xbuf_type_size);
-#endif
-
-#ifdef HAVE_MPI_GET_COUNT_C
-            MPI_Count get_count;
-            mpireturn = MPI_Get_count_c(&mpistatus, xbuf_type, &get_count);
-#else
-            int get_count;
-            mpireturn = MPI_Get_count(&mpistatus, xbuf_type, &get_count);
-#endif
-            if (mpireturn != MPI_SUCCESS || get_count == MPI_UNDEFINED)
-                /* partial read: in this case MPI_Get_elements() is supposed to
-                 * be called to obtain the number of type map elements actually
-                 * read in order to calculate the true read amount. Below skips
-                 * this step and simply ignore the partial read. See an example
-                 * usage of MPI_Get_count() in Example 5.12 from MPI standard
-                 * document.
-                 */
-                ncp->get_size += xbuf_type_size * get_count;
-            else
-                ncp->get_size += xbuf_type_size * xlen;
-        }
         if (xbuf != buf) { /* unpack contiguous xbuf to noncontiguous buf */
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Count pos=0;
@@ -504,47 +581,12 @@ ncmpio_read_write(NC           *ncp,
             }
         }
 
-        err = NC_NOERR;
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL)
-            err = ncmpio_file_write_at_all(ncp, offset, xbuf, xlen, xbuf_type, &mpistatus);
+            wlen = ncmpio_file_write_at_all(ncp, offset, xbuf, xlen, xbuf_type);
         else
-            err = ncmpio_file_write_at(ncp, offset, xbuf, xlen, xbuf_type, &mpistatus);
-        status = (status == NC_NOERR) ? err : status;
+            wlen = ncmpio_file_write_at(ncp, offset, xbuf, xlen, xbuf_type);
+        if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
-        if (err == NC_NOERR) {
-            /* update the number of bytes written since file open */
-#ifdef HAVE_MPI_TYPE_SIZE_C
-            MPI_Count xbuf_type_size;
-            /* MPI_Type_size_c is introduced in MPI 4.0 */
-            MPI_Type_size_c(xbuf_type, &xbuf_type_size);
-#elif defined(HAVE_MPI_TYPE_SIZE_X)
-            MPI_Count xbuf_type_size;
-            /* MPI_Type_size_x is introduced in MPI 3.0 */
-            MPI_Type_size_x(xbuf_type, &xbuf_type_size);
-#else
-            int xbuf_type_size;
-            MPI_Type_size(xbuf_type, &xbuf_type_size);
-#endif
-
-#ifdef HAVE_MPI_GET_COUNT_C
-            MPI_Count put_count;
-            mpireturn = MPI_Get_count_c(&mpistatus, xbuf_type, &put_count);
-#else
-            int put_count;
-            mpireturn = MPI_Get_count(&mpistatus, xbuf_type, &put_count);
-#endif
-            if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
-                /* partial write: in this case MPI_Get_elements() is supposed
-                 * to be called to obtain the number of type map elements
-                 * actually written in order to calculate the true write
-                 * amount. Below skips this step and simply ignore the partial
-                 * write. See an example usage of MPI_Get_count() in Example
-                 * 5.12 from MPI standard document.
-                 */
-                ncp->put_size += xbuf_type_size * put_count;
-            else
-                ncp->put_size += xbuf_type_size * xlen;
-        }
         if (xbuf != buf) NCI_Free(xbuf);
         if (xbuf_type != buf_type && xbuf_type != MPI_BYTE)
             MPI_Type_free(&xbuf_type);

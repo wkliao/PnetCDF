@@ -502,9 +502,8 @@ ncmpio_hdr_put_NC(NC *ncp, void *buf)
  */
 int ncmpio_write_header(NC *ncp)
 {
-    int status=NC_NOERR, mpireturn, err;
+    int status=NC_NOERR, mpireturn;
     size_t i, ntimes;
-    MPI_Status mpistatus;
 
     /* Write the entire header to the file. This function may be called from
      * a rename API. In that case, we cannot just change the variable name in
@@ -537,54 +536,25 @@ int ncmpio_write_header(NC *ncp)
         buf_ptr = buf;
         for (i=0; i<ntimes; i++) {
             int writeLen = (int)(MIN(remain, NC_MAX_INT));
-
-            /* explicitly initialize mpistatus object to 0. For zero-length
-             * read, MPI_Get_count may report incorrect result for some MPICH
-             * version, due to the uninitialized MPI_Status object passed to
-             * MPI-IO calls.  Thus we initialize it above to work around.
-             */
-            memset(&mpistatus, 0, sizeof(MPI_Status));
+            MPI_Offset wlen;
 
             if (fIsSet(ncp->flags, NC_HCOLL)) /* header collective write */
-                err = ncmpio_file_write_at_all(ncp, offset, buf_ptr, writeLen,
-                                               MPI_BYTE, &mpistatus);
+                wlen = ncmpio_file_write_at_all(ncp, offset, buf_ptr, writeLen,
+                                               MPI_BYTE);
             else /* header independent write */
-                err = ncmpio_file_write_at(ncp, offset, buf_ptr, writeLen,
-                                               MPI_BYTE, &mpistatus);
-            status = (status == NC_NOERR) ? err : status;
+                wlen = ncmpio_file_write_at(ncp, offset, buf_ptr, writeLen,
+                                            MPI_BYTE);
+            if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
-            if (err == NC_NOERR && writeLen > 0) {
-                /* update the number of bytes written since file open.
-                 * Because each MPI write writes no more than NC_MAX_INT,
-                 * calling MPI_Get_count() is sufficient. No need to call
-                 * MPI_Get_count_c()
-                 */
-                int put_count;
-                mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_count);
-                if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
-                    /* partial write: in this case MPI_Get_elements() is
-                     * supposed to be called to obtain the number of type map
-                     * elements actually written in order to calculate the true
-                     * write amount. Below skips this step and simply ignore
-                     * the partial write. See an example usage of
-                     * MPI_Get_count() in Example 5.12 from MPI standard
-                     * document.
-                     */
-                    ncp->put_size += writeLen;
-                else
-                    ncp->put_size += put_count;
-            }
             offset  += writeLen;
             buf_ptr += writeLen;
             remain  -= writeLen;
         }
         NCI_Free(buf);
     }
-    else if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
+    else if (fIsSet(ncp->flags, NC_HCOLL)) /* header collective write */
         /* collective write: non-root ranks participate the collective call */
-        err = ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
-        status = (status == NC_NOERR) ? err : status;
-    }
+        ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE);
 
     if (ncp->safe_mode == 1) {
         /* broadcast root's status, because only root writes to the file */

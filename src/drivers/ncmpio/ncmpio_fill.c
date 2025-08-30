@@ -146,8 +146,7 @@ fill_var_rec(NC         *ncp,
 {
     int err, status=NC_NOERR, mpireturn;
     void *buf;
-    MPI_Offset var_len, start, count, offset;
-    MPI_Status mpistatus;
+    MPI_Offset var_len, start, count, offset, wlen;
     MPI_Datatype bufType;
 
     /* When intra-node aggregation is enabled, use the communicator consisting
@@ -222,10 +221,11 @@ fill_var_rec(NC         *ncp,
 
     /* write to variable collectively */
     if (nprocs > 1)
-        err = ncmpio_file_write_at_all(ncp, offset, buf, count, bufType, &mpistatus);
+        wlen = ncmpio_file_write_at_all(ncp, offset, buf, count, bufType);
     else
-        err = ncmpio_file_write_at(ncp, offset, buf, count, bufType, &mpistatus);
-    status = (status != NC_NOERR) ? status : err;
+        wlen = ncmpio_file_write_at(ncp, offset, buf, count, bufType);
+    if (status == NC_NOERR && wlen < 0) status = (int)wlen;
+
     NCI_Free(buf);
     if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
 
@@ -359,9 +359,8 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     char *buf_ptr, *noFill;
     void *buf;
     size_t nsegs;
-    MPI_Offset buf_len, var_len, nrecs, start, *count, disp;
+    MPI_Offset buf_len, var_len, nrecs, start, *count, disp, wlen;
     MPI_Datatype filetype, bufType;
-    MPI_Status mpistatus;
     NC_var *varp;
 
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -658,10 +657,10 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
 
     /* write to variable collectively */
     if (nprocs > 1)
-        err = ncmpio_file_write_at_all(ncp, disp, buf, buf_len, bufType, &mpistatus);
+        wlen = ncmpio_file_write_at_all(ncp, disp, buf, buf_len, bufType);
     else
-        err = ncmpio_file_write_at(ncp, disp, buf, buf_len, bufType, &mpistatus);
-    status = (status != NC_NOERR) ? status : err;
+        wlen = ncmpio_file_write_at(ncp, disp, buf, buf_len, bufType);
+    if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
     NCI_Free(buf);
     if (bufType != MPI_BYTE) MPI_Type_free(&bufType);

@@ -322,7 +322,6 @@ hdr_len_NC_vararray(const NC_vararray *ncap,
 static int
 hdr_fetch(bufferinfo *gbp) {
     int rank, nprocs, err=NC_NOERR, mpireturn;
-    MPI_Status mpistatus;
 
     assert(gbp->base != NULL);
 
@@ -332,6 +331,7 @@ hdr_fetch(bufferinfo *gbp) {
         char *readBuf;
         int readLen;
         size_t slack;
+        MPI_Offset rlen;
 
         /* any leftover data in the buffer */
         slack = gbp->ncp->chunk - (gbp->pos - gbp->base);
@@ -351,71 +351,55 @@ hdr_fetch(bufferinfo *gbp) {
             readLen -= slack;
         }
 
-        /* explicitly initialize mpistatus object to 0. For zero-length read,
-         * MPI_Get_count may report incorrect result for some MPICH version,
-         * due to the uninitialized MPI_Status object passed to MPI-IO calls.
-         */
-        memset(&mpistatus, 0, sizeof(MPI_Status));
-
         /* fileview is already entire file visible and MPI_File_read_at does
            not change the file pointer */
         if (gbp->ncp->nprocs > 1 && fIsSet(gbp->ncp->flags, NC_HCOLL))
             /* collective read */
-            err = ncmpio_file_read_at_all(gbp->ncp, gbp->offset, readBuf,
-                                          readLen, MPI_BYTE, &mpistatus);
+            rlen = ncmpio_file_read_at_all(gbp->ncp, gbp->offset, readBuf,
+                                           readLen, MPI_BYTE);
         else
             /* independent read */
-            err = ncmpio_file_read_at(gbp->ncp, gbp->offset, readBuf,
-                                          readLen, MPI_BYTE, &mpistatus);
+            rlen = ncmpio_file_read_at(gbp->ncp, gbp->offset, readBuf,
+                                       readLen, MPI_BYTE);
 
-        if (err == NC_NOERR && readLen > 0) {
-            /* Obtain the actual read amount. It may be smaller than readLen,
-             * when the remaining file size is smaller than read chunk size.
-             * Because each MPI File_read reads amount of readLen bytes, and
-             * readLen <= read chunk size which is <= NC_MAX_INT, calling
-             * MPI_Get_count() is sufficient. No need to call MPI_Get_count_c()
+        if (rlen > 0) {
+            /* rlen is the actual read amount. It may be smaller than readLen,
+             * when the remaining file size is smaller than readLen. When
+             * actual read amount is smaller than readLen, then we zero-out the
+             * remaining buffer. This is because the MPI_Bcast below broadcasts
+             * a buffer of a fixed size, gbp->ncp->chunk. Without zeroing out,
+             * valgrind will complain about the uninitialized values.
              */
-            int get_count;
-            mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &get_count);
-            if (mpireturn != MPI_SUCCESS || get_count == MPI_UNDEFINED)
-                /* partial read: in this case MPI_Get_elements() is supposed to
-                 * be called to obtain the number of type map elements actually
-                 * read in order to calculate the true read amount. Below skips
-                 * this step and simply ignore the partial read. See an example
-                 * usage of MPI_Get_count() in Example 5.12 from MPI standard
-                 * document.
-                 */
-                gbp->ncp->get_size += readLen;
-            else
-                gbp->ncp->get_size += get_count;
-
-            /* If actual read amount is shorter than readLen, then we zero-out
-             * the remaining buffer. This is because the MPI_Bcast below
-             * broadcasts a buffer of a fixed size, gbp->ncp->chunk. Without
-             * zeroing out, valgrind will complain about the uninitialized
-             * values.
-             */
-            if (get_count < readLen)
-                memset(readBuf + get_count, 0, readLen - get_count);
+            if (rlen < readLen)
+                memset(readBuf + rlen, 0, readLen - rlen);
         }
+        else if (rlen < 0)
+            err = (int)rlen;
+
         /* only root process reads file header, keeps track of current read
          * file pointer location */
-        gbp->offset += readLen;
+        gbp->offset += rlen;
     }
     else if (gbp->ncp->nprocs > 1 && fIsSet(gbp->ncp->flags, NC_HCOLL))
         /* Collective read: non-root ranks participate the collective call with
          * a zero-sized request.
          */
-        err = ncmpio_file_read_at_all(gbp->ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
+        ncmpio_file_read_at_all(gbp->ncp, 0, NULL, 0, MPI_BYTE);
 
     if (gbp->ncp->safe_mode == 1 && nprocs > 1) {
         TRACE_COMM(MPI_Bcast)(&err, 1, MPI_INT, 0, gbp->ncp->comm);
+        if (mpireturn != MPI_SUCCESS)
+            return ncmpii_error_mpi2nc(mpireturn, "MPI_Bcast");
         if (err != NC_NOERR) return err;
     }
 
     /* broadcast root's read (full or partial header) to other processes */
-    if (nprocs > 1)
-        TRACE_COMM(MPI_Bcast)(gbp->base, gbp->ncp->chunk, MPI_BYTE, 0, gbp->ncp->comm);
+    if (nprocs > 1) {
+        TRACE_COMM(MPI_Bcast)(gbp->base, gbp->ncp->chunk, MPI_BYTE, 0,
+                              gbp->ncp->comm);
+        if (mpireturn != MPI_SUCCESS)
+            return ncmpii_error_mpi2nc(mpireturn, "MPI_Bcast");
+    }
 
     gbp->pos = gbp->base;
 

@@ -118,8 +118,8 @@ move_file_block(NC         *ncp,
             get_size = pread(fd, buf, chunk_size, off_from);
             if (get_size < 0) {
                 fprintf(stderr,
-                "Error at %s line %d: pread file %s offset "OFFFMT" size %zd (%s)\n",
-                __func__,__LINE__,path,off_from,chunk_size,strerror(errno));
+                "Error at %s line %d: pread file %s offset %lld size %zd (%s)\n",
+                __func__,__LINE__,path,(long long)off_from,chunk_size,strerror(errno));
                 DEBUG_RETURN_ERROR(NC_EREAD)
             }
             ncp->get_size += get_size;
@@ -138,8 +138,8 @@ move_file_block(NC         *ncp,
             put_size = pwrite(fd, buf, get_size, off_to);
             if (put_size < 0) {
                 fprintf(stderr,
-                "Error at %s line %d: pwrite file %s offset "OFFFMT" size %zd (%s)\n",
-                __func__,__LINE__,path,off_to,get_size,strerror(errno));
+                "Error at %s line %d: pwrite file %s offset %lld size %zd (%s)\n",
+                __func__,__LINE__,path,(long long)off_to,get_size,strerror(errno));
                 DEBUG_RETURN_ERROR(NC_EREAD)
             }
             ncp->put_size += put_size;
@@ -167,14 +167,21 @@ move_file_block(NC         *ncp,
                 MPI_Offset  from,   /* source      starting file offset */
                 MPI_Offset  nbytes) /* amount to be moved */
 {
-    int rank, nprocs, mpireturn, err, status=NC_NOERR, do_coll;
+    int rank, nprocs, status=NC_NOERR, do_coll;
     void *buf;
     size_t num_moves, mv_amnt, p_units;
-    MPI_Offset off_last, off_from, off_to;
-    MPI_Status mpistatus;
+    MPI_Offset off_last, off_from, off_to, rlen, wlen;
+    MPI_Comm comm;
 
-    rank = ncp->rank;
-    nprocs = ncp->nprocs;
+    /* If intra-node aggregation is enabled, then only the aggregators perform
+     * the movement.
+     */
+    if (ncp->num_aggrs_per_node > 0 && ncp->ina_comm == MPI_COMM_NULL)
+        return NC_NOERR;
+
+    comm = (ncp->ina_comm == MPI_COMM_NULL) ? ncp->comm : ncp->ina_comm;
+    rank = (ncp->ina_comm == MPI_COMM_NULL) ? ncp->rank : ncp->ina_rank;
+    nprocs = (ncp->ina_comm == MPI_COMM_NULL) ? ncp->nprocs : ncp->ina_nprocs;
 
     /* MPI-IO fileview has been reset in ncmpi_redef() to make the entire file
      * visible
@@ -185,7 +192,7 @@ move_file_block(NC         *ncp,
      * independent I/O subroutines, as the data partitioned among processes are
      * not interleaved and thus need no collective I/O.
      */
-    do_coll = (ncp->nprocs > 1 && fIsSet(ncp->flags, NC_HCOLL));
+    do_coll = (nprocs > 1 && fIsSet(ncp->flags, NC_HCOLL));
 
     /* buf will be used as a temporal buffer to move data in chunks, i.e.
      * read a chunk and later write to the new location
@@ -204,7 +211,7 @@ move_file_block(NC         *ncp,
 
     /* move the data section starting from its tail toward its beginning */
     while (nbytes > 0) {
-        int chunk_size, get_count=0, put_count;
+        int chunk_size;
 
         if (mv_amnt == p_units) {
             /* each rank moves amount of chunk_size */
@@ -224,86 +231,26 @@ move_file_block(NC         *ncp,
                 chunk_size = 0;
         }
 
-        /* explicitly initialize mpistatus object to 0. For zero-length read,
-         * MPI_Get_count may report incorrect result for some MPICH version,
-         * due to the uninitialized MPI_Status object passed to MPI-IO calls.
-         * Thus we initialize it above to work around.
-         */
-        memset(&mpistatus, 0, sizeof(MPI_Status));
-
         /* read from file at off_from for amount of chunk_size */
+        rlen = 0;
         if (do_coll)
-            err = ncmpio_file_read_at_all(ncp, off_from, buf, chunk_size, MPI_BYTE, &mpistatus);
+            rlen = ncmpio_file_read_at_all(ncp, off_from, buf, chunk_size, MPI_BYTE);
         else if (chunk_size > 0)
-            err = ncmpio_file_read_at(ncp, off_from, buf, chunk_size, MPI_BYTE, &mpistatus);
-        if (err != NC_NOERR) get_count = 0; /* No update to ncp->get_size */
-        status = (status != NC_NOERR) ? status : err;
-
-        if (err == NC_NOERR && chunk_size > 0) {
-            /* for zero-length read, MPI_Get_count may report incorrect result
-             * for some MPICH version, due to the uninitialized MPI_Status
-             * object passed to MPI-IO calls. Thus we initialize it above to
-             * work around. See MPICH ticket:
-             * https://trac.mpich.org/projects/mpich/ticket/2332
-             *
-             * Update the number of bytes read since file open. Because each
-             * rank reads and writes no more than one chunk_size at a time and
-             * chunk_size is < NC_MAX_INT, it is OK to call MPI_Get_count,
-             * instead of MPI_Get_count_c.
-             */
-            mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &get_count);
-            if (mpireturn != MPI_SUCCESS || get_count == MPI_UNDEFINED)
-                /* partial read: in this case MPI_Get_elements() is supposed to
-                 * be called to obtain the number of type map elements actually
-                 * read in order to calculate the true read amount. Below skips
-                 * this step and simply ignore the partial read. See an example
-                 * usage of MPI_Get_count() in Example 5.12 from MPI standard
-                 * document.
-                 */
-                ncp->get_size += chunk_size;
-            else
-                ncp->get_size += get_count;
-        }
+            rlen = ncmpio_file_read_at(ncp, off_from, buf, chunk_size, MPI_BYTE);
+        if (status == NC_NOERR && rlen < 0) status = (int)rlen;
 
         /* to prevent from one rank's write run faster than other's read */
-        if (ncp->nprocs > 1) MPI_Barrier(ncp->comm);
+        if (nprocs > 1) MPI_Barrier(comm);
 
-        /* explicitly initialize mpistatus object to 0. For zero-length read,
-         * MPI_Get_count may report incorrect result for some MPICH version,
-         * due to the uninitialized MPI_Status object passed to MPI-IO calls.
-         * Thus we initialize it above to work around.
+        /* Write to new location at off_to for amount of rlen, the actual read
+         * amount is rlen.
          */
-        memset(&mpistatus, 0, sizeof(MPI_Status));
-
-        /* Write to new location at off_to for amount of get_count. Assuming the
-         * call to MPI_Get_count() above returns the actual amount of data read
-         * from the file, i.e. get_count.
-         */
-        if (do_coll)
-            err = ncmpio_file_write_at_all(ncp, off_to, buf, get_count, MPI_BYTE, &mpistatus);
-        else if (get_count > 0)
-            err = ncmpio_file_write_at(ncp, off_to, buf, get_count, MPI_BYTE, &mpistatus);
-        status = (status != NC_NOERR) ? status : err;
-
-        if (err == NC_NOERR && get_count > 0) {
-            /* update the number of bytes written since file open. Because each
-             * rank reads and writes no more than one chunk_size at a time and
-             * chunk_size is < NC_MAX_INT, it is OK to call MPI_Get_count,
-             * instead of MPI_Get_count_c.
-             */
-            mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_count);
-            if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
-                /* partial write: in this case MPI_Get_elements() is supposed
-                 * to be called to obtain the number of type map elements
-                 * actually written in order to calculate the true write
-                 * amount. Below skips this step and simply ignore the partial
-                 * write. See an example usage of MPI_Get_count() in Example
-                 * 5.12 from MPI standard document.
-                 */
-                ncp->put_size += get_count;
-            else
-                ncp->put_size += put_count;
-        }
+        wlen = 0;
+        if (do_coll && rlen > 0)
+            wlen = ncmpio_file_write_at_all(ncp, off_to, buf, rlen, MPI_BYTE);
+        else if (rlen > 0)
+            wlen = ncmpio_file_write_at(ncp, off_to, buf, rlen, MPI_BYTE);
+        if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
         /* move on to the next round */
         mv_amnt   = p_units;
@@ -593,9 +540,8 @@ NC_begins(NC *ncp)
 static int
 write_NC(NC *ncp)
 {
-    int status=NC_NOERR, mpireturn, err, is_coll=0;
+    int status=NC_NOERR, is_coll=0;
     MPI_Offset i, header_wlen, ntimes;
-    MPI_Status mpistatus;
 
     assert(!NC_readonly(ncp));
 
@@ -668,45 +614,19 @@ write_NC(NC *ncp)
 
         /* rank 0's fileview already includes the file header */
 
-        /* explicitly initialize mpistatus object to 0. For zero-length read,
-         * MPI_Get_count may report incorrect result for some MPICH version,
-         * due to the uninitialized MPI_Status object passed to MPI-IO calls.
-         * Thus we initialize it above to work around.
-         */
-        memset(&mpistatus, 0, sizeof(MPI_Status));
-
         /* write the header in chunks */
         offset = 0;
         remain = header_wlen;
         buf_ptr = buf;
         for (i=0; i<ntimes; i++) {
             int bufCount = (int) MIN(remain, NC_MAX_INT);
+            MPI_Offset wlen;
             if (is_coll)
-                err = ncmpio_file_write_at_all(ncp, offset, buf_ptr, bufCount, MPI_BYTE, &mpistatus);
+                wlen = ncmpio_file_write_at_all(ncp, offset, buf_ptr, bufCount, MPI_BYTE);
             else
-                err = ncmpio_file_write_at(ncp, offset, buf_ptr, bufCount, MPI_BYTE, &mpistatus);
-            status = (status != NC_NOERR) ? status : err;
+                wlen = ncmpio_file_write_at(ncp, offset, buf_ptr, bufCount, MPI_BYTE);
+            if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
-            if (err == NC_NOERR && bufCount > 0) {
-                /* Update the number of bytes read since file open.
-                 * Because each rank writes no more than NC_MAX_INT at a time,
-                 * it is OK to call MPI_Get_count, instead of MPI_Get_count_c.
-                 */
-                int put_count;
-                mpireturn = MPI_Get_count(&mpistatus, MPI_BYTE, &put_count);
-                if (mpireturn != MPI_SUCCESS || put_count == MPI_UNDEFINED)
-                    /* partial write: in this case MPI_Get_elements() is
-                     * supposed to be called to obtain the number of type map
-                     * elements actually written in order to calculate the true
-                     * write amount. Below skips this step and simply ignore
-                     * the partial write. See an example usage of
-                     * MPI_Get_count() in Example 5.12 from MPI standard
-                     * document.
-                     */
-                    ncp->put_size += bufCount;
-                else
-                    ncp->put_size += put_count;
-            }
             offset  += bufCount;
             buf_ptr += bufCount;
             remain  -= bufCount;
@@ -715,19 +635,20 @@ write_NC(NC *ncp)
     }
     else if (is_coll) {
         /* other processes participate the collective call */
-        for (i=0; i<ntimes; i++) {
-            err = ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE, &mpistatus);
-            status = (status != NC_NOERR) ? status : err;
-        }
+        for (i=0; i<ntimes; i++)
+            ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE);
     }
 
 fn_exit:
     if (ncp->safe_mode == 1 && ncp->nprocs > 1) {
         /* broadcast root's status, because only root writes to the file */
-        int root_status = status;
+        int mpireturn, root_status = status;
         TRACE_COMM(MPI_Bcast)(&root_status, 1, MPI_INT, 0, ncp->comm);
-        /* root's write has failed, which is more serious than inconsistency */
-        if (root_status == NC_EWRITE) DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
+        if (mpireturn != MPI_SUCCESS)
+            status = ncmpii_error_mpi2nc(mpireturn, "MPI_Bcast");
+        else if (root_status == NC_EWRITE)
+            /* root's write has failed, more serious than inconsistency */
+            DEBUG_ASSIGN_ERROR(status, NC_EWRITE)
     }
 
     fClr(ncp->flags, NC_NDIRTY);
