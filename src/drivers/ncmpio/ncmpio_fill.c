@@ -360,14 +360,14 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     void *buf;
     size_t nsegs;
     MPI_Offset buf_len, var_len, nrecs, start, *count, disp, wlen;
-    MPI_Datatype filetype, bufType;
+    MPI_Datatype bufType;
     NC_var *varp;
 
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count *blocklengths, *offset;
+    MPI_Count *blocklengths=NULL, *offset=NULL;
 #else
-    int *blocklengths;
-    MPI_Aint *offset;
+    int *blocklengths=NULL;
+    MPI_Aint *offset=NULL;
 #endif
 
     /* When intra-node aggregation is enabled, use the communicator consisting
@@ -603,6 +603,8 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     /* k is the number of valid write requests */
     NCI_Free(noFill);
 
+#if 0
+    MPI_Datatype filetype;
     filetype = MPI_BYTE;
     if (k > 0 && buf_len > 0) {
         /* create fileview: a list of contiguous segment for each variable */
@@ -622,6 +624,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
             MPI_Type_commit(&filetype);
     }
 
+printf("%s at %d: k=%d offset=%lld blocklengths=%lld\n",__func__,__LINE__,k,offset[0],blocklengths[0]);
     NCI_Free(blocklengths);
     NCI_Free(count);
     NCI_Free(offset);
@@ -631,6 +634,13 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     status = (status == NC_NOERR) ? err : status;
 
     if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
+#else
+    NCI_Free(count);
+// printf("%s at %d: k=%d offset=%lld blocklengths=%lld\n",__func__,__LINE__, k,offset[0],blocklengths[0]);
+    disp = 0;
+    err = ncmpio_file_set_view(ncp, &disp, MPI_DATATYPE_NULL, k, offset, blocklengths);
+    status = (status == NC_NOERR) ? err : status;
+#endif
 
     bufType = MPI_BYTE;
     if (buf_len > NC_MAX_INT) {
@@ -655,6 +665,13 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
 #endif
     }
 
+// printf("%s at %d: disp=%lld buf_len=%lld\n",__func__,__LINE__,disp,buf_len);
+
+    /* Ignore disp returned from ncmpio_file_set_view(), as the above offset
+     * and blocklengths do not contain the file header and we are not writing
+     * to file header below.
+     */
+    disp = 0;
     /* write to variable collectively */
     if (nprocs > 1)
         wlen = ncmpio_file_write_at_all(ncp, disp, buf, buf_len, bufType);
@@ -664,6 +681,17 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
 
     NCI_Free(buf);
     if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
+
+    if (blocklengths != NULL) NCI_Free(blocklengths);
+    if (offset != NULL) NCI_Free(offset);
+
+#if 0
+    /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
+        NCI_Free(ncp->adio_fh->flat_file);
+        ncp->adio_fh->flat_file = NULL;
+    }
+#endif
 
     /* reset fileview to make the entire file visible */
     disp = 0;

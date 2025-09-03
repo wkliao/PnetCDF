@@ -139,6 +139,7 @@ double curT = MPI_Wtime();
 
     PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
 
+// printf("%s at %d: fd->flat_file.count=%lld interleave_count=%d\n",__func__,__LINE__,fd->flat_file.count,interleave_count);
     if (fd->hints->cb_read == PNCIO_HINT_DISABLE
         || (!interleave_count && (fd->hints->cb_read == PNCIO_HINT_AUTO))) {
         /* don't do aggregation */
@@ -147,8 +148,73 @@ double curT = MPI_Wtime();
             NCI_Free(st_offsets);
         }
 
-        if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL)
-            filetype_is_contig = (fd->flat_file->count <= 1);
+        if (fd->filetype == MPI_DATATYPE_NULL) {
+/*
+if (fd->flat_file.count == 1)printf("%s at %d: fd->flat_file.count=%lld offset=%lld indices=%lld blocklens=%lld\n",__func__,__LINE__,fd->flat_file.count,offset,fd->flat_file.indices[0],fd->flat_file.blocklens[0]);
+else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offset=%lld indices=%lld %lld blocklens=%lld %lld\n",__func__,__LINE__, fd->flat_file.count,offset,fd->flat_file.indices[0],fd->flat_file.blocklens[0],fd->flat_file.indices[1],fd->flat_file.blocklens[1]);
+*/
+
+            if (fd->flat_file.count == 0)
+                /* the whole file is visible */
+                filetype_is_contig = 1;
+            else {
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Count m, size;
+                MPI_Type_size_c(datatype, &size);
+                size *= count;
+#else
+                size_t m;
+                int size;
+                MPI_Type_size(datatype, &size);
+                size *= count;
+#endif
+                MPI_Offset scan_sum=0;
+                filetype_is_contig = 0;
+                for (m=0; m<fd->flat_file.count; m++) {
+                    scan_sum += fd->flat_file.blocklens[m];
+                    if (scan_sum > offset) {
+                        if (scan_sum - offset >= size) {
+                            /* check if this request falls entirely in m's
+                             * offset-length pair
+                             */
+                            filetype_is_contig = 1;
+                            off = fd->flat_file.indices[m] + offset -
+                                  (scan_sum - fd->flat_file.blocklens[m]);
+                        }
+                        break;
+                    }
+                }
+// printf("%s at %d: offset=%lld size=%lld m=%lld scan_sum=%lld off=%lld filetype_is_contig=%d\n",__func__,__LINE__, offset,size,m,scan_sum,off,filetype_is_contig);
+            }
+#if 0
+            else if (fd->flat_file.count == 1) {
+                filetype_is_contig = 1;
+                offset += fd->flat_file.indices[0];
+            }
+#endif
+#if 0
+            else {
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Count m, size;
+                MPI_Type_size_c(datatype, &size);
+                size *= count;
+#else
+                size_t m;
+                int size;
+                MPI_Type_size(datatype, &size);
+                size *= count;
+#endif
+                filetype_is_contig = 0;
+                for (m=0; m<fd->flat_file.count; m++) {
+                    if (offset >= fd->flat_file.indices[m] &&
+                        size <= fd->flat_file.blocklens[m]) {
+                        filetype_is_contig = 1;
+                        break;
+                    }
+                }
+            }
+#endif
+        }
         else if (fd->filetype == MPI_BYTE)
             filetype_is_contig = 1;
         else
@@ -157,22 +223,27 @@ double curT = MPI_Wtime();
         *error_code = MPI_SUCCESS;
         if (count == 0) return;
 
+// printf("%s at %d: buftype_is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, buftype_is_contig,filetype_is_contig);
         if (buftype_is_contig && filetype_is_contig) {
             if (fd->filetype == MPI_DATATYPE_NULL)
                 /* intra-node aggregation has flattened the fileview and
                  * temporarily set fd->filetype to MPI_DATATYPE_NULL
                  */
-                off = (fd->flat_file->count) ? fd->flat_file->indices[0] : 0;
+                off = off;
             else
                 off = fd->disp + offset;
+// printf("%s at %d: count=%ld off=%lld\n",__func__,__LINE__,count,off);
             PNCIO_ReadContig(fd, buf, count, datatype, off, status, error_code);
         } else
+{
+// printf("%s at %d: count=%ld off=%lld\n",__func__,__LINE__,count,offset);
             PNCIO_GEN_ReadStrided(fd, buf, count, datatype, offset, status, error_code);
+}
 
 // printf("%s at %d: SWITCH indep READ ------------------ off=%lld count=%ld\n",__func__,__LINE__, off, count);
         return;
     }
-
+// printf("%s at %d\n",__func__,__LINE__);
 
     /* We're going to perform aggregation of I/O.  Here we call
      * PNCIO_Calc_file_domains() to determine what processes will handle I/O
@@ -282,7 +353,6 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
     int *len_list;
 #endif
     MPI_Aint filetype_extent, filetype_lb;
-    PNCIO_Flatlist_node *flat_file;
     MPI_Offset *offset_list, off, end_offset = 0, disp;
 
     if (bufcount == 0) {
@@ -304,7 +374,8 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
    lengths in the file and determine the start and end offsets. */
 
     if (fd->filetype == MPI_DATATYPE_NULL) {
-        if (fd->flat_file->count == 0) {
+// printf("%s at %d: fd->flat_file->count=%d\n",__func__,__LINE__,fd->flat_file->count);
+        if (fd->flat_file.count == 0) {
             *offset_list_ptr = NULL;
             *len_list_ptr = NULL;
             *start_offset_ptr = 0;
@@ -314,20 +385,32 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
         }
 
         /* When PnetCDF's intra-node aggregation is enabled, the fileview's
-         * flattened offset-length pairs, fd->flat_file->indices and
-         * fd->flat_file->blockens, have been populated in PnetCDF's
+         * flattened offset-length pairs, fd->flat_file.indices and
+         * fd->flat_file.blockens, have been populated in PnetCDF's
          * subroutines, which can be reused here to avoid repeated datatype
          * flattened work and reduce memory footprint. In addition, the
          * offset-length pairs have been sorted in an increasng order.
          */
-        *offset_list_ptr = fd->flat_file->indices;
-        *len_list_ptr = fd->flat_file->blocklens;
 
-        *start_offset_ptr = fd->flat_file->indices[0];
-        *end_offset_ptr = fd->flat_file->indices[fd->flat_file->count-1]
-                        + fd->flat_file->blocklens[fd->flat_file->count-1] - 1;
+#ifdef HAVE_MPI_LARGE_COUNT
+        MPI_Count n;
+#else
+        size_t n;
+#endif
+        /* find the first offset-length pair containing "offset" */
+        for (n=0; n<fd->flat_file.count; n++) {
+            if (offset < fd->flat_file.indices[n] + fd->flat_file.blocklens[n])
+                break;
+        }
 
-        *contig_access_count_ptr = fd->flat_file->count;
+        *offset_list_ptr = fd->flat_file.indices + n;
+        *len_list_ptr = fd->flat_file.blocklens + n;
+
+        *start_offset_ptr = fd->flat_file.indices[n];
+        *end_offset_ptr = fd->flat_file.indices[fd->flat_file.count-1]
+                        + fd->flat_file.blocklens[fd->flat_file.count-1] - 1;
+
+        *contig_access_count_ptr = fd->flat_file.count - n;
         return;
     }
 
@@ -381,7 +464,6 @@ assert(0);
 
         /* First calculate what size of offset_list and len_list to allocate */
 
-        flat_file = fd->flat_file;
         disp = fd->disp;
 
         n_etypes_in_filetype = filetype_size;
@@ -390,13 +472,13 @@ assert(0);
         size_in_filetype = etype_in_filetype;
 
         sum = 0;
-        for (i = 0; i < flat_file->count; i++) {
-            sum += flat_file->blocklens[i];
+        for (i = 0; i < fd->flat_file.count; i++) {
+            sum += fd->flat_file.blocklens[i];
             if (sum > size_in_filetype) {
                 st_index = i;
                 frd_size = sum - size_in_filetype;
-                abs_off_in_filetype = flat_file->indices[i] +
-                    size_in_filetype - (sum - flat_file->blocklens[i]);
+                abs_off_in_filetype = fd->flat_file.indices[i] +
+                    size_in_filetype - (sum - fd->flat_file.blocklens[i]);
                 break;
             }
         }
@@ -415,8 +497,8 @@ assert(0);
             if (frd_size)
                 contig_access_count++;
             i_offset += frd_size;
-            j = (j + 1) % flat_file->count;
-            frd_size = MPL_MIN(flat_file->blocklens[j], bufsize - i_offset);
+            j = (j + 1) % fd->flat_file.count;
+            frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
         }
 
         /* allocate space for offset_list and len_list */
@@ -454,23 +536,23 @@ assert(0);
             /* Note: end_offset points to the last byte-offset that will be accessed.
              * e.g., if start_offset=0 and 100 bytes to be read, end_offset=99 */
 
-            if (off + frd_size < disp + flat_file->indices[j] +
-                flat_file->blocklens[j] + n_filetypes * (MPI_Offset) filetype_extent) {
+            if (off + frd_size < disp + fd->flat_file.indices[j] +
+                fd->flat_file.blocklens[j] + n_filetypes * (MPI_Offset) filetype_extent) {
                 off += frd_size;
                 /* did not reach end of contiguous block in filetype.
                  * no more I/O needed. off is incremented by frd_size.
                  */
             } else {
-                j = (j + 1) % flat_file->count;
+                j = (j + 1) % fd->flat_file.count;
                 n_filetypes += (j == 0) ? 1 : 0;
-                while (flat_file->blocklens[j] == 0) {
-                    j = (j + 1) % flat_file->count;
+                while (fd->flat_file.blocklens[j] == 0) {
+                    j = (j + 1) % fd->flat_file.count;
                     n_filetypes += (j == 0) ? 1 : 0;
                     /* hit end of flattened filetype; start at beginning
                      * again */
                 }
-                off = disp + flat_file->indices[j] + n_filetypes * (MPI_Offset) filetype_extent;
-                frd_size = MPL_MIN(flat_file->blocklens[j], bufsize - i_offset);
+                off = disp + fd->flat_file.indices[j] + n_filetypes * (MPI_Offset) filetype_extent;
+                frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
             }
         }
 

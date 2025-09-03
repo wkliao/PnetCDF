@@ -114,7 +114,6 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
          *
          */
 
-        flat_file = fd->flat_file;
         disp = fd->disp;
 
         n_etypes_in_filetype = filetype_size;
@@ -123,13 +122,13 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
         size_in_filetype = (unsigned) etype_in_filetype;
 
         sum = 0;
-        for (f_index = 0; f_index < flat_file->count; f_index++) {
-            sum += flat_file->blocklens[f_index];
+        for (f_index = 0; f_index < fd->flat_file.count; f_index++) {
+            sum += fd->flat_file.blocklens[f_index];
             if (sum > size_in_filetype) {
                 st_index = f_index;
                 frd_size = sum - size_in_filetype;
-                abs_off_in_filetype = flat_file->indices[f_index] +
-                    size_in_filetype - (sum - flat_file->blocklens[f_index]);
+                abs_off_in_filetype = fd->flat_file.indices[f_index] +
+                    size_in_filetype - (sum - fd->flat_file.blocklens[f_index]);
                 break;
             }
         }
@@ -155,15 +154,15 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
             userbuf_off += frd_size;
             end_offset = off + frd_size - 1;
 
-            if (f_index < (flat_file->count - 1))
+            if (f_index < (fd->flat_file.count - 1))
                 f_index++;
             else {
                 f_index = 0;
                 n_filetypes++;
             }
 
-            off = disp + flat_file->indices[f_index] + n_filetypes * (MPI_Offset) filetype_extent;
-            frd_size = MPL_MIN(flat_file->blocklens[f_index], bufsize - (unsigned) userbuf_off);
+            off = disp + fd->flat_file.indices[f_index] + n_filetypes * (MPI_Offset) filetype_extent;
+            frd_size = MPL_MIN(fd->flat_file.blocklens[f_index], bufsize - (unsigned) userbuf_off);
         }
 
         /* End of calculations.  At this point the following values have
@@ -211,8 +210,8 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
                 }
                 userbuf_off += frd_size;
 
-                if (off + frd_size < disp + flat_file->indices[f_index] +
-                    flat_file->blocklens[f_index] + n_filetypes * (MPI_Offset) filetype_extent) {
+                if (off + frd_size < disp + fd->flat_file.indices[f_index] +
+                    fd->flat_file.blocklens[f_index] + n_filetypes * (MPI_Offset) filetype_extent) {
                     /* important that this value be correct, as it is
                      * used to set the offset in the fd near the end of
                      * this function.
@@ -223,15 +222,15 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
                  * no more I/O needed. off is incremented by frd_size.
                  */
                 else {
-                    if (f_index < (flat_file->count - 1))
+                    if (f_index < (fd->flat_file.count - 1))
                         f_index++;
                     else {
                         f_index = 0;
                         n_filetypes++;
                     }
-                    off = disp + flat_file->indices[f_index] +
+                    off = disp + fd->flat_file.indices[f_index] +
                         n_filetypes * (MPI_Offset) filetype_extent;
-                    frd_size = MPL_MIN(flat_file->blocklens[f_index],
+                    frd_size = MPL_MIN(fd->flat_file.blocklens[f_index],
                                        bufsize - (unsigned) userbuf_off);
                 }
             }
@@ -275,17 +274,17 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
 
                 if (size == frd_size) {
                     /* reached end of contiguous block in file */
-                    if (f_index < (flat_file->count - 1))
+                    if (f_index < (fd->flat_file.count - 1))
                         f_index++;
                     else {
                         f_index = 0;
                         n_filetypes++;
                     }
 
-                    off = disp + flat_file->indices[f_index] +
+                    off = disp + fd->flat_file.indices[f_index] +
                         n_filetypes * (MPI_Offset) filetype_extent;
 
-                    new_frd_size = flat_file->blocklens[f_index];
+                    new_frd_size = fd->flat_file.blocklens[f_index];
                     if (size != brd_size) {
                         i_offset += size;
                         new_brd_size -= size;

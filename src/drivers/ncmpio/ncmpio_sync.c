@@ -93,13 +93,20 @@ ncmpio_write_numrecs(NC         *ncp,
              */
             return NC_NOERR;
 
+        if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
+            /* reset fileview */
+            err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, 0, NULL, NULL);
+            if (err != NC_NOERR) DEBUG_RETURN_ERROR(err)
+        }
+
+// printf("%s at %d: new_numrecs=%lld NC_NUMRECS_OFFSET=%d\n",__func__,__LINE__,new_numrecs,NC_NUMRECS_OFFSET);
         /* root's file view always includes the entire file header */
         if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1)
             wlen = ncmpio_file_write_at_all(ncp, NC_NUMRECS_OFFSET, (void*)pos,
-                                           len, MPI_BYTE);
+                                            len, MPI_BYTE);
         else
             wlen = ncmpio_file_write_at(ncp, NC_NUMRECS_OFFSET, (void*)pos,
-                                           len, MPI_BYTE);
+                                        len, MPI_BYTE);
         if (wlen < 0)
             DEBUG_RETURN_ERROR((int)wlen)
     }
@@ -155,6 +162,7 @@ ncmpio_sync_numrecs(void *ncdp)
             return ncmpii_error_mpi2nc(mpireturn, "MPI_Allreduce");
     }
 
+// printf("%s at %d: max_numrecs=%lld\n",__func__,__LINE__,max_numrecs);
     /* root process writes max_numrecs to file */
     status = ncmpio_write_numrecs(ncp, max_numrecs);
 

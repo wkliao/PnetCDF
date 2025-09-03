@@ -86,16 +86,23 @@ int PNCIO_File_set_view(PNCIO_File    *fd,
     int is_predef, err=NC_NOERR, filetype_is_contig;
     MPI_Datatype copy_filetype;
 
-    if (filetype == MPI_DATATYPE_NULL) { /* called from intra_node_aggregation() */
-        fd->flat_file = NCI_Malloc(sizeof(PNCIO_Flatlist_node));
-        fd->flat_file->indices   = offsets;
-        fd->flat_file->blocklens = lengths;
-        fd->flat_file->count     = npairs;
-        fd->flat_file->lb_idx    = -1;
-        fd->flat_file->ub_idx    = -1;
-        fd->flat_file->flag      = 0;
-        fd->flat_file->refct     = 1;
+    fd->flat_file.count = 0;
 
+    if (filetype == MPI_DATATYPE_NULL) {
+// if (npairs==0)printf("%s at %d: npairs=0\n",__func__,__LINE__);
+
+        /* This is called from intra_node_aggregation() */
+        // fd->flat_file = NCI_Malloc(sizeof(PNCIO_Flatlist_node));
+
+        fd->flat_file.indices   = offsets;
+        fd->flat_file.blocklens = lengths;
+        fd->flat_file.count     = npairs;
+        fd->flat_file.lb_idx    = -1;
+        fd->flat_file.ub_idx    = -1;
+        fd->flat_file.flag      = 0;
+        fd->flat_file.refct     = 1;
+
+// printf("%s at %d: flat_file count=%ld offsets=%lld lengths=%lld\n",__func__,__LINE__,npairs,offsets[0],lengths[0]);
         /* mark this request comes from intra_node_aggregation() */
         fd->filetype = MPI_DATATYPE_NULL;
 
@@ -119,7 +126,7 @@ int PNCIO_File_set_view(PNCIO_File    *fd,
      */
 
     /* fd->flat_file should have been freed at callback of MPI_Type_free() */
-    fd->flat_file = NULL;
+    // fd->flat_file = NULL;
 
     /* free fileview if set previously */
     if (fd->filetype != MPI_BYTE && fd->filetype != MPI_DATATYPE_NULL)
@@ -141,8 +148,13 @@ int PNCIO_File_set_view(PNCIO_File    *fd,
         PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
         /* check filetype only if it is not a predefined MPI datatype */
+/*
         fd->flat_file = PNCIO_Flatten_and_find(fd->filetype);
-        err = check_type(fd->flat_file, fd->access_mode, "filetype");
+*/
+        PNCIO_Flatlist_node *tmp = PNCIO_Flatten_and_find(fd->filetype);
+        fd->flat_file = *tmp;
+
+        err = check_type(&fd->flat_file, fd->access_mode, "filetype");
         if (err != NC_NOERR)
             return err;
     }
