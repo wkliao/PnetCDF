@@ -38,7 +38,7 @@
         nerrs++; \
         printf("Error at line %d in %s: (%s)\n", \
         __LINE__,__FILE__,ncmpi_strerrno(err)); \
-        MPI_Abort(MPI_COMM_WORLD, -1); \
+        goto fn_exit; \
     } \
 }
 
