@@ -87,8 +87,8 @@ int main(int argc, char** argv)
 {
     char filename[256];
     int i, j, rank, nprocs, err, nerrs=0, expected;
-    int ncid, cmode, varid[2], dimid[2], req[4], st[4], *buf;
-    int *buf0, *buf1, *buf2;
+    int ncid, cmode, varid[2], dimid[2], req[4], st[4], *buf=NULL;
+    int *buf0=NULL, *buf1=NULL, *buf2=NULL;
     size_t len;
     MPI_Offset start[2], count[2];
     MPI_Info info;
@@ -124,7 +124,7 @@ int main(int argc, char** argv)
 
     /* create a new file for writing ----------------------------------------*/
     cmode = NC_CLOBBER | NC_64BIT_DATA;
-    err = ncmpi_create(MPI_COMM_SELF, filename, cmode, info, &ncid); CHECK_ERR
+    err = ncmpi_create(MPI_COMM_SELF, filename, cmode, info, &ncid); CHECK_FATAL_ERR
 
     MPI_Info_free(&info);
 
@@ -184,6 +184,7 @@ int main(int argc, char** argv)
 
     err = ncmpi_wait_all(ncid, 3, req, st); CHECK_ERR
     free(buf0); free(buf1); free(buf2);
+    buf0 = buf1 = buf2 = NULL;
 
     /* fill the entire variable var1 with -1s */
     for (i=0; i<NY*NX; i++) buf[i] = -1;
@@ -238,11 +239,12 @@ int main(int argc, char** argv)
     for (i=25; i<30; i++) CHECK_CONTENTS(buf, 10 + i)
 
     err = ncmpi_close(ncid); CHECK_ERR
-    free(buf0);
+    if (buf0 != NULL) free(buf0);
+    buf0 = NULL;
 
     /* open the same file and read back for validate */
     err = ncmpi_open(MPI_COMM_SELF, filename, NC_NOWRITE, MPI_INFO_NULL,
-                     &ncid); CHECK_ERR
+                     &ncid); CHECK_FATAL_ERR
 
     err = ncmpi_inq_varid(ncid, "var0", &varid[0]); CHECK_ERR
     err = ncmpi_inq_varid(ncid, "var1", &varid[1]); CHECK_ERR
@@ -316,7 +318,7 @@ int main(int argc, char** argv)
 
     err = ncmpi_close(ncid); CHECK_ERR
 
-    free(buf);
+    if (buf != NULL) free(buf);
 
     /* check if PnetCDF freed all internal malloc */
     MPI_Offset malloc_size;
