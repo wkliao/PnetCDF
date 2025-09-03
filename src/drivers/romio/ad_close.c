@@ -34,6 +34,7 @@ int PNCIO_File_close(PNCIO_File *fh)
         MPI_Info_free(&(fh->info));
     if (fh->io_buf != NULL)
         NCI_Free(fh->io_buf);
+
     PNCIO_Type_dispose(&fh->filetype);
 
     if (PNCIO_Flattened_type_keyval != MPI_KEYVAL_INVALID) {

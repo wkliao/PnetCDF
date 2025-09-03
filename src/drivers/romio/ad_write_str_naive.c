@@ -16,7 +16,7 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
 {
     /* offset is in units of etype relative to the filetype. */
 
-    PNCIO_Flatlist_node *flat_buf, *flat_file;
+    PNCIO_Flatlist_node *flat_buf;
     /* bwr == buffer write; fwr == file write */
     MPI_Offset bwr_size, fwr_size = 0, sum, size_in_filetype;
     int b_index;
@@ -33,15 +33,16 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
 
     *error_code = MPI_SUCCESS;  /* changed below if error */
 
-    if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL) {
+    if (fd->filetype == MPI_DATATYPE_NULL) {
+        // assert(fd->flat_file != NULL);
         MPI_Count n;
-        filetype_is_contig = (fd->flat_file->count <= 1);
+        filetype_is_contig = (fd->flat_file.count <= 1);
         filetype_size = 0;
-        for (n=0; n<fd->flat_file->count; n++)
-            filetype_size += fd->flat_file->blocklens[n];
-        filetype_extent = fd->flat_file->indices[fd->flat_file->count-1]
-                        + fd->flat_file->blocklens[fd->flat_file->count-1]
-                        - fd->flat_file->indices[0];
+        for (n=0; n<fd->flat_file.count; n++)
+            filetype_size += fd->flat_file.blocklens[n];
+        filetype_extent = fd->flat_file.indices[fd->flat_file.count-1]
+                        + fd->flat_file.blocklens[fd->flat_file.count-1]
+                        - fd->flat_file.indices[0];
     }
     else if (fd->filetype == MPI_BYTE) {
         filetype_is_contig = 1;
@@ -133,7 +134,6 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
          *
          */
 
-        flat_file = fd->flat_file;
         disp = fd->disp;
 
         n_etypes_in_filetype = filetype_size;
@@ -142,13 +142,13 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
         size_in_filetype = etype_in_filetype;
 
         sum = 0;
-        for (f_index = 0; f_index < flat_file->count; f_index++) {
-            sum += flat_file->blocklens[f_index];
+        for (f_index = 0; f_index < fd->flat_file.count; f_index++) {
+            sum += fd->flat_file.blocklens[f_index];
             if (sum > size_in_filetype) {
                 st_index = f_index;
                 fwr_size = sum - size_in_filetype;
-                abs_off_in_filetype = flat_file->indices[f_index] +
-                    size_in_filetype - (sum - flat_file->blocklens[f_index]);
+                abs_off_in_filetype = fd->flat_file.indices[f_index] +
+                    size_in_filetype - (sum - fd->flat_file.blocklens[f_index]);
                 break;
             }
         }
@@ -174,15 +174,15 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
             userbuf_off += fwr_size;
             end_offset = off + fwr_size - 1;
 
-            if (f_index < (flat_file->count - 1))
+            if (f_index < (fd->flat_file.count - 1))
                 f_index++;
             else {
                 f_index = 0;
                 n_filetypes++;
             }
 
-            off = disp + flat_file->indices[f_index] + n_filetypes * (MPI_Offset) filetype_extent;
-            fwr_size = MPL_MIN(flat_file->blocklens[f_index], bufsize - userbuf_off);
+            off = disp + fd->flat_file.indices[f_index] + n_filetypes * (MPI_Offset) filetype_extent;
+            fwr_size = MPL_MIN(fd->flat_file.blocklens[f_index], bufsize - userbuf_off);
         }
 
         /* End of calculations.  At this point the following values have
@@ -225,8 +225,8 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
                 }
                 userbuf_off += fwr_size;
 
-                if (off + fwr_size < disp + flat_file->indices[f_index] +
-                    flat_file->blocklens[f_index] + n_filetypes * (MPI_Offset) filetype_extent) {
+                if (off + fwr_size < disp + fd->flat_file.indices[f_index] +
+                    fd->flat_file.blocklens[f_index] + n_filetypes * (MPI_Offset) filetype_extent) {
                     /* important that this value be correct, as it is
                      * used to set the offset in the fd near the end of
                      * this function.
@@ -237,15 +237,15 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
                  * no more I/O needed. off is incremented by fwr_size.
                  */
                 else {
-                    if (f_index < (flat_file->count - 1))
+                    if (f_index < (fd->flat_file.count - 1))
                         f_index++;
                     else {
                         f_index = 0;
                         n_filetypes++;
                     }
-                    off = disp + flat_file->indices[f_index] +
+                    off = disp + fd->flat_file.indices[f_index] +
                         n_filetypes * (MPI_Offset) filetype_extent;
-                    fwr_size = MPL_MIN(flat_file->blocklens[f_index], bufsize - userbuf_off);
+                    fwr_size = MPL_MIN(fd->flat_file.blocklens[f_index], bufsize - userbuf_off);
                 }
             }
         } else {
@@ -283,17 +283,17 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
 
                 if (size == fwr_size) {
                     /* reached end of contiguous block in file */
-                    if (f_index < (flat_file->count - 1))
+                    if (f_index < (fd->flat_file.count - 1))
                         f_index++;
                     else {
                         f_index = 0;
                         n_filetypes++;
                     }
 
-                    off = disp + flat_file->indices[f_index] +
+                    off = disp + fd->flat_file.indices[f_index] +
                         n_filetypes * (MPI_Offset) filetype_extent;
 
-                    new_fwr_size = flat_file->blocklens[f_index];
+                    new_fwr_size = fd->flat_file.blocklens[f_index];
                     if (size != bwr_size) {
                         i_offset += size;
                         new_bwr_size -= size;

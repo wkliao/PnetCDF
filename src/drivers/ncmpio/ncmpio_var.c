@@ -633,6 +633,10 @@ err_check:
          * space occupied by the name shrinks, all the metadata following it
          * must be moved ahead.
          */
+/* reset fileview to entire file is visible */
+if (ncp->fstype != PNCIO_FSTYPE_MPIIO)
+ncmpio_file_set_view(ncp, 0, MPI_BYTE, 0, NULL, NULL);
+
         err = ncmpio_write_header(ncp);
         if (err != NC_NOERR) DEBUG_RETURN_ERROR(err)
     }

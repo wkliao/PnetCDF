@@ -57,7 +57,7 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
 
 /* offset is in units of etype relative to the filetype. */
 
-    PNCIO_Flatlist_node *flat_buf, *flat_file;
+    PNCIO_Flatlist_node *flat_buf;
     MPI_Offset i_offset, new_brd_size, brd_size, size;
     int i, j, k, st_index = 0;
     MPI_Count num, bufsize;
@@ -87,20 +87,47 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
 
     *error_code = MPI_SUCCESS;  /* changed below if error */
 
-    if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL) {
-        MPI_Count n;
-        filetype_is_contig = (fd->flat_file->count <= 1);
+/* This subroutine is entered with filetype being non-contiguous only */
+assert(fd->filetype != MPI_BYTE);
+
+    if (fd->filetype == MPI_DATATYPE_NULL) {
+        // assert(fd->flat_file != NULL);
+        MPI_Count m;
+
+        filetype_is_contig = 0;
         filetype_size = 0;
-        for (n=0; n<fd->flat_file->count; n++)
-            filetype_size += fd->flat_file->blocklens[n];
-        if (fd->flat_file->count > 0) {
-            n = fd->flat_file->count - 1;
-            filetype_extent = fd->flat_file->indices[n]
-                            + fd->flat_file->blocklens[n]
-                            - fd->flat_file->indices[0];
+        for (m=0; m<fd->flat_file.count; m++)
+            filetype_size += fd->flat_file.blocklens[m];
+        if (fd->flat_file.count > 0) {
+            m = fd->flat_file.count - 1;
+            filetype_extent = fd->flat_file.indices[0]
+                            + fd->flat_file.blocklens[0]
+                            - fd->flat_file.indices[m];
         }
         else
             filetype_extent = 0;
+#if 0
+        MPI_Count m, n;
+        for (m=0; m<fd->flat_file.count; m++) {
+            if (offset < fd->flat_file.indices[m] + fd->flat_file.blocklens[m])
+                break;
+        }
+
+        filetype_is_contig = (fd->flat_file.count - m == 1);
+        filetype_size = 0;
+        for (n=m; n<fd->flat_file.count; n++)
+            filetype_size += fd->flat_file.blocklens[n];
+        if (fd->flat_file.count > 0) {
+            n = fd->flat_file.count - 1;
+            filetype_extent = fd->flat_file.indices[n]
+                            + fd->flat_file.blocklens[n]
+                            - fd->flat_file.indices[m];
+        }
+        else
+            filetype_extent = 0;
+#endif
+// printf("%s at %d: filetype_is_contig=%d filetype_size=%lld filetype_extent=%ld\n",__func__,__LINE__, filetype_is_contig,filetype_size,filetype_extent);
+
     }
     else if (fd->filetype == MPI_BYTE) {
         filetype_is_contig = 1;
@@ -172,7 +199,6 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
     }
 
     else {      /* noncontiguous in file */
-        flat_file = fd->flat_file;
         disp = fd->disp;
 
         n_etypes_in_filetype = filetype_size;
@@ -181,13 +207,13 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
         size_in_filetype = etype_in_filetype;
 
         sum = 0;
-        for (i = 0; i < flat_file->count; i++) {
-            sum += flat_file->blocklens[i];
+        for (i = 0; i < fd->flat_file.count; i++) {
+            sum += fd->flat_file.blocklens[i];
             if (sum > size_in_filetype) {
                 st_index = i;
                 frd_size = sum - size_in_filetype;
-                abs_off_in_filetype = flat_file->indices[i] +
-                    size_in_filetype - (sum - flat_file->blocklens[i]);
+                abs_off_in_filetype = fd->flat_file.indices[i] +
+                    size_in_filetype - (sum - fd->flat_file.blocklens[i]);
                 break;
             }
         }
@@ -226,14 +252,14 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
             i_offset += frd_size;
             end_offset = off + frd_size - 1;
 
-            j = (j + 1) % flat_file->count;
+            j = (j + 1) % fd->flat_file.count;
             n_filetypes += (j == 0) ? 1 : 0;
-            while (flat_file->blocklens[j] == 0) {
-                j = (j + 1) % flat_file->count;
+            while (fd->flat_file.blocklens[j] == 0) {
+                j = (j + 1) % fd->flat_file.count;
                 n_filetypes += (j == 0) ? 1 : 0;
             }
-            off = disp + flat_file->indices[j] + n_filetypes * filetype_extent;
-            frd_size = MPL_MIN(flat_file->blocklens[j], bufsize - i_offset);
+            off = disp + fd->flat_file.indices[j] + n_filetypes * filetype_extent;
+            frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
         }
 
 /* if atomicity is true, lock (exclusive) the region to be accessed */
@@ -268,21 +294,21 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
                 }
                 i_offset += frd_size;
 
-                if (off + frd_size < disp + flat_file->indices[j] +
-                    flat_file->blocklens[j] + n_filetypes * filetype_extent)
+                if (off + frd_size < disp + fd->flat_file.indices[j] +
+                    fd->flat_file.blocklens[j] + n_filetypes * filetype_extent)
                     off += frd_size;
                 /* did not reach end of contiguous block in filetype.
                  * no more I/O needed. off is incremented by frd_size. */
                 else {
-                    j = (j + 1) % flat_file->count;
+                    j = (j + 1) % fd->flat_file.count;
                     n_filetypes += (j == 0) ? 1 : 0;
-                    while (flat_file->blocklens[j] == 0) {
-                        j = (j + 1) % flat_file->count;
+                    while (fd->flat_file.blocklens[j] == 0) {
+                        j = (j + 1) % fd->flat_file.count;
                         n_filetypes += (j == 0) ? 1 : 0;
                     }
-                    off = disp + flat_file->indices[j] +
+                    off = disp + fd->flat_file.indices[j] +
                         n_filetypes * filetype_extent;
-                    frd_size = MPL_MIN(flat_file->blocklens[j], bufsize - i_offset);
+                    frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
                 }
             }
         } else {
@@ -315,16 +341,16 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
 
                 if (size == frd_size) {
 /* reached end of contiguous block in file */
-                    j = (j + 1) % flat_file->count;
+                    j = (j + 1) % fd->flat_file.count;
                     n_filetypes += (j == 0) ? 1 : 0;
-                    while (flat_file->blocklens[j] == 0) {
-                        j = (j + 1) % flat_file->count;
+                    while (fd->flat_file.blocklens[j] == 0) {
+                        j = (j + 1) % fd->flat_file.count;
                         n_filetypes += (j == 0) ? 1 : 0;
                     }
-                    off = disp + flat_file->indices[j] +
+                    off = disp + fd->flat_file.indices[j] +
                         n_filetypes * filetype_extent;
 
-                    new_frd_size = flat_file->blocklens[j];
+                    new_frd_size = fd->flat_file.blocklens[j];
                     if (size != brd_size) {
                         i_offset += size;
                         new_brd_size -= size;

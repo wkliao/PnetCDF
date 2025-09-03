@@ -64,7 +64,7 @@ MPI_Offset ost_id = (off / fd->hints->striping_unit) % fd->hints->striping_facto
 
 printf("%s line %d: disp=%lld offset=%lld off=%lld count=%ld bufType_size=%d len=%lld\n",__func__,__LINE__,fd->disp,offset,off,count,bufType_size,len);
 
-    printf("%2d %s line %d pread off=%lld len=%lld\n",rank,__func__,__LINE__,off,len);
+    printf("%2d %s line %d pwrite off=%lld len=%lld\n",rank,__func__,__LINE__,off,len);
 #endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -112,6 +112,7 @@ int file_write(PNCIO_File    *fd,
                MPI_Status   *status)
 {
     int err=NC_NOERR, buftype_is_contig, filetype_is_contig;
+    MPI_Offset off=offset;
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count bufType_size;
@@ -125,19 +126,74 @@ int file_write(PNCIO_File    *fd,
     PNCIO_Datatype_iscontig(bufType, &buftype_is_contig);
 
     /* when fd->filetype == MPI_DATATYPE_NULL, this is called from INA */
-    if (fd->filetype == MPI_DATATYPE_NULL && fd->flat_file != NULL) {
-        filetype_is_contig = (fd->flat_file->count <= 1);
-        if (fd->flat_file->count > 0)
-            offset = fd->flat_file->indices[0];
+    if (fd->filetype == MPI_DATATYPE_NULL) {
+        if (fd->flat_file.count == 0)
+            /* the whole file is visible */
+            filetype_is_contig = 1;
+        else {
+#ifdef HAVE_MPI_LARGE_COUNT
+            MPI_Count m, size;
+            MPI_Type_size_c(bufType, &size);
+            size *= count;
+#else
+            size_t m;
+            int size;
+            MPI_Type_size(bufType, &size);
+            size *= count;
+#endif
+            MPI_Offset scan_sum=0;
+            filetype_is_contig = 0;
+            for (m=0; m<fd->flat_file.count; m++) {
+                scan_sum += fd->flat_file.blocklens[m];
+                if (scan_sum > offset) {
+                    if (scan_sum - offset >= size) {
+                        /* check if this request falls entirely in m's
+                         * offset-length pair
+                         */
+                        filetype_is_contig = 1;
+                        off = fd->flat_file.indices[m] + offset -
+                              (scan_sum - fd->flat_file.blocklens[m]);
+                    }
+                    break;
+                }
+            }
+// printf("%s at %d: offset=%lld size=%lld m=%lld scan_sum=%lld off=%lld filetype_is_contig=%d\n",__func__,__LINE__, offset,size,m,scan_sum,off,filetype_is_contig);
+        }
+#if 0
+        else if (fd->flat_file.count == 1)
+            filetype_is_contig = 1;
+        else {
+#ifdef HAVE_MPI_LARGE_COUNT
+            MPI_Count m;
+#else
+            size_t m;
+#endif
+            for (m=0; m<fd->flat_file.count; m++) {
+                if (offset < fd->flat_file.indices[m] + fd->flat_file.blocklens[m])
+                    break;
+            }
+            filetype_is_contig = (fd->flat_file.count - m == 1);
+        }
+#endif
     }
     else if (fd->filetype == MPI_BYTE)
         filetype_is_contig = 1;
     else
         PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
-    if (buftype_is_contig && filetype_is_contig)
+/*
+if (fd->flat_file.count == 0)
+printf("%s at %d: fd->flat_file.count=0 filetype_is_contig=%d offset=%lld\n",__func__,__LINE__, filetype_is_contig,offset);
+else if (fd->flat_file.count == 1)printf("%s at %d: fd->flat_file.count=%lld indices=%lld blocklens=%lld filetype_is_contig=%d offset=%lld count=%lld\n",__func__,__LINE__, fd->flat_file.count,fd->flat_file.indices[0],fd->flat_file.blocklens[0],filetype_is_contig,offset,count);
+else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld indices=%lld %lld blocklens=%lld %lld filetype_is_contig=%d offset=%lld count=%lld\n",__func__,__LINE__, fd->flat_file.count,fd->flat_file.indices[0],fd->flat_file.indices[1],fd->flat_file.blocklens[0],fd->flat_file.blocklens[1],filetype_is_contig,offset,count);
+*/
+
+    if (buftype_is_contig && filetype_is_contig) {
+        if (fd->filetype == MPI_DATATYPE_NULL)
+            offset = off;
         err = PNCIO_WriteContig(fd, buf, count * bufType_size, MPI_BYTE,
                                 offset, status, NULL);
+    }
     else if (fd->file_system == PNCIO_LUSTRE)
         PNCIO_LUSTRE_WriteStrided(fd, buf, count, bufType, offset, status, &err);
     else

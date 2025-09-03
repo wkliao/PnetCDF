@@ -605,6 +605,7 @@ void PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
+// printf("%s %d: offset=%lld\n",__func__,__LINE__,offset);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 MPI_Barrier(fd->comm);
 double curT = MPI_Wtime();
@@ -662,6 +663,8 @@ double curT = MPI_Wtime();
     flat_fview.idx = 0;
     flat_fview.rnd = 0; /* currently for flat_fview, rnd is not used at all */
     flat_fview.rem = (flat_fview.count > 0) ? flat_fview.len[0] : 0;
+
+// if (flat_fview.count > 0) printf("%s at %d: offset=%lld flat_fview count=%lld off=%lld len=%lld\n",__func__,__LINE__, offset,flat_fview.count,flat_fview.off[0],flat_fview.len[0]);
 
     /* If flattened offsets and lengths are generated from the INA subroutines,
      * then we should not free the space pointed in flat_fview.
@@ -931,6 +934,7 @@ double curT = MPI_Wtime();
      * performed in LUSTRE_Calc_my_req().
      */
     LUSTRE_Calc_my_req(fd, flat_fview, flat_bview.is_contig, &my_req, buf_idx);
+// printf("%s at %d: offset=%lld my_req count=%lld off=%lld len=%lld\n",__func__,__LINE__, offset,flat_fview.count,my_req->offsets[0],my_req->lens[0]);
 
     if (fd->hints->ds_write != PNCIO_HINT_DISABLE) {
         /* When data sieving is considered, below check the current file size
@@ -1849,6 +1853,7 @@ static void LUSTRE_Exch_and_write(PNCIO_File    *fd,
                     assert(srt_off_len[j].off[i] < range_off + range_size &&
                                  srt_off_len[j].off[i] >= range_off);
 
+// printf("%s %d: PNCIO_WriteContig off=%lld\n",__func__,__LINE__,srt_off_len[j].off[i]);
                     PNCIO_WriteContig(fd,
                                      write_buf[j] + (srt_off_len[j].off[i] - range_off),
                                      srt_off_len[j].len[i],
