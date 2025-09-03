@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (argc == 2) snprintf(filename, 256, "%s", argv[1]);
-    else           strcpy(filename, "redef1.nc");
+    else           strcpy(filename, "testfile.nc");
 
     if (rank == 0) {
         char *cmd_str = (char*)malloc(strlen(argv[0]) + 256);
