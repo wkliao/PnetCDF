@@ -64,6 +64,7 @@
             if (buf[j][i] != val+i) { \
                 printf("line %d: expecting buf[%d][%d]=%d but got %d\n",__LINE__,j,i,val+i,buf[j][i]); \
                 nerrs++; \
+                goto fn_exit; \
             } \
     } \
 } \
@@ -74,6 +75,7 @@
             if (buf[j][i] != rank*100+j*10+i) { \
                 printf("line %d: expecting buf[%d][%d]=%d but got %d\n",__LINE__,j,i,rank*100+j*10+i,(int)buf[j][i]); \
                 nerrs++; \
+                goto fn_exit; \
             } \
     } \
 }
@@ -143,7 +145,10 @@ int get_var_and_verify(int ncid,
                 nerrs++;
             }
     }
+
+fn_exit:
     free(ncbuf);
+
     return nerrs;
 }
 
@@ -499,6 +504,7 @@ int main(int argc, char **argv) {
     }
     free(schar_buf);
 
+fn_exit:
     MPI_Type_free(&rec_filetype);
     MPI_Type_free(&fix_filetype);
     MPI_Type_free(&buftype);
