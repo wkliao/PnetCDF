@@ -506,6 +506,9 @@ ncmpio_filetype_create_vars(const NC         *ncp,
     MPI_Offset    i, nblocks, nelems, *blocklens;
     MPI_Datatype  filetype=MPI_BYTE;
 
+/* This is no longer used, as all requests go to INA subroutines to flatten. */
+assert(0);
+
     if (stride == NULL)
         return filetype_create_vara(ncp, varp, start, count, offset_ptr,
                                     filetype_ptr, is_filetype_contig);
