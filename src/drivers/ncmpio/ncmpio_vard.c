@@ -70,7 +70,7 @@ getput_vard(NC               *ncp,
     int type_size;
 #endif
 
-    if (ncp->num_aggrs_per_node > 0) {
+    if (ncp->num_aggrs_per_node > 0 || ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         fprintf(stderr, "PnetCDF vard APIs are not supported when intra-node agggregation is enabled\n");
         return NC_ENOTSUPPORT;
     }
@@ -318,13 +318,14 @@ err_check:
 
     rw_flag = (fIsSet(reqMode, NC_REQ_RD)) ? NC_REQ_RD : NC_REQ_WR;
 
-    err = ncmpio_read_write(ncp, rw_flag, offset, nelems, xtype, xbuf,
+    err = ncmpio_read_write(ncp, rw_flag, 0, nelems, xtype, xbuf,
                             xtype_is_contig);
     if (status == NC_NOERR) status = err;
 
-    /* No longer need to reset the file view, as the root's fileview includes
-     * the whole file header.
-     */
+    /* reset fileview to make entire file visible */
+    offset = 0;
+    err = ncmpio_file_set_view(ncp, &offset, MPI_BYTE, 0, NULL, NULL);
+    if (status == NC_NOERR) status = err;
 
     if (fIsSet(reqMode, NC_REQ_RD)) {
         if (filetype_size == 0) return status;
