@@ -937,7 +937,8 @@ req_commit(NC  *ncp,
     /* carry out writes and reads separately (writes first) */
 
     if (do_write > 0) {
-        if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
+        // if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
+        if (1)
             /* intra-node aggregation must be in collective mode */
             err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_WR,
                                                       num_w_reqs, put_list,
@@ -949,7 +950,8 @@ req_commit(NC  *ncp,
     }
 
     if (do_read > 0) {
-        if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
+        // if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
+        if (1)
             /* intra-node aggregation must be in collective mode */
             err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_RD,
                                                       num_r_reqs, get_list,
