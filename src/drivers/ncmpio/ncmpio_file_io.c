@@ -353,7 +353,8 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
     /* do nothing if this came from an independent API */
     if (fIsSet(reqMode, NC_REQ_INDEP)) return NC_NOERR;
 
-    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, 0, NULL, NULL);
+    MPI_Offset disp=0;
+    err = ncmpio_file_set_view(ncp, &disp, MPI_BYTE, 0, NULL, NULL);
     if (status == NC_NOERR) status = err;
 
     if (fIsSet(reqMode, NC_REQ_RD)) {
@@ -370,6 +371,10 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
             wlen = ncmpio_file_write_at(ncp, 0, NULL, 0, MPI_BYTE);
         if (status == NC_NOERR && wlen < 0) status = (int)wlen;
     }
+
+    /* Reset fileview. Note fileview is never reused in PnetCDF */
+    disp=0;
+    ncmpio_file_set_view(ncp, &disp, MPI_BYTE, 0, NULL, NULL);
 
     /* No longer need to reset the file view, as the root's fileview includes
      * the whole file header.
@@ -601,10 +606,11 @@ printf("%s at %d: offset=%lld xlen=%lld xbuf_type=%s size=%d extent=%ld\n",__fun
             MPI_Type_free(&xbuf_type);
     }
 
-    /* fileview is never reused in PnetCDF */
-/*
+    /* Reset fileview. Note fileview is never reused in PnetCDF */
     MPI_Offset disp=0;
     ncmpio_file_set_view(ncp, &disp, MPI_BYTE, 0, NULL, NULL);
+
+/*
 if (ncp->adio_fh != NULL) ncp->adio_fh->flat_file.count=0;
 */
 
@@ -859,16 +865,12 @@ ncmpio_file_set_view(const NC     *ncp,
              * callback of MPI_Type_free(), i.e. previous round of PnetCDF I/O
              * operation.
              */
-/*
-            if (ncp->adio_fh->flat_file != NULL)
-                NCI_Free(ncp->adio_fh->flat_file);
-            ncp->adio_fh->flat_file = NULL;
-*/
 
             /* Note: The passed-in offsets and lengths are not relative to any
              * MPI-IO fileview. They are flattened byte offsets and sizes.
              */
-            *disp = (ncp->rank == 0) ? ncp->begin_var : 0;
+            // *disp = (ncp->rank == 0) ? ncp->begin_var : 0;
+            // *disp = 0;
 
             /* Pass the already flattened offsets and lengths to ADIO driver as
              * a flattened file type struct. This is avoid repeaated work of
@@ -891,6 +893,7 @@ ncmpio_file_set_view(const NC     *ncp,
                 return PNCIO_File_set_view(ncp->adio_fh, 0, MPI_BYTE, 0, NULL,
                                            NULL);
 
+assert(0);
             if (ncp->rank == 0) {
                 MPI_Datatype root_filetype;
 
@@ -906,7 +909,7 @@ ncmpio_file_set_view(const NC     *ncp,
                     MPI_Type_free(&root_filetype);
 
                 /* update the explicit disp to be used in MPI-IO call later */
-                *disp = ncp->begin_var;
+                // *disp = ncp->begin_var;
             }
             else {
                 err = PNCIO_File_set_view(ncp->adio_fh, *disp, filetype, 0,
@@ -914,13 +917,13 @@ ncmpio_file_set_view(const NC     *ncp,
                 if (status == NC_NOERR) status = err;
 
                 /* the explicit disp is already set in fileview */
-                *disp = 0;
+                // *disp = 0;
             }
             return status;
         }
     }
 
-    /* Now, ncp->fstype == PNCIO_FSTYPE_MPIIO */
+    /* Now, ncp->fstype == PNCIO_FSTYPE_MPIIO, i.e. using MPI-IO. */
     int to_free_filetype=0;
     MPI_Datatype root_filetype=MPI_BYTE;
 
@@ -940,36 +943,42 @@ ncmpio_file_set_view(const NC     *ncp,
          * construct (overwrite) filetype using offsets and lengths. Root's
          * offsets and lengths have already included the file header.
          */
+        if (npairs == 0) /* zero-sized requests */
+            filetype = MPI_BYTE;
+        else {
 // printf("%s at %d: disp=%lld npairs=%ld off=%lld len=%lld\n",__func__,__LINE__, *disp,npairs,offsets[0],lengths[0]);
 #ifdef HAVE_MPI_LARGE_COUNT
-        /* construct fileview */
-        mpireturn = MPI_Type_create_hindexed_c(npairs, lengths, offsets,
-                                               MPI_BYTE, &filetype);
+            /* construct fileview */
+            mpireturn = MPI_Type_create_hindexed_c(npairs, lengths, offsets,
+                                                   MPI_BYTE, &filetype);
 #else
-        assert(sizeof(*offsets) == sizeof(MPI_Aint));
-        /* construct fileview */
-        mpireturn = MPI_Type_create_hindexed(npairs, lengths,
-                                             (MPI_Aint*)offsets,
-                                             MPI_BYTE, &filetype);
+            assert(sizeof(*offsets) == sizeof(MPI_Aint));
+            /* construct fileview */
+            mpireturn = MPI_Type_create_hindexed(npairs, lengths,
+                                                 (MPI_Aint*)offsets,
+                                                 MPI_BYTE, &filetype);
 #endif
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_create_hindexed");
-            /* return the first encountered error if there is any */
-            if (status == NC_NOERR) status = err;
-        }
-        else {
-            mpireturn = MPI_Type_commit(&filetype);
             if (mpireturn != MPI_SUCCESS) {
-                err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_commit");
+                err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_create_hindexed");
                 /* return the first encountered error if there is any */
                 if (status == NC_NOERR) status = err;
             }
-            else
-                to_free_filetype = 1;
+            else {
+                mpireturn = MPI_Type_commit(&filetype);
+                if (mpireturn != MPI_SUCCESS) {
+                    err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_commit");
+                    /* return the first encountered error if there is any */
+                    if (status == NC_NOERR) status = err;
+                }
+                else
+                    to_free_filetype = 1;
+            }
         }
     }
+#ifdef PREPEND_HEADER
     else if (ncp->rank == 0) { /* NOT called from an INA subroutine */
         /* prepend the whole file header to filetype */
+
 /*
 printf("%s at %d: prepend_header disp=%lld\n",__func__,__LINE__, *disp);
 int size; MPI_Type_size(filetype, &size);
@@ -981,7 +990,9 @@ printf("%s at %d: disp=%lld filetype size=%d extent=%ld\n",__func__,__LINE__, *d
         filetype = root_filetype;
         *disp = 0; /* root's fileview includes file header */
     }
+#endif
 /*
+printf("%s line %d: disp=%lld filetype = %s\n",__func__,__LINE__, *disp,(filetype == MPI_DATATYPE_NULL)?"NULL":(filetype == MPI_BYTE)?"MPI_BYTE":"NOT NULL");
 int size; MPI_Type_size(filetype, &size);
 MPI_Aint extent; MPI_Type_extent(filetype, &extent);
 printf("%s at %d: disp=%lld filetype size=%d extent=%ld\n",__func__,__LINE__, *disp, size,extent);
@@ -997,8 +1008,10 @@ printf("%s at %d: disp=%lld filetype size=%d extent=%ld\n",__func__,__LINE__, *d
     if (root_filetype != MPI_BYTE)
         MPI_Type_free(&root_filetype);
 
+#ifdef PREPEND_HEADER
     /* update the explicit disp to be used in MPI-IO call later */
     *disp = (ncp->rank == 0) ? ncp->begin_var : 0;
+#endif
 
 #if 0
     if (ncp->rank == 0) {
