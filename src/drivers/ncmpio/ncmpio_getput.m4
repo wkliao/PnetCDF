@@ -266,7 +266,8 @@ err_check:
         xtype    = MPI_BYTE;
     }
 
-    if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
+    // if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
+    if (1) {
         /* intra-node aggregation must be in collective mode */
         void *wbuf = (nbytes == 0) ?  NULL : xbuf;
         err = ncmpio_intra_node_aggregation(ncp, NC_REQ_WR, varp, start, count,
@@ -505,7 +506,8 @@ err_check:
         nelems   = 0;
     }
 
-    if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
+    // if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
+    if (1) {
         /* intra-node aggregation must be in collective mode */
         void *rbuf = (nbytes == 0) ?  NULL : xbuf;
         err = ncmpio_intra_node_aggregation(ncp, NC_REQ_RD, varp, start, count,
@@ -611,7 +613,7 @@ ncmpio_$1_var(void             *ncdp,
          * write, they still need to participate the communication part of the
          * intra-node aggregation operation.
          */
-        if (ncp->num_aggrs_per_node > 0)
+        // if (ncp->num_aggrs_per_node > 0)
             return $1_varm(ncp, NULL, NULL, NULL, NULL, imap, NULL, 0,
                            buftype, reqMode);
 
