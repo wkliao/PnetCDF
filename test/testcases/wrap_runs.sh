@@ -38,6 +38,13 @@ for mpiio_mode in 0 1 ; do
        USEMPIO_HINTS="nc_use_mpi_io=false"
     fi
 
+    if [[ "$1" == *"vard"* ]] ; then
+       if test "x$mpiio_mode" == x0 ; then
+          # vard APIs are not supported when using PNCIO
+          continue
+       fi
+    fi
+
     PNETCDF_HINTS=
     if test "x$SAFE_HINTS" != x ; then
        PNETCDF_HINTS="$SAFE_HINTS"

@@ -42,13 +42,16 @@ for i in ${check_PROGRAMS} ; do
         fi
     for intra_aggr in 0 1 ; do
         if test "$intra_aggr" = 1 ; then
-           if [[ "$i" == *"vard"* ]] ; then
-              # vard APIs are not supported when intra-node agggregation is enabled
-              continue
-           fi
            INA_HINTS="nc_num_aggrs_per_node=2"
         else
            INA_HINTS="nc_num_aggrs_per_node=0"
+        fi
+
+        if [[ "$i" == *"vard"* ]] ; then
+           if test "x$mpiio_mode" == x0 || test "x$intra_aggr" == x1 ; then
+              # vard APIs are not supported when using PNCIO
+              continue
+           fi
         fi
 
         PNETCDF_HINTS=
