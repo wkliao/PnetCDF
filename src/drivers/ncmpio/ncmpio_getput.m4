@@ -266,8 +266,13 @@ err_check:
         xtype    = MPI_BYTE;
     }
 
-    // if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
-    if (1) {
+#if 1
+    void *wbuf = (nbytes == 0) ?  NULL : xbuf;
+    err = ncmpio_intra_node_aggregation(ncp, NC_REQ_WR, varp, start, count,
+                                        stride, nelems, xtype, wbuf);
+    if (status == NC_NOERR) status = err;
+#else
+    if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
         /* intra-node aggregation must be in collective mode */
         void *wbuf = (nbytes == 0) ?  NULL : xbuf;
         err = ncmpio_intra_node_aggregation(ncp, NC_REQ_WR, varp, start, count,
@@ -313,6 +318,7 @@ err_check:
                                 xtype_is_contig);
         if (status == NC_NOERR) status = err;
     }
+#endif
 
     /* done with xbuf */
     if (xbuf != NULL && xbuf != buf) NCI_Free(xbuf);
@@ -506,8 +512,13 @@ err_check:
         nelems   = 0;
     }
 
-    // if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
-    if (1) {
+#if 1
+    void *rbuf = (nbytes == 0) ?  NULL : xbuf;
+    err = ncmpio_intra_node_aggregation(ncp, NC_REQ_RD, varp, start, count,
+                                        stride, nelems, xtype, rbuf);
+    if (status == NC_NOERR) status = err;
+#else
+    if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
         /* intra-node aggregation must be in collective mode */
         void *rbuf = (nbytes == 0) ?  NULL : xbuf;
         err = ncmpio_intra_node_aggregation(ncp, NC_REQ_RD, varp, start, count,
@@ -553,6 +564,7 @@ err_check:
                                 xtype_is_contig);
         if (status == NC_NOERR) status = err;
     }
+#endif
 
     if (nelems > 0) {
         /* unpack xbuf into user buffer, buf */

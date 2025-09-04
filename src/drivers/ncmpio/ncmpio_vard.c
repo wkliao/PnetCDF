@@ -310,7 +310,7 @@ err_check:
     status = err;
 
     /* set the MPI-IO fileview, this is a collective call */
-    err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
+    err = ncmpio_file_set_view(ncp, offset, filetype, 0, NULL, NULL);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
         nelems = 0; /* skip this request */
@@ -323,8 +323,7 @@ err_check:
     if (status == NC_NOERR) status = err;
 
     /* reset fileview to make entire file visible */
-    offset = 0;
-    err = ncmpio_file_set_view(ncp, &offset, MPI_BYTE, 0, NULL, NULL);
+    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, 0, NULL, NULL);
     if (status == NC_NOERR) status = err;
 
     if (fIsSet(reqMode, NC_REQ_RD)) {

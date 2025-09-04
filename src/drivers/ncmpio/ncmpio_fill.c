@@ -197,8 +197,7 @@ fill_var_rec(NC         *ncp,
     }
 
     /* make the entire file visible */
-    offset = 0;
-    err = ncmpio_file_set_view(ncp, &offset, MPI_BYTE, 0, NULL, NULL);
+    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, 0, NULL, NULL);
     status = (status == NC_NOERR) ? err : status;
 
     /* calculate the starting file offset for each process */
@@ -359,7 +358,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     char *buf_ptr, *noFill;
     void *buf;
     size_t nsegs;
-    MPI_Offset buf_len, var_len, nrecs, start, *count, disp, wlen;
+    MPI_Offset buf_len, var_len, nrecs, start, *count, wlen;
     MPI_Datatype bufType;
     NC_var *varp;
 
@@ -602,45 +601,11 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     }
     /* k is the number of valid write requests */
     NCI_Free(noFill);
-
-#if 0
-    MPI_Datatype filetype;
-    filetype = MPI_BYTE;
-    if (k > 0 && buf_len > 0) {
-        /* create fileview: a list of contiguous segment for each variable */
-#ifdef HAVE_MPI_LARGE_COUNT
-        mpireturn = MPI_Type_create_hindexed_c(k, blocklengths, offset,
-                                               MPI_BYTE, &filetype);
-#else
-        mpireturn = MPI_Type_create_hindexed(k, blocklengths, offset,
-                                             MPI_BYTE, &filetype);
-#endif
-        if (mpireturn != MPI_SUCCESS) {
-            err = ncmpii_error_mpi2nc(mpireturn, "MPI_Type_hindexed");
-            /* return the first encountered error if there is any */
-            if (status == NC_NOERR) status = err;
-        }
-        else
-            MPI_Type_commit(&filetype);
-    }
-
-printf("%s at %d: k=%d offset=%lld blocklengths=%lld\n",__func__,__LINE__,k,offset[0],blocklengths[0]);
-    NCI_Free(blocklengths);
     NCI_Free(count);
-    NCI_Free(offset);
 
-    disp = 0;
-    err = ncmpio_file_set_view(ncp, &disp, filetype, 0, NULL, NULL);
+    err = ncmpio_file_set_view(ncp, 0, MPI_DATATYPE_NULL, k, offset,
+                               blocklengths);
     status = (status == NC_NOERR) ? err : status;
-
-    if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
-#else
-    NCI_Free(count);
-// printf("%s at %d: k=%d offset=%lld blocklengths=%lld\n",__func__,__LINE__, k,offset[0],blocklengths[0]);
-    disp = 0;
-    err = ncmpio_file_set_view(ncp, &disp, MPI_DATATYPE_NULL, k, offset, blocklengths);
-    status = (status == NC_NOERR) ? err : status;
-#endif
 
     bufType = MPI_BYTE;
     if (buf_len > NC_MAX_INT) {
@@ -665,18 +630,11 @@ printf("%s at %d: k=%d offset=%lld blocklengths=%lld\n",__func__,__LINE__,k,offs
 #endif
     }
 
-// printf("%s at %d: disp=%lld buf_len=%lld\n",__func__,__LINE__,disp,buf_len);
-
-    /* Ignore disp returned from ncmpio_file_set_view(), as the above offset
-     * and blocklengths do not contain the file header and we are not writing
-     * to file header below.
-     */
-    disp = 0;
     /* write to variable collectively */
     if (nprocs > 1)
-        wlen = ncmpio_file_write_at_all(ncp, disp, buf, buf_len, bufType);
+        wlen = ncmpio_file_write_at_all(ncp, 0, buf, buf_len, bufType);
     else
-        wlen = ncmpio_file_write_at(ncp, disp, buf, buf_len, bufType);
+        wlen = ncmpio_file_write_at(ncp, 0, buf, buf_len, bufType);
     if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
     NCI_Free(buf);
@@ -685,17 +643,8 @@ printf("%s at %d: k=%d offset=%lld blocklengths=%lld\n",__func__,__LINE__,k,offs
     if (blocklengths != NULL) NCI_Free(blocklengths);
     if (offset != NULL) NCI_Free(offset);
 
-#if 0
-    /* ncp->adio_fh->flat_file is allocated in ncmpio_file_set_view() */
-    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        NCI_Free(ncp->adio_fh->flat_file);
-        ncp->adio_fh->flat_file = NULL;
-    }
-#endif
-
     /* reset fileview to make the entire file visible */
-    disp = 0;
-    err = ncmpio_file_set_view(ncp, &disp, MPI_BYTE, 0, NULL, NULL);
+    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, 0, NULL, NULL);
     status = (status == NC_NOERR) ? err : status;
 
     return status;

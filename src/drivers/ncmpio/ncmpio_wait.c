@@ -934,11 +934,24 @@ req_commit(NC  *ncp,
         do_write = (num_w_reqs > 0);
     }
 
+#if 1
     /* carry out writes and reads separately (writes first) */
-
     if (do_write > 0) {
-        // if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
-        if (1)
+        err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_WR,
+                                                  num_w_reqs, put_list,
+                                                  newnumrecs);
+        put_list = NULL; /* has been freed in the above call */
+    }
+
+    if (do_read > 0) {
+        err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_RD,
+                                                  num_r_reqs, get_list,
+                                                  newnumrecs);
+        get_list = NULL; /* has been freed in the above call */
+    }
+#else
+    if (do_write > 0) {
+        if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
             /* intra-node aggregation must be in collective mode */
             err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_WR,
                                                       num_w_reqs, put_list,
@@ -950,8 +963,7 @@ req_commit(NC  *ncp,
     }
 
     if (do_read > 0) {
-        // if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
-        if (1)
+        if (ncp->num_aggrs_per_node > 0 && coll_indep == NC_REQ_COLL)
             /* intra-node aggregation must be in collective mode */
             err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_RD,
                                                       num_r_reqs, get_list,
@@ -961,6 +973,7 @@ req_commit(NC  *ncp,
                               newnumrecs);
         get_list = NULL; /* has been freed in wait_getput() */
     }
+#endif
 
     /* retain the first error status */
     if (status == NC_NOERR) status = err;
@@ -1696,7 +1709,7 @@ req_aggregation(NC     *ncp,
     void *buf; /* point to starting buffer, used by MPI-IO call */
     MPI_Aint      b_begin, b_addr;
     MPI_Datatype  filetype, buf_type, *ftypes, *btypes;
-    MPI_Offset max_end, offset;
+    MPI_Offset max_end;
 
     if (num_reqs == 0) { /* only NC_REQ_COLL can reach here for 0 request */
         assert(coll_indep == NC_REQ_COLL);
@@ -2009,8 +2022,7 @@ req_aggregation(NC     *ncp,
     NCI_Free(reqs);
 
     /* set the MPI-IO fileview, this is a collective call */
-    offset = 0;
-    err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
+    err = ncmpio_file_set_view(ncp, 0, filetype, 0, NULL, NULL);
     if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
@@ -2019,7 +2031,7 @@ req_aggregation(NC     *ncp,
     }
 
     /* call MPI_File_read_at_all/MPI_File_write_at_all */
-    err = ncmpio_read_write(ncp, rw_flag, offset, buf_len, buf_type, buf,
+    err = ncmpio_read_write(ncp, rw_flag, 0, buf_len, buf_type, buf,
                             ((buf_type == MPI_BYTE) ? 1 : 0));
     if (status == NC_NOERR) status = err;
 
@@ -2160,7 +2172,7 @@ mgetput(NC     *ncp,
     void *buf=NULL;
     NC_lead_req *lead_list;
     MPI_Datatype filetype, buf_type=MPI_BYTE;
-    MPI_Offset offset=0, buf_count=0;
+    MPI_Offset buf_count=0;
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *blocklens;
@@ -2345,7 +2357,7 @@ mpi_io:
     NCI_Free(reqs);
 
     /* set the MPI-IO fileview, this is a collective call */
-    err = ncmpio_file_set_view(ncp, &offset, filetype, 0, NULL, NULL);
+    err = ncmpio_file_set_view(ncp, 0, filetype, 0, NULL, NULL);
     if (filetype != MPI_BYTE) MPI_Type_free(&filetype);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
@@ -2354,7 +2366,7 @@ mpi_io:
     }
 
     /* call MPI_File_read_at_all/MPI_File_write_at_all */
-    err = ncmpio_read_write(ncp, rw_flag, offset, buf_count, buf_type, buf,
+    err = ncmpio_read_write(ncp, rw_flag, 0, buf_count, buf_type, buf,
                             ((buf_type == MPI_BYTE) ? 1 : 0));
     if (status == NC_NOERR) status = err;
 

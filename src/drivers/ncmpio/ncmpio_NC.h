@@ -688,7 +688,7 @@ extern int
 ncmpio_file_sync(NC *ncp);
 
 extern int
-ncmpio_file_set_view(const NC *ncp, MPI_Offset *disp, MPI_Datatype filetype,
+ncmpio_file_set_view(const NC *ncp, MPI_Offset disp, MPI_Datatype filetype,
                 MPI_Aint npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count *offsets, MPI_Count *lengths
