@@ -126,9 +126,13 @@
         }                                                               \
     }
 
-void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count,
-                               MPI_Datatype datatype, MPI_Offset offset,
-                               MPI_Status * status, int *error_code)
+void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
+                               const void *buf,
+                               MPI_Offset count,
+                               MPI_Datatype buftype,
+                               MPI_Offset offset,
+                               MPI_Status *status,
+                               int *error_code)
 {
     /* offset is in units of etype relative to the filetype. */
     PNCIO_Flatlist_node *flat_buf;
@@ -149,16 +153,22 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count
     int stripe_size;
     static char myname[] = "PNCIO_LUSTRE_WriteStrided";
 
+    /* The case of both buftype and filetype being contiguous has gone to
+     * PNCIO_WriteContig().
+     */
+
     if (fd->hints->ds_write == PNCIO_HINT_DISABLE) {
         /* if user has disabled data sieving on writes, use naive
          * approach instead.
          */
-        PNCIO_GEN_WriteStrided_naive(fd, buf, count, datatype, offset, status,
+        PNCIO_GEN_WriteStrided_naive(fd, buf, count, buftype, offset, status,
                                      error_code);
         return;
     }
 
     *error_code = MPI_SUCCESS;  /* changed below if error */
+
+    assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
 
     if (fd->filetype == MPI_DATATYPE_NULL) {
         // assert(fd->flat_file != NULL);
@@ -181,20 +191,10 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count
         filetype_size = 1;
         filetype_extent = 1;
     }
-    else {
-        PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
-        MPI_Type_size_x(fd->filetype, &filetype_size);
-        if (!filetype_size) {
-            MPI_Status_set_elements(status, fd->filetype, 0);
-            *error_code = MPI_SUCCESS;
-            return;
-        }
-        MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
-    }
 
-    PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
-    MPI_Type_size_x(datatype, &buftype_size);
-    MPI_Type_get_extent(datatype, &lb, &buftype_extent);
+    PNCIO_Datatype_iscontig(buftype, &buftype_is_contig);
+    MPI_Type_size_x(buftype, &buftype_size);
+    MPI_Type_get_extent(buftype, &lb, &buftype_extent);
 
     bufsize = buftype_size * count;
 
@@ -203,10 +203,15 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count
 
 // printf("%s at %d: filetype_is_contig=%d buftype_is_contig=%d offset=%lld\n",__func__,__LINE__, filetype_is_contig,buftype_is_contig,offset);
 
+
+/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
+assert(buftype_is_contig == 1);
+
     /* Different buftype to different filetype */
     if (!buftype_is_contig && filetype_is_contig) {
         /* noncontiguous in memory, contiguous in file. */
-        flat_buf = PNCIO_Flatten_and_find(datatype);
+
+        flat_buf = PNCIO_Flatten_and_find(buftype);
 
         off = fd->disp + offset;
 
@@ -234,7 +239,7 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count
 
         /* write the buffer out finally */
         PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE, writebuf_off,
-                         &status1, error_code);
+                          &status1, error_code);
 
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, bufsize);
@@ -243,7 +248,10 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count
             return;
         }
         NCI_Free(writebuf);
+
     } else {
+        /* buftype_is_contig || !filetype_is_contig */
+
         /* noncontiguous in file */
         disp = fd->disp;
 
@@ -293,9 +301,9 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count
                 PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-            MPI_Status_set_elements_x(status, datatype, count);
+            MPI_Status_set_elements_x(status, buftype, count);
 #else
-            MPI_Status_set_elements(status, datatype, count);
+            MPI_Status_set_elements(status, buftype, count);
 #endif
             NCI_Free(writebuf);
             return;
@@ -378,7 +386,7 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count
             }
         } else {
 /* noncontiguous in memory as well as in file */
-            flat_buf = PNCIO_Flatten_and_find(datatype);
+            flat_buf = PNCIO_Flatten_and_find(buftype);
 
             k = num = buf_count = 0;
             i_offset = flat_buf->indices[0];
@@ -457,9 +465,9 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Offset count
     }
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-    MPI_Status_set_elements_x(status, datatype, count);
+    MPI_Status_set_elements_x(status, buftype, count);
 #else
-    MPI_Status_set_elements(status, datatype, count);
+    MPI_Status_set_elements(status, buftype, count);
 #endif
 /* This is a temporary way of filling in status. The right way is to
     keep track of how much data was actually written by BUFFERED_WRITE. */
