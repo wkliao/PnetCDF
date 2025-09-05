@@ -19,6 +19,56 @@
 #include <common.h>
 #include "adio.h"
 
+/*----< PNCIO_File_set_view() >-----------------------------------------------*/
+/* For PnetCDF, this subroutine is an independent call, because PnetCDF only
+ * use the followings.
+ *   Argument etype is always MPI_BYTE.
+ *   Argument datarep is always "native".
+ *   Argument info is always MPI_INFO_NULL.
+ */
+int PNCIO_File_set_view(PNCIO_File    *fd,
+                        MPI_Offset    disp,
+                        MPI_Datatype  filetype,
+                        MPI_Aint      npairs,
+#ifdef HAVE_MPI_LARGE_COUNT
+                        MPI_Count    *offsets,
+                        MPI_Count    *lengths
+#else
+                        MPI_Offset   *offsets,
+                        int          *lengths
+#endif
+)
+{
+/* below 4 are no longer used */
+fd->flat_file.lb_idx    = -1;
+fd->flat_file.ub_idx    = -1;
+fd->flat_file.flag      = 0;
+fd->flat_file.refct     = 1;
+
+    fd->filetype = filetype;
+    fd->disp = 0;
+
+    if (filetype == MPI_BYTE) {
+assert(npairs==0);
+assert(offsets==NULL);
+assert(lengths==NULL);
+        fd->flat_file.count     = 0;
+        fd->flat_file.indices   = NULL;
+        fd->flat_file.blocklens = NULL;
+    }
+    else if (filetype == MPI_DATATYPE_NULL) {
+        fd->flat_file.count     = npairs;
+        fd->flat_file.indices   = offsets;
+        fd->flat_file.blocklens = lengths;
+    }
+    else
+        /* there should be no other filetype */
+        assert(0);
+
+    return NC_NOERR;
+}
+
+#if 0
 /*----< check_type() >-------------------------------------------------------*/
 /* check if filetype and etype are legal */
 static
@@ -166,4 +216,5 @@ int PNCIO_File_set_view(PNCIO_File    *fd,
 
     return err;
 }
+#endif
 
