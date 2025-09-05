@@ -33,6 +33,8 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
 
     *error_code = MPI_SUCCESS;  /* changed below if error */
 
+assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
+
     if (fd->filetype == MPI_DATATYPE_NULL) {
         // assert(fd->flat_file != NULL);
         MPI_Count n;
@@ -67,6 +69,9 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
     PNCIO_Datatype_iscontig(buftype, &buftype_is_contig);
     MPI_Type_size_x(buftype, &buftype_size);
     MPI_Type_get_extent(buftype, &lb, &buftype_extent);
+
+/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
+assert(buftype_is_contig == 1);
 
     bufsize = buftype_size * count;
 

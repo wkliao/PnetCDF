@@ -138,6 +138,8 @@ double curT = MPI_Wtime();
     }
 
     PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
+/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
+assert(buftype_is_contig == 1);
 
     if (fd->hints->cb_write == PNCIO_HINT_DISABLE ||
         (!interleave_count && (fd->hints->cb_write == PNCIO_HINT_AUTO))) {
@@ -151,6 +153,8 @@ double curT = MPI_Wtime();
             *error_code = MPI_SUCCESS;
             return;
         }
+
+assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
 
         if (fd->filetype == MPI_DATATYPE_NULL) {
             if (fd->flat_file.count == 0)
@@ -437,6 +441,9 @@ static void Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
      * this iteration */
 
     PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
+/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
+assert(buftype_is_contig == 1);
+
     if (!buftype_is_contig) {
         flat_buf = PNCIO_Flatten_and_find(datatype);
     }

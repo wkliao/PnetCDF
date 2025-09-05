@@ -15,7 +15,7 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
 {
     /* offset is in units of etype relative to the filetype. */
 
-    PNCIO_Flatlist_node *flat_buf, *flat_file;
+    PNCIO_Flatlist_node *flat_buf;
     MPI_Offset size, brd_size, frd_size = 0, req_len, sum;
     int b_index;
     MPI_Count n_etypes_in_filetype;
@@ -32,6 +32,9 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf, MPI_Aint count,
 
     PNCIO_Datatype_iscontig(buftype, &buftype_is_contig);
     PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+
+/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
+assert(buftype_is_contig == 1);
 
     MPI_Type_size_x(fd->filetype, &filetype_size);
     if (!filetype_size) {

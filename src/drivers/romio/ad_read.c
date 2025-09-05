@@ -105,6 +105,9 @@ int file_read(PNCIO_File    *fd,
 
     PNCIO_Datatype_iscontig(bufType, &buftype_is_contig);
 
+/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
+assert(buftype_is_contig == 1);
+
     /* when fd->filetype == MPI_DATATYPE_NULL, this is called from INA */
     if (fd->filetype == MPI_DATATYPE_NULL) {
         if (fd->flat_file.count == 0)

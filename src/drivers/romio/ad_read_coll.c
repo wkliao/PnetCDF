@@ -138,6 +138,8 @@ double curT = MPI_Wtime();
     }
 
     PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
+/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
+assert(buftype_is_contig == 1);
 
 // printf("%s at %d: fd->flat_file.count=%lld interleave_count=%d\n",__func__,__LINE__,fd->flat_file.count,interleave_count);
     if (fd->hints->cb_read == PNCIO_HINT_DISABLE
@@ -319,6 +321,110 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
 #endif
 }
 
+void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
+                           MPI_Offset     bufcount,
+                           MPI_Datatype   buftype,
+                           MPI_Offset     offset,
+                           MPI_Offset   **offset_list_ptr,
+#ifdef HAVE_MPI_LARGE_COUNT
+                           MPI_Offset   **len_list_ptr,
+#else
+                           int          **len_list_ptr,
+#endif
+                           MPI_Offset    *start_offset_ptr,
+                           MPI_Offset    *end_offset_ptr,
+                           MPI_Count     *contig_access_count_ptr)
+{
+    size_t alloc_sz;
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Count n, buftype_size;
+#else
+    int n, buftype_size;
+#endif
+
+    if (bufcount == 0) { /* zero-sized request */
+        *offset_list_ptr = NULL;
+        *len_list_ptr = NULL;
+        *start_offset_ptr = 0;
+        *end_offset_ptr = -1;
+        *contig_access_count_ptr = 0;
+        return;
+    }
+
+    /* Note: PnetCDF always defines a filetype of size equals to (bufcount *
+     * size of buftype) when the filetype is non-contiguous. Thus if the
+     * filetype has been flattened in fd->flat_file, then its flattened
+     * offset-length pair can be reused.
+     */
+    if (fd->filetype == MPI_DATATYPE_NULL) {
+        if (fd->flat_file.count == 0) {
+            *offset_list_ptr = NULL;
+            *len_list_ptr = NULL;
+            *start_offset_ptr = 0;
+            *end_offset_ptr = -1;
+            *contig_access_count_ptr = 0;
+            return;
+        }
+
+        /* When PnetCDF's intra-node aggregation is enabled, the fileview's
+         * flattened offset-length pairs, fd->flat_file.indices and
+         * fd->flat_file.blockens, have been populated in PnetCDF's
+         * subroutines, which can be reused here to avoid repeated datatype
+         * flattened work and reduce memory footprint. In addition, the
+         * offset-length pairs have been sorted in an increasng order.
+         */
+
+        /* find the first offset-length pair containing "offset" */
+        for (n=0; n<fd->flat_file.count; n++) {
+            if (offset < fd->flat_file.indices[n] + fd->flat_file.blocklens[n])
+                break;
+        }
+
+        *offset_list_ptr = fd->flat_file.indices + n;
+        *len_list_ptr = fd->flat_file.blocklens + n;
+
+        *start_offset_ptr = fd->flat_file.indices[n];
+        *end_offset_ptr = fd->flat_file.indices[fd->flat_file.count-1]
+                        + fd->flat_file.blocklens[fd->flat_file.count-1] - 1;
+
+        *contig_access_count_ptr = fd->flat_file.count - n;
+        return;
+    }
+    else if (fd->filetype == MPI_BYTE) {
+#ifdef HAVE_MPI_TYPE_SIZE_C
+        MPI_Type_size_c(buftype, &buftype_size);
+#elif defined(HAVE_MPI_TYPE_SIZE_X)
+        MPI_Type_size_x(buftype, &buftype_size);
+#else
+        MPI_Type_size(buftype, &buftype_size);
+#endif
+
+        *contig_access_count_ptr = 1;
+#ifdef HAVE_MPI_LARGE_COUNT
+        alloc_sz = sizeof(MPI_Offset) * 2;
+        *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz);
+        *len_list_ptr = (*offset_list_ptr + 1);
+        (*offset_list_ptr)[0] = fd->disp + offset;
+        (*len_list_ptr)[0] = bufcount * buftype_size;
+#else
+        alloc_sz = sizeof(MPI_Offset) + sizeof(int);
+        *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz);
+        *len_list_ptr = (int*) (*offset_list_ptr + 1);
+        (*offset_list_ptr)[0] = fd->disp + offset;
+        /* TODO: check int overflow
+        if (bufcount > NC_MAX_INT) NC_EINTOVERFLOW
+        */
+        (*len_list_ptr)[0] = (int) bufcount * buftype_size;
+#endif
+        *start_offset_ptr = (*offset_list_ptr)[0];
+        *end_offset_ptr = (*offset_list_ptr)[0] + (*len_list_ptr)[0] - 1;
+    }
+    else
+        /* There should be no other filetype */
+        assert(fd->filetype == MPI_BYTE);
+}
+
+#if 0
 void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
                            MPI_Offset     bufcount,
                            MPI_Datatype   datatype,
@@ -560,6 +666,7 @@ assert(0);
         *end_offset_ptr = end_offset;
     }
 }
+#endif
 
 static void Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
                           datatype, int nprocs,
@@ -674,6 +781,10 @@ static void Read_and_exch(PNCIO_File *fd, void *buf, MPI_Datatype
      * this iteration */
 
     PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
+
+/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
+assert(buftype_is_contig == 1);
+
     if (!buftype_is_contig) {
         flat_buf = PNCIO_Flatten_and_find(datatype);
     }
