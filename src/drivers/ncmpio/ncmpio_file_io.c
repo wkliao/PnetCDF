@@ -393,6 +393,11 @@ ncmpio_read_write(NC           *ncp,
     int status=NC_NOERR, err=NC_NOERR, mpireturn, coll_indep;
     MPI_Offset req_size, rlen, wlen;
 
+/* User buffer has always been packed into a contiguous buffer in INA
+ * subroutine.
+ */
+assert(buf_type == MPI_BYTE);
+
 #ifdef HAVE_MPI_TYPE_SIZE_C
     MPI_Count btype_size;
     /* MPI_Type_size_c is introduced in MPI 4.0 */
