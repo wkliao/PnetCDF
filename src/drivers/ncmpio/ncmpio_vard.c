@@ -55,7 +55,7 @@ getput_vard(NC               *ncp,
     void *xbuf=NULL;
     int mpireturn, status=NC_NOERR, err=NC_NOERR, xtype_is_contig=1;
     int el_size, buftype_is_contig=0, need_swap_back_buf=0;
-    int need_convert=0, need_swap=0, rw_flag;
+    int need_convert=0, need_swap=0;
     MPI_Offset nelems=0, fnelems=0, bnelems=0, offset=0;
     MPI_Datatype etype=MPI_DATATYPE_NULL, xtype=MPI_BYTE;
     MPI_Offset filetype_size=0;
@@ -310,21 +310,72 @@ err_check:
     status = err;
 
     /* set the MPI-IO fileview, this is a collective call */
+#if 1
+    /* vard API is only supported when using MPI-IO, not PNCIO */
+    char *mpi_name;
+    MPI_File fh;
+
+    /* when ncp->nprocs == 1, ncp->collective_fh == ncp->independent_fh */
+    fh = (ncp->nprocs > 1 && !fIsSet(ncp->flags, NC_MODE_INDEP))
+       ? ncp->collective_fh : ncp->independent_fh;
+
+    TRACE_IO(MPI_File_set_view, (fh, offset, MPI_BYTE, filetype, "native",
+                                 MPI_INFO_NULL));
+    if (mpireturn != MPI_SUCCESS) {
+        err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+        if (status == NC_NOERR) status = err;
+    }
+#else
     err = ncmpio_file_set_view(ncp, offset, filetype, 0, NULL, NULL);
+#endif
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
         nelems = 0; /* skip this request */
     }
 
-    rw_flag = (fIsSet(reqMode, NC_REQ_RD)) ? NC_REQ_RD : NC_REQ_WR;
+#if 1
+    int coll_indep = NC_REQ_INDEP;
+    if (ncp->nprocs > 1 && !fIsSet(ncp->flags, NC_MODE_INDEP))
+        coll_indep = NC_REQ_COLL;
+
+    if (fIsSet(reqMode, NC_REQ_RD)) {
+        MPI_Offset rlen;
+
+        if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL)
+            rlen = ncmpio_file_read_at_all(ncp, 0, xbuf, nelems, xtype);
+        else
+            rlen = ncmpio_file_read_at(ncp, 0, xbuf, nelems, xtype);
+        if (status == NC_NOERR && rlen < 0) status = (int)rlen;
+    }
+    else {
+        MPI_Offset wlen;
+
+        if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL)
+            wlen = ncmpio_file_write_at_all(ncp, 0, xbuf, nelems, xtype);
+        else
+            wlen = ncmpio_file_write_at(ncp, 0, xbuf, nelems, xtype);
+        if (status == NC_NOERR && wlen < 0) status = (int)wlen;
+    }
+#else
+    int rw_flag = (fIsSet(reqMode, NC_REQ_RD)) ? NC_REQ_RD : NC_REQ_WR;
 
     err = ncmpio_read_write(ncp, rw_flag, 0, nelems, xtype, xbuf,
                             xtype_is_contig);
     if (status == NC_NOERR) status = err;
+#endif
 
     /* reset fileview to make entire file visible */
+#if 1
+    TRACE_IO(MPI_File_set_view, (fh, 0, MPI_BYTE, MPI_BYTE, "native",
+                                 MPI_INFO_NULL));
+    if (mpireturn != MPI_SUCCESS) {
+        err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+        if (status == NC_NOERR) status = err;
+    }
+#else
     err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, 0, NULL, NULL);
     if (status == NC_NOERR) status = err;
+#endif
 
     if (fIsSet(reqMode, NC_REQ_RD)) {
         if (filetype_size == 0) return status;
