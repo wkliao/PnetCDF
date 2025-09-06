@@ -258,9 +258,10 @@ int main(int argc, char** argv)
     for (j=0; j<8; j++) {
         for (i=3; i<5; i++) {
             if (buf[j*NX+i] != expected) {
-                printf("%d: Unexpected read buf[%d][%d]=%d, should be %d\n",
+                printf("%d: Unexpected var0 read buf[%d][%d]=%d, should be %d\n",
                        rank, j, i, buf[j*NX+i], expected);
                 nerrs++;
+                goto err_out;
             }
             expected++;
         }
@@ -269,9 +270,10 @@ int main(int argc, char** argv)
     j = 1;
     for (i=8; i<13; i++) {
         if (buf[j*NX+i] != expected) {
-            printf("%d: Unexpected read buf[%d][%d]=%d, should be %d\n",
+            printf("%d: Unexpected var0 read buf[%d][%d]=%d, should be %d\n",
                    rank, j, i, buf[j*NX+i], expected);
             nerrs++;
+            goto err_out;
         }
         expected++;
     }
@@ -279,9 +281,10 @@ int main(int argc, char** argv)
     j = 3;
     for (i=7; i<12; i++) {
         if (buf[j*NX+i] != expected) {
-            printf("%d: Unexpected read buf[%d][%d]=%d, should be %d\n",
+            printf("%d: Unexpected var0 read buf[%d][%d]=%d, should be %d\n",
                    rank, j, i, buf[j*NX+i], expected);
             nerrs++;
+            goto err_out;
         }
         expected++;
     }
@@ -297,9 +300,10 @@ int main(int argc, char** argv)
     for (j=6; j<9; j++) {
         for (i=7; i<17; i++) {
             if (buf[j*NX+i] != expected) {
-                printf("%d: Unexpected read buf[%d]=%d, should be %d\n",
+                printf("%d: Unexpected var1 read buf[%d]=%d, should be %d\n",
                        rank, i, buf[j*NX+i], expected);
                 nerrs++;
+                goto err_out;
             }
             expected++;
         }
@@ -308,14 +312,16 @@ int main(int argc, char** argv)
     for (j=0; j<8; j++) {
         for (i=3; i<5; i++) {
             if (buf[j*NX+i] != expected) {
-                printf("%d: Unexpected read buf[%d][%d]=%d, should be %d\n",
+                printf("%d: Unexpected var1 read buf[%d][%d]=%d, should be %d\n",
                        rank, j, i, buf[j*NX+i], expected);
                 nerrs++;
+                goto err_out;
             }
             expected++;
         }
     }
 
+err_out:
     err = ncmpi_close(ncid); CHECK_ERR
 
     if (buf != NULL) free(buf);
