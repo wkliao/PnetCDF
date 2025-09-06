@@ -1020,18 +1020,24 @@ flatten_reqs(NC            *ncp,
 /*----< construct_buf_type() >-----------------------------------------------*/
 /* Construct an MPI derived datatype for I/O buffers from multiple requests
  * described in the request list, reqs, by concatenate memory addresses of all
- * buffers.
+ * buffers. Note xbuf in each nonblocking request is a contiguous buffer packed
+ * from the user buffer. For record variables, a get/put request is separated
+ * into different NC_req objects, one for each record.
  */
 static int
-construct_buf_type(const NC     *ncp,
-                   int           reqMode,   /* IN: NC_REQ_RD or NC_REQ_WR */
-                   int           num_reqs,  /* IN: # requests */
-                   const NC_req *reqs,      /* IN: [num_reqs] requests */
-                   MPI_Aint     *bufLen,    /* OUT: buffer size in bytes */
-                   MPI_Datatype *bufType)   /* OUT: buffer datatype */
+construct_buf_type(const NC      *ncp,
+                   int            reqMode,  /* IN: NC_REQ_RD or NC_REQ_WR */
+                   int            num_reqs, /* IN: # requests */
+                   const NC_req  *reqs,     /* IN: [num_reqs] requests */
+                   MPI_Aint      *bufLen,   /* OUT: buffer size in bytes */
+                   MPI_Datatype  *bufType,  /* OUT: buffer datatype */
+                   void         **buf)      /* OUT: pointer to I/O buffer */
 {
-    int i, err, mpireturn, status=NC_NOERR;
+    int i, err, mpireturn, status=NC_NOERR, is_contig=1;
     NC_lead_req *lead;
+    MPI_Aint prev_addr;
+
+    assert(num_reqs > 0);
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *disps     = (MPI_Count*)NCI_Malloc(sizeof(MPI_Count) * num_reqs);
@@ -1049,7 +1055,14 @@ construct_buf_type(const NC     *ncp,
         MPI_Get_address(reqs[i].xbuf, &addr);
         disps[i] = addr;
 
-        /* blocklens[] in bytes */
+        /* check if i is contiguous from i-1 */
+        if (is_contig) {
+            if (i > 0 && prev_addr != addr)
+                is_contig = 0;
+            prev_addr = addr + blocklens[i];
+        }
+
+        /* blocklens[] are in bytes */
         if (fIsSet(reqMode, NC_REQ_WR))
             lead = ncp->put_lead_list + reqs[i].lead_off;
         else
@@ -1059,31 +1072,47 @@ construct_buf_type(const NC     *ncp,
         *bufLen += blocklens[i];
     }
 
-    /* construct buffer derived datatype */
-#ifdef HAVE_MPI_LARGE_COUNT
-    mpireturn = MPI_Type_create_hindexed_c(num_reqs, blocklens, disps,
-                                           MPI_BYTE, bufType);
-#else
-    mpireturn = MPI_Type_create_hindexed(num_reqs, blocklens, disps,
-                                         MPI_BYTE, bufType);
-#endif
-    if (mpireturn != MPI_SUCCESS) {
-        err = ncmpii_error_mpi2nc(mpireturn, "MPI_Type_create_hindexed");
-        /* return the first encountered error if there is any */
-        if (status == NC_NOERR) status = err;
+// if (is_contig != 1) printf("%s at %d: num_reqs=%d bufType is_contig=%d\n",__func__,__LINE__, num_reqs,is_contig);
 
-        *bufType = MPI_DATATYPE_NULL;
+    if (is_contig) {
+        *bufType = MPI_BYTE;
+        if (fIsSet(reqMode, NC_REQ_WR))
+            lead = ncp->put_lead_list + reqs[0].lead_off;
+        else
+            lead = ncp->get_lead_list + reqs[0].lead_off;
+
+        *buf = lead->xbuf;
     }
     else {
-        MPI_Type_commit(bufType);
+        /* construct buffer derived datatype */
 #ifdef HAVE_MPI_LARGE_COUNT
-        MPI_Count typeSize;
-        MPI_Type_size_c(*bufType, &typeSize);
+        mpireturn = MPI_Type_create_hindexed_c(num_reqs, blocklens, disps,
+                                               MPI_BYTE, bufType);
 #else
-        int typeSize;
-        MPI_Type_size(*bufType, &typeSize);
+        mpireturn = MPI_Type_create_hindexed(num_reqs, blocklens, disps,
+                                             MPI_BYTE, bufType);
 #endif
-        assert(typeSize == *bufLen);
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn, "MPI_Type_create_hindexed");
+            /* return the first encountered error if there is any */
+            if (status == NC_NOERR) status = err;
+
+            *bufType = MPI_BYTE;
+            *bufLen  = 0;
+        }
+        else {
+            MPI_Type_commit(bufType);
+#ifdef HAVE_MPI_LARGE_COUNT
+            MPI_Count typeSize;
+            MPI_Type_size_c(*bufType, &typeSize);
+#else
+            int typeSize;
+            MPI_Type_size(*bufType, &typeSize);
+#endif
+            assert(typeSize == *bufLen);
+            *bufLen = 1;
+        }
+        *buf = NULL; /* bufType is constructed using MPI_BOTTOM */
     }
 
     NCI_Free(blocklens);
@@ -1354,7 +1383,7 @@ int ina_put(NC           *ncp,
             MPI_Datatype  bufType,   /* user buffer data type */
             void         *buf)       /* user buffer */
 {
-    int i, j, err, mpireturn, status=NC_NOERR, nreqs;
+    int i, j, err, mpireturn, status=NC_NOERR, nreqs, pack_buf;
     char *recv_buf=NULL, *wr_buf = NULL;
     MPI_Aint npairs=0, *meta=NULL, *count=NULL;
     MPI_Offset buf_count=0;
@@ -1514,8 +1543,7 @@ if (ncp->rank == 0) {
              * one single sorted offset list. Note count will be used in
              * heap_merge()
              */
-            count = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) *
-            ncp->num_nonaggrs);
+            count = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) *ncp->num_nonaggrs);
             for (i=0; i<ncp->num_nonaggrs; i++) count[i] = meta[i*3];
         }
 
@@ -1566,39 +1594,57 @@ if (ncp->rank == 0) {
          * non-aggregators have received into recv_buf, recv_buf is packed into
          * wr_buf. Then, wr_buf is used when calling MPI-IO to write to file.
          */
-        if (buf_count > 0) {
+        pack_buf = (buf_count > 0);
+        if (ncp->num_nonaggrs == 1 && is_incr && pack_buf) {
+            /* If self rank aggregator is the only process in the group, then
+             * we can reuse the bufCount, bufType, and buf directly to write to
+             * file, except for the two cases below.
+             *
+             * Case 1. If buf is not in an incremental order, we must pack into
+             * a contiguous buffer, so the corresponding sub-buffers can be
+             * re-ordered based on sorted offset-length pairs.
+             *
+             * Case 2. If there is any overlap in offset-length pairs, we must
+             * pack the write buffer into one to be coalseced.
+             */
+            int overlapped = 0;
+            for (j=1; j<num_pairs; j++) {
+                if (offsets[j-1] + lengths[j-1] > offsets[j]) {
+                    overlapped = 1;
+                    break;
+                }
+            }
+
+            if (overlapped == 0) {
+                wr_buf = recv_buf = buf;
+                pack_buf = 1;
+            }
+        }
+
+        if (pack_buf) {
             recv_buf = (char*) NCI_Malloc(buf_count);
             wr_buf = (char*) NCI_Malloc(buf_count);
         }
+
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         ncmpi_inq_malloc_size(&mem_max);
         ncp->maxmem_put[3] = MAX(ncp->maxmem_put[3], mem_max);
 #endif
 
         /* First, pack self write data into front of the recv_buf */
-        if (bufLen > 0) {
-            int is_predef;
-            if (bufType == MPI_DATATYPE_NULL)
-                is_predef = 0;
-            else
-                PNCIO_Type_ispredef(bufType, &is_predef);
-
-            if (is_predef)
-                memcpy(recv_buf, buf, bufLen);
-            else {
-                void *inbuf = (buf == NULL) ? MPI_BOTTOM : buf;
+        if (pack_buf) {
+            void *inbuf = (buf == NULL) ? MPI_BOTTOM : buf;
 #ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count position=0;
-                MPI_Count incount = (buf == NULL) ? 1 : bufCount;
-                MPI_Pack_c(inbuf, incount, bufType, recv_buf, bufLen, &position,
-                           MPI_COMM_SELF);
+            MPI_Count position=0;
+            MPI_Count incount = (buf == NULL) ? 1 : bufCount;
+            MPI_Pack_c(inbuf, incount, bufType, recv_buf, bufLen, &position,
+                       MPI_COMM_SELF);
 #else
-                int position=0;
-                int incount = (buf == NULL) ? 1 : bufCount;
-                MPI_Pack(inbuf, incount, bufType, recv_buf, bufLen, &position,
-                         MPI_COMM_SELF);
+            int position=0;
+            int incount = (buf == NULL) ? 1 : bufCount;
+            MPI_Pack(inbuf, incount, bufType, recv_buf, bufLen, &position,
+                     MPI_COMM_SELF);
 #endif
-            }
         }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -1614,7 +1660,7 @@ if (ncp->rank == 0) {
          */
 
         /* receive write data sent from non-aggregators */
-        if (buf_count > 0) {
+        if (ncp->num_nonaggrs > 1 && buf_count > 0) {
             char *ptr = recv_buf + bufLen;
             nreqs = 0;
             for (i=1; i<ncp->num_nonaggrs; i++) {
@@ -1645,75 +1691,77 @@ if (ncp->rank == 0) {
             }
         }
 
-        /* merge the overlapped buffer segments, skip the overlapped regions
-         * for those with higher j indices (i.e. requests with lower j indices
-         * win the writes to the overlapped regions)
-         */
-        for (i=0, j=1; j<npairs; j++) {
-            if (off_ptr[i] + len_ptr[i] >= off_ptr[j] + len_ptr[j])
-                /* segment i completely covers segment j, skip j */
-                continue;
+        if (pack_buf) {
+            /* merge the overlapped buffer segments, skip the overlapped
+             * regions for those with higher j indices (i.e. requests with
+             * lower j indices win the writes to the overlapped regions)
+             */
+            for (i=0, j=1; j<npairs; j++) {
+                if (off_ptr[i] + len_ptr[i] >= off_ptr[j] + len_ptr[j])
+                    /* segment i completely covers segment j, skip j */
+                    continue;
 
-            MPI_Offset gap = off_ptr[i] + len_ptr[i] - off_ptr[j];
-            if (gap >= 0) { /* segments i and j overlap */
-                if (bufAddr[i] + len_ptr[i] == bufAddr[j] + gap) {
-                    /* buffers i and j are contiguous, merge j into i */
-                    len_ptr[i] += len_ptr[j] - gap;
+                MPI_Offset gap = off_ptr[i] + len_ptr[i] - off_ptr[j];
+                if (gap >= 0) { /* segments i and j overlap */
+                    if (bufAddr[i] + len_ptr[i] == bufAddr[j] + gap) {
+                        /* buffers i and j are contiguous, merge j into i */
+                        len_ptr[i] += len_ptr[j] - gap;
+                    }
+                    else { /* buffers are not contiguous, reduce j's len */
+                        off_ptr[i+1] = off_ptr[j] + gap;
+                        len_ptr[i+1] = len_ptr[j] - gap;
+                        bufAddr[i+1] = bufAddr[j] + gap;
+                        i++;
+                    }
                 }
-                else { /* buffers are not contiguous, reduce j's len */
-                    off_ptr[i+1] = off_ptr[j] + gap;
-                    len_ptr[i+1] = len_ptr[j] - gap;
-                    bufAddr[i+1] = bufAddr[j] + gap;
+                else { /* i and j do not overlap */
                     i++;
+                    if (i < j) {
+                        off_ptr[i] = off_ptr[j];
+                        len_ptr[i] = len_ptr[j];
+                        bufAddr[i] = bufAddr[j];
+                    }
                 }
             }
-            else { /* i and j do not overlap */
-                i++;
-                if (i < j) {
-                    off_ptr[i] = off_ptr[j];
-                    len_ptr[i] = len_ptr[j];
-                    bufAddr[i] = bufAddr[j];
-                }
-            }
-        }
-        /* update number of pairs, now all off-len pairs are not overlapped */
-        npairs = i+1;
+            /* update npairs, now all off-len pairs are not overlapped */
+            npairs = i+1;
 
-        /* pack recv_buf, data received from non-aggregators, into wr_buf, a
-         * contiguous buffer, wr_buf, which will later be used in a call to
-         * MPI_File_write_at_all()
-         */
-        char *ptr = wr_buf;
-        buf_count = 0;
-        if (npairs > 0) {
-            memcpy(ptr, recv_buf + bufAddr[0], len_ptr[0]);
-            ptr += len_ptr[0];
-            buf_count = len_ptr[0];
-        }
-        for (i=0, j=1; j<npairs; j++) {
-            memcpy(ptr, recv_buf + bufAddr[j], len_ptr[j]);
-            ptr += len_ptr[j];
-            /* overlap may be found, recalculate buf_count */
-            buf_count += len_ptr[j];
-
-            /* coalesce the offset-length pairs */
-            if (off_ptr[i] + len_ptr[i] == off_ptr[j]) {
-                /* coalesce j into i */
-                len_ptr[i] += len_ptr[j];
+            /* pack recv_buf, data received from non-aggregators, into wr_buf,
+             * a contiguous buffer, wr_buf, which will later be used in a call
+             * to MPI_File_write_at_all()
+             */
+            char *ptr = wr_buf;
+            buf_count = 0;
+            if (npairs > 0) {
+                memcpy(ptr, recv_buf + bufAddr[0], len_ptr[0]);
+                ptr += len_ptr[0];
+                buf_count = len_ptr[0];
             }
-            else {
-                i++;
-                if (i < j) {
-                    off_ptr[i] = off_ptr[j];
-                    len_ptr[i] = len_ptr[j];
+            for (i=0, j=1; j<npairs; j++) {
+                memcpy(ptr, recv_buf + bufAddr[j], len_ptr[j]);
+                ptr += len_ptr[j];
+                /* overlap may be found, recalculate buf_count */
+                buf_count += len_ptr[j];
+
+                /* coalesce the offset-length pairs */
+                if (off_ptr[i] + len_ptr[i] == off_ptr[j]) {
+                    /* coalesce j into i */
+                    len_ptr[i] += len_ptr[j];
+                }
+                else {
+                    i++;
+                    if (i < j) {
+                        off_ptr[i] = off_ptr[j];
+                        len_ptr[i] = len_ptr[j];
+                    }
                 }
             }
+            /* update npairs, now all off-len pairs are not overlapped */
+            npairs = i+1;
+            if (recv_buf != buf) NCI_Free(recv_buf);
         }
+
         NCI_Free(bufAddr);
-        if (recv_buf != NULL) NCI_Free(recv_buf);
-
-        /* update number of pairs, now all off-len pairs are not overlapped */
-        npairs = i+1;
 
     } /* if (ncp->rank == ncp->my_aggr && npairs > 0) */
 
@@ -1742,7 +1790,7 @@ if (ncp->rank == 0) npairs++;
 #endif
 
 
-// printf("%s at %d: \n",__func__,__LINE__);
+// printf("%s at %d: npairs=%ld off=%lld %lld %lld %lld len=%lld %lld %lld %lld\n",__func__,__LINE__, npairs, offsets[0],offsets[1],offsets[2],offsets[3],lengths[0],lengths[1],lengths[2],lengths[3]);
     err = ncmpio_file_set_view(ncp, 0, MPI_DATATYPE_NULL, npairs,
                                offsets, lengths);
     if (err != NC_NOERR) {
@@ -1755,13 +1803,16 @@ if (ncp->rank == 0) npairs++;
     ncp->maxmem_put[4] = MAX(ncp->maxmem_put[4], mem_max);
 #endif
 
-// printf("%s at %d: disp=%ld\n",__func__,__LINE__, disp);
-    /* call MPI_File_write_at_all or PNCIO_File_write_at_all */
-    err = ncmpio_read_write(ncp, NC_REQ_WR, 0, buf_count, MPI_BYTE, wr_buf, 1);
+// if (ncp->num_nonaggrs == 1) printf("%s at %d: bufCount=%lld\n",__func__,__LINE__, bufCount);
+    /* carry out write request to file */
+    if (pack_buf)
+        err = ncmpio_read_write(ncp, NC_REQ_WR, 0, buf_count, MPI_BYTE, wr_buf);
+    else
+        err = ncmpio_read_write(ncp, NC_REQ_WR, 0, bufCount, bufType, wr_buf);
     if (status == NC_NOERR) status = err;
 
 // printf("%s at %d: \n",__func__,__LINE__);
-    if (wr_buf  != NULL) NCI_Free(wr_buf);
+    if (wr_buf  != buf)  NCI_Free(wr_buf);
     if (offsets != NULL) NCI_Free(offsets);
     if (lengths != NULL) NCI_Free(lengths);
 
@@ -2137,7 +2188,7 @@ if (ncp->rank == 0) npairs--;
 
     /* call MPI_File_read_at_all */
 // printf("%s at %d: disp=%lld buf_count=%lld\n",__func__,__LINE__,disp,buf_count);
-    err = ncmpio_read_write(ncp, NC_REQ_RD, 0, buf_count, MPI_BYTE, rd_buf, 1);
+    err = ncmpio_read_write(ncp, NC_REQ_RD, 0, buf_count, MPI_BYTE, rd_buf);
     if (status == NC_NOERR) status = err;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -2388,6 +2439,7 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
                                     MPI_Offset  newnumrecs)
 {
     int err, status=NC_NOERR, is_incr=1;
+    void *buf=NULL;
     MPI_Aint bufLen, num_pairs;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *offsets=NULL, *lengths=NULL;
@@ -2474,12 +2526,16 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
         num_pairs = 0;
 
     /* construct user buffer datatype, bufType.
-     * bufLen is the buffer size in bytes
+     * bufLen is the number of bufType.
      */
     if (num_reqs > 0) {
-        construct_buf_type(ncp, reqMode, num_reqs, reqs, &bufLen,
-                           &bufType);
-        bufLen = 1;
+        err = construct_buf_type(ncp, reqMode, num_reqs, reqs, &bufLen,
+                                 &bufType, &buf);
+// printf("%s at %d: bufLen=%ld bufType=%s buf=%s\n",__func__,__LINE__, bufLen, (bufType==MPI_BYTE)?"MPI_BYTE":"NOT MPI_BYTE",(buf==NULL)?"NULL":"NOT NULL");
+        if (status == NC_NOERR) status = err;
+        /* If buf is non-contiguous, bufLen will be set to 1, buf to NULL, and
+         * bufType is a derived datatype constructed using MPI_BOTTOM.
+         */
     }
     else
         bufLen = 0;
@@ -2505,15 +2561,16 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
         ncp->num_nonaggrs = 1;
     }
 
+// printf("%s at %d: is_incr=%d\n",__func__,__LINE__, is_incr);
     /* perform intra-node aggregation */
     if (fIsSet(reqMode, NC_REQ_WR)) {
-        err = ina_put(ncp, is_incr, num_pairs, offsets, lengths,
-                      bufLen, bufType, NULL);
+        err = ina_put(ncp, is_incr, num_pairs, offsets, lengths, bufLen,
+                      bufType, buf);
         if (status == NC_NOERR) status = err;
     }
     else {
-        err = ina_get(ncp, is_incr, num_pairs, offsets, lengths,
-                      bufLen, bufType, NULL);
+        err = ina_get(ncp, is_incr, num_pairs, offsets, lengths, bufLen,
+                      bufType, buf);
         if (status == NC_NOERR) status = err;
     }
 
@@ -2633,7 +2690,6 @@ ncmpio_intra_node_aggregation(NC               *ncp,
         ncp->num_nonaggrs = 1;
     }
 
-// printf("%s at %d: \n",__func__,__LINE__);
     /* perform intra-node aggregation */
     if (fIsSet(reqMode, NC_REQ_WR)) {
         err = ina_put(ncp, is_incr, num_pairs, offsets, lengths, bufCount,
