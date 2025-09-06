@@ -359,8 +359,7 @@ err_check:
 #else
     int rw_flag = (fIsSet(reqMode, NC_REQ_RD)) ? NC_REQ_RD : NC_REQ_WR;
 
-    err = ncmpio_read_write(ncp, rw_flag, 0, nelems, xtype, xbuf,
-                            xtype_is_contig);
+    err = ncmpio_read_write(ncp, rw_flag, 0, nelems, xtype, xbuf);
     if (status == NC_NOERR) status = err;
 #endif
 

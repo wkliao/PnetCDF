@@ -314,8 +314,7 @@ err_check:
          * written to the variable defined in file. Note data stored in xbuf
          * is in the external data type, ready to be written to file.
          */
-        err = ncmpio_read_write(ncp, NC_REQ_WR, offset, nelems, xtype, xbuf,
-                                xtype_is_contig);
+        err = ncmpio_read_write(ncp, NC_REQ_WR, offset, nelems, xtype, xbuf);
         if (status == NC_NOERR) status = err;
     }
 #endif
@@ -560,8 +559,7 @@ err_check:
          * read from the variable defined in file. Note xbuf will contain data
          * read from the file and hence is in the external data type.
          */
-        err = ncmpio_read_write(ncp, NC_REQ_RD, offset, nelems, xtype, xbuf,
-                                xtype_is_contig);
+        err = ncmpio_read_write(ncp, NC_REQ_RD, offset, nelems, xtype, xbuf);
         if (status == NC_NOERR) status = err;
     }
 #endif

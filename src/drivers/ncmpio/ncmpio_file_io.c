@@ -386,17 +386,13 @@ ncmpio_read_write(NC           *ncp,
                   MPI_Offset    offset,
                   MPI_Offset    buf_count,
                   MPI_Datatype  buf_type,
-                  void         *buf,
-                  int           buftype_is_contig)
+                  void         *buf)
 {
     char *mpi_name;
-    int status=NC_NOERR, err=NC_NOERR, mpireturn, coll_indep;
+    int status=NC_NOERR, err=NC_NOERR, mpireturn, coll_indep, is_contig;
     MPI_Offset req_size, rlen, wlen;
 
-/* User buffer has always been packed into a contiguous buffer in INA
- * subroutine.
- */
-assert(buf_type == MPI_BYTE);
+    PNCIO_Datatype_iscontig(buf_type, &is_contig);
 
 #ifdef HAVE_MPI_TYPE_SIZE_C
     MPI_Count btype_size;
@@ -467,7 +463,7 @@ assert(buf_type == MPI_BYTE);
         }
 #endif
 
-        if (xlen > 0 && !buftype_is_contig && req_size <= ncp->ibuf_size) {
+        if (xlen > 0 && !is_contig && req_size <= ncp->ibuf_size) {
             /* if read buffer is noncontiguous and size is < ncp->ibuf_size,
              * allocate a temporary buffer and use it to read, as some MPI,
              * e.g. Cray on KNL, can be significantly slow when read buffer is
@@ -549,7 +545,8 @@ assert(buf_type == MPI_BYTE);
         }
 #endif
 
-        if (xlen > 0 && !buftype_is_contig && req_size <= ncp->ibuf_size) {
+// printf("%s at %d: xlen=%lld is_contig=%d req_size=%lld ibuf_size=%lld\n",__func__,__LINE__, xlen,is_contig,req_size,ncp->ibuf_size);
+        if (xlen > 0 && !is_contig && req_size <= ncp->ibuf_size) {
             /* if write buffer is noncontiguous and size is < ncp->ibuf_size,
              * allocate a temporary buffer and use it to write, as some MPI,
              * e.g. Cray on KNL, can be significantly slow when write buffer is
@@ -589,6 +586,7 @@ assert(buf_type == MPI_BYTE);
             }
         }
 
+// printf("%s at %d: xlen=%lld xbuf_type=%s\n",__func__,__LINE__, xlen,(xbuf_type==MPI_BYTE)?"MPI_BYTE":"NOT MPI_BYTE");
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL)
             wlen = ncmpio_file_write_at_all(ncp, offset, xbuf, xlen, xbuf_type);
         else
