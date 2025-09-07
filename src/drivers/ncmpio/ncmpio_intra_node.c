@@ -1017,109 +1017,213 @@ flatten_reqs(NC            *ncp,
     return status;
 }
 
-/*----< construct_buf_type() >-----------------------------------------------*/
-/* Construct an MPI derived datatype for I/O buffers from multiple requests
- * described in the request list, reqs, by concatenate memory addresses of all
- * buffers. Note xbuf in each nonblocking request is a contiguous buffer packed
- * from the user buffer. For record variables, a get/put request is separated
- * into different NC_req objects, one for each record.
+/*----< flat_buf_type() >----------------------------------------------------*/
+/* Scan the nonblocking requests, pointed by reqs, and build the offset-length
+ * pairs of all buffers, xbuf. Note xbuf in each nonblocking request is a
+ * contiguous buffer (packed from the user buffer for the write operations).
+ * For record variables, if a user request is accessing more than one record,
+ * the request is split into into multiple NC_req objects, one for each record.
  */
 static int
-construct_buf_type(const NC      *ncp,
-                   int            reqMode,  /* IN: NC_REQ_RD or NC_REQ_WR */
-                   int            num_reqs, /* IN: # requests */
-                   const NC_req  *reqs,     /* IN: [num_reqs] requests */
-                   MPI_Aint      *bufLen,   /* OUT: buffer size in bytes */
-                   MPI_Datatype  *bufType,  /* OUT: buffer datatype */
-                   void         **buf)      /* OUT: pointer to I/O buffer */
+flat_buf_type(const NC         *ncp,
+              int               reqMode,    /* IN: NC_REQ_RD or NC_REQ_WR */
+              int               num_reqs,   /* IN: # requests */
+              const NC_req     *reqs,       /* IN: [num_reqs] requests */
+              PNCIO_Flat_list  *flat_btype, /* OUT: flattened buftype */
+              void            **buf)        /* OUT: pointer to I/O buffer */
+/* TODO: */
+#if 0
 {
-    int i, err, mpireturn, status=NC_NOERR, is_contig=1;
+    int i, j, err=NC_NOERR;
     NC_lead_req *lead;
-    MPI_Aint prev_addr;
-
-    assert(num_reqs > 0);
-
+    MPI_Aint addr;
+/* buffer offset should be of type MPI_Aint. length should be size_t. */
+    MPI_Offset  *off;       /* array of byte offsets of each block */
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count *disps     = (MPI_Count*)NCI_Malloc(sizeof(MPI_Count) * num_reqs);
-    MPI_Count *blocklens = (MPI_Count*)NCI_Malloc(sizeof(MPI_Count) * num_reqs);
+    MPI_Offset  *len;       /* array of contiguous block lengths (bytes) */
 #else
-    MPI_Aint  *disps     = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint)  * num_reqs);
-    int       *blocklens = (int*)      NCI_Malloc(sizeof(int)       * num_reqs);
+    int         *len;       /* array of contiguous block lengths (bytes) */
 #endif
 
-    *bufLen = 0;
-    for (i=0; i<num_reqs; i++) {
-        MPI_Aint addr;
-
-        /* displacement uses MPI_BOTTOM */
-        MPI_Get_address(reqs[i].xbuf, &addr);
-        disps[i] = addr;
-
-        /* check if i is contiguous from i-1 */
-        if (is_contig) {
-            if (i > 0 && prev_addr != addr)
-                is_contig = 0;
-            prev_addr = addr + blocklens[i];
-        }
-
-        /* blocklens[] are in bytes */
-        if (fIsSet(reqMode, NC_REQ_WR))
-            lead = ncp->put_lead_list + reqs[i].lead_off;
-        else
-            lead = ncp->get_lead_list + reqs[i].lead_off;
-        blocklens[i] = reqs[i].nelems * lead->varp->xsz;
-
-        *bufLen += blocklens[i];
+    if (num_reqs == 0) {
+        flat_btype->type  = MPI_BYTE;
+        flat_btype->count = 0;
+        return NC_NOERR;
     }
 
-// if (is_contig != 1) printf("%s at %d: num_reqs=%d bufType is_contig=%d\n",__func__,__LINE__, num_reqs,is_contig);
+    off = (MPI_Offset*)NCI_Malloc(sizeof(MPI_Offset) * num_reqs);
+#ifdef HAVE_MPI_LARGE_COUNT
+    len = (MPI_Offset*)NCI_Malloc(sizeof(MPI_Offset) * num_reqs);
+#else
+    len = (int*)       NCI_Malloc(sizeof(int)        * num_reqs);
+#endif
 
-    if (is_contig) {
-        *bufType = MPI_BYTE;
-        if (fIsSet(reqMode, NC_REQ_WR))
-            lead = ncp->put_lead_list + reqs[0].lead_off;
-        else
-            lead = ncp->get_lead_list + reqs[0].lead_off;
+    /* set off[0] and len[0] */
+    MPI_Get_address(reqs[0].xbuf, &addr); /* displacement uses MPI_BOTTOM */
+    off[0] = addr;
 
-        *buf = lead->xbuf;
+    lead = (fIsSet(reqMode, NC_REQ_WR)) ? ncp->put_lead_list
+                                        : ncp->get_lead_list;
+
+    /* len[] are in bytes */
+    len[0] = reqs[0].nelems * lead[reqs[0].lead_off].varp->xsz;
+    *buf = lead[reqs[0].lead_off].xbuf;
+
+    for (i=0, j=1; j<num_reqs; j++) {
+        /* displacement uses MPI_BOTTOM */
+        MPI_Get_address(reqs[j].xbuf, &addr);
+        off[j] = addr;
+
+        /* len[] are in bytes */
+        len[j] = reqs[j].nelems * lead[reqs[j].lead_off].varp->xsz;
+
+        /* coalesce the off-len pairs */
+        if (off[i] + len[i] == off[j])
+            len[i] += len[j];
+        else {
+            i++;
+            if (i < j) {
+                off[i] = off[j];
+                len[i] = len[j];
+            }
+        }
+    }
+
+    if (i + 1 < num_reqs) {
+        num_reqs = i + 1;
+        off = (MPI_Offset*)NCI_Realloc(off, sizeof(MPI_Offset) * num_reqs);
+#ifdef HAVE_MPI_LARGE_COUNT
+        len = (MPI_Offset*)NCI_Realloc(len, sizeof(MPI_Offset) * num_reqs);
+#else
+        len = (int*)       NCI_Realloc(len, sizeof(int)        * num_reqs);
+#endif
+    }
+
+    flat_btype->count = num_reqs;
+    flat_btype->off   = off;
+    flat_btype->len   = len;
+
+    if (num_reqs == 1) {
+        flat_btype->type = MPI_BYTE;
     }
     else {
+        flat_btype->type = MPI_DATATYPE_NULL;
+        *buf = NULL; /* flat_btype->type will be constructed using MPI_BOTTOM */
+    }
+    return err;
+}
+#else
+{
+    int i, j, err, mpireturn, status=NC_NOERR;
+    NC_lead_req *lead;
+    MPI_Aint addr;
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Count *disps, *blens;
+#else
+    MPI_Aint *disps;
+    int *blens;
+#endif
+
+    if (num_reqs == 0) {
+        flat_btype->type  = MPI_BYTE;
+        flat_btype->count = 0;
+        return NC_NOERR;
+    }
+
+#ifdef HAVE_MPI_LARGE_COUNT
+    disps = (MPI_Count*)NCI_Malloc(sizeof(MPI_Count) * num_reqs);
+    blens = (MPI_Count*)NCI_Malloc(sizeof(MPI_Count) * num_reqs);
+#else
+    disps = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint)  * num_reqs);
+    blens = (int*)      NCI_Malloc(sizeof(int)       * num_reqs);
+#endif
+
+    /* set disps[0] and blens[0] */
+    MPI_Get_address(reqs[0].xbuf, &addr); /* displacement uses MPI_BOTTOM */
+    disps[0] = addr;
+
+    lead = (fIsSet(reqMode, NC_REQ_WR)) ? ncp->put_lead_list
+                                        : ncp->get_lead_list;
+
+    /* blens[] are in bytes */
+    blens[0] = reqs[0].nelems * lead[reqs[0].lead_off].varp->xsz;
+    *buf = lead[reqs[0].lead_off].xbuf;
+
+    for (i=0, j=1; j<num_reqs; j++) {
+        /* displacement uses MPI_BOTTOM */
+        MPI_Get_address(reqs[j].xbuf, &addr);
+        disps[j] = addr;
+
+        /* blens[] are in bytes */
+        blens[j] = reqs[j].nelems * lead[reqs[j].lead_off].varp->xsz;
+
+        /* coalesce the disps-blens pairs */
+        if (disps[i] + blens[i] == disps[j])
+            blens[i] += blens[j];
+        else {
+            i++;
+            if (i < j) {
+                disps[i] = disps[j];
+                blens[i] = blens[j];
+            }
+        }
+    }
+
+    if (i + 1 < num_reqs) {
+        num_reqs = i + 1;
+#ifdef HAVE_MPI_LARGE_COUNT
+        disps = (MPI_Count*)NCI_Realloc(disps, sizeof(MPI_Count) * num_reqs);
+        blens = (MPI_Count*)NCI_Realloc(blens, sizeof(MPI_Count) * num_reqs);
+#else
+        disps = (MPI_Aint*) NCI_Realloc(disps, sizeof(MPI_Aint)  * num_reqs);
+        blens = (int*)      NCI_Realloc(blens, sizeof(int)       * num_reqs);
+#endif
+    }
+
+    flat_btype->count = num_reqs;
+    flat_btype->off   = disps;
+    flat_btype->len   = blens;
+
+/* TODO: below datatype construction moves into ncmpio_read_write() */
+    if (num_reqs == 1) {
+#if 1
+flat_btype->count = blens[0];
+#endif
+        flat_btype->type = MPI_BYTE;
+    }
+    else {
+#if 1
         /* construct buffer derived datatype */
 #ifdef HAVE_MPI_LARGE_COUNT
-        mpireturn = MPI_Type_create_hindexed_c(num_reqs, blocklens, disps,
-                                               MPI_BYTE, bufType);
+        mpireturn = MPI_Type_create_hindexed_c(num_reqs, blens, disps,
+                                               MPI_BYTE, &flat_btype->type);
 #else
-        mpireturn = MPI_Type_create_hindexed(num_reqs, blocklens, disps,
-                                             MPI_BYTE, bufType);
+        mpireturn = MPI_Type_create_hindexed(num_reqs, blens, disps,
+                                             MPI_BYTE, &flat_btype->type);
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, "MPI_Type_create_hindexed");
             /* return the first encountered error if there is any */
             if (status == NC_NOERR) status = err;
 
-            *bufType = MPI_BYTE;
-            *bufLen  = 0;
+            flat_btype->type = MPI_BYTE;
+            flat_btype->count = 0;
         }
         else {
-            MPI_Type_commit(bufType);
-#ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Count typeSize;
-            MPI_Type_size_c(*bufType, &typeSize);
-#else
-            int typeSize;
-            MPI_Type_size(*bufType, &typeSize);
-#endif
-            assert(typeSize == *bufLen);
-            *bufLen = 1;
+            MPI_Type_commit(&flat_btype->type);
+flat_btype->count = 1;
         }
-        *buf = NULL; /* bufType is constructed using MPI_BOTTOM */
+#endif
+        *buf = NULL; /* flat_btype->type is constructed using MPI_BOTTOM */
     }
 
-    NCI_Free(blocklens);
+#if 1
+    NCI_Free(blens);
     NCI_Free(disps);
-
+#endif
     return status;
 }
+#endif
 
 /*----< ina_collect_md() >---------------------------------------------------*/
 /* Within each intra-node aggregation group, the aggregator collects request
@@ -1379,8 +1483,7 @@ int ina_put(NC           *ncp,
             MPI_Offset   *offsets,
             int          *lengths,
 #endif
-            MPI_Offset    bufCount,  /* number of user buffer data types */
-            MPI_Datatype  bufType,   /* user buffer data type */
+            PNCIO_Flat_list flat_btype,
             void         *buf)       /* user buffer */
 {
     int i, j, err, mpireturn, status=NC_NOERR, nreqs, pack_buf;
@@ -1388,6 +1491,9 @@ int ina_put(NC           *ncp,
     MPI_Aint npairs=0, *meta=NULL, *count=NULL;
     MPI_Offset buf_count=0;
     MPI_Request *req=NULL;
+
+    MPI_Offset    bufCount = flat_btype.count;  /* number of user buffer data types */
+    MPI_Datatype  bufType = flat_btype.type;   /* user buffer data type */
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double endT, startT = MPI_Wtime();
@@ -1873,8 +1979,7 @@ int ina_get(NC           *ncp,
             MPI_Offset   *offsets,
             int          *lengths,
 #endif
-            MPI_Offset    bufCount, /* number of user buffer data types */
-            MPI_Datatype  bufType,  /* user buffer data type */
+            PNCIO_Flat_list flat_btype,
             void         *buf)      /* user buffer */
 {
     int i, j, err, mpireturn, status=NC_NOERR, nreqs;
@@ -1883,6 +1988,9 @@ int ina_get(NC           *ncp,
     MPI_Aint npairs=0, max_npairs, *meta=NULL, *count=NULL;
     MPI_Offset buf_count=0;
     MPI_Request *req=NULL;
+
+    MPI_Offset    bufCount = flat_btype.count;  /* number of user buffer data types */
+    MPI_Datatype  bufType = flat_btype.type;   /* user buffer data type */
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double endT, startT = MPI_Wtime();
@@ -2440,7 +2548,7 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
 {
     int err, status=NC_NOERR, is_incr=1;
     void *buf=NULL;
-    MPI_Aint bufLen, num_pairs;
+    MPI_Aint num_pairs;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *offsets=NULL, *lengths=NULL;
 #else
@@ -2528,17 +2636,14 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
     /* construct user buffer datatype, bufType.
      * bufLen is the number of bufType.
      */
-    if (num_reqs > 0) {
-        err = construct_buf_type(ncp, reqMode, num_reqs, reqs, &bufLen,
-                                 &bufType, &buf);
+    PNCIO_Flat_list flat_btype;
+    err = flat_buf_type(ncp, reqMode, num_reqs, reqs, &flat_btype, &buf);
+    if (status == NC_NOERR) status = err;
+
 // printf("%s at %d: bufLen=%ld bufType=%s buf=%s\n",__func__,__LINE__, bufLen, (bufType==MPI_BYTE)?"MPI_BYTE":"NOT MPI_BYTE",(buf==NULL)?"NULL":"NOT NULL");
-        if (status == NC_NOERR) status = err;
         /* If buf is non-contiguous, bufLen will be set to 1, buf to NULL, and
          * bufType is a derived datatype constructed using MPI_BOTTOM.
          */
-    }
-    else
-        bufLen = 0;
 
     if (req_list != NULL)
         /* All metadata in req_list have been used to construct bufType and
@@ -2564,13 +2669,13 @@ ncmpio_intra_node_aggregation_nreqs(NC         *ncp,
 // printf("%s at %d: is_incr=%d\n",__func__,__LINE__, is_incr);
     /* perform intra-node aggregation */
     if (fIsSet(reqMode, NC_REQ_WR)) {
-        err = ina_put(ncp, is_incr, num_pairs, offsets, lengths, bufLen,
-                      bufType, buf);
+        err = ina_put(ncp, is_incr, num_pairs, offsets, lengths, flat_btype,
+                      buf);
         if (status == NC_NOERR) status = err;
     }
     else {
-        err = ina_get(ncp, is_incr, num_pairs, offsets, lengths, bufLen,
-                      bufType, buf);
+        err = ina_get(ncp, is_incr, num_pairs, offsets, lengths, flat_btype,
+                      buf);
         if (status == NC_NOERR) status = err;
     }
 
@@ -2639,6 +2744,12 @@ ncmpio_intra_node_aggregation(NC               *ncp,
     double timing = MPI_Wtime();
 #endif
 
+    /* bufType may not be contiguous and need to be flattened */
+
+// int ispredef; PNCIO_Type_ispredef(bufType, &ispredef); assert(ispredef == 1);
+// int is_contig; PNCIO_Datatype_iscontig(bufType, &is_contig); assert(is_contig == 1);
+
+
 // printf("%s at %d: buf=%s bufType=%s\n",__func__,__LINE__, (buf==NULL)?"NULL":"NOT NULL", (bufType==MPI_BYTE)?"MPI_BYTE":(bufType==MPI_DATATYPE_NULL)?"MPI_DATATYPE_NULL":"OTHER");
     if (bufCount == 0 || buf == NULL) {
         /* This is a zero-length request. When in collective data mode, this
@@ -2690,15 +2801,19 @@ ncmpio_intra_node_aggregation(NC               *ncp,
         ncp->num_nonaggrs = 1;
     }
 
+    PNCIO_Flat_list flat_btype;
+    flat_btype.count = bufCount;
+    flat_btype.type = bufType;
+
     /* perform intra-node aggregation */
     if (fIsSet(reqMode, NC_REQ_WR)) {
-        err = ina_put(ncp, is_incr, num_pairs, offsets, lengths, bufCount,
-                      bufType, buf);
+        err = ina_put(ncp, is_incr, num_pairs, offsets, lengths, flat_btype,
+                      buf);
         if (status == NC_NOERR) status = err;
     }
     else {
-        err = ina_get(ncp, is_incr, num_pairs, offsets, lengths, bufCount,
-                      bufType, buf);
+        err = ina_get(ncp, is_incr, num_pairs, offsets, lengths, flat_btype,
+                      buf);
         if (status == NC_NOERR) status = err;
     }
 

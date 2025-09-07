@@ -141,6 +141,27 @@ typedef struct {
 } PNCIO_Hints;
 
 typedef struct {
+    MPI_Datatype type;      /* MPI derived datatype */
+    MPI_Count    count;     /* number of off-len pairs (blocks) */
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Offset  *off;       /* array of byte offsets of each block */
+    MPI_Offset  *len;       /* array of contiguous block lengths (bytes) */
+#else
+    MPI_Offset  *off;       /* array of byte offsets of each block */
+    int         *len;       /* array of contiguous block lengths (bytes) */
+#endif
+    MPI_Count    rnd;       /* number of whole type already consumed */
+    MPI_Count    idx;       /* index of off-len pairs consumed so far */
+    MPI_Aint     rem;       /* remaining amount in the pair to be consumed */
+    MPI_Aint     extent;    /* data type extent */
+    int          is_contig; /* for fileview, whether file access is contiguous
+                             * for buffer, whether user buffer is contiguous
+                             * Note this is not whether filetype or buftype
+                             * is contiguous or not.
+                             */
+} PNCIO_Flat_list;
+
+typedef struct {
     MPI_Count count;            /* no. of contiguous blocks */
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *indices;   /* array of byte offsets of each block */
