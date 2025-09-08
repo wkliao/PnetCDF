@@ -2746,8 +2746,10 @@ ncmpio_intra_node_aggregation(NC               *ncp,
 
     /* bufType may not be contiguous and need to be flattened */
 
+/* If all bufType passed to this subroutine is contiguous, then we do not need to flatten it at all.
+ */
 // int ispredef; PNCIO_Type_ispredef(bufType, &ispredef); assert(ispredef == 1);
-// int is_contig; PNCIO_Datatype_iscontig(bufType, &is_contig); assert(is_contig == 1);
+int is_contig; PNCIO_Datatype_iscontig(bufType, &is_contig); assert(is_contig == 1);
 
 
 // printf("%s at %d: buf=%s bufType=%s\n",__func__,__LINE__, (buf==NULL)?"NULL":"NOT NULL", (bufType==MPI_BYTE)?"MPI_BYTE":(bufType==MPI_DATATYPE_NULL)?"MPI_DATATYPE_NULL":"OTHER");

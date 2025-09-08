@@ -783,12 +783,12 @@ ncmpio_unpack_xbuf(int           fmt,   /* NC_FORMAT_CDF2 NC_FORMAT_CDF5 etc. */
                 break;
         }
         /* The only error codes returned from the above switch block are
-	 * NC_EBADTYPE or NC_ERANGE. Bad varp->xtype and itype have been sanity
-	 * checked at the dispatchers, so NC_EBADTYPE is not possible. Thus,
-	 * the only possible error is NC_ERANGE.  NC_ERANGE can be caused by
-	 * one or more elements of buf that is out of range representable by
-	 * the external data type, it is not considered a fatal error. This
-	 * request must continue to finish.
+	     * NC_EBADTYPE or NC_ERANGE. Bad varp->xtype and itype have been sanity
+	     * checked at the dispatchers, so NC_EBADTYPE is not possible. Thus,
+	     * the only possible error is NC_ERANGE.  NC_ERANGE can be caused by
+	     * one or more elements of buf that is out of range representable by
+	     * the external data type, it is not considered a fatal error. This
+	     * request must continue to finish.
          */
     }
     else {
@@ -838,30 +838,36 @@ ncmpio_unpack_xbuf(int           fmt,   /* NC_FORMAT_CDF2 NC_FORMAT_CDF5 etc. */
         MPI_Type_free(&imaptype);
     }
 
-    /* unpacked lbuf into buf based on buftype -----------------------------*/
-    if (!buftype_is_contig && lbuf != buf) {
-        /* no need unpack when buftype is used in MPI_File_read (lbuf == buf) */
+    /* Unpacked lbuf into buf based on buftype. Note no need to unpack when
+     * buftype is used in MPI_File_read, i.e. lbuf == buf.
+     */
+    if (lbuf != buf) {
+        if (buftype_is_contig)
+            memcpy(buf, lbuf, ibuf_size);
+        else { /* buftye is not contiguous */
 #ifdef HAVE_MPI_LARGE_COUNT
-        MPI_Count position = 0;
-        mpireturn = MPI_Unpack_c(lbuf, (MPI_Count)ibuf_size, &position, buf,
-                     (MPI_Count)bufcount, buftype, MPI_COMM_SELF);
-        if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, "MPI_Unpack_c");
-#else
-        if (bufcount > NC_MAX_INT) {
-            if (err == NC_NOERR)
-                DEBUG_ASSIGN_ERROR(err, NC_EINTOVERFLOW)
-        }
-        else {
-            int position = 0;
-            if (ibuf_size > NC_MAX_INT)
-                DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
-            mpireturn = MPI_Unpack(lbuf, (int)ibuf_size, &position, buf,
-                                   (int)bufcount, buftype, MPI_COMM_SELF);
+            MPI_Count position = 0;
+            mpireturn = MPI_Unpack_c(lbuf, (MPI_Count)ibuf_size, &position,
+                                     buf, (MPI_Count)bufcount, buftype,
+                                     MPI_COMM_SELF);
             if (mpireturn != MPI_SUCCESS)
-                return ncmpii_error_mpi2nc(mpireturn, "MPI_Unpack");
-        }
+                return ncmpii_error_mpi2nc(mpireturn, "MPI_Unpack_c");
+#else
+            if (bufcount > NC_MAX_INT) {
+                if (err == NC_NOERR)
+                    DEBUG_ASSIGN_ERROR(err, NC_EINTOVERFLOW)
+            }
+            else {
+                int position = 0;
+                if (ibuf_size > NC_MAX_INT)
+                    DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
+                mpireturn = MPI_Unpack(lbuf, (int)ibuf_size, &position, buf,
+                                       (int)bufcount, buftype, MPI_COMM_SELF);
+                if (mpireturn != MPI_SUCCESS)
+                    return ncmpii_error_mpi2nc(mpireturn, "MPI_Unpack");
+            }
 #endif
+        }
     }
     if (free_cbuf) NCI_Free(cbuf);
     if (free_lbuf) NCI_Free(lbuf);
