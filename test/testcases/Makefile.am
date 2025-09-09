@@ -106,6 +106,10 @@ check_PROGRAMS = file_create_open \
                  iput_all_kinds \
                  tst_version
 
+if ENABLE_COMPRESSION
+  check_PROGRAMS += tst_chunk_nonblocking
+endif
+
 M4_SRCS      = put_all_kinds.m4 \
                erange_fill.m4 \
                tst_vars_fill.m4 \
