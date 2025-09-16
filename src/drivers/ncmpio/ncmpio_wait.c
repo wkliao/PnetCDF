@@ -937,16 +937,14 @@ req_commit(NC  *ncp,
 #if 1
     /* carry out writes and reads separately (writes first) */
     if (do_write > 0) {
-        err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_WR,
-                                                  num_w_reqs, put_list,
-                                                  newnumrecs);
+        err = ncmpio_ina_nreqs(ncp, NC_REQ_WR, num_w_reqs, put_list,
+                               newnumrecs);
         put_list = NULL; /* has been freed in the above call */
     }
 
     if (do_read > 0) {
-        err = ncmpio_intra_node_aggregation_nreqs(ncp, NC_REQ_RD,
-                                                  num_r_reqs, get_list,
-                                                  newnumrecs);
+        err = ncmpio_ina_nreqs(ncp, NC_REQ_RD, num_r_reqs, get_list,
+                               newnumrecs);
         get_list = NULL; /* has been freed in the above call */
     }
 #else
@@ -2031,7 +2029,14 @@ req_aggregation(NC     *ncp,
     }
 
     /* call MPI_File_read_at_all/MPI_File_write_at_all */
-    err = ncmpio_read_write(ncp, rw_flag, 0, buf_len, buf_type, buf);
+    // err = ncmpio_read_write(ncp, rw_flag, 0, buf_len, buf_type, buf);
+
+assert(0);
+/* This subroutine is no longer used.
+    PNCIO_Flat_list buf_view;
+    err = ncmpio_read_write(ncp, rw_flag, 0, buf_view, buf);
+*/
+
     if (status == NC_NOERR) status = err;
 
     if (buf_type != MPI_BYTE) MPI_Type_free(&buf_type);
@@ -2365,7 +2370,10 @@ mpi_io:
     }
 
     /* call MPI_File_read_at_all/MPI_File_write_at_all */
-    err = ncmpio_read_write(ncp, rw_flag, 0, buf_count, buf_type, buf);
+    // err = ncmpio_read_write(ncp, rw_flag, 0, buf_count, buf_type, buf);
+    assert(0);
+    PNCIO_Flat_list buf_view;
+    err = ncmpio_read_write(ncp, rw_flag, 0, buf_view, buf);
     if (status == NC_NOERR) status = err;
 
     if (buf_type != MPI_BYTE) MPI_Type_free(&buf_type);

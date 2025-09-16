@@ -231,12 +231,18 @@ move_file_block(NC         *ncp,
                 chunk_size = 0;
         }
 
+        PNCIO_Flat_list buf_view;
+        buf_view.type = MPI_BYTE;
+        buf_view.size = chunk_size;
+        buf_view.count = 1;
+        buf_view.is_contig = 1;
+
         /* read from file at off_from for amount of chunk_size */
         rlen = 0;
         if (do_coll)
-            rlen = ncmpio_file_read_at_all(ncp, off_from, buf, chunk_size, MPI_BYTE);
+            rlen = ncmpio_file_read_at_all(ncp, off_from, buf, buf_view);
         else if (chunk_size > 0)
-            rlen = ncmpio_file_read_at(ncp, off_from, buf, chunk_size, MPI_BYTE);
+            rlen = ncmpio_file_read_at(ncp, off_from, buf, buf_view);
         if (status == NC_NOERR && rlen < 0) status = (int)rlen;
 
         /* to prevent from one rank's write run faster than other's read */
@@ -245,11 +251,12 @@ move_file_block(NC         *ncp,
         /* Write to new location at off_to for amount of rlen, the actual read
          * amount is rlen.
          */
+        buf_view.size = rlen;
         wlen = 0;
         if (do_coll && rlen > 0)
-            wlen = ncmpio_file_write_at_all(ncp, off_to, buf, rlen, MPI_BYTE);
+            wlen = ncmpio_file_write_at_all(ncp, off_to, buf, buf_view);
         else if (rlen > 0)
-            wlen = ncmpio_file_write_at(ncp, off_to, buf, rlen, MPI_BYTE);
+            wlen = ncmpio_file_write_at(ncp, off_to, buf, buf_view);
         if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
         /* move on to the next round */
@@ -542,8 +549,11 @@ write_NC(NC *ncp)
 {
     int status=NC_NOERR, is_coll=0;
     MPI_Offset i, header_wlen, ntimes;
+    PNCIO_Flat_list buf_view;
 
     assert(!NC_readonly(ncp));
+
+    buf_view.is_contig = 1;
 
     /* Depending on whether NC_HCOLL is set, writing file header can be done
      * through either MPI collective or independent write call.
@@ -618,25 +628,29 @@ write_NC(NC *ncp)
         offset = 0;
         remain = header_wlen;
         buf_ptr = buf;
+        buf_view.type = MPI_BYTE;
+        buf_view.count = 1;
         for (i=0; i<ntimes; i++) {
-            int bufCount = (int) MIN(remain, NC_MAX_INT);
             MPI_Offset wlen;
+            buf_view.size = MIN(remain, NC_MAX_INT);
             if (is_coll)
-                wlen = ncmpio_file_write_at_all(ncp, offset, buf_ptr, bufCount, MPI_BYTE);
+                wlen = ncmpio_file_write_at_all(ncp, offset, buf_ptr, buf_view);
             else
-                wlen = ncmpio_file_write_at(ncp, offset, buf_ptr, bufCount, MPI_BYTE);
+                wlen = ncmpio_file_write_at(ncp, offset, buf_ptr, buf_view);
             if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
-            offset  += bufCount;
-            buf_ptr += bufCount;
-            remain  -= bufCount;
+            offset  += buf_view.size;
+            buf_ptr += buf_view.size;
+            remain  -= buf_view.size;
         }
         NCI_Free(buf);
     }
     else if (is_coll) {
         /* other processes participate the collective call */
+        buf_view.type = MPI_DATATYPE_NULL;
+        buf_view.size = 0;
         for (i=0; i<ntimes; i++)
-            ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE);
+            ncmpio_file_write_at_all(ncp, 0, NULL, buf_view);
     }
 
 fn_exit:

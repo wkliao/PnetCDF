@@ -181,7 +181,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
          * ncp->node_ids[] will be modified to contain the nodes IDs of
          *     intra-node aggregators only, which will be passed to adio_fh.
          */
-        err = ncmpio_intra_node_aggr_init(ncp);
+        err = ncmpio_ina_init(ncp);
         if (err != NC_NOERR) return err;
 
         /* As non-aggregators will not perform any file I/O, we now can replace

@@ -655,27 +655,27 @@ ncmpio_calc_start_end(const NC *ncp, const NC_var *varp,
 
 /* Begin defined in ncmpio_file_io.c ----------------------------------------*/
 extern MPI_Offset
-ncmpio_file_read_at(NC *ncp, MPI_Offset offset, void *buf, MPI_Offset count,
-                    MPI_Datatype buftype);
+ncmpio_file_read_at(NC *ncp, MPI_Offset offset, void *buf,
+                    PNCIO_Flat_list buf_view);
 
 extern MPI_Offset
-ncmpio_file_read_at_all(NC *ncp, MPI_Offset offset, void *buf, MPI_Offset count,
-                    MPI_Datatype buftype);
+ncmpio_file_read_at_all(NC *ncp, MPI_Offset offset, void *buf,
+                    PNCIO_Flat_list buf_view);
 
 extern MPI_Offset
 ncmpio_file_write_at(NC *ncp, MPI_Offset offset, const void *buf,
-                    MPI_Offset count, MPI_Datatype  buftype);
+                    PNCIO_Flat_list buf_view);
 
 extern MPI_Offset
 ncmpio_file_write_at_all(NC *ncp, MPI_Offset offset, const void *buf,
-                    MPI_Offset count, MPI_Datatype buftype);
+                    PNCIO_Flat_list buf_view);
 
 extern int
 ncmpio_getput_zero_req(NC *ncp, int rw_flag);
 
 extern int
 ncmpio_read_write(NC *ncp, int rw_flag, MPI_Offset offset,
-                  MPI_Offset buf_count, MPI_Datatype buf_type, void *buf);
+                  PNCIO_Flat_list flat_btype, void *buf);
 
 extern int
 ncmpio_file_close(NC *ncp);
@@ -702,16 +702,14 @@ ncmpio_file_open(NC *ncp, MPI_Comm comm, const char *path, int omode,
 
 /* Begin defined in ncmpio_intranode.c --------------------------------------*/
 extern int
-ncmpio_intra_node_aggr_init(NC *ncp);
+ncmpio_ina_init(NC *ncp);
 
 extern int
-ncmpio_intra_node_aggregation_nreqs(NC *ncp, int mode, int num_reqs,
-                                    NC_req *put_list, MPI_Offset newnumrecs);
+ncmpio_ina_nreqs(NC *ncp, int mode, int num_reqs, NC_req *put_list,
+                 MPI_Offset newnumrecs);
 extern int
-ncmpio_intra_node_aggregation(NC *ncp, int mode, NC_var *varp,
-                              const MPI_Offset *start, const MPI_Offset *count,
-                              const MPI_Offset *stride, MPI_Offset bufCount,
-                              MPI_Datatype bufType, void *buf);
-
+ncmpio_ina_req(NC *ncp, int mode, NC_var *varp, const MPI_Offset *start,
+               const MPI_Offset *count, const MPI_Offset *stride,
+               MPI_Offset nbytes, void *buf);
 
 #endif /* H_NC */

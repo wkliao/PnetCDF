@@ -56,7 +56,7 @@ getput_vard(NC               *ncp,
     int mpireturn, status=NC_NOERR, err=NC_NOERR, xtype_is_contig=1;
     int el_size, buftype_is_contig=0, need_swap_back_buf=0;
     int need_convert=0, need_swap=0;
-    MPI_Offset nelems=0, fnelems=0, bnelems=0, offset=0;
+    MPI_Offset fnelems=0, bnelems=0, offset=0;
     MPI_Datatype etype=MPI_DATATYPE_NULL, xtype=MPI_BYTE;
     MPI_Offset filetype_size=0;
 #ifdef HAVE_MPI_TYPE_SIZE_C
@@ -174,7 +174,7 @@ getput_vard(NC               *ncp,
         bnelems = bufcount;
     }
     else {
-        /* find the element type of filetype. ncmpii_dtype_decode() checks
+        /* find the element type of buftype. ncmpii_dtype_decode() checks
          * NC_EMULTITYPES */
         err = ncmpii_dtype_decode(buftype, &etype, &el_size, &bnelems, NULL,
                                   &buftype_is_contig);
@@ -218,8 +218,8 @@ getput_vard(NC               *ncp,
             }
         }
 
-        if (!need_convert &&
-            (!need_swap || (can_swap_in_place && buftype_is_contig))) {
+        if (!need_convert && buftype_is_contig &&
+            (!need_swap || can_swap_in_place)) {
             /* reuse buftype, bufcount, buf in later MPI file write */
             xbuf = buf;
             if (need_swap) {
@@ -250,7 +250,7 @@ getput_vard(NC               *ncp,
         }
     }
     else { /* read request */
-        if (!need_convert && (!need_swap || buftype_is_contig)) {
+        if (!need_convert && !need_swap && buftype_is_contig) {
             /* reuse buftype, bufcount, buf in later MPI file read */
             xbuf = buf;
         }
@@ -263,18 +263,7 @@ getput_vard(NC               *ncp,
             xtype_is_contig = 1;
         }
     }
-
-    /* Set nelems and xtype which will be used in MPI read/write */
-    if (buf != xbuf) {
-        /* xbuf is a malloc-ed contiguous buffer */
-        nelems = bnelems;
-    }
-    else {
-        /* we can safely use bufcount and buftype in MPI File read/write.
-         * Note buftype may be noncontiguous. */
-        nelems = bufcount;
-        xtype = buftype;
-    }
+assert(xtype_is_contig == 1);
 
     /* set fileview's displacement to the variable's starting file offset */
     offset = varp->begin;
@@ -300,7 +289,6 @@ err_check:
          */
         offset   = 0;
         bufcount = 0;
-        nelems   = 0;
         filetype_size = 0;
         filetype = MPI_BYTE;
         buftype  = MPI_BYTE;
@@ -330,30 +318,37 @@ err_check:
 #endif
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
-        nelems = 0; /* skip this request */
+        filetype_size = 0; /* skip this request */
     }
 
 #if 1
+    /* vard API is only supported when using MPI-IO, not PNCIO */
     int coll_indep = NC_REQ_INDEP;
     if (ncp->nprocs > 1 && !fIsSet(ncp->flags, NC_MODE_INDEP))
         coll_indep = NC_REQ_COLL;
+
+    PNCIO_Flat_list  buf_view;
+    buf_view.type = MPI_BYTE;
+    buf_view.size = filetype_size;
+    buf_view.count = 1;
+    buf_view.is_contig = 1;
 
     if (fIsSet(reqMode, NC_REQ_RD)) {
         MPI_Offset rlen;
 
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL)
-            rlen = ncmpio_file_read_at_all(ncp, 0, xbuf, nelems, xtype);
+            rlen = ncmpio_file_read_at_all(ncp, 0, xbuf, buf_view);
         else
-            rlen = ncmpio_file_read_at(ncp, 0, xbuf, nelems, xtype);
+            rlen = ncmpio_file_read_at_all(ncp, 0, xbuf, buf_view);
         if (status == NC_NOERR && rlen < 0) status = (int)rlen;
     }
     else {
         MPI_Offset wlen;
 
         if (ncp->nprocs > 1 && coll_indep == NC_REQ_COLL)
-            wlen = ncmpio_file_write_at_all(ncp, 0, xbuf, nelems, xtype);
+            wlen = ncmpio_file_write_at_all(ncp, 0, xbuf, buf_view);
         else
-            wlen = ncmpio_file_write_at(ncp, 0, xbuf, nelems, xtype);
+            wlen = ncmpio_file_write_at(ncp, 0, xbuf, buf_view);
         if (status == NC_NOERR && wlen < 0) status = (int)wlen;
     }
 #else

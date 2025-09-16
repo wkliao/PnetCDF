@@ -49,8 +49,8 @@
     }
 
 
-void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
-                           MPI_Datatype datatype, MPI_Offset offset,
+void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf,
+                           PNCIO_Flat_list buf_view, MPI_Offset offset,
                            MPI_Status * status, int *error_code)
 {
 
@@ -64,9 +64,9 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
     MPI_Count n_etypes_in_filetype;
     MPI_Offset n_filetypes, etype_in_filetype, st_n_filetypes, size_in_filetype;
     MPI_Offset abs_off_in_filetype = 0, new_frd_size, frd_size = 0, st_frd_size;
-    MPI_Count filetype_size, buftype_size, partial_read;
+    MPI_Count filetype_size, partial_read;
     MPI_Aint lb, filetype_extent, buftype_extent;
-    int buf_count, buftype_is_contig, filetype_is_contig;
+    int buf_count, filetype_is_contig;
     MPI_Offset userbuf_off, req_len, sum;
     MPI_Offset off, req_off, disp, end_offset = 0, readbuf_off, start_off;
     char *readbuf, *tmp_buf, *value;
@@ -75,13 +75,14 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf, MPI_Aint count,
     MPI_Status status1;
     static char myname[] = "PNCIO_GEN_ReadStrided";
 
+printf("%s at %d:\n",__func__,__LINE__);
+
     if (fd->hints->ds_read == PNCIO_HINT_DISABLE) {
         /* if user has disabled data sieving on reads, use naive
          * approach instead.
          */
-        PNCIO_GEN_ReadStrided_naive(fd,
-                                    buf,
-                                    count, datatype, offset, status, error_code);
+        PNCIO_GEN_ReadStrided_naive(fd, buf, buf_view, offset, status,
+                                    error_code);
         return;
     }
 
@@ -100,9 +101,9 @@ assert(fd->filetype == MPI_DATATYPE_NULL);
             filetype_size += fd->flat_file.blocklens[m];
         if (fd->flat_file.count > 0) {
             m = fd->flat_file.count - 1;
-            filetype_extent = fd->flat_file.indices[0]
-                            + fd->flat_file.blocklens[0]
-                            - fd->flat_file.indices[m];
+            filetype_extent = fd->flat_file.indices[m]
+                            + fd->flat_file.blocklens[m]
+                            - fd->flat_file.indices[0];
         }
         else
             filetype_extent = 0;
@@ -129,6 +130,8 @@ assert(fd->filetype == MPI_DATATYPE_NULL);
 // printf("%s at %d: filetype_is_contig=%d filetype_size=%lld filetype_extent=%ld\n",__func__,__LINE__, filetype_is_contig,filetype_size,filetype_extent);
 
     }
+else assert(0);
+/*
     else if (fd->filetype == MPI_BYTE) {
         filetype_is_contig = 1;
         filetype_size = 1;
@@ -144,15 +147,14 @@ assert(fd->filetype == MPI_DATATYPE_NULL);
         }
         MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
     }
+*/
 
-    PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
-    MPI_Type_size_x(datatype, &buftype_size);
-    MPI_Type_get_extent(datatype, &lb, &buftype_extent);
+assert(filetype_is_contig == 0);
 
-/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
-assert(buftype_is_contig == 1);
+    if (buf_view.is_contig) buftype_extent = buf_view.size;
+    else buftype_extent = buf_view.off[buf_view.count-1] + buf_view.len[buf_view.count-1] - buf_view.off[0];
 
-    bufsize = buftype_size * count;
+    bufsize = buf_view.size;
 
 /* get max_bufsize from the info object. */
 
@@ -162,11 +164,20 @@ assert(buftype_is_contig == 1);
     NCI_Free(value);
 
 
-    if (!buftype_is_contig && filetype_is_contig) {
+    PNCIO_Flatlist_node flat_tmp;
+    flat_buf = &flat_tmp;
+        flat_buf->count = buf_view.count;
+        flat_buf->indices = buf_view.off;
+        flat_buf->blocklens = buf_view.len;
+        flat_buf->lb_idx = 0;
+        flat_buf->ub_idx = 0;
+        flat_buf->refct = 0;
+        flat_buf->flag = 0;
+
+    if (!buf_view.is_contig && filetype_is_contig) {
+assert(0);
 
 /* noncontiguous in memory, contiguous in file. */
-
-        flat_buf = PNCIO_Flatten_and_find(datatype);
 
         off = fd->disp + offset;
 
@@ -185,14 +196,12 @@ assert(buftype_is_contig == 1);
         if (*error_code != MPI_SUCCESS)
             return;
 
-        for (j = 0; j < count; j++) {
-            for (i = 0; i < flat_buf->count; i++) {
+        for (i = 0; i < flat_buf->count; i++) {
                 userbuf_off = (MPI_Offset) j * buftype_extent + flat_buf->indices[i];
                 req_off = off;
                 req_len = flat_buf->blocklens[i];
                 BUFFERED_READ
                 off += flat_buf->blocklens[i];
-            }
         }
 
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
@@ -229,15 +238,15 @@ assert(buftype_is_contig == 1);
         /* Wei-keng Liao: read request is within a single flat_file contig
          * block e.g. with subarray types that actually describe the whole
          * array */
-        if (buftype_is_contig && bufsize <= frd_size) {
+        if (buf_view.is_contig && bufsize <= frd_size) {
             /* a count of bytes can overflow. operate on original type instead */
-            PNCIO_ReadContig(fd, buf, count, datatype, offset, status,
+            PNCIO_ReadContig(fd, buf, buf_view.size, MPI_BYTE, offset, status,
                             error_code);
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-            MPI_Status_set_elements_x(status, datatype, count);
+            MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
 #else
-            MPI_Status_set_elements(status, datatype, count);
+            MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
 #endif
             return;
         }
@@ -273,7 +282,7 @@ assert(buftype_is_contig == 1);
         readbuf_len = 0;
         readbuf = (char *) NCI_Malloc(max_bufsize);
 
-        if (buftype_is_contig && !filetype_is_contig) {
+        if (buf_view.is_contig && !filetype_is_contig) {
 
 /* contiguous in memory, noncontiguous in file. should be the most
    common case. */
@@ -317,7 +326,7 @@ assert(buftype_is_contig == 1);
         } else {
 /* noncontiguous in memory as well as in file */
 
-            flat_buf = PNCIO_Flatten_and_find(datatype);
+            // flat_buf = PNCIO_Flatten_and_find(datatype);
 
             k = num = buf_count = 0;
             i_offset = flat_buf->indices[0];
@@ -387,9 +396,9 @@ assert(buftype_is_contig == 1);
     }
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-    MPI_Status_set_elements_x(status, datatype, count);
+    MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
 #else
-    MPI_Status_set_elements(status, datatype, count);
+    MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
 #endif
 /* This is a temporary way of filling in status. The right way is to
    keep track of how much data was actually read and placed in buf

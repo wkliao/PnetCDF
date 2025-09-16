@@ -87,26 +87,14 @@ static
 int file_read(PNCIO_File    *fd,
               MPI_Offset    offset,
               void         *buf,
-              MPI_Offset    count,
-              MPI_Datatype  bufType,
+              PNCIO_Flat_list  buf_view,
               MPI_Status   *status)
 {
-    int err=NC_NOERR, buftype_is_contig, filetype_is_contig;
+    int err=NC_NOERR, filetype_is_contig;
     MPI_Offset off=offset;
 
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count bufType_size;
-    MPI_Type_size_c(bufType, &bufType_size);
-#else
-    int bufType_size;
-    MPI_Type_size(bufType, &bufType_size);
-#endif
-    if (bufType_size == 0) return NC_NOERR;
-
-    PNCIO_Datatype_iscontig(bufType, &buftype_is_contig);
-
-/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
-assert(buftype_is_contig == 1);
+    if (buf_view.size == 0) /* zero-sized request */
+        return NC_NOERR;
 
     /* when fd->filetype == MPI_DATATYPE_NULL, this is called from INA */
     if (fd->filetype == MPI_DATATYPE_NULL) {
@@ -116,13 +104,11 @@ assert(buftype_is_contig == 1);
         else {
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Count m, size;
-            MPI_Type_size_c(bufType, &size);
-            size *= count;
+            size = buf_view.size;
 #else
             size_t m;
             int size;
-            MPI_Type_size(bufType, &size);
-            size *= count;
+            size = buf_view.size;
 #endif
             MPI_Offset scan_sum=0;
             filetype_is_contig = 0;
@@ -164,18 +150,13 @@ assert(buftype_is_contig == 1);
     else
         PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
-// printf("%s at %d: flat_file.count=%lld buftype_is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, fd->flat_file.count, buftype_is_contig,filetype_is_contig);
+// printf("%s at %d: flat_file.count=%lld buf_view.is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, fd->flat_file.count, buf_view.is_contig,filetype_is_contig);
 
-    if (buftype_is_contig && filetype_is_contig) {
-        MPI_Aint rcount = (MPI_Aint)count * bufType_size;
-// printf("%s at %d: off=%lld rcount=%ld\n",__func__,__LINE__, off,rcount);
-
-        err = PNCIO_ReadContig(fd, buf, rcount, MPI_BYTE, off, status, NULL);
+    if (buf_view.is_contig && filetype_is_contig) {
+        err = PNCIO_ReadContig(fd, buf, buf_view.size, MPI_BYTE, off, status, NULL);
     }
     else {
-// printf("%s at %d: offset=%lld count=%lld\n",__func__,__LINE__, offset,count);
-
-        PNCIO_GEN_ReadStrided(fd, buf, count, bufType, offset, status, &err);
+        PNCIO_GEN_ReadStrided(fd, buf, buf_view, offset, status, &err);
         if (err != MPI_SUCCESS)
             err = ncmpii_error_mpi2nc(err, __func__);
         else
@@ -192,22 +173,21 @@ assert(buftype_is_contig == 1);
 int PNCIO_File_read_at(PNCIO_File    *fh,
                        MPI_Offset    offset,
                        void         *buf,
-                       MPI_Offset    count,
-                       MPI_Datatype  bufType,
+              PNCIO_Flat_list  buf_view,
                        MPI_Status   *status)
 {
     int err = NC_NOERR;
 
     assert(fh != NULL);
 
-    if (count == 0) return NC_NOERR;
+    if (buf_view.size == 0) return NC_NOERR;
 
-    if (count < 0) return NC_ENEGATIVECNT;
+    if (buf_view.size < 0) return NC_ENEGATIVECNT;
 
     /* PnetCDF has only 2 modes: read-only and read-write */
     // if (fh->access_mode & MPI_MODE_RDONLY) return NC_EPERM;
 
-    err = file_read(fh, offset, buf, count, bufType, status);
+    err = file_read(fh, offset, buf, buf_view, status);
 
     return err;
 }
@@ -220,21 +200,19 @@ int PNCIO_File_read_at(PNCIO_File    *fh,
 int PNCIO_File_read_at_all(PNCIO_File    *fh,
                            MPI_Offset    offset,
                            void         *buf,
-                           MPI_Offset    count,
-                           MPI_Datatype  bufType,
+              PNCIO_Flat_list  buf_view,
                            MPI_Status   *status)
 {
     int err, st=NC_NOERR;
 
     assert(fh != NULL);
 
-    if (count < 0) st = NC_ENEGATIVECNT;
+    if (buf_view.size < 0) st = NC_ENEGATIVECNT;
 
     /* PnetCDF has only 2 modes: read-only and read-write */
     // if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR) st = NC_EPERM;
 
-// printf("%s at %d: offset=%lld count=%lld\n",__func__,__LINE__,offset,count);
-    PNCIO_GEN_ReadStridedColl(fh, buf, count, bufType, offset, status, &err);
+    PNCIO_GEN_ReadStridedColl(fh, buf, buf_view, offset, status, &err);
     if (err != MPI_SUCCESS && st == NC_NOERR)
         st = ncmpii_error_mpi2nc(err, __func__);
 

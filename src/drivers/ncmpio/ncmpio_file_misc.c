@@ -168,7 +168,7 @@ ncmpio_begin_indep_data(void *ncdp)
         ncp->adio_fh->node_ids[0] = 0;
 
         err = PNCIO_File_open(MPI_COMM_SELF, filename, ncp->mpiomode,
-                             ncp->mpiinfo, ncp->adio_fh);
+                              ncp->mpiinfo, ncp->adio_fh);
         if (err != NC_NOERR)
             return err;
 

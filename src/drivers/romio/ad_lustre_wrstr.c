@@ -128,8 +128,7 @@
 
 void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
                                const void *buf,
-                               MPI_Offset count,
-                               MPI_Datatype buftype,
+                               PNCIO_Flat_list buf_view,
                                MPI_Offset offset,
                                MPI_Status *status,
                                int *error_code)
@@ -142,8 +141,8 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
     MPI_Offset num, size, n_filetypes, etype_in_filetype, st_n_filetypes;
     MPI_Offset abs_off_in_filetype = 0;
     MPI_Count filetype_size, buftype_size;
-    MPI_Aint lb, filetype_extent, buftype_extent;
-    int buf_count, buftype_is_contig, filetype_is_contig;
+    MPI_Aint lb, filetype_extent;
+    int buf_count, filetype_is_contig;
     MPI_Offset userbuf_off;
     MPI_Offset off, req_off, disp, end_offset = 0, writebuf_off, start_off;
     char *writebuf;
@@ -157,11 +156,13 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
      * PNCIO_WriteContig().
      */
 
+// printf("%s at %d:\n",__func__,__LINE__);
+
     if (fd->hints->ds_write == PNCIO_HINT_DISABLE) {
         /* if user has disabled data sieving on writes, use naive
          * approach instead.
          */
-        PNCIO_GEN_WriteStrided_naive(fd, buf, count, buftype, offset, status,
+        PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view, offset, status,
                                      error_code);
         return;
     }
@@ -192,26 +193,26 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
         filetype_extent = 1;
     }
 
-    PNCIO_Datatype_iscontig(buftype, &buftype_is_contig);
-    MPI_Type_size_x(buftype, &buftype_size);
-    MPI_Type_get_extent(buftype, &lb, &buftype_extent);
+    bufsize = buf_view.size;
 
-    bufsize = buftype_size * count;
+
 
     /* get striping info */
     stripe_size = fd->hints->striping_unit;
 
-// printf("%s at %d: filetype_is_contig=%d buftype_is_contig=%d offset=%lld\n",__func__,__LINE__, filetype_is_contig,buftype_is_contig,offset);
+// printf("%s at %d: filetype_is_contig=%d buf_view.is_contig=%d offset=%lld\n",__func__,__LINE__, filetype_is_contig,buf_view.is_contig,offset);
 
 
-/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
-assert(buftype_is_contig == 1);
+PNCIO_Flatlist_node tmp_buf;
+    flat_buf = &tmp_buf;
+    flat_buf->count = buf_view.count;
+    flat_buf->indices = buf_view.off;
+    flat_buf->blocklens = buf_view.len;
 
     /* Different buftype to different filetype */
-    if (!buftype_is_contig && filetype_is_contig) {
+    if (!buf_view.is_contig && filetype_is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-        flat_buf = PNCIO_Flatten_and_find(buftype);
 
         off = fd->disp + offset;
 
@@ -227,14 +228,12 @@ assert(buftype_is_contig == 1);
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, bufsize);
 
-        for (j = 0; j < count; j++) {
-            for (i = 0; i < flat_buf->count; i++) {
-                userbuf_off = (MPI_Offset) j * buftype_extent + flat_buf->indices[i];
+        for (i = 0; i < flat_buf->count; i++) {
+                userbuf_off = flat_buf->indices[i];
                 req_off = off;
                 req_len = flat_buf->blocklens[i];
                 BUFFERED_WRITE_WITHOUT_READ;
                 off += flat_buf->blocklens[i];
-            }
         }
 
         /* write the buffer out finally */
@@ -250,7 +249,7 @@ assert(buftype_is_contig == 1);
         NCI_Free(writebuf);
 
     } else {
-        /* buftype_is_contig || !filetype_is_contig */
+        /* buf_view.is_contig || !filetype_is_contig */
 
         /* noncontiguous in file */
         disp = fd->disp;
@@ -282,7 +281,7 @@ assert(buftype_is_contig == 1);
          * contig block*/
         /* this could happen, for example, with subarray types that are
          * actually fairly contiguous */
-        if (buftype_is_contig && bufsize <= fwr_size) {
+        if (buf_view.is_contig && bufsize <= fwr_size) {
             req_off = start_off;
             req_len = bufsize;
             end_offset = start_off + bufsize - 1;
@@ -301,9 +300,9 @@ assert(buftype_is_contig == 1);
                 PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-            MPI_Status_set_elements_x(status, buftype, count);
+            MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
 #else
-            MPI_Status_set_elements(status, buftype, count);
+            MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
 #endif
             NCI_Free(writebuf);
             return;
@@ -343,7 +342,7 @@ assert(buftype_is_contig == 1);
         writebuf = (char *) NCI_Malloc(stripe_size);
         memset(writebuf, -1, stripe_size);
 
-        if (buftype_is_contig && !filetype_is_contig) {
+        if (buf_view.is_contig && !filetype_is_contig) {
 
 /* contiguous in memory, noncontiguous in file. should be the most
            common case. */
@@ -386,7 +385,7 @@ assert(buftype_is_contig == 1);
             }
         } else {
 /* noncontiguous in memory as well as in file */
-            flat_buf = PNCIO_Flatten_and_find(buftype);
+            // flat_buf = PNCIO_Flatten_and_find(buftype);
 
             k = num = buf_count = 0;
             i_offset = flat_buf->indices[0];
@@ -435,8 +434,7 @@ assert(buftype_is_contig == 1);
 
                     k = (k + 1) % flat_buf->count;
                     buf_count++;
-                    i_offset = (MPI_Offset) buftype_extent *
-                        (buf_count / flat_buf->count) + flat_buf->indices[k];
+                    i_offset = flat_buf->indices[k];
                     new_bwr_size = flat_buf->blocklens[k];
                     if (size != fwr_size) {
                         off += size;
@@ -465,9 +463,9 @@ assert(buftype_is_contig == 1);
     }
 
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-    MPI_Status_set_elements_x(status, buftype, count);
+    MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
 #else
-    MPI_Status_set_elements(status, buftype, count);
+    MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
 #endif
 /* This is a temporary way of filling in status. The right way is to
     keep track of how much data was actually written by BUFFERED_WRITE. */

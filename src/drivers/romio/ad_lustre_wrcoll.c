@@ -582,7 +582,7 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fd,
 }
 
 void PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
-                                   MPI_Offset count, MPI_Datatype buftype,
+                                   PNCIO_Flat_list buf_view,
                                    MPI_Offset offset, MPI_Status *status,
                                    int *error_code)
 {
@@ -657,7 +657,7 @@ double curT = MPI_Wtime();
      *
      * PNCIO_Calc_my_off_len() performs no inter-process communication.
      */
-    PNCIO_Calc_my_off_len(fd, count, buftype, offset, &flat_fview.off,
+    PNCIO_Calc_my_off_len(fd, buf_view.size, MPI_BYTE, offset, &flat_fview.off,
                           &flat_fview.len, &start_offset, &end_offset,
                           &flat_fview.count);
     flat_fview.idx = 0;
@@ -687,6 +687,22 @@ double curT = MPI_Wtime();
      */
     flat_fview.is_contig = (flat_fview.count > 1) ? 0 : 1;
 
+// MPI_Offset count, MPI_Datatype buftype,
+#if 1
+    flat_bview.type = MPI_BYTE;
+    flat_bview.count = buf_view.count;
+    flat_bview.off = buf_view.off;
+    flat_bview.len = buf_view.len;
+    flat_bview.extent = (flat_bview.count == 0) ? 0 :
+                        (flat_bview.count == 1) ? buf_view.size :
+                        (buf_view.off[buf_view.count-1] + buf_view.len[buf_view.count-1] - buf_view.off[0]);
+    flat_bview.rnd  = 0;
+    flat_bview.idx  = 0;
+    flat_bview.rem  = (flat_bview.count == 0) ? 0 :
+                      (flat_bview.count == 1) ? buf_view.size :
+                      flat_bview.len[0];
+    flat_bview.is_contig = buf_view.is_contig;
+#else
     PNCIO_Type_ispredef(buftype, &is_btype_predef);
 
     /* flatten user buffer datatype, buftype */
@@ -740,6 +756,7 @@ double curT = MPI_Wtime();
             /* buftype extent is the same as the only length */
             flat_bview.is_contig = 1;
     }
+#endif
 
     if (fd->hints->cb_write == PNCIO_HINT_DISABLE) {
         /* collective write is explicitly disabled by user */
@@ -836,10 +853,12 @@ double curT = MPI_Wtime();
     /* If collective I/O is determined not necessary, use independent I/O */
     if (!do_collect) {
 
+/*
         if (is_btype_predef)
             NCI_Free(flat_bview.off);
+*/
 
-        if (count == 0) {
+        if (buf_view.size == 0 || buf_view.type == MPI_DATATYPE_NULL) {
             if (free_flat_fview && flat_fview.count > 0)
                 NCI_Free(flat_fview.off);
             *error_code = MPI_SUCCESS;
@@ -862,7 +881,7 @@ double curT = MPI_Wtime();
             printf("%s %d: SWITCH to PNCIO_WriteContig !!!\n",__func__,__LINE__);
 #endif
 
-            PNCIO_WriteContig(fd, buf, count, buftype, off, status, error_code);
+            PNCIO_WriteContig(fd, buf, buf_view.size, MPI_BYTE, off, status, error_code);
         } else {
             if (free_flat_fview && flat_fview.count > 0)
                 NCI_Free(flat_fview.off);
@@ -871,7 +890,7 @@ double curT = MPI_Wtime();
                    __func__,__LINE__);
 #endif
 
-            PNCIO_LUSTRE_WriteStrided(fd, buf, count, buftype, offset, status,
+            PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view, offset, status,
                                       error_code);
         }
 
@@ -990,7 +1009,7 @@ double curT = MPI_Wtime();
      */
 
     /* if this rank has data to write, then participate exchange-and-write */
-    do_ex_wr = (count > 0) ? 1 : 0;
+    do_ex_wr = (buf_view.type == MPI_DATATYPE_NULL) ? 0 : 1;
     use_alltoallw = 0;
 
 #ifdef USE_MPI_ALLTOALLW
@@ -1035,8 +1054,10 @@ double curT = MPI_Wtime();
     if (free_flat_fview && flat_fview.count > 0)
         NCI_Free(flat_fview.off);
 
+/*
     if (is_btype_predef)
         NCI_Free(flat_bview.off);
+*/
 
     /* If this collective write is followed by an independent write, it's
      * possible to have those subsequent writes on other processes race ahead
@@ -1071,9 +1092,9 @@ double curT = MPI_Wtime();
          * I/O.
          */
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-        MPI_Status_set_elements_x(status, buftype, count);
+        MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
 #else
-        MPI_Status_set_elements(status, buftype, count);
+        MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
 #endif
     }
 

@@ -322,8 +322,12 @@ hdr_len_NC_vararray(const NC_vararray *ncap,
 static int
 hdr_fetch(bufferinfo *gbp) {
     int rank, nprocs, err=NC_NOERR, mpireturn;
+    PNCIO_Flat_list buf_view;
 
     assert(gbp->base != NULL);
+
+    buf_view.count = 1;
+    buf_view.is_contig = 1;
 
     MPI_Comm_size(gbp->ncp->comm, &nprocs);
     MPI_Comm_rank(gbp->ncp->comm, &rank);
@@ -351,16 +355,19 @@ hdr_fetch(bufferinfo *gbp) {
             readLen -= slack;
         }
 
+        buf_view.type = MPI_BYTE;
+        buf_view.size = readLen;
+
         /* fileview is already entire file visible and MPI_File_read_at does
            not change the file pointer */
         if (gbp->ncp->nprocs > 1 && fIsSet(gbp->ncp->flags, NC_HCOLL))
             /* collective read */
             rlen = ncmpio_file_read_at_all(gbp->ncp, gbp->offset, readBuf,
-                                           readLen, MPI_BYTE);
+                                           buf_view);
         else
             /* independent read */
             rlen = ncmpio_file_read_at(gbp->ncp, gbp->offset, readBuf,
-                                       readLen, MPI_BYTE);
+                                       buf_view);
 
         if (rlen > 0) {
             /* rlen is the actual read amount. It may be smaller than readLen,
@@ -380,11 +387,14 @@ hdr_fetch(bufferinfo *gbp) {
          * file pointer location */
         gbp->offset += rlen;
     }
-    else if (gbp->ncp->nprocs > 1 && fIsSet(gbp->ncp->flags, NC_HCOLL))
+    else if (gbp->ncp->nprocs > 1 && fIsSet(gbp->ncp->flags, NC_HCOLL)) {
         /* Collective read: non-root ranks participate the collective call with
          * a zero-sized request.
          */
-        ncmpio_file_read_at_all(gbp->ncp, 0, NULL, 0, MPI_BYTE);
+        buf_view.type = MPI_DATATYPE_NULL;
+        buf_view.size = 0;
+        ncmpio_file_read_at_all(gbp->ncp, 0, NULL, buf_view);
+    }
 
     if (gbp->ncp->safe_mode == 1 && nprocs > 1) {
         TRACE_COMM(MPI_Bcast)(&err, 1, MPI_INT, 0, gbp->ncp->comm);

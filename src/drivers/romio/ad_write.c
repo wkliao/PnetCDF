@@ -104,29 +104,17 @@ ioerr:
 /*----< file_write() >-------------------------------------------------------*/
 /* This is an independent call. */
 static
-int file_write(PNCIO_File    *fd,
-               MPI_Offset    offset,
-               const void   *buf,
-               MPI_Offset    count,
-               MPI_Datatype  bufType,
-               MPI_Status   *status)
+int file_write(PNCIO_File       *fd,
+               MPI_Offset       offset,
+               const void      *buf,
+               PNCIO_Flat_list  buf_view,
+               MPI_Status      *status)
 {
-    int err=NC_NOERR, buftype_is_contig, filetype_is_contig;
+    int err=NC_NOERR, filetype_is_contig;
     MPI_Offset off=offset;
 
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count bufType_size;
-    MPI_Type_size_c(bufType, &bufType_size);
-#else
-    int bufType_size;
-    MPI_Type_size(bufType, &bufType_size);
-#endif
-    if (bufType_size == 0) return NC_NOERR;
-
-    PNCIO_Datatype_iscontig(bufType, &buftype_is_contig);
-
-/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
-assert(buftype_is_contig == 1);
+    if (buf_view.size == 0) /* zero-sized request */
+        return NC_NOERR;
 
 assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
 
@@ -138,13 +126,11 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
         else {
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Count m, size;
-            MPI_Type_size_c(bufType, &size);
-            size *= count;
+            size = buf_view.size;
 #else
             size_t m;
             int size;
-            MPI_Type_size(bufType, &size);
-            size *= count;
+            size = buf_view.size;
 #endif
             MPI_Offset scan_sum=0;
             filetype_is_contig = 0;
@@ -193,16 +179,24 @@ else if (fd->flat_file.count == 1)printf("%s at %d: fd->flat_file.count=%lld ind
 else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld indices=%lld %lld blocklens=%lld %lld filetype_is_contig=%d offset=%lld count=%lld\n",__func__,__LINE__, fd->flat_file.count,fd->flat_file.indices[0],fd->flat_file.indices[1],fd->flat_file.blocklens[0],fd->flat_file.blocklens[1],filetype_is_contig,offset,count);
 */
 
-    if (buftype_is_contig && filetype_is_contig) {
+    MPI_Offset count;
+    if (buf_view.type == MPI_DATATYPE_NULL) /* zero-sized request */
+        count = 0;
+    else if (buf_view.type == MPI_BYTE) /* contiguous buffer */
+        count = buf_view.size;
+    else /* noncontiguous buffer */
+        count = 1;
+
+    if (buf_view.is_contig && filetype_is_contig) {
         if (fd->filetype == MPI_DATATYPE_NULL)
             offset = off;
-        err = PNCIO_WriteContig(fd, buf, count * bufType_size, MPI_BYTE,
+        err = PNCIO_WriteContig(fd, buf, buf_view.size, MPI_BYTE,
                                 offset, status, NULL);
     }
     else if (fd->file_system == PNCIO_LUSTRE)
-        PNCIO_LUSTRE_WriteStrided(fd, buf, count, bufType, offset, status, &err);
+        PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view, offset, status, &err);
     else
-        PNCIO_GEN_WriteStrided(fd, buf, count, bufType, offset, status, &err);
+        PNCIO_GEN_WriteStrided(fd, buf, buf_view, offset, status, &err);
     if (err != MPI_SUCCESS)
         err = ncmpii_error_mpi2nc(err, __func__);
     else
@@ -215,25 +209,25 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld indi
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNCIO_File_write_at(PNCIO_File    *fh,
-                        MPI_Offset    offset,
-                        const void   *buf,
-                        MPI_Offset    count,
-                        MPI_Datatype  bufType,
-                        MPI_Status   *status)
+int PNCIO_File_write_at(PNCIO_File       *fh,
+                        MPI_Offset       offset,
+                        const void      *buf,
+                        PNCIO_Flat_list  buf_view,
+                        MPI_Status      *status)
 {
     int err = NC_NOERR;
 
     assert(fh != NULL);
 
-    if (count == 0) return NC_NOERR;
+    if (buf_view.type == MPI_DATATYPE_NULL) /* zero-sized request */
+        return NC_NOERR;
 
-    if (count < 0) return NC_ENEGATIVECNT;
+    if (buf_view.size < 0) return NC_ENEGATIVECNT;
 
     if (fh->access_mode & MPI_MODE_RDONLY)
         return NC_EPERM;
 
-    err = file_write(fh, offset, buf, count, bufType, status);
+    err = file_write(fh, offset, buf, buf_view, status);
 
     return err;
 }
@@ -243,28 +237,33 @@ int PNCIO_File_write_at(PNCIO_File    *fh,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-int PNCIO_File_write_at_all(PNCIO_File    *fh,
-                            MPI_Offset    offset,
-                            const void   *buf,
-                            MPI_Offset    count,
-                            MPI_Datatype  bufType,
-                            MPI_Status   *status)
+int PNCIO_File_write_at_all(PNCIO_File       *fh,
+                            MPI_Offset       offset,
+                            const void      *buf,
+                            PNCIO_Flat_list  buf_view,
+                            MPI_Status      *status)
 {
     int err, st=NC_NOERR;
+    MPI_Offset count;
 
     assert(fh != NULL);
 
-    if (count < 0) st = NC_ENEGATIVECNT;
+    if (buf_view.size < 0) st = NC_ENEGATIVECNT;
 
     if (fh->access_mode & MPI_MODE_RDONLY && st == NC_NOERR)
         st = NC_EPERM;
 
+    if (buf_view.type == MPI_DATATYPE_NULL)
+        count = 0;
+    else if (buf_view.type == MPI_BYTE)
+        count = buf_view.size;
+    else
+        count = 1;
+
     if (fh->file_system == PNCIO_LUSTRE)
-        PNCIO_LUSTRE_WriteStridedColl(fh, buf, count, bufType, offset, status,
-                                      &err);
+        PNCIO_LUSTRE_WriteStridedColl(fh, buf, buf_view, offset, status, &err);
     else if (fh->file_system == PNCIO_UFS)
-        PNCIO_GEN_WriteStridedColl(fh, buf, count, bufType, offset, status,
-                                   &err);
+        PNCIO_GEN_WriteStridedColl(fh, buf, buf_view, offset, status, &err);
     else
         return NC_EFSTYPE;
 

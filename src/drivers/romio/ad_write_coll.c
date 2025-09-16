@@ -10,8 +10,8 @@
 #include "adio.h"
 
 /* prototypes of functions used for collective writes only. */
-static void Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
-                           datatype, int nprocs, int myrank,
+static void Exch_and_write(PNCIO_File *fd, void *buf,
+                           PNCIO_Flat_list buf_view, int nprocs, int myrank,
                            PNCIO_Access *others_req, MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                            MPI_Offset *len_list,
@@ -41,7 +41,7 @@ static void W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
                             PNCIO_Access * others_req,
                             MPI_Count *send_buf_idx, MPI_Count *curr_to_proc,
                             MPI_Count *done_to_proc, int *hole, int iter,
-                            MPI_Aint buftype_extent, MPI_Aint * buf_idx, int *error_code);
+                            MPI_Aint * buf_idx, int *error_code);
 
 static void Fill_send_buffer(PNCIO_File *fd, void *buf,
                              PNCIO_Flatlist_node *flat_buf, char **send_buf,
@@ -56,11 +56,10 @@ static void Fill_send_buffer(PNCIO_File *fd, void *buf,
                              MPI_Count contig_access_count, MPI_Offset min_st_offset,
                              MPI_Offset fd_size, MPI_Offset *fd_start,
                              MPI_Offset *fd_end, MPI_Count *send_buf_idx,
-                             MPI_Count *curr_to_proc, MPI_Count *done_to_proc, int iter,
-                             MPI_Aint buftype_extent);
+                             MPI_Count *curr_to_proc, MPI_Count *done_to_proc, int iter);
 
 void PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
-                                MPI_Aint count, MPI_Datatype datatype,
+                                PNCIO_Flat_list buf_view,
                                 MPI_Offset offset, MPI_Status *status,
                                 int *error_code)
 {
@@ -80,7 +79,7 @@ void PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
 
     int i, filetype_is_contig, nprocs, nprocs_for_coll, myrank;
     MPI_Count contig_access_count = 0;
-    int interleave_count = 0, buftype_is_contig;
+    int interleave_count = 0;
     MPI_Count *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
     MPI_Offset start_offset, end_offset, fd_size, min_st_offset, off;
@@ -115,7 +114,7 @@ double curT = MPI_Wtime();
          * accessed.  e.g., if start_offset=0 and 100 bytes to be read,
          * end_offset=99 */
 
-        PNCIO_Calc_my_off_len(fd, count, datatype, offset, &offset_list,
+        PNCIO_Calc_my_off_len(fd, buf_view.size, MPI_BYTE, offset, &offset_list,
                               &len_list, &start_offset, &end_offset,
                               &contig_access_count);
 
@@ -137,9 +136,8 @@ double curT = MPI_Wtime();
          * for the moment. */
     }
 
-    PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
 /* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
-assert(buftype_is_contig == 1);
+assert(buf_view.is_contig == 1);
 
     if (fd->hints->cb_write == PNCIO_HINT_DISABLE ||
         (!interleave_count && (fd->hints->cb_write == PNCIO_HINT_AUTO))) {
@@ -149,7 +147,7 @@ assert(buftype_is_contig == 1);
                 NCI_Free(offset_list);
             NCI_Free(st_offsets);
         }
-        if (count == 0) {
+        if (buf_view.size == 0) {
             *error_code = MPI_SUCCESS;
             return;
         }
@@ -163,14 +161,12 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
             else {
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count m, size;
-                MPI_Type_size_c(datatype, &size);
-                size *= count;
 #else
                 size_t m;
                 int size;
-                MPI_Type_size(datatype, &size);
-                size *= count;
 #endif
+                size = buf_view.size;
+
                 MPI_Offset scan_sum=0;
                 filetype_is_contig = 0;
                 for (m=0; m<fd->flat_file.count; m++) {
@@ -211,7 +207,7 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
         else
             PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
-        if (buftype_is_contig && filetype_is_contig) {
+        if (buf_view.is_contig && filetype_is_contig) {
             if (fd->filetype == MPI_DATATYPE_NULL)
                 /* intra-node aggregation has flattened the fileview and
                  * temporarily set fd->filetype to MPI_DATATYPE_NULL
@@ -219,10 +215,10 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
                 off = off;
             else
                 off = fd->disp + offset;
-            PNCIO_WriteContig(fd, buf, count, datatype, off, status,
+            PNCIO_WriteContig(fd, buf, buf_view.size, MPI_BYTE, off, status,
                               error_code);
         } else
-            PNCIO_GEN_WriteStrided(fd, buf, count, datatype, offset, status, error_code);
+            PNCIO_GEN_WriteStrided(fd, buf, buf_view, offset, status, error_code);
 
         return;
     }
@@ -262,7 +258,7 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
 
 /* exchange data and write in sizes of no more than coll_bufsize. */
     /* Cast away const'ness for the below function */
-    Exch_and_write(fd, (char *) buf, datatype, nprocs, myrank,
+    Exch_and_write(fd, (char *) buf, buf_view, nprocs, myrank,
                    others_req, offset_list,
                    len_list, contig_access_count, min_st_offset,
                    fd_size, fd_start, fd_end, buf_idx, error_code);
@@ -308,9 +304,9 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
          * I/O.
          */
 #ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-        MPI_Status_set_elements_x(status, datatype, count);
+        MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
 #else
-        MPI_Status_set_elements(status, datatype, count);
+        MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
 #endif
     }
 
@@ -324,8 +320,8 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
 /* If successful, error_code is set to MPI_SUCCESS.  Otherwise an error
  * code is created and returned in error_code.
  */
-static void Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
-                           datatype, int nprocs,
+static void Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_Flat_list buf_view,
+                           int nprocs,
                            int myrank,
                            PNCIO_Access *others_req, MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -349,7 +345,7 @@ static void Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
 
     /* Not convinced end_loc-st_loc couldn't be > int, so make these offsets */
     MPI_Offset size = 0;
-    int hole, i, m, ntimes, max_ntimes, buftype_is_contig;
+    int hole, i, m, ntimes, max_ntimes;
     MPI_Offset st_loc = -1, end_loc = -1, off, done, req_off;
     char *write_buf = NULL;
     MPI_Count *curr_offlen_ptr, *send_size, *count, req_len, *recv_size;
@@ -358,7 +354,6 @@ static void Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
     MPI_Count *send_buf_idx, *curr_to_proc, *done_to_proc;
     MPI_Status status;
     PNCIO_Flatlist_node *flat_buf = NULL;
-    MPI_Aint lb, buftype_extent;
     int info_flag;
     MPI_Aint coll_bufsize;
     char *value;
@@ -440,14 +435,11 @@ static void Exch_and_write(PNCIO_File *fd, void *buf, MPI_Datatype
     /* used to store the starting value of curr_offlen_ptr[i] in
      * this iteration */
 
-    PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
-/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
-assert(buftype_is_contig == 1);
-
-    if (!buftype_is_contig) {
-        flat_buf = PNCIO_Flatten_and_find(datatype);
-    }
-    MPI_Type_get_extent(datatype, &lb, &buftype_extent);
+PNCIO_Flatlist_node tmp_buf;
+    flat_buf = &tmp_buf;
+    flat_buf->count = buf_view.count;
+    flat_buf->indices = buf_view.off;
+    flat_buf->blocklens = buf_view.len;
 
     done = 0;
     off = st_loc;
@@ -534,10 +526,10 @@ assert(buftype_is_contig == 1);
         W_Exchange_data(fd, buf, write_buf, flat_buf, offset_list, len_list,
                         send_size, recv_size, off, size, count, start_pos,
                         partial_recv, sent_to_proc, nprocs, myrank,
-                        buftype_is_contig, contig_access_count, min_st_offset,
+                        buf_view.is_contig, contig_access_count, min_st_offset,
                         fd_size, fd_start, fd_end, others_req, send_buf_idx,
-                        curr_to_proc, done_to_proc, &hole, m, buftype_extent,
-                        buf_idx, error_code);
+                        curr_to_proc, done_to_proc, &hole, m, buf_idx,
+                        error_code);
         if (*error_code != MPI_SUCCESS)
             return;
 
@@ -564,10 +556,10 @@ assert(buftype_is_contig == 1);
         W_Exchange_data(fd, buf, write_buf, flat_buf, offset_list, len_list,
                         send_size, recv_size, off, size, count, start_pos,
                         partial_recv, sent_to_proc, nprocs, myrank,
-                        buftype_is_contig, contig_access_count, min_st_offset,
+                        buf_view.is_contig, contig_access_count, min_st_offset,
                         fd_size, fd_start, fd_end, others_req, send_buf_idx,
-                        curr_to_proc, done_to_proc, &hole, m, buftype_extent,
-                        buf_idx, error_code);
+                        curr_to_proc, done_to_proc, &hole, m, buf_idx,
+                        error_code);
         if (*error_code != MPI_SUCCESS)
             return;
     }
@@ -600,8 +592,7 @@ static void W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
                             PNCIO_Access * others_req,
                             MPI_Count * send_buf_idx, MPI_Count * curr_to_proc,
                             MPI_Count * done_to_proc, int *hole, int iter,
-                            MPI_Aint buftype_extent, MPI_Aint *buf_idx,
-                            int *error_code)
+                            MPI_Aint *buf_idx, int *error_code)
 {
     int i, j, nprocs_recv, nprocs_send, err;
     MPI_Count *tmp_len;
@@ -813,7 +804,7 @@ double curT = MPI_Wtime();
                          send_size, send_req, sent_to_proc, nprocs, myrank,
                          contig_access_count, min_st_offset, fd_size,
                          fd_start, fd_end, send_buf_idx, curr_to_proc,
-                         done_to_proc, iter, buftype_extent);
+                         done_to_proc, iter);
 
         /* the send is done in Fill_send_buffer */
     }
@@ -902,8 +893,7 @@ double curT = MPI_Wtime();
                 flat_buf_idx = 0; \
                 n_buftypes++; \
             } \
-            user_buf_idx = flat_buf->indices[flat_buf_idx] + \
-                           n_buftypes*buftype_extent; \
+            user_buf_idx = flat_buf->indices[flat_buf_idx]; \
             flat_buf_sz = flat_buf->blocklens[flat_buf_idx]; \
         } \
         buf_incr -= size_in_buf; \
@@ -928,8 +918,7 @@ double curT = MPI_Wtime();
                 flat_buf_idx = 0; \
                 n_buftypes++; \
             } \
-            user_buf_idx = flat_buf->indices[flat_buf_idx] + \
-                           n_buftypes*buftype_extent; \
+            user_buf_idx = flat_buf->indices[flat_buf_idx]; \
             flat_buf_sz = flat_buf->blocklens[flat_buf_idx]; \
         } \
         size -= size_in_buf; \
@@ -958,8 +947,7 @@ void Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                       MPI_Offset min_st_offset, MPI_Offset fd_size,
                       MPI_Offset * fd_start, MPI_Offset * fd_end,
                       MPI_Count * send_buf_idx, MPI_Count * curr_to_proc,
-                      MPI_Count * done_to_proc, int iter,
-                      MPI_Aint buftype_extent)
+                      MPI_Count * done_to_proc, int iter)
 {
 /* this function is only called if buftype is not contig */
 

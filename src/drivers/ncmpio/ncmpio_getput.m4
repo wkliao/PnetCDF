@@ -269,9 +269,14 @@ err_check:
     }
 
 #ifdef ALWAYS_USE_INA
-    void *wbuf = (nbytes == 0) ?  NULL : xbuf;
+    void *wbuf = (nbytes == 0) ? NULL : xbuf;
+#if 1
+    err = ncmpio_ina_req(ncp, NC_REQ_WR, varp, start, count, stride, nbytes,
+                         wbuf);
+#else
     err = ncmpio_intra_node_aggregation(ncp, NC_REQ_WR, varp, start, count,
                                         stride, nelems, xtype, wbuf);
+#endif
     if (status == NC_NOERR) status = err;
 #else
     MPI_Offset offset=0;
@@ -523,9 +528,14 @@ err_check:
     }
 
 #ifdef ALWAYS_USE_INA
-    void *rbuf = (nbytes == 0) ?  NULL : xbuf;
+    void *rbuf = (nbytes == 0) ? NULL : xbuf;
+#if 1
+    err = ncmpio_ina_req(ncp, NC_REQ_RD, varp, start, count, stride, nbytes,
+                         rbuf);
+#else
     err = ncmpio_intra_node_aggregation(ncp, NC_REQ_RD, varp, start, count,
                                         stride, nelems, xtype, rbuf);
+#endif
     if (status == NC_NOERR) status = err;
 #else
     MPI_Offset offset=0;

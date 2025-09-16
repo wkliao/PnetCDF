@@ -147,7 +147,12 @@ fill_var_rec(NC         *ncp,
     int err, status=NC_NOERR, mpireturn;
     void *buf;
     MPI_Offset var_len, start, count, offset, wlen;
-    MPI_Datatype bufType;
+    PNCIO_Flat_list buf_view;
+
+    buf_view.type = MPI_BYTE;
+    buf_view.count = 1;
+    buf_view.is_contig = 1;
+    buf_view.size = 0;
 
     /* When intra-node aggregation is enabled, use the communicator consisting
      * of aggregators in comm, nprocs, and rank. Non-aggregators do not
@@ -192,7 +197,8 @@ fill_var_rec(NC         *ncp,
     err = fill_var_buf(varp, count, buf);
     if (err != NC_NOERR) {
         NCI_Free(buf);
-        count = 0; /* still participate collective calls below */
+        /* still participate collective calls below */
+        buf_view.type = MPI_DATATYPE_NULL;
         status = err;
     }
 
@@ -208,25 +214,26 @@ fill_var_rec(NC         *ncp,
 
     count *= varp->xsz;
 
-    bufType = MPI_BYTE;
-
 #ifndef HAVE_MPI_LARGE_COUNT
     if (count > NC_MAX_INT) {
         DEBUG_ASSIGN_ERROR(err, NC_EINTOVERFLOW)
         if (status == NC_NOERR) status = err;
-        count = 0; /* participate collective write with 0-length request */
+        /* participate collective write with 0-length request */
+        buf_view.type = MPI_DATATYPE_NULL;
     }
 #endif
 
+    if (status == NC_NOERR)
+        buf_view.size = count;
+
     /* write to variable collectively */
     if (nprocs > 1)
-        wlen = ncmpio_file_write_at_all(ncp, offset, buf, count, bufType);
+        wlen = ncmpio_file_write_at_all(ncp, offset, buf, buf_view);
     else
-        wlen = ncmpio_file_write_at(ncp, offset, buf, count, bufType);
+        wlen = ncmpio_file_write_at(ncp, offset, buf, buf_view);
     if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
     NCI_Free(buf);
-    if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
 
     if (status != NC_NOERR) return status;
 
@@ -359,8 +366,8 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     void *buf;
     size_t nsegs;
     MPI_Offset buf_len, var_len, nrecs, start, *count, wlen;
-    MPI_Datatype bufType;
     NC_var *varp;
+    PNCIO_Flat_list buf_view;
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *blocklengths=NULL, *offset=NULL;
@@ -607,20 +614,19 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
                                blocklengths);
     status = (status == NC_NOERR) ? err : status;
 
-    bufType = MPI_BYTE;
+    buf_view.type = MPI_BYTE;
     if (buf_len > NC_MAX_INT) {
 #ifdef HAVE_MPI_LARGE_COUNT
         mpireturn = MPI_Type_contiguous_c((MPI_Count)buf_len, MPI_BYTE,
-                                          &bufType);
+                                          &buf_view.type);
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, "MPI_Type_contiguous_c");
             /* return the first encountered error if there is any */
             if (status == NC_NOERR) status = err;
-            buf_len = 0;
+            buf_view.type = MPI_DATATYPE_NULL;
         }
         else {
-            MPI_Type_commit(&bufType);
-            buf_len = 1;
+            MPI_Type_commit(&buf_view.type);
         }
 #else
         if (status == NC_NOERR)
@@ -630,15 +636,30 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
 #endif
     }
 
+    MPI_Offset off=0;
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Offset  len=buf_len;
+#else
+    int         len=buf_len;
+#endif
+
+    /* write buffer is contiguous */
+    buf_view.size = buf_len;
+    buf_view.count = 1;
+    buf_view.off = &off;
+    buf_view.len = &len;
+    buf_view.is_contig = 1;
+
     /* write to variable collectively */
     if (nprocs > 1)
-        wlen = ncmpio_file_write_at_all(ncp, 0, buf, buf_len, bufType);
+        wlen = ncmpio_file_write_at_all(ncp, 0, buf, buf_view);
     else
-        wlen = ncmpio_file_write_at(ncp, 0, buf, buf_len, bufType);
+        wlen = ncmpio_file_write_at(ncp, 0, buf, buf_view);
     if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
+// printf("%s at %d\n",__func__,__LINE__);
     NCI_Free(buf);
-    if (bufType != MPI_BYTE) MPI_Type_free(&bufType);
+    if (buf_view.type != MPI_BYTE) MPI_Type_free(&buf_view.type);
 
     if (blocklengths != NULL) NCI_Free(blocklengths);
     if (offset != NULL) NCI_Free(offset);

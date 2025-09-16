@@ -40,6 +40,12 @@ ncmpio_write_numrecs(NC         *ncp,
                      MPI_Offset  new_numrecs)
 {
     int err=NC_NOERR;
+    PNCIO_Flat_list buf_view;
+
+    buf_view.type = MPI_BYTE;
+    buf_view.size = 0;
+    buf_view.count = 1;
+    buf_view.is_contig = 1;
 
     /* return now if there is no record variable defined */
     if (ncp->vars.num_rec_vars == 0) return NC_NOERR;
@@ -61,7 +67,7 @@ ncmpio_write_numrecs(NC         *ncp,
      * processes participate the collective write call with zero-size requests.
      */
     if (ncp->rank > 0 && fIsSet(ncp->flags, NC_HCOLL)) {
-        ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE);
+        ncmpio_file_write_at_all(ncp, 0, NULL, buf_view);
         return NC_NOERR;
     }
 
@@ -100,13 +106,15 @@ ncmpio_write_numrecs(NC         *ncp,
         }
 
 // printf("%s at %d: new_numrecs=%lld NC_NUMRECS_OFFSET=%d\n",__func__,__LINE__,new_numrecs,NC_NUMRECS_OFFSET);
+        buf_view.size = len;
+
         /* root's file view always includes the entire file header */
         if (fIsSet(ncp->flags, NC_HCOLL) && ncp->nprocs > 1)
             wlen = ncmpio_file_write_at_all(ncp, NC_NUMRECS_OFFSET, (void*)pos,
-                                            len, MPI_BYTE);
+                                            buf_view);
         else
             wlen = ncmpio_file_write_at(ncp, NC_NUMRECS_OFFSET, (void*)pos,
-                                        len, MPI_BYTE);
+                                        buf_view);
         if (wlen < 0)
             DEBUG_RETURN_ERROR((int)wlen)
     }

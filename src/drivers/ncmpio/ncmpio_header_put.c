@@ -504,6 +504,10 @@ int ncmpio_write_header(NC *ncp)
 {
     int status=NC_NOERR, mpireturn;
     size_t i, ntimes;
+    PNCIO_Flat_list buf_view;
+
+    buf_view.count = 1;
+    buf_view.is_contig = 1;
 
     /* Write the entire header to the file. This function may be called from
      * a rename API. In that case, we cannot just change the variable name in
@@ -538,12 +542,13 @@ int ncmpio_write_header(NC *ncp)
             int writeLen = (int)(MIN(remain, NC_MAX_INT));
             MPI_Offset wlen;
 
+            buf_view.type = MPI_BYTE;
+            buf_view.size = writeLen;
+
             if (fIsSet(ncp->flags, NC_HCOLL)) /* header collective write */
-                wlen = ncmpio_file_write_at_all(ncp, offset, buf_ptr, writeLen,
-                                               MPI_BYTE);
+                wlen = ncmpio_file_write_at_all(ncp, offset, buf_ptr, buf_view);
             else /* header independent write */
-                wlen = ncmpio_file_write_at(ncp, offset, buf_ptr, writeLen,
-                                            MPI_BYTE);
+                wlen = ncmpio_file_write_at(ncp, offset, buf_ptr, buf_view);
             if (status == NC_NOERR && wlen < 0) status = (int)wlen;
 
             offset  += writeLen;
@@ -552,9 +557,12 @@ int ncmpio_write_header(NC *ncp)
         }
         NCI_Free(buf);
     }
-    else if (fIsSet(ncp->flags, NC_HCOLL)) /* header collective write */
+    else if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
         /* collective write: non-root ranks participate the collective call */
-        ncmpio_file_write_at_all(ncp, 0, NULL, 0, MPI_BYTE);
+        buf_view.type = MPI_DATATYPE_NULL;
+        buf_view.size = 0;
+        ncmpio_file_write_at_all(ncp, 0, NULL, buf_view);
+    }
 
     if (ncp->safe_mode == 1) {
         /* broadcast root's status, because only root writes to the file */

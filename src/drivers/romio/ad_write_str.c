@@ -107,8 +107,8 @@
             memcpy(writebuf, (char *)buf + userbuf_off, write_sz);      \
         }                                                               \
     }
-void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
-                            MPI_Datatype datatype, MPI_Offset offset,
+void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf,
+                            PNCIO_Flat_list buf_view, MPI_Offset offset,
                             MPI_Status * status, int *error_code)
 {
 
@@ -119,9 +119,9 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
     int i, j, k, st_index = 0;
     MPI_Offset num, size, n_filetypes, etype_in_filetype, st_n_filetypes;
     MPI_Offset n_etypes_in_filetype, abs_off_in_filetype = 0;
-    MPI_Count filetype_size, buftype_size;
-    MPI_Aint lb, filetype_extent, buftype_extent;
-    int buf_count, buftype_is_contig, filetype_is_contig;
+    MPI_Count filetype_size;
+    MPI_Aint lb, filetype_extent;
+    int buf_count, filetype_is_contig;
     MPI_Offset userbuf_off;
     MPI_Offset off, req_off, disp, end_offset = 0, writebuf_off, start_off;
     char *writebuf = NULL;
@@ -136,9 +136,8 @@ void PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf, MPI_Aint count,
          * approach instead.
          */
 
-        PNCIO_GEN_WriteStrided_naive(fd,
-                                     buf,
-                                     count, datatype, offset, status, error_code);
+        PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view, offset, status,
+                                     error_code);
         return;
     }
 
@@ -178,14 +177,7 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
         MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
     }
 
-    PNCIO_Datatype_iscontig(datatype, &buftype_is_contig);
-    MPI_Type_size_x(datatype, &buftype_size);
-    MPI_Type_get_extent(datatype, &lb, &buftype_extent);
-
-/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
-assert(buftype_is_contig == 1);
-
-    bufsize = buftype_size * count;
+    bufsize = buf_view.size;
 
 /* get max_bufsize from the info object. */
 
@@ -194,13 +186,17 @@ assert(buftype_is_contig == 1);
     /* Contiguous both in buftype and filetype should have been handled in a
      * call to PNCIO_WriteContig() earlier.
      */
-    assert(!(buftype_is_contig && filetype_is_contig));
+    assert(!(buf_view.is_contig && filetype_is_contig));
 
-    if (!buftype_is_contig && filetype_is_contig) {
+PNCIO_Flatlist_node tmp_buf;
+    flat_buf = &tmp_buf;
+    flat_buf->count = buf_view.count;
+    flat_buf->indices = buf_view.off;
+    flat_buf->blocklens = buf_view.len;
+
+    if (!buf_view.is_contig && filetype_is_contig) {
 
 /* noncontiguous in memory, contiguous in file. */
-
-        flat_buf = PNCIO_Flatten_and_find(datatype);
 
         off = fd->disp + offset;
 
@@ -215,15 +211,13 @@ assert(buftype_is_contig == 1);
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
-        for (j = 0; j < count; j++) {
             for (i = 0; i < flat_buf->count; i++) {
-                userbuf_off = (MPI_Offset) j *(MPI_Offset) buftype_extent + flat_buf->indices[i];
+                userbuf_off = flat_buf->indices[i];
                 req_off = off;
                 req_len = flat_buf->blocklens[i];
                 BUFFERED_WRITE_WITHOUT_READ;
                 off += flat_buf->blocklens[i];
             }
-        }
 
         /* write the buffer out finally */
         if (writebuf_len) {
@@ -267,7 +261,7 @@ assert(buftype_is_contig == 1);
         /* Wei-keng Liao:write request is within single flat_file contig block */
         /* this could happen, for example, with subarray types that are
          * actually fairly contiguous */
-        if (buftype_is_contig && bufsize <= fwr_size) {
+        if (buf_view.is_contig && bufsize <= fwr_size) {
             /* though MPI api has an integer 'count' parameter, derived
              * datatypes might describe more bytes than can fit into an integer.
              * if we've made it this far, we can pass a count of original
@@ -275,7 +269,7 @@ assert(buftype_is_contig == 1);
              * Other WriteContig calls in this path are operating on data
              * sieving buffer */
             PNCIO_WRITE_LOCK(fd, offset, SEEK_SET, bufsize);
-            PNCIO_WriteContig(fd, buf, count, datatype, offset, status,
+            PNCIO_WriteContig(fd, buf, buf_view.size, MPI_BYTE, offset, status,
                              error_code);
             PNCIO_UNLOCK(fd, offset, SEEK_SET, bufsize);
 
@@ -322,7 +316,7 @@ assert(buftype_is_contig == 1);
         writebuf = (char *) NCI_Malloc(max_bufsize);
         memset(writebuf, -1, max_bufsize);
 
-        if (buftype_is_contig && !filetype_is_contig) {
+        if (buf_view.is_contig && !filetype_is_contig) {
 
 /* contiguous in memory, noncontiguous in file. should be the most
    common case. */
@@ -365,8 +359,6 @@ assert(buftype_is_contig == 1);
             }
         } else {
 /* noncontiguous in memory as well as in file */
-
-            flat_buf = PNCIO_Flatten_and_find(datatype);
 
             k = num = buf_count = 0;
             i_offset = flat_buf->indices[0];
@@ -415,9 +407,7 @@ assert(buftype_is_contig == 1);
 
                     k = (k + 1) % flat_buf->count;
                     buf_count++;
-                    i_offset =
-                        (MPI_Offset) buftype_extent *(MPI_Offset) (buf_count / flat_buf->count) +
-                        flat_buf->indices[k];
+                    i_offset = flat_buf->indices[k];
                     new_bwr_size = flat_buf->blocklens[k];
                     if (size != fwr_size) {
                         off += size;

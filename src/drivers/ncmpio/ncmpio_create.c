@@ -366,7 +366,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
     if (ncp->num_aggrs_per_node > 0) {
         /* Divide all ranks into groups. Each group is assigned one intra-node
          * aggregator. The following metadata related to intra-node aggregation
-         * will be set up in ncmpio_intra_node_aggr_init().
+         * will be set up in ncmpio_ina_init().
          * ncp->my_aggr is the aggregator's rank ID (related to ncp->comm) of
          *     this group. When == ncp->rank, this rank is an aggregator.
          * ncp->num_nonaggrs is the number of non-aggregators assigned to this
@@ -377,7 +377,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
          * ncp->node_ids[] will be modified to contain the nodes IDs of all
          *     intra-node aggregators, and will be passed to adio_fh.
          */
-        err = ncmpio_intra_node_aggr_init(ncp);
+        err = ncmpio_ina_init(ncp);
         if (err != NC_NOERR) return err;
 
         /* As non-aggregators will not perform any file I/O, we now can replace

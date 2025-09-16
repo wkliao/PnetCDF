@@ -452,6 +452,12 @@ igetput_varn(NC                *ncp,
     lead_req->max_rec     = -1;
     lead_req->nonlead_num = new_nreqs;
 
+#if 0
+MPI_Aint addr;
+MPI_Get_address(lead_req->xbuf, &addr);
+printf("%s at %d: lead_req xbuf=%ld nelems=%lld\n",__func__,__LINE__, addr,lead_req->nelems);
+#endif
+
     /* varn APIs have no argument stride */
     fSet(lead_req->flag, NC_REQ_STRIDE_NULL);
 
@@ -474,6 +480,11 @@ igetput_varn(NC                *ncp,
         req->lead_off  = lead_off;
         req->xbuf      = xbufp;
         xbufp         += req_nelems[i] * xsize;
+
+#if 0
+MPI_Get_address(req->xbuf, &addr);
+printf("%s at %d: req i=%d xbuf=%ld off=%ld nelems=%lld\n",__func__,__LINE__, i,addr,(char*)req->xbuf - (char*)xbuf,req->nelems);
+#endif
 
         /* copy starts[i] and counts[i] over to req */
         req->start = start_ptr;

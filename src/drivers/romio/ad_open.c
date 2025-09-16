@@ -236,8 +236,9 @@ int PNCIO_File_open(MPI_Comm    comm,
     fd->filetype    = MPI_BYTE;
     fd->is_open     = 0;
     fd->access_mode = amode;
-    // fd->flat_file   = NULL; /* flattend fileview in offset-length pairs */
     fd->io_buf      = NULL; /* collective buffer used by aggregators only */
+
+    fd->flat_file.count = 0; /* flattend fileview in offset-length pairs */
 
     /* create and initialize info object */
     fd->hints = (PNCIO_Hints*) NCI_Calloc(1, sizeof(PNCIO_Hints));
