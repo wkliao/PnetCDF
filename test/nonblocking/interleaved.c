@@ -258,8 +258,8 @@ int main(int argc, char** argv)
     for (j=0; j<8; j++) {
         for (i=3; i<5; i++) {
             if (buf[j*NX+i] != expected) {
-                printf("%d: Unexpected var0 read buf[%d][%d]=%d, should be %d\n",
-                       rank, j, i, buf[j*NX+i], expected);
+                printf("%d at line %d: var0 read buf[%d][%d] expect %d but got %d\n",
+                       rank, __LINE__, j, i, expected, buf[j*NX+i]);
                 nerrs++;
                 goto err_out;
             }
@@ -270,8 +270,8 @@ int main(int argc, char** argv)
     j = 1;
     for (i=8; i<13; i++) {
         if (buf[j*NX+i] != expected) {
-            printf("%d: Unexpected var0 read buf[%d][%d]=%d, should be %d\n",
-                   rank, j, i, buf[j*NX+i], expected);
+            printf("%d at line %d: var0 read buf[%d][%d] expect %d but got %d\n",
+                   rank, __LINE__, j, i, expected, buf[j*NX+i]);
             nerrs++;
             goto err_out;
         }
@@ -281,8 +281,8 @@ int main(int argc, char** argv)
     j = 3;
     for (i=7; i<12; i++) {
         if (buf[j*NX+i] != expected) {
-            printf("%d: Unexpected var0 read buf[%d][%d]=%d, should be %d\n",
-                   rank, j, i, buf[j*NX+i], expected);
+            printf("%d at line %d: var0 read buf[%d][%d] expect %d but got %d\n",
+                   rank, __LINE__, j, i, expected, buf[j*NX+i]);
             nerrs++;
             goto err_out;
         }
@@ -300,8 +300,8 @@ int main(int argc, char** argv)
     for (j=6; j<9; j++) {
         for (i=7; i<17; i++) {
             if (buf[j*NX+i] != expected) {
-                printf("%d: Unexpected var1 read buf[%d]=%d, should be %d\n",
-                       rank, i, buf[j*NX+i], expected);
+                printf("%d at line %d: var1 read buf[%d][%d] expect %d but got %d\n",
+                       rank, __LINE__, j, i, expected, buf[j*NX+i]);
                 nerrs++;
                 goto err_out;
             }
@@ -312,8 +312,8 @@ int main(int argc, char** argv)
     for (j=0; j<8; j++) {
         for (i=3; i<5; i++) {
             if (buf[j*NX+i] != expected) {
-                printf("%d: Unexpected var1 read buf[%d][%d]=%d, should be %d\n",
-                       rank, j, i, buf[j*NX+i], expected);
+                printf("%d at line %d: var1 read buf[%d][%d] expect %d but got %d\n",
+                       rank, __LINE__, j, i, expected, buf[j*NX+i]);
                 nerrs++;
                 goto err_out;
             }
