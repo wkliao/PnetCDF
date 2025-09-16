@@ -290,7 +290,7 @@ int main(int argc, char** argv)
 
     for (i=0; i<w_len; i++) {
         if (buffer[i] != rank+10) {
-            printf("Error at line %d in %s: expecting buffer[%d]=%d but got %d\n",
+            printf("Error at line %d in %s: expecting rec_var buffer[%d]=%d but got %d\n",
                    __LINE__,__FILE__,i,rank+10,buffer[i]);
             nerrs++;
             goto err_out;
@@ -310,7 +310,7 @@ int main(int argc, char** argv)
 
     for (i=0; i<w_len*2; i++) {
         if (i%2 && buffer[i] != -1) {
-            printf("Error at line %d in %s: expecting buffer[%d]=-1 but got %d\n",
+            printf("Error at line %d in %s: expecting rec_var buffer[%d]=-1 but got %d\n",
                    __LINE__,__FILE__,i,buffer[i]);
             nerrs++;
             goto err_out;
