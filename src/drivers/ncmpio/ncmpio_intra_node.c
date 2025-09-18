@@ -1558,10 +1558,10 @@ int ina_put(NC              *ncp,
             PNCIO_Flat_list  buf_view,
             void            *buf)       /* user buffer */
 {
-    int i, j, err, mpireturn, status=NC_NOERR, do_sort=0;
+    int i, j, err, mpireturn, status=NC_NOERR;
     char *recv_buf=NULL, *wr_buf = NULL;
     MPI_Aint npairs=0, *meta=NULL, *count=NULL;
-    MPI_Offset wr_amnt=0, recv_amnt;
+    MPI_Offset wr_amnt=0;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *off_ptr, *len_ptr;
 #else
@@ -1671,11 +1671,13 @@ int ina_put(NC              *ncp,
          * non-aggregators. At first, check if a sorting is necessary.
          */
         char *ptr;
-        int nreqs, indv_sorted;
+        int nreqs, indv_sorted, do_sort, overlap;
         MPI_Request *req=NULL;
+        MPI_Offset recv_amnt;
 
         /* check if offsets of all non-aggregators are individual sorted */
         indv_sorted = 1;
+        do_sort = 0;
         for (i=-1,j=0; j<ncp->num_nonaggrs; j++) {
             if (i == -1 && meta[j*3] > 0) /* find 1st whose num_pairs > 0 */
                 i = j;
@@ -1761,9 +1763,70 @@ int ina_put(NC              *ncp,
                  */
                 qsort_off_len_buf(npairs, off_ptr, len_ptr, bufAddr);
         }
+
         /* Now off_ptr and len_ptr are sorted, but overlaps may exist between
          * adjacent pairs. If this is the case, they must be coalesced.
+         *
+         * Below loop checks if there is overlap and calculates recv_amnt and
+         * wr_amnt.
+         * recv_amnt is the total amount this aggregator will receive from
+         *     non-aggregators, including self. recv_amnt includes overlaps.
+         * wr_amnt is recv_amnt with overlap removed.
+         *
+         * This loop also coalesces offset-length pairs as well as the
+         * corresponding buffer addresses, so they can be used to move write
+         * data around in the true write buffer.
          */
+        overlap = 0;
+int fake_overlap=0;
+        wr_amnt = recv_amnt = len_ptr[0];
+        for (i=0, j=1; j<npairs; j++) {
+            recv_amnt += len_ptr[j];
+            if (off_ptr[i] + len_ptr[i] >= off_ptr[j] + len_ptr[j]) {
+                overlap = 1;
+fake_overlap=1;
+                /* segment i completely covers segment j, skip j */
+                continue;
+            }
+
+            MPI_Offset gap = off_ptr[i] + len_ptr[i] - off_ptr[j];
+            if (gap >= 0) { /* overlap detected, merge j into i */
+                /* when gap > 0,  pairs i and j overlap
+                 * when gap == 0, pairs i and j are contiguous
+                 */
+                if (gap > 0) overlap = 1;
+if (gap >= 0) fake_overlap=1;
+                wr_amnt += len_ptr[j] - gap;
+                if (bufAddr[i] + len_ptr[i] == bufAddr[j] + gap) {
+                    /* buffers i and j are contiguous, merge j into i */
+                    len_ptr[i] += len_ptr[j] - gap;
+                }
+                else { /* buffers are not contiguous, reduce j's len */
+                    off_ptr[i+1] = off_ptr[j] + gap;
+                    len_ptr[i+1] = len_ptr[j] - gap;
+                    bufAddr[i+1] = bufAddr[j] + gap;
+                    i++;
+                }
+            }
+            else { /* i and j do not overlap */
+                wr_amnt += len_ptr[j];
+                i++;
+                if (i < j) {
+                    off_ptr[i] = off_ptr[j];
+                    len_ptr[i] = len_ptr[j];
+                    bufAddr[i] = bufAddr[j];
+                }
+            }
+        }
+/*
+MPI_Aint old_npairs = npairs;
+if (do_sort == 1) printf("%s at %d: overlap=%d do_sort=%d after coalesce npairs changed from %ld to %ld wr_amnt=%lld recv_amnt=%lld\n",__func__,__LINE__, overlap, do_sort,old_npairs,npairs,wr_amnt,recv_amnt);
+*/
+
+if (fake_overlap == 0) assert(npairs == i+1);
+
+        /* Now off_ptr[], len_ptr[], bufAddr[] are coalesced and no overlap */
+        npairs = i+1;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         ncmpi_inq_malloc_size(&mem_max);
@@ -1775,12 +1838,6 @@ int ina_put(NC              *ncp,
         startT = endT;
 #endif
 
-        /*
-         * TODO: move posting MPI_Irecv calls to before sorting and leave
-         * MPI_Waitall() to after sorting, so that communication can be
-         * overlapped with the sorting.
-         */
-
         /* Allocate receive buffer. Once write data from non-aggregators have
          * received into recv_buf, it is packed into wr_buf. Then, wr_buf is
          * used to call MPI-IO/PNCIO file write. Note the wr_buf is always
@@ -1788,15 +1845,17 @@ int ina_put(NC              *ncp,
          *
          * When ncp->num_nonaggrs == 1, wr_buf is set to buf which is directly
          * passed to MPI-IO/PNCIO file write.
+         *
+         * If file offset-length pairs have not been re-ordered, i.e. sorted
+         * and overlaps removed, and this aggregator will not receive any write
+         * data from its non-aggregators, then we can use user's buffer, buf,
+         * to call MPI-IO/PNCIO to write to the file, without allocating an
+         * additional temporary buffer.
          */
-        recv_amnt = 0;
-        for (i=0; i<ncp->num_nonaggrs; i++)
-            recv_amnt += meta[i*3 + 1];
-
-        if (ncp->num_nonaggrs > 1 || !buf_view.is_contig)
-            recv_buf = (char*) NCI_Malloc(recv_amnt);
-        else
+        if (!do_sort && buf_view.size == recv_amnt && !overlap)
             recv_buf = buf;
+        else
+            recv_buf = (char*) NCI_Malloc(recv_amnt);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         ncmpi_inq_malloc_size(&mem_max);
@@ -1824,7 +1883,11 @@ int ina_put(NC              *ncp,
         startT = endT;
 #endif
 
-        /* receive write data sent from non-aggregators */
+        /* Receive write data sent from non-aggregators. Note we cannot move
+         * the posting of MPI_Irecv calls to before sorting and leave
+         * MPI_Waitall() to after sorting to overlap communication with the
+         * sorting, because the sorting determines the receive buffer size.
+         */
         req = (MPI_Request*)NCI_Malloc(sizeof(MPI_Request) * ncp->num_nonaggrs);
         ptr = recv_buf + buf_view.size;
         nreqs = 0;
@@ -1857,60 +1920,16 @@ int ina_put(NC              *ncp,
         }
         NCI_Free(req);
 
-        /* Check if there is overlap. Now calculate recv_amnt, the total amount
-         * this aggregator will receive from non-aggregators, including self.
-         * recv_amnt includes overlaps. In the meantime, calculate wr_amnt,
-         * which is recv_amnt with overlap removed.
-         */
-
         /* Now all write data has been collected into recv_buf. In case of any
-         * overlap, we next coalesce recv_buf into wr_buf using off_ptr[],
-         * len_ptr[]. and bufAddr[]. For overlapped regions, requests with
+         * overlap, we must coalesce recv_buf into wr_buf using off_ptr[],
+         * len_ptr[], and bufAddr[]. For overlapped regions, requests with
          * lower j indices win the writes to the overlapped regions.
+         *
+         * In case the user buffer, buf, can not be used to write to the file,
+         * loop below packs recv_buf, data received from non-aggregators, into
+         * wr_buf, a contiguous buffer, wr_buf, which will later be used in a
+         * call to MPI-IO/PNCIO file write.
          */
-        wr_amnt = len_ptr[0];
-        for (i=0, j=1; j<npairs; j++) {
-            if (off_ptr[i] + len_ptr[i] >= off_ptr[j] + len_ptr[j])
-                /* segment i completely covers segment j, skip j */
-                continue;
-
-            MPI_Offset gap = off_ptr[i] + len_ptr[i] - off_ptr[j];
-            if (gap >= 0) { /* overlap detected, merge j into i */
-                /* when gap > 0,  pairs i and j overlap
-                 * when gap == 0, pairs i and j are contiguous
-                 */
-                wr_amnt += len_ptr[j] - gap;
-                if (bufAddr[i] + len_ptr[i] == bufAddr[j] + gap) {
-                    /* buffers i and j are contiguous, merge j into i */
-                    len_ptr[i] += len_ptr[j] - gap;
-                }
-                else { /* buffers are not contiguous, reduce j's len */
-                    off_ptr[i+1] = off_ptr[j] + gap;
-                    len_ptr[i+1] = len_ptr[j] - gap;
-                    bufAddr[i+1] = bufAddr[j] + gap;
-                    i++;
-                }
-            }
-            else { /* i and j do not overlap */
-                wr_amnt += len_ptr[j];
-                i++;
-                if (i < j) {
-                    off_ptr[i] = off_ptr[j];
-                    len_ptr[i] = len_ptr[j];
-                    bufAddr[i] = bufAddr[j];
-                }
-            }
-        }
-// printf("%s at %d: do_sort=%d after coalesce npairs=%ld i+1=%d wr_amnt=%lld recv_amnt=%lld\n",__func__,__LINE__, do_sort,npairs,i+1,wr_amnt,recv_amnt);
-
-        /* Now off_ptr[], len_ptr[], bufAddr[] are coalesced and no overlap */
-        npairs = i+1;
-
-        /* pack recv_buf, data received from non-aggregators, into wr_buf,
-         * a contiguous buffer, wr_buf, which will later be used in a call
-         * to MPI_File_write_at_all()
-         */
-
         if (!do_sort && wr_amnt == recv_amnt)
             wr_buf = recv_buf;
         else {
@@ -1953,12 +1972,16 @@ int ina_put(NC              *ncp,
     ncp->maxmem_put[4] = MAX(ncp->maxmem_put[4], mem_max);
 #endif
 
-    /* As wr_buf is always contiguous, update buf_view.size with the total
-     * write amount and pass it to the MPI-IO/PNCIO file write.
-     */
-    buf_view.size = wr_amnt;
-    buf_view.type = MPI_BYTE;
-    buf_view.is_contig = 1;
+    if (wr_buf != buf) {
+        /* If write data has been packed in wr_buf, a contiguous buffer,
+         * buf_view must be updated before passing it to the MPI-IO/PNCIO file
+         * write.
+         */
+        buf_view.size = wr_amnt;
+        buf_view.type = MPI_BYTE;
+        buf_view.is_contig = 1;
+    }
+    /* else case is when the user's buffer, buf, can be used to write */
 
     /* carry out write request to file */
     err = ncmpio_read_write(ncp, NC_REQ_WR, 0, buf_view, wr_buf);
@@ -2032,10 +2055,10 @@ int ina_get(NC           *ncp,
             void         *buf)      /* user buffer */
 {
     int i, j, err, mpireturn, status=NC_NOERR, nreqs;
-    int do_sort=0, indv_sorted=1;
+    int do_sort=0, indv_sorted=1, overlap=0;
     char *rd_buf = NULL;
     MPI_Aint npairs=0, max_npairs, *meta=NULL, *count=NULL;
-    MPI_Offset send_amnt, rd_amnt=0;
+    MPI_Offset send_amnt=0, rd_amnt=0;
     MPI_Request *req=NULL;
     PNCIO_Flat_list rd_buf_view;
 
@@ -2059,7 +2082,7 @@ int ina_get(NC           *ncp,
      *
      * This rank tells its aggregator how much metadata to receive from this
      * rank, by sending
-     *     1. the number of offset-length pairs (num_pairs) 
+     *     1. the number of offset-length pairs (num_pairs)
      *     2. user buffer size in bytes (bufLen).
      *     3. whether this rank's offsets are sorted in increasing order.
      * This message size to be sent by this rank is 3 MPI_Offset.
@@ -2251,14 +2274,23 @@ int ina_get(NC           *ncp,
         /* Coalesce the offset-length pairs and calculate the total read amount
          * and send amount by this aggregator.
          */
-        rd_amnt = len_ptr[0];
-        send_amnt = rd_amnt;
+        overlap = 0;
+        send_amnt = rd_amnt = len_ptr[0];
         for (i=0, j=1; j<npairs; j++) {
+            MPI_Offset gap;
             send_amnt += len_ptr[j];
-            if (off_ptr[i] + len_ptr[i] >= off_ptr[j]) {
-                /* coalesce j into i */
-                MPI_Offset i_end = off_ptr[i] + len_ptr[i];
-                MPI_Offset j_end = off_ptr[j] + len_ptr[j];
+
+            gap = off_ptr[i] + len_ptr[i] - off_ptr[j];
+            if (gap >= 0) { /* overlap detected, merge j into i */
+                /* when gap > 0,  pairs i and j overlap
+                 * when gap == 0, pairs i and j are contiguous
+                 */
+                MPI_Offset i_end, j_end;
+
+                if (gap > 0) overlap = 1;
+
+                i_end = off_ptr[i] + len_ptr[i];
+                j_end = off_ptr[j] + len_ptr[j];
                 if (i_end < j_end) {
                     len_ptr[i] += j_end - i_end;
                     rd_amnt += j_end - i_end;
@@ -2299,19 +2331,27 @@ int ina_get(NC           *ncp,
      * rd_buf, it is unpacked into send_buf for each non-aggregator. send_buf
      * will be directly used to send the read request data to non-aggregators.
      *
-     * Note rd_amnt may be not the same as send_amnt, as there may be overlaps
-     * in offset-length pairs.
+     * Note rd_amnt may not be the same as send_amnt, as there can be overlaps
+     * between adjacent offset-length pairs after sorted.
+     *
+     * If file offset-length pairs have not been re-ordered, i.e. sorted and
+     * overlaps removed, and this aggregator will not send any read data to its
+     * non-aggregators, then we can use user's buffer, buf, to call
+     * MPI-IO/PNCIO to read from the file, without allocating an additional
+     * temporary buffer.
      */
-
-    /* The read buffer is always contiguous. */
-    rd_buf_view.size = rd_amnt;
-    rd_buf_view.type = MPI_BYTE;
-    rd_buf_view.is_contig = 1;
-    if (ncp->num_nonaggrs == 1 && !do_sort && rd_amnt == send_amnt &&
-        buf_view.is_contig)
+    if (!do_sort && buf_view.size == send_amnt && !overlap) {
+        rd_buf_view = buf_view;
         rd_buf = buf;
-    else if (rd_amnt > 0)
-        rd_buf = (char*) NCI_Malloc(rd_amnt);
+    }
+    else {
+        /* Read data will be stored in a contiguous read buffer. */
+        rd_buf_view.size = rd_amnt;
+        rd_buf_view.type = MPI_BYTE;
+        rd_buf_view.is_contig = 1;
+        if (rd_amnt > 0)
+            rd_buf = (char*) NCI_Malloc(rd_amnt);
+    }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     ncmpi_inq_malloc_size(&mem_max);

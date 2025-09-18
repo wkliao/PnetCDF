@@ -136,9 +136,6 @@ double curT = MPI_Wtime();
          * for the moment. */
     }
 
-/* PnetCDF always packs non-contiguous user buffer into a contiguous one in INA */
-assert(buf_view.is_contig == 1);
-
     if (fd->hints->cb_write == PNCIO_HINT_DISABLE ||
         (!interleave_count && (fd->hints->cb_write == PNCIO_HINT_AUTO))) {
         /* use independent accesses */

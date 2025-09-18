@@ -33,6 +33,8 @@ int PNCIO_ReadContig(PNCIO_File    *fd,
 
     if (error_code != NULL) *error_code = MPI_SUCCESS;
 
+assert(bufType == MPI_BYTE);
+
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count bufType_size;
     MPI_Type_size_c(bufType, &bufType_size);

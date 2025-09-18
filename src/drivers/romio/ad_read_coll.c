@@ -231,18 +231,18 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
                 off = off;
             else
                 off = fd->disp + offset;
-// printf("%s at %d: count=%ld off=%lld\n",__func__,__LINE__,count,off);
+// printf("%s at %d: size=%ld off=%lld\n",__func__,__LINE__,buf_view.size,off);
             PNCIO_ReadContig(fd, buf, buf_view.size, MPI_BYTE, off, status, error_code);
         } else
 {
-// printf("%s at %d: count=%ld off=%lld\n",__func__,__LINE__,count,offset);
+// printf("%s at %d: size=%ld offset=%lld\n",__func__,__LINE__,buf_view.size,offset);
             PNCIO_GEN_ReadStrided(fd, buf, buf_view, offset, status, error_code);
 }
 
-// printf("%s at %d: SWITCH indep READ ------------------ off=%lld count=%ld\n",__func__,__LINE__, off, count);
+// printf("%s at %d: SWITCH indep READ ------------------ off=%lld size=%ld\n",__func__,__LINE__, off, buf_view.size);
         return;
     }
-// printf("%s at %d\n",__func__,__LINE__);
+// printf("%s at %d\n",__func__,__LINE__);fflush(stdout);
 
     /* We're going to perform aggregation of I/O.  Here we call
      * PNCIO_Calc_file_domains() to determine what processes will handle I/O
@@ -387,9 +387,9 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
         return;
     }
     else if (fd->filetype == MPI_BYTE) {
+assert(buftype == MPI_BYTE);
 #ifdef HAVE_MPI_TYPE_SIZE_C
         MPI_Type_size_c(buftype, &buftype_size);
-assert(buftype == MPI_BYTE);
 #elif defined(HAVE_MPI_TYPE_SIZE_X)
         MPI_Type_size_x(buftype, &buftype_size);
 #else
