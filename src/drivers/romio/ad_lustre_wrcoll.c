@@ -1074,6 +1074,9 @@ double curT = MPI_Wtime();
     if (fd->is_agg) fd->write_timing[0] += MPI_Wtime() - curT;
 #endif
 
+    /* w_len may not be the same as buf_view.size, because data sieving may
+     * write more than requested.
+     */
     return buf_view.size;
 }
 

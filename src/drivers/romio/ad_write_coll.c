@@ -93,6 +93,8 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
     int *len_list = NULL;
 #endif
 
+// printf("%s at %d: buf_view.size=%lld\n",__func__,__LINE__, buf_view.size);
+
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
@@ -286,10 +288,11 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
     if (fd->is_agg) fd->write_timing[0] += MPI_Wtime() - curT;
 #endif
 
-    return w_len;
+    /* w_len may not be the same as buf_view.size, because data sieving may
+     * write more than requested.
+     */
+    return buf_view.size;
 }
-
-
 
 /* If successful, it returns the amount written. Otherwise a NetCDF error code
  * (negative value) is returned.
