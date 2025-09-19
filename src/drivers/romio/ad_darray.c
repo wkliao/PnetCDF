@@ -27,6 +27,9 @@ int PNCIO_Type_create_darray(int size, int rank, int ndims,
     int procs, tmp_rank, i, tmp_size, blklens[1], *coords;
     MPI_Aint *st_offsets, lb, ub, orig_extent, disps[1];
 
+// no longer used
+assert(0);
+
     MPI_Type_get_extent(oldtype, &lb, &orig_extent);
 
 /* calculate position in Cartesian grid as MPI would (row-major

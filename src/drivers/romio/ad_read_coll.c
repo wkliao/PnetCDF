@@ -216,8 +216,10 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
         }
         else if (fd->filetype == MPI_BYTE)
             filetype_is_contig = 1;
-        else
+        else {
+assert(0);
             PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        }
 
         if (buf_view.size == 0) return 0;
 
@@ -507,6 +509,7 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
         filetype_extent = 1;
     }
     else {
+assert(0);
         PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
         MPI_Type_size_x(fd->filetype, &filetype_size);
         MPI_Type_get_extent(fd->filetype, &filetype_lb, &filetype_extent);

@@ -118,8 +118,10 @@ MPI_Offset off=offset;
     }
     else if (fd->filetype == MPI_BYTE)
         filetype_is_contig = 1;
-    else
+    else {
+assert(0);
         PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+    }
 
 // printf("%s at %d: flat_file.count=%lld buf_view.is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, fd->flat_file.count, buf_view.is_contig,filetype_is_contig);
 

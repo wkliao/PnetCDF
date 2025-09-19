@@ -13,6 +13,9 @@ void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag)
 {
     int combiner;
 
+// no longer used.
+assert(0);
+
     PNCIO_Type_get_combiner(datatype, &combiner);
 
     switch (combiner) {

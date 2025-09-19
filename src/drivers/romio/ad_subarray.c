@@ -19,6 +19,9 @@ int PNCIO_Type_create_subarray(int ndims,
     int i, blklens[3];
     MPI_Datatype tmp1, tmp2, types[3];
 
+// no longer used.
+assert(0);
+
     MPI_Type_get_extent(oldtype, &lb, &extent);
 
     if (order == MPI_ORDER_FORTRAN) {

@@ -2405,6 +2405,7 @@ int num_memcpy=0;
      *     over, changed each round.
      * flat_bview->extent: extent size of user buffer data type.
      */
+assert(flat_fview->rnd == 0);
     user_buf_idx = flat_bview->extent * flat_bview->rnd
                  + flat_bview->off[flat_bview->idx]
                  + flat_bview->len[flat_bview->idx]
@@ -2494,7 +2495,9 @@ num_memcpy++;
                     else {
                         flat_bview->idx = 0;
                         flat_bview->rnd++;
+assert(0);
                     }
+assert(flat_fview->rnd == 0);
                     user_buf_idx = flat_bview->off[flat_bview->idx] +
                                    flat_bview->rnd * flat_bview->extent;
                     flat_bview->rem = flat_bview->len[flat_bview->idx];
@@ -2549,6 +2552,7 @@ num_memcpy++;
                 assert(flat_fview->rnd <= 1);
                 flat_fview->idx = 0;
                 flat_fview->rnd++;
+assert(0);
             }
             else
                 flat_fview->idx++;

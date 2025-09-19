@@ -132,7 +132,8 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
         filetype_extent = 1;
     }
     else {
-        PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        // PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+        filetype_is_contig = (fd->flat_file.count <= 1);
         MPI_Type_size_x(fd->filetype, &filetype_size);
         if (filetype_size == 0)
             return NC_NOERR;

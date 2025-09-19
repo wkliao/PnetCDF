@@ -42,6 +42,9 @@ static PNCIO_Flatlist_node *Flatten_datatype(MPI_Datatype datatype);
 
 PNCIO_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype datatype)
 {
+// no longer used !
+assert(0);
+
     if (PNCIO_Flattened_type_keyval == MPI_KEYVAL_INVALID) {
         /* MPI_Type_free() will take care of cleanup */
         MPI_Type_create_keyval(Flattened_type_copy,

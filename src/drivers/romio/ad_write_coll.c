@@ -199,7 +199,8 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
         else if (fd->filetype == MPI_BYTE)
             filetype_is_contig = 1;
         else
-            PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+            // PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
+            filetype_is_contig = (fd->flat_file.count <= 1);
 
         if (buf_view.is_contig && filetype_is_contig) {
             if (fd->filetype == MPI_DATATYPE_NULL)
