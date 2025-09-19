@@ -150,16 +150,6 @@ else if (fd->flat_file.count == 1)printf("%s at %d: fd->flat_file.count=%lld ind
 else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld indices=%lld %lld blocklens=%lld %lld filetype_is_contig=%d offset=%lld count=%lld\n",__func__,__LINE__, fd->flat_file.count,fd->flat_file.indices[0],fd->flat_file.indices[1],fd->flat_file.blocklens[0],fd->flat_file.blocklens[1],filetype_is_contig,offset,count);
 */
 
-#if 0
-    MPI_Offset count;
-    if (buf_view.type == MPI_DATATYPE_NULL) /* zero-sized request */
-        count = 0;
-    else if (buf_view.type == MPI_BYTE) /* contiguous buffer */
-        count = buf_view.size;
-    else /* noncontiguous buffer */
-        count = 1;
-#endif
-
     if (buf_view.is_contig && filetype_is_contig) {
         if (fd->filetype == MPI_DATATYPE_NULL)
             offset = off;
@@ -185,7 +175,7 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File       *fh,
 {
     assert(fh != NULL);
 
-    if (buf_view.type == MPI_DATATYPE_NULL) /* zero-sized request */
+    if (buf_view.size == 0) /* zero-sized request */
         return NC_NOERR;
 
     if (buf_view.size < 0) return NC_ENEGATIVECNT;

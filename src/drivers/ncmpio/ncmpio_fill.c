@@ -198,7 +198,7 @@ fill_var_rec(NC         *ncp,
     if (err != NC_NOERR) {
         NCI_Free(buf);
         /* still participate collective calls below */
-        buf_view.type = MPI_DATATYPE_NULL;
+        buf_view.size = 0;
         status = err;
     }
 
@@ -219,7 +219,7 @@ fill_var_rec(NC         *ncp,
         DEBUG_ASSIGN_ERROR(err, NC_EINTOVERFLOW)
         if (status == NC_NOERR) status = err;
         /* participate collective write with 0-length request */
-        buf_view.type = MPI_DATATYPE_NULL;
+        buf_view.size = 0;
     }
 #endif
 
@@ -623,7 +623,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
             err = ncmpii_error_mpi2nc(mpireturn, "MPI_Type_contiguous_c");
             /* return the first encountered error if there is any */
             if (status == NC_NOERR) status = err;
-            buf_view.type = MPI_DATATYPE_NULL;
+            buf_view.size = 0;
         }
         else {
             MPI_Type_commit(&buf_view.type);

@@ -855,7 +855,7 @@ double curT = MPI_Wtime();
             NCI_Free(flat_bview.off);
 */
 
-        if (buf_view.size == 0 || buf_view.type == MPI_DATATYPE_NULL) {
+        if (buf_view.size == 0) { /* zero-sized request */
             if (free_flat_fview && flat_fview.count > 0)
                 NCI_Free(flat_fview.off);
             return 0;
@@ -1002,7 +1002,7 @@ double curT = MPI_Wtime();
      */
 
     /* if this rank has data to write, then participate exchange-and-write */
-    do_ex_wr = (buf_view.type == MPI_DATATYPE_NULL) ? 0 : 1;
+    do_ex_wr = (buf_view.size == 0) ? 0 : 1;
     use_alltoallw = 0;
 
 #ifdef USE_MPI_ALLTOALLW

@@ -391,7 +391,6 @@ hdr_fetch(bufferinfo *gbp) {
         /* Collective read: non-root ranks participate the collective call with
          * a zero-sized request.
          */
-        buf_view.type = MPI_DATATYPE_NULL;
         buf_view.size = 0;
         ncmpio_file_read_at_all(gbp->ncp, 0, NULL, buf_view);
     }

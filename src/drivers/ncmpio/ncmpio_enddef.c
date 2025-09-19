@@ -647,7 +647,6 @@ write_NC(NC *ncp)
     }
     else if (is_coll) {
         /* other processes participate the collective call */
-        buf_view.type = MPI_DATATYPE_NULL;
         buf_view.size = 0;
         for (i=0; i<ntimes; i++)
             ncmpio_file_write_at_all(ncp, 0, NULL, buf_view);

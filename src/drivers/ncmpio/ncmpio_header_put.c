@@ -559,7 +559,6 @@ int ncmpio_write_header(NC *ncp)
     }
     else if (fIsSet(ncp->flags, NC_HCOLL)) { /* header collective write */
         /* collective write: non-root ranks participate the collective call */
-        buf_view.type = MPI_DATATYPE_NULL;
         buf_view.size = 0;
         ncmpio_file_write_at_all(ncp, 0, NULL, buf_view);
     }

@@ -95,22 +95,13 @@ ncmpio_file_read_at(NC              *ncp,
         fh = fIsSet(ncp->flags, NC_MODE_INDEP)
            ? ncp->independent_fh : ncp->collective_fh;
 
-        MPI_Datatype btype = buf_view.type;
-        if (btype == MPI_DATATYPE_NULL) btype = MPI_BYTE;
-
 #ifdef HAVE_MPI_LARGE_COUNT
-        MPI_Count count;
-        if (buf_view.type == MPI_DATATYPE_NULL) count = 0;
-        else if (buf_view.type == MPI_BYTE)     count = buf_view.size;
-        else                                    count = 1;
+        MPI_Count count = (buf_view.is_contig) ? buf_view.size : 1;
 
-        TRACE_IO(MPI_File_read_at_c, (fh, offset, buf, count, btype,
+        TRACE_IO(MPI_File_read_at_c, (fh, offset, buf, count, buf_view.type,
                                       &mpistatus));
 #else
-        int count;
-        if (buf_view.type == MPI_DATATYPE_NULL) count = 0;
-        else if (buf_view.type == MPI_BYTE)     count = buf_view.size;
-        else                                    count = 1;
+        int count = (buf_view.is_contig) ? buf_view.size : 1;
 
         if (buf_view.size > NC_MAX_INT) {
 #ifdef PNETCDF_DEBUG
@@ -119,7 +110,7 @@ ncmpio_file_read_at(NC              *ncp,
 #endif
             DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
         }
-        TRACE_IO(MPI_File_read_at, (fh, offset, buf, count, btype,
+        TRACE_IO(MPI_File_read_at, (fh, offset, buf, count, buf_view.type,
                                     &mpistatus));
 #endif
         if (mpireturn != MPI_SUCCESS) {
@@ -170,22 +161,13 @@ ncmpio_file_read_at_all(NC              *ncp,
         fh = fIsSet(ncp->flags, NC_MODE_INDEP)
            ? ncp->independent_fh : ncp->collective_fh;
 
-        MPI_Datatype btype = buf_view.type;
-        if (btype == MPI_DATATYPE_NULL) btype = MPI_BYTE;
-
 #ifdef HAVE_MPI_LARGE_COUNT
-        MPI_Count count;
-        if (buf_view.type == MPI_DATATYPE_NULL) count = 0;
-        else if (buf_view.type == MPI_BYTE)     count = buf_view.size;
-        else                                    count = 1;
+        MPI_Count count = (buf_view.is_contig) ? buf_view.size : 1;
 
         TRACE_IO(MPI_File_read_at_all_c, (fh, offset, buf, count,
-                                          btype, &mpistatus));
+                                          buf_view.type, &mpistatus));
 #else
-        int count;
-        if (buf_view.type == MPI_DATATYPE_NULL) count = 0;
-        else if (buf_view.type == MPI_BYTE)     count = buf_view.size;
-        else                                    count = 1;
+        int count = (buf_view.is_contig) ? buf_view.size : 1;
 
         if (buf_view.size > NC_MAX_INT) {
 #ifdef PNETCDF_DEBUG
@@ -197,7 +179,7 @@ ncmpio_file_read_at_all(NC              *ncp,
             count = 0;
         }
         TRACE_IO(MPI_File_read_at_all, (fh, offset, buf, count,
-                                        btype, &mpistatus));
+                                        buf_view.type, &mpistatus));
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
@@ -247,23 +229,13 @@ ncmpio_file_write_at(NC              *ncp,
         fh = fIsSet(ncp->flags, NC_MODE_INDEP)
            ? ncp->independent_fh : ncp->collective_fh;
 
-        MPI_Datatype btype = buf_view.type;
-        if (btype == MPI_DATATYPE_NULL) btype = MPI_BYTE;
-
 #ifdef HAVE_MPI_LARGE_COUNT
-        MPI_Count count;
-        if (buf_view.type == MPI_DATATYPE_NULL) count = 0;
-        else if (buf_view.type == MPI_BYTE)     count = buf_view.size;
-        else                                    count = 1;
+        MPI_Count count = (buf_view.is_contig) ? buf_view.size : 1;
 
-// printf("%s at %d: offset=%lld count=%lld\n",__func__,__LINE__, offset,count);
-        TRACE_IO(MPI_File_write_at_c, (fh, offset, buf, count, btype,
+        TRACE_IO(MPI_File_write_at_c, (fh, offset, buf, count, buf_view.type,
                                        &mpistatus));
 #else
-        int count;
-        if (buf_view.type == MPI_DATATYPE_NULL) count = 0;
-        else if (buf_view.type == MPI_BYTE)     count = buf_view.size;
-        else                                    count = 1;
+        int count = (buf_view.is_contig) ? buf_view.size : 1;
 
         if (buf_view.size > NC_MAX_INT) {
 #ifdef PNETCDF_DEBUG
@@ -272,7 +244,7 @@ ncmpio_file_write_at(NC              *ncp,
 #endif
             DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
         }
-        TRACE_IO(MPI_File_write_at, (fh, offset, buf, count, btype,
+        TRACE_IO(MPI_File_write_at, (fh, offset, buf, count, buf_view.type,
                                      &mpistatus));
 #endif
         if (mpireturn != MPI_SUCCESS) {
@@ -322,23 +294,13 @@ ncmpio_file_write_at_all(NC              *ncp,
         fh = fIsSet(ncp->flags, NC_MODE_INDEP)
            ? ncp->independent_fh : ncp->collective_fh;
 
-        MPI_Datatype btype = buf_view.type;
-        if (btype == MPI_DATATYPE_NULL) btype = MPI_BYTE;
-
 #ifdef HAVE_MPI_LARGE_COUNT
-        MPI_Count count;
-        if (buf_view.type == MPI_DATATYPE_NULL) count = 0;
-        else if (buf_view.type == MPI_BYTE)     count = buf_view.size;
-        else                                    count = 1;
+        MPI_Count count = (buf_view.is_contig) ? buf_view.size : 1;
 
-// printf("%s at %d: offset=%lld count=%lld\n",__func__,__LINE__, offset,count);
         TRACE_IO(MPI_File_write_at_all_c, (fh, offset, buf, count,
-                                           btype, &mpistatus));
+                                           buf_view.type, &mpistatus));
 #else
-        int count;
-        if (buf_view.type == MPI_DATATYPE_NULL) count = 0;
-        else if (buf_view.type == MPI_BYTE)     count = buf_view.size;
-        else                                    count = 1;
+        int count = (buf_view.is_contig) ? buf_view.size : 1;
 
         if (buf_view.size > NC_MAX_INT) {
 #ifdef PNETCDF_DEBUG
@@ -350,7 +312,7 @@ ncmpio_file_write_at_all(NC              *ncp,
             count = 0;
         }
         TRACE_IO(MPI_File_write_at_all, (fh, offset, buf, count,
-                                         btype, &mpistatus));
+                                         buf_view.type, &mpistatus));
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
@@ -385,7 +347,7 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
     MPI_Offset rlen, wlen;
     PNCIO_Flat_list buf_view;
 
-    buf_view.type = MPI_DATATYPE_NULL;
+    buf_view.size = 0;
 
     /* When intra-node aggregation is enabled, non-aggregators do not access
      * the file.
@@ -465,7 +427,7 @@ ncmpio_read_write(NC              *ncp,
         void *xbuf=buf;
 
 #ifndef HAVE_MPI_LARGE_COUNT
-        if (buf_view.count == 1 && buf_view.size > NC_MAX_INT) {
+        if (buf_view.size > NC_MAX_INT) {
 #ifdef PNETCDF_DEBUG
             fprintf(stderr,"%d: %s line %d:  NC_EINTOVERFLOW buffer size="OFFFMT"\n",
                     ncp->rank, __func__,__LINE__,buf_view.size);
@@ -473,7 +435,7 @@ ncmpio_read_write(NC              *ncp,
             if (coll_indep == NC_REQ_COLL) {
                 DEBUG_ASSIGN_ERROR(status, NC_EINTOVERFLOW)
                 /* write nothing, but participate the collective call */
-                buf_view.type = MPI_DATATYPE_NULL;
+                buf_view.size = 0;
             }
             else
                 DEBUG_RETURN_ERROR(NC_EINTOVERFLOW)
@@ -527,7 +489,7 @@ ncmpio_read_write(NC              *ncp,
                 err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
                 /* return the first encountered error if there is any */
                 if (status == NC_NOERR) status = err;
-                buf_view.type = MPI_DATATYPE_NULL;
+                buf_view.size = 0;
             }
             else {
                 mpireturn = MPI_Type_commit(&buf_view.type);
@@ -535,7 +497,7 @@ ncmpio_read_write(NC              *ncp,
                     err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_commit");
                     /* return the first encountered error if there is any */
                     if (status == NC_NOERR) status = err;
-                    buf_view.type = MPI_DATATYPE_NULL;
+                    buf_view.size = 0;
                 }
                 else
                     to_free_buftype = 1;
@@ -657,7 +619,7 @@ printf("%s at %d: wkl[15] = %d %d %d %d %d\n",__func__,__LINE__, wkl[15],wkl[16]
                 err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
                 /* return the first encountered error if there is any */
                 if (status == NC_NOERR) status = err;
-                buf_view.type = MPI_DATATYPE_NULL;
+                buf_view.size = 0;
             }
             else {
                 mpireturn = MPI_Type_commit(&buf_view.type);
@@ -665,7 +627,7 @@ printf("%s at %d: wkl[15] = %d %d %d %d %d\n",__func__,__LINE__, wkl[15],wkl[16]
                     err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_commit");
                     /* return the first encountered error if there is any */
                     if (status == NC_NOERR) status = err;
-                    buf_view.type = MPI_DATATYPE_NULL;
+                    buf_view.size = 0;
                 }
                 else
                     to_free_buftype = 1;

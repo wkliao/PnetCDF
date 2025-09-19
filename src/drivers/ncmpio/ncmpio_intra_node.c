@@ -2121,11 +2121,11 @@ int ina_get(NC           *ncp,
              */
             MPI_Status st;
 #ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Count num = (buf_view.is_contig) ? buf_view.len[0] : 1;
+            MPI_Count num = (buf_view.is_contig) ? buf_view.size : 1;
             TRACE_COMM(MPI_Recv_c)(buf, num, buf_view.type, ncp->my_aggr, 0,
                                    ncp->comm, &st);
 #else
-            int num = (buf_view.is_contig) ? buf_view.len[0] : 1;
+            int num = (buf_view.is_contig) ? buf_view.size : 1;
             TRACE_COMM(MPI_Recv)(buf, num, buf_view.type, ncp->my_aggr, 0,
                                  ncp->comm, &st);
 #endif
@@ -2768,10 +2768,9 @@ printf("%s at %d: buf_view count=%lld size=%lld\n",__func__,__LINE__, buf_view.c
 }
 #endif
 
-    if (buf_view.type != MPI_BYTE && buf_view.type != MPI_DATATYPE_NULL)
-        MPI_Type_free(&buf_view.type);
+    if (buf_view.type != MPI_BYTE) MPI_Type_free(&buf_view.type);
     if (buf_view.off != NULL) NCI_Free(buf_view.off);
-    if (buf_view.off != NULL) NCI_Free(buf_view.len);
+    if (buf_view.len != NULL) NCI_Free(buf_view.len);
 
     /* Update the number of records if new records have been created.
      * For nonblocking APIs, there is no way for a process to know whether
@@ -2826,8 +2825,13 @@ ncmpio_ina_req(NC               *ncp,
     double timing = MPI_Wtime();
 #endif
 
+    /* blocking API's buffer passed here is always contiguous */
     buf_view.type = MPI_BYTE;
     buf_view.is_contig = 1;
+    buf_view.count = buf_len;
+    buf_view.size = buf_len;
+    buf_view.off = NULL;
+    buf_view.len = NULL;
 
 // printf("%s at %d: buf=%s\n",__func__,__LINE__, (buf==NULL)?"NULL":"NOT NULL");
     if (buf_len == 0 || buf == NULL) {
@@ -2837,7 +2841,8 @@ ncmpio_ina_req(NC               *ncp,
          * disabled, this rank must participate other collective file call.
          */
         num_pairs = 0;
-        buf_view.type = MPI_DATATYPE_NULL;
+        buf_view.size = 0;
+        buf_view.count = 0;
     }
     else {
         /* construct file access offset-length pairs
@@ -2852,7 +2857,8 @@ ncmpio_ina_req(NC               *ncp,
             is_incr = 1;
             num_pairs = 0;
             buf_len = 0;
-            buf_view.type = MPI_DATATYPE_NULL;
+            buf_view.size = 0;
+            buf_view.count = 0;
             if (offsets != NULL) NCI_Free(offsets);
             if (lengths != NULL) NCI_Free(lengths);
             offsets = NULL;
@@ -2878,20 +2884,6 @@ ncmpio_ina_req(NC               *ncp,
         saved_num_nonaggrs = ncp->num_nonaggrs;
         ncp->num_nonaggrs = 1;
     }
-
-    /* construct buffer view (always a contiguous buffer) */
-    MPI_Offset buf_off=0;
-    buf_view.off = &buf_off;
-#ifdef HAVE_MPI_LARGE_COUNT
-    buf_view.len = &buf_len;
-#else
-    int int_len = buf_len;
-    buf_view.len = &int_len;
-#endif
-
-    /* blocking API's buffer passed here is contiguous */
-    buf_view.count = 1;
-    buf_view.size = buf_len;
 
 // printf("%s at %d: buf_view count=%lld size=%lld is_contig=%d buf=%p\n",__func__,__LINE__, buf_view.count,buf_view.size,buf_view.is_contig,buf);
     /* perform intra-node aggregation */
