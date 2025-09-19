@@ -940,8 +940,32 @@ req_commit(NC  *ncp,
         err = ncmpio_ina_nreqs(ncp, NC_REQ_WR, num_w_reqs, put_list,
                                newnumrecs);
         put_list = NULL; /* has been freed in the above call */
-    }
 
+        /* Update the number of records if new records have been created.
+         * For nonblocking APIs, there is no way for a process to know whether
+         * others write to a record variable or not. Note newnumrecs has been
+         * sync-ed and always >= ncp->numrecs.
+         */
+        if (coll_indep == NC_REQ_COLL) {
+            if (newnumrecs > ncp->numrecs) {
+                /* update new record number in file. Note newnumrecs is already
+                 * sync-ed among all processes and in collective mode
+                 * ncp->numrecs is always sync-ed in memory among processes,
+                 * thus no need another MPI_Allreduce to sync it. */
+                err = ncmpio_write_numrecs(ncp, newnumrecs);
+                if (status == NC_NOERR) status = err;
+                /* retain the first error if there is any */
+                if (ncp->numrecs < newnumrecs) ncp->numrecs = newnumrecs;
+            }
+        }
+        else { /* NC_REQ_INDEP */
+            if (ncp->numrecs < newnumrecs) {
+                ncp->numrecs = newnumrecs;
+                set_NC_ndirty(ncp);
+                /* delay numrecs sync until end_indep, redef or close */
+            }
+        }
+    }
     if (do_read > 0) {
         err = ncmpio_ina_nreqs(ncp, NC_REQ_RD, num_r_reqs, get_list,
                                newnumrecs);
