@@ -126,7 +126,7 @@ int main(int argc, char **argv)
     extern int optind;
     extern char *optarg;
     int i, j, k, err, nerrs=0, debug=0, use_contig_buf=0, use_bput=0;
-    int nprocs, len=0, nelems, rank;
+    int nprocs, len=0, nelems, rank, format, rec_bytes;
     int *sca_buf, *fix_buf[FIX_NVARS], *rec_buf[REC_NVARS];
     int gsizes[NDIMS], psizes[NDIMS];
     double write_timing, max_write_timing, write_bw;
@@ -246,6 +246,9 @@ int main(int argc, char **argv)
     }
 
     MPI_Info_free(&info);
+
+    ncmpi_inq_format(ncid, &format);
+    rec_bytes = (format == NC_FORMAT_CDF5) ? 8 : 4;
 
     req = (int*) malloc(sizeof(int) * (SCA_NVARS + FIX_NVARS + REC_NVARS));
     st  = (int*) malloc(sizeof(int) * (SCA_NVARS + FIX_NVARS + REC_NVARS));
@@ -391,7 +394,10 @@ int main(int argc, char **argv)
 
     write_timing = MPI_Wtime() - write_timing;
 
-    write_size = nelems * (FIX_NVARS + NTIMES * REC_NVARS) + SCA_NVARS;
+    write_size  = nelems * FIX_NVARS;
+    write_size += nelems * NTIMES * REC_NVARS;
+    /* scalar variables are written by rank 0 only in PnetCDF */
+    write_size += (rank == 0) ? SCA_NVARS : 0;
     write_size *= sizeof(int);
 
     MPI_Reduce(&write_size,   &sum_write_size,   1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -402,7 +408,7 @@ int main(int argc, char **argv)
      * header NTIME times
      */
     if (rank == 0 && verbose) {
-        sum_write_size += header_size + NTIMES * 8;
+        sum_write_size += header_size + ((REC_NVARS) ? NTIMES * rec_bytes : 0);
 
         printf("\n");
         if (use_bput)
