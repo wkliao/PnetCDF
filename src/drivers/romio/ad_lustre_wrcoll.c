@@ -79,16 +79,15 @@ typedef struct {
 } Flat_list;
 
 /* prototypes of functions used for collective writes only. */
-static void LUSTRE_Exch_and_write(PNCIO_File *fd,
-                                  const void *buf,
-                                  Flat_list *flat_bview,
-                                  PNCIO_Access *others_req,
-                                  PNCIO_Access *my_req,
-                                  Flat_list *flat_fview,
-                                  MPI_Offset min_st_loc,
-                                  MPI_Offset max_end_loc,
-                                  MPI_Offset **buf_idx,
-                                  int *error_code);
+static MPI_Offset LUSTRE_Exch_and_write(PNCIO_File *fd,
+                                        const void *buf,
+                                        Flat_list *flat_bview,
+                                        PNCIO_Access *others_req,
+                                        PNCIO_Access *my_req,
+                                        Flat_list *flat_fview,
+                                        MPI_Offset min_st_loc,
+                                        MPI_Offset max_end_loc,
+                                        MPI_Offset **buf_idx);
 
 static void LUSTRE_Fill_send_buffer(PNCIO_File *fd, const void *buf,
                                     Flat_list *flat_fview,
@@ -99,22 +98,21 @@ static void LUSTRE_Fill_send_buffer(PNCIO_File *fd, const void *buf,
                                     char **self_buf,
                                     disp_len_list *send_list);
 
-static void Exchange_data_recv(PNCIO_File            *fd,
-                               const void           *buf,
-                                     char           *write_buf,
-                                     char          **recv_buf,
-                                     Flat_list      *flat_fview,
-                                     Flat_list      *flat_bview,
-                               const MPI_Count      *recv_size,
-                                     MPI_Offset     range_off,
-                                     MPI_Count       range_size,
-                               const MPI_Count      *recv_count,
-                               const MPI_Count      *start_pos,
-                               const PNCIO_Access   *others_req,
-                               const MPI_Offset    *buf_idx,
-                                     off_len_list   *srt_off_len,
-                                     disp_len_list  *recv_list,
-                                     int            *error_code);
+static int Exchange_data_recv(PNCIO_File            *fd,
+                              const void           *buf,
+                                    char           *write_buf,
+                                    char          **recv_buf,
+                                    Flat_list      *flat_fview,
+                                    Flat_list      *flat_bview,
+                              const MPI_Count      *recv_size,
+                                    MPI_Offset     range_off,
+                                    MPI_Count       range_size,
+                              const MPI_Count      *recv_count,
+                              const MPI_Count      *start_pos,
+                              const PNCIO_Access   *others_req,
+                              const MPI_Offset    *buf_idx,
+                                    off_len_list   *srt_off_len,
+                                    disp_len_list  *recv_list);
 
 static void Exchange_data_send(      PNCIO_File      *fd,
                                const void           *buf,
@@ -581,10 +579,10 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fd,
     }
 }
 
-void PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
-                                   PNCIO_Flat_list buf_view,
-                                   MPI_Offset offset, MPI_Status *status,
-                                   int *error_code)
+MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd,
+                                         const void *buf,
+                                         PNCIO_Flat_list buf_view,
+                                         MPI_Offset offset)
 {
     /* Uses a generalized version of the extended two-phase method described in
      * "An Extended Two-Phase Method for Accessing Sections of Out-of-Core
@@ -593,14 +591,13 @@ void PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
      * http://www.mcs.anl.gov/home/thakur/ext2ph.ps
      */
 
-    int i, j, nprocs, myrank, old_error, tmp_error;
-    int do_collect = 1, is_btype_predef, free_flat_fview, do_ex_wr;
+    int i, j, nprocs, myrank;
+    int do_collect = 1, free_flat_fview, do_ex_wr;
     MPI_Offset start_offset, end_offset;
     MPI_Offset min_st_loc = -1, max_end_loc = -1;
     Flat_list flat_fview;
     Flat_list flat_bview;
-
-    *error_code = MPI_SUCCESS;
+    MPI_Offset w_len=0;
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
@@ -657,7 +654,7 @@ double curT = MPI_Wtime();
      *
      * PNCIO_Calc_my_off_len() performs no inter-process communication.
      */
-    PNCIO_Calc_my_off_len(fd, buf_view.size, MPI_BYTE, offset, &flat_fview.off,
+    PNCIO_Calc_my_off_len(fd, buf_view.size, offset, &flat_fview.off,
                           &flat_fview.len, &start_offset, &end_offset,
                           &flat_fview.count);
     flat_fview.idx = 0;
@@ -861,8 +858,7 @@ double curT = MPI_Wtime();
         if (buf_view.size == 0 || buf_view.type == MPI_DATATYPE_NULL) {
             if (free_flat_fview && flat_fview.count > 0)
                 NCI_Free(flat_fview.off);
-            *error_code = MPI_SUCCESS;
-            return;
+            return 0;
         }
 
         if (flat_fview.is_contig && flat_bview.is_contig) {
@@ -881,20 +877,17 @@ double curT = MPI_Wtime();
             printf("%s %d: SWITCH to PNCIO_WriteContig !!!\n",__func__,__LINE__);
 #endif
 
-            PNCIO_WriteContig(fd, buf, buf_view.size, MPI_BYTE, off, status, error_code);
-        } else {
-            if (free_flat_fview && flat_fview.count > 0)
-                NCI_Free(flat_fview.off);
+            return PNCIO_WriteContig(fd, buf, buf_view.size, off);
+        }
+
+        if (free_flat_fview && flat_fview.count > 0)
+            NCI_Free(flat_fview.off);
 #ifdef WKL_DEBUG
-            printf("%s %d: SWITCH to PNCIO_LUSTRE_WriteStrided !!!\n",
+        printf("%s %d: SWITCH to PNCIO_LUSTRE_WriteStrided !!!\n",
                    __func__,__LINE__);
 #endif
 
-            PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view, offset, status,
-                                      error_code);
-        }
-
-        return;
+        return PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view, offset);
     }
 
     /* Now we are using collective I/O (two-phase I/O strategy) */
@@ -1031,9 +1024,9 @@ double curT = MPI_Wtime();
         /* This rank participates exchange and write only when it has non-zero
          * data to write or is an I/O aggregator
          */
-        LUSTRE_Exch_and_write(fd, buf, &flat_bview, others_req, my_req,
-                              &flat_fview, min_st_loc, max_end_loc, buf_idx,
-                              error_code);
+        w_len = LUSTRE_Exch_and_write(fd, buf, &flat_bview, others_req, my_req,
+                                      &flat_fview, min_st_loc, max_end_loc,
+                                      buf_idx);
 
     /* free all memory allocated */
     NCI_Free(others_req[0].offsets);
@@ -1070,37 +1063,18 @@ double curT = MPI_Wtime();
      * specific error code, we can still have that process report the
      * additional information
      */
-    old_error = *error_code;
-    if (*error_code != MPI_SUCCESS)
-        *error_code = MPI_ERR_IO;
-
     /* optimization: if only one process performing I/O, we can perform
      * a less-expensive Bcast. */
     if (fd->hints->cb_nodes == 1)
-        MPI_Bcast(error_code, 1, MPI_INT, fd->hints->ranklist[0], fd->comm);
-    else {
-        tmp_error = *error_code;
-        MPI_Allreduce(&tmp_error, error_code, 1, MPI_INT, MPI_MAX, fd->comm);
-    }
-
-    if ((old_error != MPI_SUCCESS) && (old_error != MPI_ERR_IO))
-        *error_code = old_error;
-
-    if (status) {
-        /* This is a temporary way of filling in status. The right way is to
-         * keep track of how much data was actually written during collective
-         * I/O.
-         */
-#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-        MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
-#else
-        MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
-#endif
-    }
+        MPI_Bcast(&w_len, 1, MPI_OFFSET, fd->hints->ranklist[0], fd->comm);
+    else
+        MPI_Allreduce(MPI_IN_PLACE, &w_len, 1, MPI_OFFSET, MPI_MIN, fd->comm);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     if (fd->is_agg) fd->write_timing[0] += MPI_Wtime() - curT;
 #endif
+
+    return buf_view.size;
 }
 
 #define CAST_INT32(count, bklen, disp, dType, newType) {                     \
@@ -1404,16 +1378,16 @@ void commit_comm_phase(PNCIO_File     *fd,
  * for Collective I/O Based on Underlying Parallel File System Locking
  * Protocols", in The Supercomputing Conference, 2008.
  */
-static void LUSTRE_Exch_and_write(PNCIO_File    *fd,
-                                  const void    *buf,
-                                  Flat_list     *flat_bview,
-                                  PNCIO_Access  *others_req,
-                                  PNCIO_Access  *my_req,
-                                  Flat_list     *flat_fview,
-                                  MPI_Offset     min_st_loc,
-                                  MPI_Offset     max_end_loc,
-                                  MPI_Offset   **buf_idx,
-                                  int           *error_code)
+static
+MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
+                                 const void    *buf,
+                                 Flat_list     *flat_bview,
+                                 PNCIO_Access  *others_req,
+                                 PNCIO_Access  *my_req,
+                                 Flat_list     *flat_fview,
+                                 MPI_Offset     min_st_loc,
+                                 MPI_Offset     max_end_loc,
+                                 MPI_Offset   **buf_idx)
 {
     char **write_buf = NULL, **recv_buf = NULL, **send_buf = NULL;
     size_t alloc_sz;
@@ -1425,11 +1399,7 @@ static void LUSTRE_Exch_and_write(PNCIO_File    *fd,
     MPI_Offset *this_buf_idx=NULL;
     off_len_list *srt_off_len = NULL;
     disp_len_list *send_list = NULL, *recv_list = NULL;
-
-    /* If successful, error_code is set to MPI_SUCCESS. Otherwise an error
-     * code is created and returned in error_code.
-     */
-    *error_code = MPI_SUCCESS;
+    MPI_Offset w_len, total_w_len=0;
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
@@ -1736,8 +1706,9 @@ static void LUSTRE_Exch_and_write(PNCIO_File    *fd,
          */
         if (recv_list != NULL) { /* this aggregator has something to received */
             char *rbuf = (recv_buf  == NULL) ? NULL :  recv_buf[ibuf];
+            int err;
 
-            Exchange_data_recv(fd,
+            err = Exchange_data_recv(fd,
                                buf,                /* IN: user buffer */
                                wbuf,               /* OUT: write buffer */
                                &rbuf,              /* OUT: receive buffer */
@@ -1751,9 +1722,8 @@ static void LUSTRE_Exch_and_write(PNCIO_File    *fd,
                                others_req,          /* IN: changed each round */
                                this_buf_idx,        /* IN: changed each round */
                                &srt_off_len[ibuf],/* OUT: write off-len pairs */
-                               recv_list,         /* OUT: recv disp-len pairs */
-                               error_code);
-            if (*error_code != MPI_SUCCESS)
+                               recv_list);        /* OUT: recv disp-len pairs */
+            if (err != NC_NOERR)
                 goto over;
 
             /* rbuf might be realloc-ed */
@@ -1865,8 +1835,6 @@ static void LUSTRE_Exch_and_write(PNCIO_File    *fd,
                  * LUSTRE_W_Exchange_data().
                  */
                 for (i = 0; i < srt_off_len[j].num; i++) {
-                    MPI_Status status;
-
                     /* all write requests in this round should fall into file
                      * range of [range_off, range_off+range_size). This below
                      * assertion should never fail.
@@ -1875,14 +1843,12 @@ static void LUSTRE_Exch_and_write(PNCIO_File    *fd,
                                  srt_off_len[j].off[i] >= range_off);
 
 // printf("%s %d: PNCIO_WriteContig off=%lld\n",__func__,__LINE__,srt_off_len[j].off[i]);
-                    PNCIO_WriteContig(fd,
+                    w_len = PNCIO_WriteContig(fd,
                                      write_buf[j] + (srt_off_len[j].off[i] - range_off),
                                      srt_off_len[j].len[i],
-                                     MPI_BYTE,
-                                     srt_off_len[j].off[i],
-                                     &status, error_code);
-                    if (*error_code != MPI_SUCCESS)
-                        goto over;
+                                     srt_off_len[j].off[i]);
+                    if (w_len < 0) goto over;
+                    total_w_len += w_len;
                 }
                 if (srt_off_len[j].num > 0) {
                     NCI_Free(srt_off_len[j].off);
@@ -1934,6 +1900,7 @@ static void LUSTRE_Exch_and_write(PNCIO_File    *fd,
         fflush(stdout);
     }
 #endif
+    return total_w_len;
 }
 
 /* This subroutine is copied from PNCIO_Heap_merge(), but modified to coalesce
@@ -2069,7 +2036,7 @@ void heap_merge(const PNCIO_Access *others_req,
 }
 
 static
-void Exchange_data_recv(
+int Exchange_data_recv(
           PNCIO_File      *fd,
     const void           *buf,          /* user buffer */
           char           *write_buf,    /* OUT: internal buffer used to write
@@ -2099,15 +2066,13 @@ void Exchange_data_recv(
                                          * write data to aggregator i */
           off_len_list   *srt_off_len,  /* OUT: list of write offset-length
                                          * pairs of this aggregator */
-          disp_len_list  *recv_list,    /* OUT: displacement-length pairs of
+          disp_len_list  *recv_list)    /* OUT: displacement-length pairs of
                                          * recv buffer */
-          int            *error_code)   /* OUT: */
 {
     char *buf_ptr, *contig_buf;
     size_t alloc_sz;
-    int i, j, nprocs, myrank, nprocs_recv, err, hole, build_srt_off_len;
+    int i, j, nprocs, myrank, nprocs_recv, hole, build_srt_off_len;
     MPI_Count sum_recv;
-    MPI_Status status;
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
@@ -2132,7 +2097,7 @@ void Exchange_data_recv(
             nprocs_recv++;
     }
 
-    if (nprocs_recv == 0) return;
+    if (nprocs_recv == 0) return NC_NOERR;
 
 // MPI_Count numx = srt_off_len->num; printf("nprocs_recv=%d PNCIO_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld PNCIO_DS_WR_NPAIRS_LB=%d\n",nprocs_recv,PNCIO_DS_WR_NAGGRS_LB,srt_off_len->num,PNCIO_DS_WR_NPAIRS_LB);
 
@@ -2238,14 +2203,9 @@ void Exchange_data_recv(
         if (fd->skip_read)
             memset(write_buf, 0, range_size);
         else {
-            PNCIO_ReadContig(fd, write_buf, range_size, MPI_BYTE, range_off,
-                            &status, &err);
-            if (err != MPI_SUCCESS) {
-                *error_code = PNCIO_Err_create_code(err, MPIR_ERR_RECOVERABLE,
-                                                    __func__, __LINE__, MPI_ERR_IO,
-                                                    "**ioRMWrdwr", 0);
-                return;
-            }
+            MPI_Offset r_len;
+            r_len = PNCIO_ReadContig(fd, write_buf, range_size, range_off);
+            if (r_len < 0) return r_len;
         }
 
         /* Once read, holes have been filled and thus the number of
@@ -2312,6 +2272,7 @@ void Exchange_data_recv(
             MEMCPY_UNPACK(i, fromBuf, start_pos[i], recv_count[i], write_buf);
         }
     }
+    return NC_NOERR;
 }
 
 static

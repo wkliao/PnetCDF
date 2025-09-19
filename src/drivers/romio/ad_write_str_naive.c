@@ -9,10 +9,10 @@
 
 #include <adio.h>
 
-void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
-                                  PNCIO_Flat_list buf_view,
-                                  MPI_Offset offset, MPI_Status *status,
-                                  int *error_code)
+MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
+                                        const void *buf,
+                                        PNCIO_Flat_list buf_view,
+                                        MPI_Offset offset)
 {
     /* offset is in units of etype relative to the filetype. */
 
@@ -29,9 +29,7 @@ void PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
     int buf_count, filetype_is_contig;
     MPI_Offset userbuf_off;
     MPI_Offset off, req_off, disp, end_offset = 0, start_off;
-    MPI_Status status1;
-
-    *error_code = MPI_SUCCESS;  /* changed below if error */
+    MPI_Offset w_len, total_w_len=0;
 
 assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
 
@@ -54,15 +52,8 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
     else {
         PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
         MPI_Type_size_x(fd->filetype, &filetype_size);
-        if (!filetype_size) {
-#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-            MPI_Status_set_elements_x(status, MPI_BYTE, 0);
-#else
-            MPI_Status_set_elements(status, MPI_BYTE, 0);
-#endif
-            *error_code = MPI_SUCCESS;
-            return;
-        }
+        if (filetype_size == 0)
+            return 0;
         MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
     }
 
@@ -80,7 +71,6 @@ PNCIO_Flatlist_node tmp_buf;
     flat_buf->blocklens = buf_view.len;
 
     if (!buf_view.is_contig && filetype_is_contig) {
-        int b_count;
         /* noncontiguous in memory, contiguous in file. */
 
         off = fd->disp + offset;
@@ -101,10 +91,10 @@ PNCIO_Flatlist_node tmp_buf;
                 req_off = off;
                 req_len = flat_buf->blocklens[b_index];
 
-                PNCIO_WriteContig(fd, (char *) buf + userbuf_off, req_len, MPI_BYTE,
-                                 req_off, &status1, error_code);
-                if (*error_code != MPI_SUCCESS)
-                    return;
+                w_len = PNCIO_WriteContig(fd, (char *) buf + userbuf_off,
+                                          req_len, req_off);
+                if (w_len < 0) return w_len;
+                total_w_len += w_len;
 
                 /* off is (potentially) used to save the final offset later */
                 off += flat_buf->blocklens[b_index];
@@ -217,10 +207,10 @@ PNCIO_Flatlist_node tmp_buf;
                     req_off = off;
                     req_len = fwr_size;
 
-                    PNCIO_WriteContig(fd, (char *) buf + userbuf_off, req_len, MPI_BYTE,
-                                     req_off, &status1, error_code);
-                    if (*error_code != MPI_SUCCESS)
-                        return;
+                    w_len = PNCIO_WriteContig(fd, (char *) buf + userbuf_off,
+                                              req_len, req_off);
+                    if (w_len < 0) return w_len;
+                    total_w_len += w_len;
                 }
                 userbuf_off += fwr_size;
 
@@ -272,10 +262,10 @@ PNCIO_Flatlist_node tmp_buf;
                     req_len = size;
                     userbuf_off = i_offset;
 
-                    PNCIO_WriteContig(fd, (char *) buf + userbuf_off, req_len, MPI_BYTE,
-                                     req_off, &status1, error_code);
-                    if (*error_code != MPI_SUCCESS)
-                        return;
+                    w_len = PNCIO_WriteContig(fd, (char *) buf + userbuf_off,
+                                              req_len, req_off);
+                    if (w_len < 0) return w_len;
+                    total_w_len += w_len;
                 }
 
                 if (size == fwr_size) {
@@ -321,12 +311,5 @@ PNCIO_Flatlist_node tmp_buf;
         }
     }   /* end of (else noncontiguous in file) */
 
-#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-    MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
-#else
-    MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
-#endif
-    /* This is a temporary way of filling in status. The right way is to
-     * keep track of how much data was actually written and placed in buf
-     */
+    return total_w_len;
 }

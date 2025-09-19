@@ -1818,9 +1818,9 @@ if (gap >= 0) fake_overlap=1;
                 }
             }
         }
-/*
 MPI_Aint old_npairs = npairs;
 if (do_sort == 1) printf("%s at %d: overlap=%d do_sort=%d after coalesce npairs changed from %ld to %ld wr_amnt=%lld recv_amnt=%lld\n",__func__,__LINE__, overlap, do_sort,old_npairs,npairs,wr_amnt,recv_amnt);
+/*
 */
 
 if (fake_overlap == 0) assert(npairs == i+1);

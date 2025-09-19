@@ -12,7 +12,8 @@
 #include <adio.h>
 
 /* prototypes of functions used for collective reads only. */
-static void Read_and_exch(PNCIO_File *fd, void *buf,
+static
+MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
                           PNCIO_Flat_list buf_view, int nprocs,
                           int myrank, PNCIO_Access *others_req,
                           MPI_Offset * offset_list,
@@ -25,7 +26,7 @@ static void Read_and_exch(PNCIO_File *fd, void *buf,
                           MPI_Offset
                           min_st_offset, MPI_Offset fd_size,
                           MPI_Offset * fd_start, MPI_Offset * fd_end,
-                          MPI_Aint * buf_idx, MPI_Status * status, int *error_code);
+                          MPI_Aint * buf_idx);
 
 static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                             * flat_buf, MPI_Offset * offset_list,
@@ -62,9 +63,10 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                              MPI_Offset fd_size, MPI_Offset * fd_start,
                              MPI_Offset * fd_end);
 
-void PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf,
-                               PNCIO_Flat_list buf_view, MPI_Offset offset,
-                               MPI_Status * status, int *error_code)
+MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File      *fd,
+                                     void            *buf,
+                                     PNCIO_Flat_list  buf_view,
+                                     MPI_Offset       offset)
 {
 /* Uses a generalized version of the extended two-phase method described
    in "An Extended Two-Phase Method for Accessing Sections of
@@ -94,6 +96,7 @@ void PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf,
     int *len_list;
 #endif
     MPI_Aint *buf_idx = NULL;
+    MPI_Offset r_len, total_r_len=0;
 
     int free_flat_fview = (fd->filetype != MPI_DATATYPE_NULL);
 
@@ -118,7 +121,7 @@ double curT = MPI_Wtime();
         /* Note: end_offset points to the last byte-offset that will be accessed.
          * e.g., if start_offset=0 and 100 bytes to be read, end_offset=99 */
 
-        PNCIO_Calc_my_off_len(fd, buf_view.size, MPI_BYTE, offset, &offset_list,
+        PNCIO_Calc_my_off_len(fd, buf_view.size, offset, &offset_list,
                               &len_list, &start_offset, &end_offset,
                               &contig_access_count);
 
@@ -160,19 +163,16 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
                 filetype_is_contig = 1;
             else {
 #ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count m, size;
+                MPI_Count m;
 #else
                 size_t m;
-                int size;
 #endif
-                size = buf_view.size;
-
                 MPI_Offset scan_sum=0;
                 filetype_is_contig = 0;
                 for (m=0; m<fd->flat_file.count; m++) {
                     scan_sum += fd->flat_file.blocklens[m];
                     if (scan_sum > offset) {
-                        if (scan_sum - offset >= size) {
+                        if (scan_sum - offset >= buf_view.size) {
                             /* check if this request falls entirely in m's
                              * offset-length pair
                              */
@@ -183,7 +183,7 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
                         break;
                     }
                 }
-// printf("%s at %d: offset=%lld size=%lld m=%lld scan_sum=%lld off=%lld filetype_is_contig=%d\n",__func__,__LINE__, offset,size,m,scan_sum,off,filetype_is_contig);
+// printf("%s at %d: offset=%lld buf_view.size=%lld m=%lld scan_sum=%lld off=%lld filetype_is_contig=%d\n",__func__,__LINE__, offset,buf_view.size,m,scan_sum,off,filetype_is_contig);
             }
 #if 0
             else if (fd->flat_file.count == 1) {
@@ -219,8 +219,7 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
         else
             PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
-        *error_code = MPI_SUCCESS;
-        if (buf_view.size == 0) return;
+        if (buf_view.size == 0) return 0;
 
 // printf("%s at %d: buf_view.is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, buf_view.is_contig,filetype_is_contig);
         if (buf_view.is_contig && filetype_is_contig) {
@@ -231,16 +230,9 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
                 off = off;
             else
                 off = fd->disp + offset;
-// printf("%s at %d: size=%ld off=%lld\n",__func__,__LINE__,buf_view.size,off);
-            PNCIO_ReadContig(fd, buf, buf_view.size, MPI_BYTE, off, status, error_code);
+            return PNCIO_ReadContig(fd, buf, buf_view.size, off);
         } else
-{
-// printf("%s at %d: size=%ld offset=%lld\n",__func__,__LINE__,buf_view.size,offset);
-            PNCIO_GEN_ReadStrided(fd, buf, buf_view, offset, status, error_code);
-}
-
-// printf("%s at %d: SWITCH indep READ ------------------ off=%lld size=%ld\n",__func__,__LINE__, off, buf_view.size);
-        return;
+            return PNCIO_GEN_ReadStrided(fd, buf, buf_view, offset);
     }
 // printf("%s at %d\n",__func__,__LINE__);fflush(stdout);
 
@@ -300,9 +292,10 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
     /* read data in sizes of no more than collective buffer size,
      * communicate, and fill user buf.
      */
-    Read_and_exch(fd, buf, buf_view, nprocs, myrank, others_req, offset_list,
-                  len_list, contig_access_count, min_st_offset,
-                  fd_size, fd_start, fd_end, buf_idx, status, error_code);
+    r_len = Read_and_exch(fd, buf, buf_view, nprocs, myrank, others_req,
+                          offset_list, len_list, contig_access_count,
+                          min_st_offset, fd_size, fd_start, fd_end, buf_idx);
+    if (r_len > 0) total_r_len += r_len;
 
     /* free all memory allocated for collective I/O */
     PNCIO_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
@@ -315,11 +308,12 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     if (fd->is_agg) fd->read_timing[0] += MPI_Wtime() - curT;
 #endif
+
+    return (r_len < 0) ? r_len : total_r_len;
 }
 
 void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
-                           MPI_Offset     bufcount,
-                           MPI_Datatype   buftype,
+                           MPI_Offset     io_amnt,
                            MPI_Offset     offset,
                            MPI_Offset   **offset_list_ptr,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -332,13 +326,8 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
                            MPI_Count     *contig_access_count_ptr)
 {
     size_t alloc_sz;
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count n, buftype_size;
-#else
-    int n, buftype_size;
-#endif
 
-    if (bufcount == 0) { /* zero-sized request */
+    if (io_amnt == 0) { /* zero-sized request */
         *offset_list_ptr = NULL;
         *len_list_ptr = NULL;
         *start_offset_ptr = 0;
@@ -347,10 +336,9 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
         return;
     }
 
-    /* Note: PnetCDF always defines a filetype of size equals to (bufcount *
-     * size of buftype) when the filetype is non-contiguous. Thus if the
-     * filetype has been flattened in fd->flat_file, then its flattened
-     * offset-length pair can be reused.
+    /* Note: PnetCDF always sets the same size for fileview and bufview and
+     * passes the flattened file offset and length pairs to set fileview API,
+     * so they can be reused.
      */
     if (fd->filetype == MPI_DATATYPE_NULL) {
         if (fd->flat_file.count == 0) {
@@ -362,15 +350,20 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
             return;
         }
 
-        /* When PnetCDF's intra-node aggregation is enabled, the fileview's
-         * flattened offset-length pairs, fd->flat_file.indices and
-         * fd->flat_file.blockens, have been populated in PnetCDF's
-         * subroutines, which can be reused here to avoid repeated datatype
-         * flattened work and reduce memory footprint. In addition, the
-         * offset-length pairs have been sorted in an increasng order.
+        /* The fileview's flattened offset-length pairs, fd->flat_file.indices
+         * and fd->flat_file.blockens, have been populated in PnetCDF's
+         * subroutines, which also have been sorted in an increasng order.
          */
 
-        /* find the first offset-length pair containing "offset" */
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Count n;
+#else
+    int n;
+#endif
+
+// offset should always be 0
+assert(offset == 0);
+/* find the first offset-length pair containing "offset" */
         for (n=0; n<fd->flat_file.count; n++) {
             if (offset < fd->flat_file.indices[n] + fd->flat_file.blocklens[n])
                 break;
@@ -387,22 +380,13 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
         return;
     }
     else if (fd->filetype == MPI_BYTE) {
-assert(buftype == MPI_BYTE);
-#ifdef HAVE_MPI_TYPE_SIZE_C
-        MPI_Type_size_c(buftype, &buftype_size);
-#elif defined(HAVE_MPI_TYPE_SIZE_X)
-        MPI_Type_size_x(buftype, &buftype_size);
-#else
-        MPI_Type_size(buftype, &buftype_size);
-#endif
-
         *contig_access_count_ptr = 1;
 #ifdef HAVE_MPI_LARGE_COUNT
         alloc_sz = sizeof(MPI_Offset) * 2;
         *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz);
         *len_list_ptr = (*offset_list_ptr + 1);
         (*offset_list_ptr)[0] = fd->disp + offset;
-        (*len_list_ptr)[0] = bufcount * buftype_size;
+        (*len_list_ptr)[0] = io_amnt;
 #else
         alloc_sz = sizeof(MPI_Offset) + sizeof(int);
         *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz);
@@ -411,7 +395,7 @@ assert(buftype == MPI_BYTE);
         /* TODO: check int overflow
         if (bufcount > NC_MAX_INT) NC_EINTOVERFLOW
         */
-        (*len_list_ptr)[0] = (int) bufcount * buftype_size;
+        (*len_list_ptr)[0] = (int) io_amnt;
 #endif
         *start_offset_ptr = (*offset_list_ptr)[0];
         *end_offset_ptr = (*offset_list_ptr)[0] + (*len_list_ptr)[0] - 1;
@@ -665,19 +649,20 @@ assert(0);
 }
 #endif
 
-static void Read_and_exch(PNCIO_File *fd, void *buf,
-                          PNCIO_Flat_list buf_view, int nprocs,
-                          int myrank, PNCIO_Access *others_req,
-                          MPI_Offset *offset_list,
+static
+MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
+                         PNCIO_Flat_list buf_view, int nprocs,
+                         int myrank, PNCIO_Access *others_req,
+                         MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
-                          MPI_Offset *len_list,
+                         MPI_Offset *len_list,
 #else
-                          int *len_list,
+                         int *len_list,
 #endif
-                          MPI_Count contig_access_count,
-                          MPI_Offset min_st_offset, MPI_Offset fd_size,
-                          MPI_Offset * fd_start, MPI_Offset * fd_end,
-                          MPI_Aint * buf_idx, MPI_Status * status, int *error_code)
+                         MPI_Count contig_access_count,
+                         MPI_Offset min_st_offset, MPI_Offset fd_size,
+                         MPI_Offset * fd_start, MPI_Offset * fd_end,
+                         MPI_Aint * buf_idx)
 {
 /* Read in sizes of no more than coll_bufsize, an info parameter.
    Send data to appropriate processes.
@@ -700,9 +685,7 @@ static void Read_and_exch(PNCIO_File *fd, void *buf,
     PNCIO_Flatlist_node *flat_buf = NULL;
     MPI_Aint coll_bufsize;
     MPI_Aint actual_recved_bytes = 0;
-
-    *error_code = MPI_SUCCESS;  /* changed below if error */
-    /* only I/O errors are currently reported */
+    MPI_Offset r_len;
 
 /* calculate the number of reads of size coll_bufsize
    to be done by each process and the max among all processes.
@@ -854,30 +837,10 @@ flat_buf = &flatB;
             }
         }
         if (flag) {
-            MPI_Status read_status;
-            assert(size == (int) size);
             /* This should be only reached by I/O aggregators only */
-
-            PNCIO_ReadContig(fd, read_buf + for_curr_iter, (int) size, MPI_BYTE,
-                            off, &read_status, error_code);
-
-            if (*error_code != MPI_SUCCESS) {
-                /* TODO: proper error return */
-                return;
-            }
-            int mpireturn, get_count;
-            mpireturn = MPI_Get_count(&read_status, MPI_BYTE, &get_count);
-            if (mpireturn != MPI_SUCCESS || get_count == MPI_UNDEFINED) {
-                /* partial read: in this case MPI_Get_elements() is supposed to
-                 * be called to obtain the number of type map elements actually
-                 * read in order to calculate the true read amount. Below skips
-                 * this step and simply ignore the partial read. See an example
-                 * usage of MPI_Get_count() in Example 5.12 from MPI standard
-                 * document.
-                 */
-                size = get_count;
-                /* TODO: need abort the further rounds */
-            }
+            r_len = PNCIO_ReadContig(fd, read_buf + for_curr_iter, size, off);
+            if (r_len < 0) return r_len;
+            size = r_len;
         }
 
         real_off = off - for_curr_iter;
@@ -986,13 +949,9 @@ flat_buf = &flatB;
         actual_recved_bytes += recved_bytes;
     }
 
-#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-    MPI_Status_set_elements_x(status, MPI_BYTE, actual_recved_bytes);
-#else
-    MPI_Status_set_elements(status, MPI_BYTE, actual_recved_bytes);
-#endif
-
     NCI_Free(curr_offlen_ptr);
+
+    return actual_recved_bytes;
 }
 
 static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node

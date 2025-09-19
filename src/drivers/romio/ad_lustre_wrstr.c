@@ -14,17 +14,16 @@
     {                                                                   \
         if (req_off >= writebuf_off + writebuf_len) {                   \
             if (writebuf_len) {                                         \
-                PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE, \
-                                  writebuf_off, &status1, error_code);  \
+                w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,   \
+                                          writebuf_off);                \
                 if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                     PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-                if (*error_code != MPI_SUCCESS) {                       \
-                    *error_code = PNCIO_Err_create_code(*error_code,    \
-                        MPIR_ERR_RECOVERABLE, myname, __LINE__,         \
-                        MPI_ERR_IO, "**iowswc", 0);                     \
+                if (w_len < 0) {                                        \
                     NCI_Free(writebuf);                                 \
-                    return;                                             \
+                    return w_len;                                       \
                 }                                                       \
+                total_w_len += w_len;                                   \
+                writebuf_off = req_off;                                 \
             }                                                           \
             writebuf_off = req_off;                                     \
             /* stripe_size alignment */                                 \
@@ -33,30 +32,25 @@
                                    stripe_size - writebuf_off);         \
             if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                 PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                             writebuf_off, &status1, error_code);       \
-            if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = PNCIO_Err_create_code(*error_code,        \
-                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
-                    "**iowsrc", 0);                                     \
+            r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len,        \
+                                     writebuf_off);                     \
+            if (r_len < 0) {                                            \
                 NCI_Free(writebuf);                                     \
-                return;                                                 \
+                return r_len;                                           \
             }                                                           \
         }                                                               \
         write_sz = (MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
         memcpy(writebuf + req_off - writebuf_off, (char *)buf +userbuf_off, write_sz); \
-        while (write_sz != req_len) {                                    \
-            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                              writebuf_off, &status1, error_code);       \
+        while (write_sz != req_len) {                                   \
+            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,       \
+                                      writebuf_off);                    \
             if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                 PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = PNCIO_Err_create_code(*error_code,        \
-                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
-                    "**iowswc", 0);                                     \
+            if (w_len < 0) {                                            \
                 NCI_Free(writebuf);                                     \
-                return;                                                 \
+                return w_len;                                           \
             }                                                           \
+            total_w_len += w_len;                                       \
             req_len -= write_sz;                                        \
             userbuf_off += write_sz;                                    \
             writebuf_off += writebuf_len;                               \
@@ -66,14 +60,11 @@
                                    stripe_size - writebuf_off);         \
             if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
                 PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            PNCIO_ReadContig(fd, writebuf, writebuf_len, MPI_BYTE,      \
-                             writebuf_off, &status1, error_code);       \
-            if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = PNCIO_Err_create_code(*error_code,        \
-                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
-                    "**iowsrc", 0);                                     \
+            r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len,        \
+                                     writebuf_off);                     \
+            if (r_len < 0) {                                            \
                 NCI_Free(writebuf);                                     \
-                return;                                                 \
+                return r_len;                                           \
             }                                                           \
             write_sz = MPL_MIN(req_len, writebuf_len);                  \
             memcpy(writebuf, (char *)buf + userbuf_off, write_sz);      \
@@ -86,15 +77,13 @@
 #define BUFFERED_WRITE_WITHOUT_READ                                     \
     {                                                                   \
         if (req_off >= writebuf_off + writebuf_len) {                   \
-            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,     \
-                              writebuf_off, &status1,  error_code);     \
-            if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = PNCIO_Err_create_code(*error_code,        \
-                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
-                    "**iowswc", 0);                                     \
+            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,       \
+                                      writebuf_off);                    \
+            if (w_len < 0) {                                            \
                 NCI_Free(writebuf);                                     \
-                return;                                                 \
+                return w_len;                                           \
             }                                                           \
+            total_w_len += w_len;                                       \
             writebuf_off = req_off;                                     \
             /* stripe_size alignment */                                 \
             writebuf_len = MPL_MIN(end_offset - writebuf_off + 1,       \
@@ -105,15 +94,13 @@
         memcpy(writebuf + req_off - writebuf_off,                       \
                (char *)buf + userbuf_off, write_sz);                    \
         while (write_sz != req_len) {                                   \
-            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,     \
-                              writebuf_off, &status1, error_code);      \
-            if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = PNCIO_Err_create_code(*error_code,        \
-                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
-                    "**iowswc", 0);                                     \
+            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,       \
+                                      writebuf_off);                    \
+            if (w_len < 0) {                                            \
                 NCI_Free(writebuf);                                     \
-                return;                                                 \
+                return w_len;                                           \
             }                                                           \
+            total_w_len += w_len;                                       \
             req_len -= write_sz;                                        \
             userbuf_off += write_sz;                                    \
             writebuf_off += writebuf_len;                               \
@@ -126,12 +113,10 @@
         }                                                               \
     }
 
-void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
-                               const void *buf,
-                               PNCIO_Flat_list buf_view,
-                               MPI_Offset offset,
-                               MPI_Status *status,
-                               int *error_code)
+MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
+                                     const void *buf,
+                                     PNCIO_Flat_list buf_view,
+                                     MPI_Offset offset)
 {
     /* offset is in units of etype relative to the filetype. */
     PNCIO_Flatlist_node *flat_buf;
@@ -140,17 +125,16 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
     MPI_Count n_etypes_in_filetype;
     MPI_Offset num, size, n_filetypes, etype_in_filetype, st_n_filetypes;
     MPI_Offset abs_off_in_filetype = 0;
-    MPI_Count filetype_size, buftype_size;
-    MPI_Aint lb, filetype_extent;
+    MPI_Count filetype_size;
+    MPI_Aint filetype_extent;
     int buf_count, filetype_is_contig;
     MPI_Offset userbuf_off;
     MPI_Offset off, req_off, disp, end_offset = 0, writebuf_off, start_off;
     char *writebuf;
     MPI_Count bufsize, writebuf_len, write_sz;
-    MPI_Status status1;
     MPI_Offset new_bwr_size, new_fwr_size, st_fwr_size, fwr_size = 0, bwr_size, req_len;
     int stripe_size;
-    static char myname[] = "PNCIO_LUSTRE_WriteStrided";
+    MPI_Offset r_len, w_len, total_w_len=0;
 
     /* The case of both buftype and filetype being contiguous has gone to
      * PNCIO_WriteContig().
@@ -162,12 +146,9 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
         /* if user has disabled data sieving on writes, use naive
          * approach instead.
          */
-        PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view, offset, status,
-                                     error_code);
-        return;
+        return PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view, offset);
     }
 
-    *error_code = MPI_SUCCESS;  /* changed below if error */
 
     assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
 
@@ -196,6 +177,7 @@ void PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
     bufsize = buf_view.size;
 
 
+// printf("%s at %d: buf_view.size=%lld filetype_size=%lld\n",__func__,__LINE__,buf_view.size,filetype_size);
 
     /* get striping info */
     stripe_size = fd->hints->striping_unit;
@@ -229,24 +211,23 @@ PNCIO_Flatlist_node tmp_buf;
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, bufsize);
 
         for (i = 0; i < flat_buf->count; i++) {
-                userbuf_off = flat_buf->indices[i];
-                req_off = off;
-                req_len = flat_buf->blocklens[i];
-                BUFFERED_WRITE_WITHOUT_READ;
-                off += flat_buf->blocklens[i];
+            userbuf_off = flat_buf->indices[i];
+            req_off = off;
+            req_len = flat_buf->blocklens[i];
+            BUFFERED_WRITE_WITHOUT_READ;
+            off += flat_buf->blocklens[i];
         }
 
         /* write the buffer out finally */
-        PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE, writebuf_off,
-                          &status1, error_code);
+        w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);
 
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, bufsize);
-        if (*error_code != MPI_SUCCESS) {
-            NCI_Free(writebuf);
-            return;
-        }
+
         NCI_Free(writebuf);
+
+        if (w_len < 0) return w_len;
+        total_w_len += w_len;
 
     } else {
         /* buf_view.is_contig || !filetype_is_contig */
@@ -291,21 +272,20 @@ PNCIO_Flatlist_node tmp_buf;
             writebuf_len = 0;
             userbuf_off = 0;
             BUFFERED_WRITE_WITHOUT_READ;
+
             /* write the buffer out finally */
             if (fd->hints->ds_write != PNCIO_HINT_DISABLE)
                 PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
-            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
-                             writebuf_off, &status1, error_code);
+
+            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);
+            if (w_len > 0) total_w_len += w_len;
+
             if (fd->hints->ds_write != PNCIO_HINT_DISABLE)
                 PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
 
-#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-            MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
-#else
-            MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
-#endif
             NCI_Free(writebuf);
-            return;
+
+            return total_w_len;
         }
 
         /* Calculate end_offset, the last byte-offset that will be accessed.
@@ -449,12 +429,11 @@ PNCIO_Flatlist_node tmp_buf;
 
         /* write the buffer out finally */
         if (writebuf_len) {
-            PNCIO_WriteContig(fd, writebuf, writebuf_len, MPI_BYTE,
-                             writebuf_off, &status1, error_code);
+            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);
             if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)
                 PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
-            if (*error_code != MPI_SUCCESS)
-                return;
+            if (w_len < 0) return w_len;
+            total_w_len += w_len;
         }
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
@@ -462,11 +441,5 @@ PNCIO_Flatlist_node tmp_buf;
         NCI_Free(writebuf);
     }
 
-#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-    MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
-#else
-    MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
-#endif
-/* This is a temporary way of filling in status. The right way is to
-    keep track of how much data was actually written by BUFFERED_WRITE. */
+    return buf_view.size;
 }

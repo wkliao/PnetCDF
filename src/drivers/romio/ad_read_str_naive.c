@@ -9,9 +9,10 @@
 
 #include <adio.h>
 
-void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf,
-                                 PNCIO_Flat_list buf_view, MPI_Offset offset,
-                                 MPI_Status * status, int *error_code)
+MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File      *fd,
+                                       void            *buf,
+                                       PNCIO_Flat_list  buf_view,
+                                       MPI_Offset       offset)
 {
     /* offset is in units of etype relative to the filetype. */
 
@@ -26,20 +27,15 @@ void PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf,
     int buf_count, filetype_is_contig;
     MPI_Offset userbuf_off;
     MPI_Offset off, req_off, disp, end_offset = 0, start_off;
-    MPI_Status status1;
-
-    *error_code = MPI_SUCCESS;  /* changed below if error */
+    MPI_Offset r_len, total_r_len=0;
 
 printf("%s at %d:\n",__func__,__LINE__);
 
     PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
 
     MPI_Type_size_x(fd->filetype, &filetype_size);
-    if (!filetype_size) {
-        MPI_Status_set_elements(status, MPI_BYTE, 0);
-        *error_code = MPI_SUCCESS;
-        return;
-    }
+    if (filetype_size == 0)
+        return 0;
 
     MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
 
@@ -58,7 +54,6 @@ printf("%s at %d:\n",__func__,__LINE__);
         flat_buf->flag = 0;
 
     if (!buf_view.is_contig && filetype_is_contig) {
-        int b_count;
         /* noncontiguous in memory, contiguous in file. */
 
         off = fd->disp + offset;
@@ -82,12 +77,10 @@ printf("%s at %d:\n",__func__,__LINE__);
                 assert((((MPI_Offset) (uintptr_t) buf) + userbuf_off) ==
                              (MPI_Offset) (uintptr_t) ((uintptr_t) buf + userbuf_off));
                 assert(req_len == (int) req_len);
-                PNCIO_ReadContig(fd,
-                                (char *) buf + userbuf_off,
-                                req_len,
-                                MPI_BYTE, req_off, &status1, error_code);
-                if (*error_code != MPI_SUCCESS)
-                    return;
+                r_len = PNCIO_ReadContig(fd, (char *) buf + userbuf_off,
+                                         req_len, req_off);
+                if (r_len < 0) return r_len;
+                total_r_len += r_len;
 
                 /* off is (potentially) used to save the final offset later */
                 off += flat_buf->blocklens[b_index];
@@ -204,12 +197,10 @@ printf("%s at %d:\n",__func__,__LINE__);
                     assert((((MPI_Offset) (uintptr_t) buf) + userbuf_off) ==
                                  (MPI_Offset) (uintptr_t) ((uintptr_t) buf + userbuf_off));
                     assert(req_len == (int) req_len);
-                    PNCIO_ReadContig(fd,
-                                    (char *) buf + userbuf_off,
-                                    req_len,
-                                    MPI_BYTE, req_off, &status1, error_code);
-                    if (*error_code != MPI_SUCCESS)
-                        return;
+                    r_len = PNCIO_ReadContig(fd, (char *) buf + userbuf_off,
+                                             req_len, req_off);
+                    if (r_len < 0) return r_len;
+                    total_r_len += r_len;
                 }
                 userbuf_off += frd_size;
 
@@ -265,12 +256,10 @@ printf("%s at %d:\n",__func__,__LINE__);
                     assert((((MPI_Offset) (uintptr_t) buf) + userbuf_off) ==
                                  (MPI_Offset) (uintptr_t) ((uintptr_t) buf + userbuf_off));
                     assert(req_len == (int) req_len);
-                    PNCIO_ReadContig(fd,
-                                    (char *) buf + userbuf_off,
-                                    req_len,
-                                    MPI_BYTE, req_off, &status1, error_code);
-                    if (*error_code != MPI_SUCCESS)
-                        return;
+                    r_len = PNCIO_ReadContig(fd, (char *) buf + userbuf_off,
+                                             req_len, req_off);
+                    if (r_len < 0) return r_len;
+                    total_r_len += r_len;
                 }
 
                 if (size == frd_size) {
@@ -316,12 +305,5 @@ printf("%s at %d:\n",__func__,__LINE__);
         }
     }   /* end of (else noncontiguous in file) */
 
-#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-    MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
-#else
-    MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
-#endif
-    /* This is a temporary way of filling in status. The right way is to
-     * keep track of how much data was actually read and placed in buf
-     */
+    return total_r_len;
 }

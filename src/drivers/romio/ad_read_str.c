@@ -9,49 +9,40 @@
 
 #include <adio.h>
 
-#define BUFFERED_READ                                                   \
-    {                                                                   \
-        if (req_off >= readbuf_off + readbuf_len) {                     \
-            readbuf_off = req_off;                                      \
-            readbuf_len = MPL_MIN(max_bufsize, end_offset-readbuf_off+1); \
-            PNCIO_ReadContig(fd, readbuf, readbuf_len, MPI_BYTE,        \
-                             readbuf_off, &status1, error_code);        \
-            if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = PNCIO_Err_create_code(*error_code,        \
-                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
-                    "**iorsrc", 0);                                     \
-                return;                                                 \
-            }                                                           \
-        }                                                               \
-        while (req_len > readbuf_off + readbuf_len - req_off) {         \
-            partial_read = readbuf_off + readbuf_len - req_off;         \
-            tmp_buf = (char *) NCI_Malloc(partial_read);                \
+#define BUFFERED_READ                                                        \
+    {                                                                        \
+        if (req_off >= readbuf_off + readbuf_len) {                          \
+            readbuf_off = req_off;                                           \
+            readbuf_len = MPL_MIN(max_bufsize, end_offset-readbuf_off+1);    \
+            r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off); \
+            if (r_len < 0) return r_len;                                     \
+            total_r_len += r_len;                                            \
+        }                                                                    \
+        while (req_len > readbuf_off + readbuf_len - req_off) {              \
+            partial_read = readbuf_off + readbuf_len - req_off;              \
+            tmp_buf = (char *) NCI_Malloc(partial_read);                     \
             memcpy(tmp_buf, readbuf+readbuf_len-partial_read, partial_read); \
-            NCI_Free(readbuf);                                          \
-            readbuf = (char *) NCI_Malloc(partial_read + max_bufsize);  \
-            memcpy(readbuf, tmp_buf, partial_read);                     \
-            NCI_Free(tmp_buf);                                          \
-            readbuf_off += readbuf_len-partial_read;                    \
-            readbuf_len = partial_read +                                \
-                          MPL_MIN(max_bufsize, end_offset-readbuf_off+1); \
-            PNCIO_ReadContig(fd, readbuf+partial_read,                  \
-                             readbuf_len-partial_read, MPI_BYTE,        \
-                             readbuf_off+partial_read, &status1,        \
-                             error_code);                               \
-            if (*error_code != MPI_SUCCESS) {                           \
-                *error_code = PNCIO_Err_create_code(*error_code,        \
-                    MPIR_ERR_RECOVERABLE, myname, __LINE__, MPI_ERR_IO, \
-                    "**iorsrc", 0);                                     \
-                return;                                                 \
-            }                                                           \
-        }                                                               \
-        memcpy((char *)buf + userbuf_off, readbuf+req_off-readbuf_off, req_len); \
+            NCI_Free(readbuf);                                               \
+            readbuf = (char *) NCI_Malloc(partial_read + max_bufsize);       \
+            memcpy(readbuf, tmp_buf, partial_read);                          \
+            NCI_Free(tmp_buf);                                               \
+            readbuf_off += readbuf_len-partial_read;                         \
+            readbuf_len = partial_read +                                     \
+                          MPL_MIN(max_bufsize, end_offset-readbuf_off+1);    \
+            r_len = PNCIO_ReadContig(fd, readbuf+partial_read,               \
+                             readbuf_len-partial_read,                       \
+                             readbuf_off+partial_read);                      \
+            if (r_len < 0) return r_len;                                     \
+            total_r_len += r_len;                                            \
+        }                                                                    \
+        memcpy((char*)buf+userbuf_off, readbuf+req_off-readbuf_off, req_len); \
     }
 
 
-void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf,
-                           PNCIO_Flat_list buf_view, MPI_Offset offset,
-                           MPI_Status * status, int *error_code)
+MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
+                                 void *buf,
+                                 PNCIO_Flat_list buf_view,
+                                 MPI_Offset offset)
 {
 
 
@@ -65,15 +56,14 @@ void PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf,
     MPI_Offset n_filetypes, etype_in_filetype, st_n_filetypes, size_in_filetype;
     MPI_Offset abs_off_in_filetype = 0, new_frd_size, frd_size = 0, st_frd_size;
     MPI_Count filetype_size, partial_read;
-    MPI_Aint lb, filetype_extent, buftype_extent;
+    MPI_Aint filetype_extent, buftype_extent;
     int buf_count, filetype_is_contig;
     MPI_Offset userbuf_off, req_len, sum;
     MPI_Offset off, req_off, disp, end_offset = 0, readbuf_off, start_off;
     char *readbuf, *tmp_buf, *value;
     int info_flag;
     MPI_Aint max_bufsize, readbuf_len;
-    MPI_Status status1;
-    static char myname[] = "PNCIO_GEN_ReadStrided";
+    MPI_Offset r_len, total_r_len=0;
 
 printf("%s at %d:\n",__func__,__LINE__);
 
@@ -81,12 +71,8 @@ printf("%s at %d:\n",__func__,__LINE__);
         /* if user has disabled data sieving on reads, use naive
          * approach instead.
          */
-        PNCIO_GEN_ReadStrided_naive(fd, buf, buf_view, offset, status,
-                                    error_code);
-        return;
+        return PNCIO_GEN_ReadStrided_naive(fd, buf, buf_view, offset);
     }
-
-    *error_code = MPI_SUCCESS;  /* changed below if error */
 
 /* This subroutine is entered with filetype being non-contiguous only */
 assert(fd->filetype == MPI_DATATYPE_NULL);
@@ -131,23 +117,6 @@ assert(fd->filetype == MPI_DATATYPE_NULL);
 
     }
 else assert(0);
-/*
-    else if (fd->filetype == MPI_BYTE) {
-        filetype_is_contig = 1;
-        filetype_size = 1;
-        filetype_extent = 1;
-    }
-    else {
-        PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
-        MPI_Type_size_x(fd->filetype, &filetype_size);
-        if (!filetype_size) {
-            MPI_Status_set_elements(status, datatype, 0);
-            *error_code = MPI_SUCCESS;
-            return;
-        }
-        MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
-    }
-*/
 
 assert(filetype_is_contig == 0);
 
@@ -191,17 +160,15 @@ assert(0);
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
-        PNCIO_ReadContig(fd, readbuf, readbuf_len, MPI_BYTE, readbuf_off,
-                        &status1, error_code);
-        if (*error_code != MPI_SUCCESS)
-            return;
+        r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off);
+        if (r_len < 0) return r_len;
 
         for (i = 0; i < flat_buf->count; i++) {
-                userbuf_off = (MPI_Offset) j * buftype_extent + flat_buf->indices[i];
-                req_off = off;
-                req_len = flat_buf->blocklens[i];
-                BUFFERED_READ
-                off += flat_buf->blocklens[i];
+            userbuf_off = (MPI_Offset)j * buftype_extent + flat_buf->indices[i];
+            req_off = off;
+            req_len = flat_buf->blocklens[i];
+            BUFFERED_READ
+            off += flat_buf->blocklens[i];
         }
 
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
@@ -240,15 +207,10 @@ assert(0);
          * array */
         if (buf_view.is_contig && bufsize <= frd_size) {
             /* a count of bytes can overflow. operate on original type instead */
-            PNCIO_ReadContig(fd, buf, buf_view.size, MPI_BYTE, offset, status,
-                            error_code);
+            r_len = PNCIO_ReadContig(fd, buf, buf_view.size, offset);
 
-#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-            MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
-#else
-            MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
-#endif
-            return;
+assert(buf_view.size == r_len);
+            return r_len;
         }
 
         /* Calculate end_offset, the last byte-offset that will be accessed.
@@ -395,12 +357,5 @@ assert(0);
         NCI_Free(readbuf);    /* malloced in the buffered_read macro */
     }
 
-#ifdef HAVE_MPI_STATUS_SET_ELEMENTS_X
-    MPI_Status_set_elements_x(status, MPI_BYTE, buf_view.size);
-#else
-    MPI_Status_set_elements(status, MPI_BYTE, buf_view.size);
-#endif
-/* This is a temporary way of filling in status. The right way is to
-   keep track of how much data was actually read and placed in buf
-   by BUFFERED_READ. */
+    return buf_view.size;
 }

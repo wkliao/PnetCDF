@@ -77,6 +77,7 @@ ncmpio_file_read_at(NC              *ncp,
                     PNCIO_Flat_list  buf_view)
 {
     int err=NC_NOERR, mpireturn;
+    MPI_Offset amnt=0;
     MPI_Status mpistatus;
 
     /* explicitly initialize mpistatus object to 0. For zero-length read/write,
@@ -125,22 +126,19 @@ ncmpio_file_read_at(NC              *ncp,
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
             if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(err, NC_EREAD)
         }
-    }
-    else {
-        err = PNCIO_File_read_at(ncp->adio_fh, offset, buf, buf_view,
-                                 &mpistatus);
-    }
 
-    /* update the number of bytes read since file open */
-    if (err == NC_NOERR) {
-        MPI_Offset amnt;
-        amnt = get_count(&mpistatus, buf_view.type);
-        if (amnt >= 0) ncp->get_size += amnt;
-        /* else: ignore if error, as this error is not fatal */
-        return amnt;
+        /* update the number of bytes read since file open */
+        if (err == NC_NOERR)
+            amnt = get_count(&mpistatus, buf_view.type);
     }
     else
-        return err;
+        amnt = PNCIO_File_read_at(ncp->adio_fh, offset, buf, buf_view);
+
+    /* update the number of bytes read since file open */
+    if (amnt >= 0) ncp->get_size += amnt;
+    /* else: ignore if error, as this error is not fatal */
+
+    return amnt;
 }
 
 /*----< ncmpio_file_read_at_all() >------------------------------------------*/
@@ -154,6 +152,7 @@ ncmpio_file_read_at_all(NC              *ncp,
                         PNCIO_Flat_list  buf_view)
 {
     int err=NC_NOERR, mpireturn;
+    MPI_Offset amnt=0;
     MPI_Status mpistatus;
 
     /* Explicitly initialize mpistatus object to 0. For zero-length read/write,
@@ -204,22 +203,19 @@ ncmpio_file_read_at_all(NC              *ncp,
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
             if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(err, NC_EREAD)
         }
-    }
-    else {
-        err = PNCIO_File_read_at_all(ncp->adio_fh, offset, buf, buf_view,
-                                     &mpistatus);
-    }
 
-    /* update the number of bytes read since file open */
-    if (err == NC_NOERR) {
-        MPI_Offset amnt;
-        amnt = get_count(&mpistatus, buf_view.type);
-        if (amnt >= 0) ncp->get_size += amnt;
-        /* else: ignore if error, as this error is not fatal */
-        return amnt;
+        /* update the number of bytes read since file open */
+        if (err == NC_NOERR)
+            amnt = get_count(&mpistatus, buf_view.type);
     }
     else
-        return err;
+        amnt = PNCIO_File_read_at_all(ncp->adio_fh, offset, buf, buf_view);
+
+    /* update the number of bytes read since file open */
+    if (amnt >= 0) ncp->get_size += amnt;
+    /* else: ignore if error, as this error is not fatal */
+
+    return amnt;
 }
 
 /*----< ncmpio_file_write_at() >---------------------------------------------*/
@@ -233,6 +229,7 @@ ncmpio_file_write_at(NC              *ncp,
                      PNCIO_Flat_list  buf_view)
 {
     int err=NC_NOERR, mpireturn;
+    MPI_Offset amnt=0;
     MPI_Status mpistatus;
 
     /* Explicitly initialize mpistatus object to 0. For zero-length read/write,
@@ -282,22 +279,18 @@ ncmpio_file_write_at(NC              *ncp,
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
             if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(err, NC_EWRITE)
         }
-    }
-    else {
-        err = PNCIO_File_write_at(ncp->adio_fh, offset, buf, buf_view,
-                                  &mpistatus);
-    }
 
-    /* update the number of bytes written since file open */
-    if (err == NC_NOERR) {
-        MPI_Offset amnt;
-        amnt = get_count(&mpistatus, buf_view.type);
-        if (amnt >= 0) ncp->put_size += amnt;
-        /* else: ignore if error, as this error is not fatal */
-        return amnt;
+        if (err == NC_NOERR)
+            amnt = get_count(&mpistatus, buf_view.type);
     }
     else
-        return err;
+        amnt = PNCIO_File_write_at(ncp->adio_fh, offset, buf, buf_view);
+
+    /* update the number of bytes written since file open */
+    if (amnt >= 0) ncp->put_size += amnt;
+    /* else: ignore if error, as this error is not fatal */
+
+    return amnt;
 }
 
 /*----< ncmpio_file_write_at_all() >-----------------------------------------*/
@@ -311,6 +304,7 @@ ncmpio_file_write_at_all(NC              *ncp,
                          PNCIO_Flat_list  buf_view)
 {
     int err=NC_NOERR, mpireturn;
+    MPI_Offset amnt=0;
     MPI_Status mpistatus;
 
     /* explicitly initialize mpistatus object to 0. For zero-length read/write,
@@ -362,22 +356,18 @@ ncmpio_file_write_at_all(NC              *ncp,
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
             if (err == NC_EFILE) DEBUG_ASSIGN_ERROR(err, NC_EWRITE)
         }
-    }
-    else {
-        err = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf, buf_view,
-                                      &mpistatus);
-    }
 
-    /* update the number of bytes written since file open */
-    if (err == NC_NOERR) {
-        MPI_Offset amnt;
-        amnt = get_count(&mpistatus, buf_view.type);
-        if (amnt >= 0) ncp->put_size += amnt;
-        /* else: ignore if error, as this error is not fatal */
-        return amnt;
+        if (err == NC_NOERR)
+            amnt = get_count(&mpistatus, buf_view.type);
     }
     else
-        return err;
+        amnt = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf, buf_view);
+
+    /* update the number of bytes written since file open */
+    if (amnt >= 0) ncp->put_size += amnt;
+    /* else: ignore if error, as this error is not fatal */
+
+    return amnt;
 }
 
 /*----< ncmpio_getput_zero_req() >-------------------------------------------*/
