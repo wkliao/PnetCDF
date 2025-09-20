@@ -59,7 +59,7 @@ ioerr:
 /* This is an independent call. */
 static
 MPI_Offset file_read(PNCIO_File      *fd,
-                     MPI_Offset       offset,
+                     MPI_Offset       offset, /* relative to fileview */
                      void            *buf,
                      PNCIO_Flat_list  buf_view)
 {
@@ -67,10 +67,16 @@ MPI_Offset file_read(PNCIO_File      *fd,
     MPI_Offset r_len=0;
 MPI_Offset off=offset;
 
+// printf("%s at %d: offset=%lld buf_view size=%lld\n",__func__,__LINE__, offset,buf_view.size);
+
+assert(fd->filetype == MPI_BYTE);
+
     if (buf_view.size == 0) /* zero-sized request */
         return NC_NOERR;
 
-    /* when fd->filetype == MPI_DATATYPE_NULL, this is called from INA */
+if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
+
+#if 0
     if (fd->filetype == MPI_DATATYPE_NULL) {
         if (fd->flat_file.count == 0)
             /* the whole file is visible */
@@ -122,11 +128,15 @@ MPI_Offset off=offset;
 assert(0);
         PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
     }
+#endif
 
 // printf("%s at %d: flat_file.count=%lld buf_view.is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, fd->flat_file.count, buf_view.is_contig,filetype_is_contig);
 
-    if (buf_view.is_contig && filetype_is_contig)
-        r_len = PNCIO_ReadContig(fd, buf, buf_view.size, off);
+    filetype_is_contig = (fd->flat_file.count <= 1);
+    if (buf_view.is_contig && filetype_is_contig) {
+        if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
+        r_len = PNCIO_ReadContig(fd, buf, buf_view.size, offset);
+    }
     else
         r_len = PNCIO_GEN_ReadStrided(fd, buf, buf_view, offset);
 

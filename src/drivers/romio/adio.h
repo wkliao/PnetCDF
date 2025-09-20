@@ -163,7 +163,9 @@ typedef struct {
 } PNCIO_Flat_list;
 
 typedef struct {
-    MPI_Count count;            /* no. of contiguous blocks */
+    MPI_Count count;           /* no. of contiguous blocks */
+    MPI_Count size;            /* size in bytes */
+    int       is_contig;       /* whether or not is contiguous (redundant) */
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *indices;   /* array of byte offsets of each block */
     MPI_Count *blocklens; /* array of contiguous block lengths (bytes) */

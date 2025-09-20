@@ -1690,6 +1690,7 @@ int ina_put(NC              *ncp,
         /* i is the first non-aggregator whose num_pairs > 0, and
          * j is the first non-aggregator whose is_incr is false
          */
+// printf("%s at %d: do_sort=%d indv_sorted=%d\n",__func__,__LINE__, do_sort,indv_sorted);
 
         if (i >= 0 && indv_sorted == 1) {
             /* When all ranks' offsets are individually sorted, we still need
@@ -1763,6 +1764,7 @@ int ina_put(NC              *ncp,
                  */
                 qsort_off_len_buf(npairs, off_ptr, len_ptr, bufAddr);
         }
+// printf("%s at %d: do_sort=%d indv_sorted=%d\n",__func__,__LINE__, do_sort,indv_sorted);
 
         /* Now off_ptr and len_ptr are sorted, but overlaps may exist between
          * adjacent pairs. If this is the case, they must be coalesced.
@@ -1819,7 +1821,7 @@ if (gap >= 0) fake_overlap=1;
             }
         }
 MPI_Aint old_npairs = npairs;
-if (do_sort == 1) printf("%s at %d: overlap=%d do_sort=%d after coalesce npairs changed from %ld to %ld wr_amnt=%lld recv_amnt=%lld\n",__func__,__LINE__, overlap, do_sort,old_npairs,npairs,wr_amnt,recv_amnt);
+if (ncp->num_nonaggrs == 1 && do_sort == 1) printf("%s at %d: overlap=%d do_sort=%d after coalesce npairs changed from %ld to %ld wr_amnt=%lld recv_amnt=%lld\n",__func__,__LINE__, overlap, do_sort,old_npairs,npairs,wr_amnt,recv_amnt);
 /*
 */
 
@@ -1960,8 +1962,7 @@ if (fake_overlap == 0) assert(npairs == i+1);
 #endif
 
     /* set the fileview */
-    err = ncmpio_file_set_view(ncp, 0, MPI_DATATYPE_NULL, npairs,
-                               off_ptr, len_ptr);
+    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, npairs, off_ptr, len_ptr);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
         wr_amnt = 0;
@@ -2320,8 +2321,7 @@ int ina_get(NC           *ncp,
      */
 
     /* set the fileview */
-    err = ncmpio_file_set_view(ncp, 0, MPI_DATATYPE_NULL, npairs,
-                               off_ptr, len_ptr);
+    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, npairs, off_ptr, len_ptr);
     if (err != NC_NOERR) {
         if (status == NC_NOERR) status = err;
         rd_amnt = 0;
@@ -2692,6 +2692,8 @@ ncmpio_ina_nreqs(NC         *ncp,
     if (descreasing)
         qsort(reqs, (size_t)num_reqs, sizeof(NC_req), req_compare);
 
+// printf("%s at %d: descreasing=%d\n",__func__,__LINE__, descreasing);
+
     /* construct file offset-length pairs
      *     num_pairs: total number of off-len pairs
      *     offsets:   array of flattened offsets
@@ -2828,8 +2830,8 @@ ncmpio_ina_req(NC               *ncp,
     /* blocking API's buffer passed here is always contiguous */
     buf_view.type = MPI_BYTE;
     buf_view.is_contig = 1;
-    buf_view.count = buf_len;
     buf_view.size = buf_len;
+    buf_view.count = 0;
     buf_view.off = NULL;
     buf_view.len = NULL;
 

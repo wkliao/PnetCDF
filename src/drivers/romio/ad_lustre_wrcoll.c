@@ -592,7 +592,7 @@ MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd,
      */
 
     int i, j, nprocs, myrank;
-    int do_collect = 1, free_flat_fview, do_ex_wr;
+    int do_collect = 1, do_ex_wr;
     MPI_Offset start_offset, end_offset;
     MPI_Offset min_st_loc = -1, max_end_loc = -1;
     Flat_list flat_fview;
@@ -662,11 +662,6 @@ double curT = MPI_Wtime();
     flat_fview.rem = (flat_fview.count > 0) ? flat_fview.len[0] : 0;
 
 // if (flat_fview.count > 0) printf("%s at %d: offset=%lld flat_fview count=%lld off=%lld len=%lld\n",__func__,__LINE__, offset,flat_fview.count,flat_fview.off[0],flat_fview.len[0]);
-
-    /* If flattened offsets and lengths are generated from the INA subroutines,
-     * then we should not free the space pointed in flat_fview.
-     */
-    free_flat_fview = (fd->filetype != MPI_DATATYPE_NULL);
 
     /* When this rank's fileview datatype is not contiguous, it is still
      * possible that flat_fview.count == 1. It happens when this write is small
@@ -855,33 +850,19 @@ double curT = MPI_Wtime();
             NCI_Free(flat_bview.off);
 */
 
-        if (buf_view.size == 0) { /* zero-sized request */
-            if (free_flat_fview && flat_fview.count > 0)
-                NCI_Free(flat_fview.off);
+        if (buf_view.size == 0) /* zero-sized request */
             return 0;
-        }
 
         if (flat_fview.is_contig && flat_bview.is_contig) {
             /* both buffer and fileview are contiguous */
-            MPI_Offset off = 0;
-            off = flat_fview.off[0];
-            /* In PNCIO_Calc_my_off_len(), (offset * fd->etype_size) has been
-             * counted into flat_fview.off[]. Similarly, fd->disp has been
-             * counted into flat_fview.off[].
-             */
-
-            if (free_flat_fview && flat_fview.count > 0)
-                NCI_Free(flat_fview.off);
-
+            if (flat_fview.count > 0) offset += flat_fview.off[0];
 #ifdef WKL_DEBUG
             printf("%s %d: SWITCH to PNCIO_WriteContig !!!\n",__func__,__LINE__);
 #endif
 
-            return PNCIO_WriteContig(fd, buf, buf_view.size, off);
+            return PNCIO_WriteContig(fd, buf, buf_view.size, offset);
         }
 
-        if (free_flat_fview && flat_fview.count > 0)
-            NCI_Free(flat_fview.off);
 #ifdef WKL_DEBUG
         printf("%s %d: SWITCH to PNCIO_LUSTRE_WriteStrided !!!\n",
                    __func__,__LINE__);
@@ -1043,9 +1024,6 @@ double curT = MPI_Wtime();
     /* restore the original striping_unit */
     fd->hints->striping_unit = orig_striping_unit;
 #endif
-
-    if (free_flat_fview && flat_fview.count > 0)
-        NCI_Free(flat_fview.off);
 
 /*
     if (is_btype_predef)
@@ -2495,9 +2473,8 @@ num_memcpy++;
                     else {
                         flat_bview->idx = 0;
                         flat_bview->rnd++;
-assert(0);
+assert(size - size_in_buf == 0);
                     }
-assert(flat_fview->rnd == 0);
                     user_buf_idx = flat_bview->off[flat_bview->idx] +
                                    flat_bview->rnd * flat_bview->extent;
                     flat_bview->rem = flat_bview->len[flat_bview->idx];
@@ -2552,7 +2529,7 @@ num_memcpy++;
                 assert(flat_fview->rnd <= 1);
                 flat_fview->idx = 0;
                 flat_fview->rnd++;
-assert(0);
+assert (send_total_size == 0);
             }
             else
                 flat_fview->idx++;

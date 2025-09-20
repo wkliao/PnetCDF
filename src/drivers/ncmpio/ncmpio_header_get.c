@@ -326,8 +326,11 @@ hdr_fetch(bufferinfo *gbp) {
 
     assert(gbp->base != NULL);
 
-    buf_view.count = 1;
+    buf_view.count = 0;
+    buf_view.off = NULL;
+    buf_view.len = NULL;
     buf_view.is_contig = 1;
+    buf_view.type = MPI_BYTE;
 
     MPI_Comm_size(gbp->ncp->comm, &nprocs);
     MPI_Comm_rank(gbp->ncp->comm, &rank);
@@ -355,7 +358,6 @@ hdr_fetch(bufferinfo *gbp) {
             readLen -= slack;
         }
 
-        buf_view.type = MPI_BYTE;
         buf_view.size = readLen;
 
         /* fileview is already entire file visible and MPI_File_read_at does

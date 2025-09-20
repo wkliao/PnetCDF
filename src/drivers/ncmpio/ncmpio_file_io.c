@@ -766,6 +766,104 @@ ncmpio_file_sync(NC *ncp) {
     return NC_NOERR;
 }
 
+#if 1
+/*----< ncmpio_file_set_view() >---------------------------------------------*/
+/* This subroutine is collective when using MPI-IO. When using internal PNCIO
+ * driver, this subroutine is independent.
+ */
+int
+ncmpio_file_set_view(const NC     *ncp,
+                     MPI_Offset    disp,    /* IN/OUT */
+                     MPI_Datatype  filetype,
+                     MPI_Aint      npairs,
+#ifdef HAVE_MPI_LARGE_COUNT
+                     MPI_Count    *offsets,
+                     MPI_Count    *lengths
+#else
+                     MPI_Offset   *offsets,
+                     int          *lengths
+#endif
+)
+{
+    char *mpi_name;
+    int err, mpireturn, status=NC_NOERR;
+    MPI_File fh;
+
+assert(filetype == MPI_BYTE);
+assert(disp == 0);
+
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
+        /* Skip setting fileview for ranks whose adio_fh is NULL */
+        if (ncp->adio_fh == NULL)
+            return NC_NOERR;
+
+        /* When PnetCDF's internal PNCIO driver is used, the request has been
+         * flattened into offsets and lengths. Thus passed-in filetype is not
+         * constructed. Note offsets and lengths are not relative to any MPI-IO
+         * fileview. They will be reused in PNCIO driver as a flattened file
+         * type struct, which avoids repeated work of constructing and
+         * flattening the filetype.
+         */
+        return PNCIO_File_set_view(ncp->adio_fh, disp, filetype, npairs,
+                                   offsets, lengths);
+    }
+
+    /* Now, ncp->fstype == PNCIO_FSTYPE_MPIIO, i.e. using MPI-IO. */
+    int to_free_filetype=0;
+
+    /* when ncp->nprocs == 1, ncp->collective_fh == ncp->independent_fh */
+    fh = (ncp->nprocs > 1 && !fIsSet(ncp->flags, NC_MODE_INDEP))
+       ? ncp->collective_fh : ncp->independent_fh;
+
+    if (fh == MPI_FILE_NULL) /* not INA aggregator */
+        return NC_NOERR;
+
+    if (npairs == 0) /* zero-sized requests */
+        filetype = MPI_BYTE;
+    else {
+#ifdef HAVE_MPI_LARGE_COUNT
+        /* construct fileview */
+        mpireturn = MPI_Type_create_hindexed_c(npairs, lengths, offsets,
+                                               MPI_BYTE, &filetype);
+#else
+        assert(sizeof(*offsets) == sizeof(MPI_Aint));
+        /* construct fileview */
+        mpireturn = MPI_Type_create_hindexed(npairs, lengths,
+                                             (MPI_Aint*)offsets,
+                                             MPI_BYTE, &filetype);
+#endif
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_create_hindexed");
+            /* return the first encountered error if there is any */
+            if (status == NC_NOERR) status = err;
+        }
+        else {
+            mpireturn = MPI_Type_commit(&filetype);
+            if (mpireturn != MPI_SUCCESS) {
+                err = ncmpii_error_mpi2nc(mpireturn,"MPI_Type_commit");
+                /* return the first encountered error if there is any */
+                if (status == NC_NOERR) status = err;
+            }
+            else
+                to_free_filetype = 1;
+        }
+    }
+
+    TRACE_IO(MPI_File_set_view, (fh, disp, MPI_BYTE, filetype, "native",
+                                 MPI_INFO_NULL));
+    if (mpireturn != MPI_SUCCESS) {
+        err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+        if (status == NC_NOERR) status = err;
+assert(0);
+    }
+
+    if (to_free_filetype)
+        MPI_Type_free(&filetype);
+
+    return status;
+}
+
+#else
 /*----< ncmpio_file_set_view() >---------------------------------------------*/
 /* This subroutine is collective when using MPI-IO. When using internal PNCIO
  * driver, this subroutine is independent.
@@ -872,6 +970,7 @@ ncmpio_file_set_view(const NC     *ncp,
 
     return status;
 }
+#endif
 
 /*----< ncmpio_file_open() >-------------------------------------------------*/
 int

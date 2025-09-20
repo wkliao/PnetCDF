@@ -55,7 +55,7 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
     MPI_Count n_etypes_in_filetype;
     MPI_Offset n_filetypes, etype_in_filetype, st_n_filetypes, size_in_filetype;
     MPI_Offset abs_off_in_filetype = 0, new_frd_size, frd_size = 0, st_frd_size;
-    MPI_Count filetype_size, partial_read;
+    MPI_Count partial_read;
     MPI_Aint filetype_extent, buftype_extent;
     int buf_count, filetype_is_contig;
     MPI_Offset userbuf_off, req_len, sum;
@@ -65,7 +65,7 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
     MPI_Aint max_bufsize, readbuf_len;
     MPI_Offset r_len, total_r_len=0;
 
-printf("%s at %d:\n",__func__,__LINE__);
+// printf("%s at %d:\n",__func__,__LINE__);
 
     if (fd->hints->ds_read == PNCIO_HINT_DISABLE) {
         /* if user has disabled data sieving on reads, use naive
@@ -75,8 +75,12 @@ printf("%s at %d:\n",__func__,__LINE__);
     }
 
 /* This subroutine is entered with filetype being non-contiguous only */
-assert(fd->filetype == MPI_DATATYPE_NULL);
+assert(fd->filetype == MPI_BYTE);
 
+    filetype_is_contig = (fd->flat_file.count <= 1);
+if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
+
+#if 0
     if (fd->filetype == MPI_DATATYPE_NULL) {
         // assert(fd->flat_file != NULL);
         MPI_Count m;
@@ -93,7 +97,8 @@ assert(fd->filetype == MPI_DATATYPE_NULL);
         }
         else
             filetype_extent = 0;
-#if 0
+
+
         MPI_Count m, n;
         for (m=0; m<fd->flat_file.count; m++) {
             if (offset < fd->flat_file.indices[m] + fd->flat_file.blocklens[m])
@@ -112,11 +117,11 @@ assert(fd->filetype == MPI_DATATYPE_NULL);
         }
         else
             filetype_extent = 0;
-#endif
 // printf("%s at %d: filetype_is_contig=%d filetype_size=%lld filetype_extent=%ld\n",__func__,__LINE__, filetype_is_contig,filetype_size,filetype_extent);
 
     }
 else assert(0);
+#endif
 
 assert(filetype_is_contig == 0);
 
@@ -180,7 +185,7 @@ assert(0);
     else {      /* noncontiguous in file */
         disp = fd->disp;
 
-        n_etypes_in_filetype = filetype_size;
+        n_etypes_in_filetype = fd->flat_file.size;
         n_filetypes = offset / n_etypes_in_filetype;
         etype_in_filetype = offset % n_etypes_in_filetype;
         size_in_filetype = etype_in_filetype;

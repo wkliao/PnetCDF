@@ -59,9 +59,10 @@ static void Fill_send_buffer(PNCIO_File *fd, void *buf,
                              MPI_Offset *fd_end, MPI_Count *send_buf_idx,
                              MPI_Count *curr_to_proc, MPI_Count *done_to_proc, int iter);
 
-MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
+                                      const void *buf,
                                       PNCIO_Flat_list buf_view,
-                                      MPI_Offset offset)
+                                      MPI_Offset offset) /* relative to fileview */
 {
 /* Uses a generalized version of the extended two-phase method described
    in "An Extended Two-Phase Method for Accessing Sections of
@@ -82,7 +83,7 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
     int interleave_count = 0;
     MPI_Count *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
-    MPI_Offset start_offset, end_offset, fd_size, min_st_offset, off;
+    MPI_Offset start_offset, end_offset, fd_size, min_st_offset;
     MPI_Offset *offset_list = NULL, *st_offsets = NULL, *fd_start = NULL,
         *fd_end = NULL, *end_offsets = NULL;
     MPI_Offset w_len=0;
@@ -93,7 +94,7 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
     int *len_list = NULL;
 #endif
 
-// printf("%s at %d: buf_view.size=%lld\n",__func__,__LINE__, buf_view.size);
+// printf("%s at %d: offset=%lld buf_view.size=%lld\n",__func__,__LINE__, offset,buf_view.size);
 
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
@@ -140,29 +141,24 @@ double curT = MPI_Wtime();
 
     if (fd->hints->cb_write == PNCIO_HINT_DISABLE ||
         (!interleave_count && (fd->hints->cb_write == PNCIO_HINT_AUTO))) {
+
         /* use independent accesses */
-        if (fd->hints->cb_write != PNCIO_HINT_DISABLE) {
-            if (fd->filetype != MPI_DATATYPE_NULL)
-                NCI_Free(offset_list);
+        if (fd->hints->cb_write != PNCIO_HINT_DISABLE)
             NCI_Free(st_offsets);
-        }
         if (buf_view.size == 0) return 0;
 
-assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
+        filetype_is_contig = (fd->flat_file.count <= 1);
 
-        if (fd->filetype == MPI_DATATYPE_NULL) {
-            if (fd->flat_file.count == 0)
-                /* the whole file is visible */
-                filetype_is_contig = 1;
-            else {
+        /* offset is relative to fileview */
+if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
+
+#if 0
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count m;
 #else
                 size_t m;
 #endif
-
                 MPI_Offset scan_sum=0;
-                filetype_is_contig = 0;
                 for (m=0; m<fd->flat_file.count; m++) {
                     scan_sum += fd->flat_file.blocklens[m];
                     if (scan_sum > offset) {
@@ -170,15 +166,14 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
                             /* check if this request falls entirely in m's
                              * offset-length pair
                              */
-                            filetype_is_contig = 1;
                             off = fd->flat_file.indices[m] + offset -
                                   (scan_sum - fd->flat_file.blocklens[m]);
                         }
                         break;
                     }
                 }
+#endif
 // printf("%s at %d: offset=%lld buf_view.size=%lld m=%lld scan_sum=%lld off=%lld filetype_is_contig=%d\n",__func__,__LINE__, offset,buf_view.size,m,scan_sum,off,filetype_is_contig);
-            }
 #if 0
             else if (fd->flat_file.count == 1)
                 filetype_is_contig = 1;
@@ -195,28 +190,19 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
                 filetype_is_contig = (fd->flat_file.count - m == 1);
             }
 #endif
-        }
-        else if (fd->filetype == MPI_BYTE)
-            filetype_is_contig = 1;
-        else
-            // PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
-            filetype_is_contig = (fd->flat_file.count <= 1);
 
+// printf("%s at %d: offset=%lld start_offset=%lld buf_view.is_contig=%d fd->flat_file.count=%lld filetype_is_contig=%d\n",__func__,__LINE__,offset,start_offset,buf_view.is_contig,fd->flat_file.count,filetype_is_contig);
         if (buf_view.is_contig && filetype_is_contig) {
-            if (fd->filetype == MPI_DATATYPE_NULL)
-                /* intra-node aggregation has flattened the fileview and
-                 * temporarily set fd->filetype to MPI_DATATYPE_NULL
-                 */
-                off = off;
-            else
-                off = fd->disp + offset;
-            w_len = PNCIO_WriteContig(fd, buf, buf_view.size, off);
-        } else
+            if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
+            w_len = PNCIO_WriteContig(fd, buf, buf_view.size, offset);
+        }
+        else
             w_len = PNCIO_GEN_WriteStrided(fd, buf, buf_view, offset);
 
         return w_len;
     }
 
+// printf("%s at %d:\n",__func__,__LINE__);
 /* Divide the I/O workload among "nprocs_for_coll" processes. This is
    done by (logically) dividing the file into file domains (FDs); each
    process may directly access only its own file domain. */
@@ -280,8 +266,6 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
     PNCIO_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
     PNCIO_Free_others_req(nprocs, count_others_req_per_proc, others_req);
 
-    if (fd->filetype != MPI_DATATYPE_NULL)
-        NCI_Free(offset_list);
     NCI_Free(st_offsets);
     NCI_Free(fd_start);
 
@@ -419,6 +403,7 @@ PNCIO_Flatlist_node tmp_buf;
 
     done = 0;
     off = st_loc;
+// printf("%s at %d: off=%lld buf_view.size=%lld ntimes=%d\n",__func__,__LINE__, off,buf_view.size,ntimes);
 
     for (m = 0; m < ntimes; m++) {
         /* go through all others_req and check which will be satisfied

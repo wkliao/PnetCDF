@@ -98,9 +98,7 @@ MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File      *fd,
     MPI_Aint *buf_idx = NULL;
     MPI_Offset r_len, total_r_len=0;
 
-    int free_flat_fview = (fd->filetype != MPI_DATATYPE_NULL);
-
-printf("%s at %d:\n",__func__,__LINE__);
+// printf("%s at %d:\n",__func__,__LINE__);
 
 
     MPI_Comm_size(fd->comm, &nprocs);
@@ -146,18 +144,19 @@ double curT = MPI_Wtime();
 // printf("%s at %d: fd->flat_file.count=%lld interleave_count=%d\n",__func__,__LINE__,fd->flat_file.count,interleave_count);
     if (fd->hints->cb_read == PNCIO_HINT_DISABLE
         || (!interleave_count && (fd->hints->cb_read == PNCIO_HINT_AUTO))) {
-        /* don't do aggregation */
-        if (fd->hints->cb_read != PNCIO_HINT_DISABLE) {
-            if (free_flat_fview) NCI_Free(offset_list);
-            NCI_Free(st_offsets);
-        }
 
-        if (fd->filetype == MPI_DATATYPE_NULL) {
+        /* don't do aggregation */
+        if (fd->hints->cb_read != PNCIO_HINT_DISABLE)
+            NCI_Free(st_offsets);
+
+        if (buf_view.size == 0) return 0;
 /*
 if (fd->flat_file.count == 1)printf("%s at %d: fd->flat_file.count=%lld offset=%lld indices=%lld blocklens=%lld\n",__func__,__LINE__,fd->flat_file.count,offset,fd->flat_file.indices[0],fd->flat_file.blocklens[0]);
 else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offset=%lld indices=%lld %lld blocklens=%lld %lld\n",__func__,__LINE__, fd->flat_file.count,offset,fd->flat_file.indices[0],fd->flat_file.blocklens[0],fd->flat_file.indices[1],fd->flat_file.blocklens[1]);
 */
 
+#if 0
+        if (fd->filetype == MPI_DATATYPE_NULL) {
             if (fd->flat_file.count == 0)
                 /* the whole file is visible */
                 filetype_is_contig = 1;
@@ -185,11 +184,11 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
                 }
 // printf("%s at %d: offset=%lld buf_view.size=%lld m=%lld scan_sum=%lld off=%lld filetype_is_contig=%d\n",__func__,__LINE__, offset,buf_view.size,m,scan_sum,off,filetype_is_contig);
             }
-#if 0
-            else if (fd->flat_file.count == 1) {
-                filetype_is_contig = 1;
-                offset += fd->flat_file.indices[0];
-            }
+#else
+if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
+
+            filetype_is_contig = (fd->flat_file.count <= 1);
+
 #endif
 #if 0
             else {
@@ -212,7 +211,6 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
                     }
                 }
             }
-#endif
         }
         else if (fd->filetype == MPI_BYTE)
             filetype_is_contig = 1;
@@ -220,20 +218,14 @@ else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offs
 assert(0);
             PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
         }
-
-        if (buf_view.size == 0) return 0;
+#endif
 
 // printf("%s at %d: buf_view.is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, buf_view.is_contig,filetype_is_contig);
         if (buf_view.is_contig && filetype_is_contig) {
-            if (fd->filetype == MPI_DATATYPE_NULL)
-                /* intra-node aggregation has flattened the fileview and
-                 * temporarily set fd->filetype to MPI_DATATYPE_NULL
-                 */
-                off = off;
-            else
-                off = fd->disp + offset;
-            return PNCIO_ReadContig(fd, buf, buf_view.size, off);
-        } else
+            if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
+            return PNCIO_ReadContig(fd, buf, buf_view.size, offset);
+        }
+        else
             return PNCIO_GEN_ReadStrided(fd, buf, buf_view, offset);
     }
 // printf("%s at %d\n",__func__,__LINE__);fflush(stdout);
@@ -254,10 +246,10 @@ assert(0);
      * needs to be mapped to an actual rank in the communicator later.
      *
      */
-    PNCIO_Calc_file_domains(st_offsets, end_offsets, nprocs,
-                            nprocs_for_coll, &min_st_offset,
-                            &fd_start, &fd_end,
-                            &fd_size, fd->hints->striping_unit);
+    PNCIO_Calc_file_domains(st_offsets, end_offsets, nprocs, nprocs_for_coll,
+                            &min_st_offset, &fd_start, &fd_end, &fd_size,
+                            fd->hints->striping_unit);
+// printf("%s at %d: min_st_offset=%lld\n",__func__,__LINE__, min_st_offset);fflush(stdout);
 
     /* calculate where the portions of the access requests of this process
      * are located in terms of the file domains.  this could be on the same
@@ -273,7 +265,8 @@ assert(0);
      */
     PNCIO_Calc_my_req(fd, offset_list, len_list, contig_access_count,
                       min_st_offset, fd_start, fd_end, fd_size,
-                      nprocs, &count_my_req_procs, &count_my_req_per_proc, &my_req, &buf_idx);
+                      nprocs, &count_my_req_procs, &count_my_req_per_proc,
+                      &my_req, &buf_idx);
 
     /* perform a collective communication in order to distribute the
      * data calculated above.  fills in the following:
@@ -282,10 +275,9 @@ assert(0);
      * count_others_req_per_proc[] - number of separate contiguous
      *     requests from proc i lie in this process's file domain.
      */
-    PNCIO_Calc_others_req(fd, count_my_req_procs,
-                          count_my_req_per_proc, my_req,
-                          nprocs, myrank, &count_others_req_procs, &count_others_req_per_proc,
-                          &others_req);
+    PNCIO_Calc_others_req(fd, count_my_req_procs, count_my_req_per_proc,
+                          my_req, nprocs, myrank, &count_others_req_procs,
+                          &count_others_req_per_proc, &others_req);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     if (fd->is_agg) fd->read_timing[1] += MPI_Wtime() - curT;
@@ -303,7 +295,6 @@ assert(0);
     PNCIO_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
     PNCIO_Free_others_req(nprocs, count_others_req_per_proc, others_req);
 
-    if (free_flat_fview) NCI_Free(offset_list);
     NCI_Free(st_offsets);
     NCI_Free(fd_start);
 
@@ -316,7 +307,7 @@ assert(0);
 
 void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
                            MPI_Offset     io_amnt,
-                           MPI_Offset     offset,
+                           MPI_Offset     offset, /* relative to fileview, may be > 0 */
                            MPI_Offset   **offset_list_ptr,
 #ifdef HAVE_MPI_LARGE_COUNT
                            MPI_Offset   **len_list_ptr,
@@ -327,6 +318,32 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
                            MPI_Offset    *end_offset_ptr,
                            MPI_Count     *contig_access_count_ptr)
 {
+assert(fd->filetype == MPI_BYTE);
+if (fd->flat_file.size > 0) assert(fd->flat_file.size == io_amnt);
+
+    *offset_list_ptr = fd->flat_file.indices;
+    *len_list_ptr = fd->flat_file.blocklens;
+
+    if (fd->flat_file.size == 0) {
+        *start_offset_ptr = 0;
+        *end_offset_ptr = -1;
+        *contig_access_count_ptr = 0;
+        return;
+    }
+
+    if (fd->flat_file.count > 0) {
+        *start_offset_ptr = offset + fd->flat_file.indices[0];
+        *end_offset_ptr = fd->flat_file.indices[fd->flat_file.count-1]
+                        + fd->flat_file.blocklens[fd->flat_file.count-1] - 1;
+        *contig_access_count_ptr = fd->flat_file.count;
+    }
+    else {
+        *start_offset_ptr = offset;
+        *end_offset_ptr = offset + io_amnt - 1;
+        *contig_access_count_ptr = 1;
+    }
+    return;
+#if 0
     size_t alloc_sz;
 
     if (io_amnt == 0) { /* zero-sized request */
@@ -405,6 +422,7 @@ assert(offset == 0);
     else
         /* There should be no other filetype */
         assert(fd->filetype == MPI_BYTE);
+#endif
 }
 
 #if 0

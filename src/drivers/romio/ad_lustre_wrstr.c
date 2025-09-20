@@ -150,8 +150,17 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
     }
 
 
-    assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
+assert(fd->filetype == MPI_BYTE);
+assert(fd->flat_file.size == buf_view.size);
 
+    filetype_size = fd->flat_file.size;
+    filetype_is_contig = (fd->flat_file.count <= 1);
+
+if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
+
+filetype_extent = 0;
+
+#if 0
     if (fd->filetype == MPI_DATATYPE_NULL) {
         // assert(fd->flat_file != NULL);
         MPI_Count n;
@@ -173,7 +182,7 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
         filetype_size = 1;
         filetype_extent = 1;
     }
-
+#endif
     bufsize = buf_view.size;
 
 

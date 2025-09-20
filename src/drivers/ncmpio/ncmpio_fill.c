@@ -610,7 +610,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     NCI_Free(noFill);
     NCI_Free(count);
 
-    err = ncmpio_file_set_view(ncp, 0, MPI_DATATYPE_NULL, k, offset,
+    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, k, offset,
                                blocklengths);
     status = (status == NC_NOERR) ? err : status;
 

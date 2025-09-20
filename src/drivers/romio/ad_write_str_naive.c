@@ -31,19 +31,22 @@ MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
     MPI_Offset off, req_off, disp, end_offset = 0, start_off;
     MPI_Offset w_len, total_w_len=0;
 
-assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
+assert(fd->filetype == MPI_BYTE);
 
-    if (fd->filetype == MPI_DATATYPE_NULL) {
-        // assert(fd->flat_file != NULL);
         MPI_Count n;
         filetype_is_contig = (fd->flat_file.count <= 1);
         filetype_size = 0;
         for (n=0; n<fd->flat_file.count; n++)
             filetype_size += fd->flat_file.blocklens[n];
+    if (fd->flat_file.count == 0)
+        filetype_extent = filetype_size;
+    else
+// TODO: remove use of filetype_extent
         filetype_extent = fd->flat_file.indices[fd->flat_file.count-1]
                         + fd->flat_file.blocklens[fd->flat_file.count-1]
                         - fd->flat_file.indices[0];
-    }
+
+#if 0
     else if (fd->filetype == MPI_BYTE) {
         filetype_is_contig = 1;
         filetype_size = 1;
@@ -57,6 +60,7 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
             return 0;
         MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
     }
+#endif
 
     bufsize = buf_view.size;
 

@@ -113,19 +113,25 @@ MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
         return PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view, offset);
     }
 
-assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
+assert(fd->filetype == MPI_BYTE);
+assert(fd->flat_file.size == buf_view.size);
 
-    if (fd->filetype == MPI_DATATYPE_NULL) {
-        // assert(fd->flat_file != NULL);
-        MPI_Count n;
-        filetype_is_contig = (fd->flat_file.count <= 1);
-        filetype_size = 0;
-        for (n=0; n<fd->flat_file.count; n++)
-            filetype_size += fd->flat_file.blocklens[n];
+    filetype_size = fd->flat_file.size;
+    filetype_is_contig = (fd->flat_file.count <= 1);
+
+// printf("%s at %d: offset=%lld\n",__func__,__LINE__, offset);
+if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
+
+// printf("%s at %d: offset=%lld filetype_size=%lld\n",__func__,__LINE__, offset,filetype_size);
+
+// TODO: remove use of filetype_extent
+    if (fd->flat_file.count == 0)
+        filetype_extent = filetype_size;
+    else
         filetype_extent = fd->flat_file.indices[fd->flat_file.count-1]
                         + fd->flat_file.blocklens[fd->flat_file.count-1]
                         - fd->flat_file.indices[0];
-    }
+#if 0
     else if (fd->filetype == MPI_BYTE) {
         filetype_is_contig = 1;
         filetype_size = 1;
@@ -139,6 +145,7 @@ assert(fd->filetype == MPI_DATATYPE_NULL || fd->filetype == MPI_BYTE);
             return NC_NOERR;
         MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
     }
+#endif
 
     bufsize = buf_view.size;
 
@@ -162,6 +169,7 @@ PNCIO_Flatlist_node tmp_buf;
 /* noncontiguous in memory, contiguous in file. */
 
         off = fd->disp + offset;
+assert(fd->disp == 0);
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -200,6 +208,7 @@ PNCIO_Flatlist_node tmp_buf;
     else { /* noncontiguous in file */
 
         disp = fd->disp;
+assert(fd->disp == 0);
 
         n_etypes_in_filetype = filetype_size;
         n_filetypes = offset / n_etypes_in_filetype;
@@ -222,6 +231,9 @@ PNCIO_Flatlist_node tmp_buf;
         offset = disp + (MPI_Offset) n_filetypes *filetype_extent + abs_off_in_filetype;
 
         start_off = offset;
+assert(offset == abs_off_in_filetype);
+
+// printf("%s at %d: start_off=%lld n_filetypes=%lld abs_off_in_filetype=%lld\n",__func__,__LINE__,start_off,n_filetypes,abs_off_in_filetype);
 
         /* Wei-keng Liao:write request is within single flat_file contig block */
         /* this could happen, for example, with subarray types that are

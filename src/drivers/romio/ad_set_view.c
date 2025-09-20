@@ -39,12 +39,28 @@ int PNCIO_File_set_view(PNCIO_File    *fd,
 #endif
 )
 {
+    MPI_Aint i;
 /* below 4 are no longer used */
 fd->flat_file.lb_idx    = -1;
 fd->flat_file.ub_idx    = -1;
 fd->flat_file.flag      = 0;
 fd->flat_file.refct     = 1;
 
+assert(filetype == MPI_BYTE);
+assert(disp == 0);
+#if 1
+    fd->flat_file.count     = npairs;
+    fd->flat_file.indices   = offsets;
+    fd->flat_file.blocklens = lengths;
+
+    fd->flat_file.size = 0;
+    for (i=0; i<npairs; i++) fd->flat_file.size += lengths[i];
+
+fd->filetype = filetype;
+fd->disp = 0;
+fd->flat_file.is_contig = (npairs <= 1); /* is_contig is redundant to count <= 1*/
+
+#else
     fd->filetype = filetype;
     fd->disp = 0;
 
@@ -64,6 +80,7 @@ assert(lengths==NULL);
     else
         /* there should be no other filetype */
         assert(0);
+#endif
 
     return NC_NOERR;
 }

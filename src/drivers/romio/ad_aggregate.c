@@ -99,6 +99,7 @@ int PNCIO_Calc_aggregator(PNCIO_File *fd,
         fprintf(stderr,
                 "Error in PNCIO_Calc_aggregator(): rank_index(%d) >= fd->hints->cb_nodes (%d) fd_size=%lld off=%lld\n",
                 rank_index, fd->hints->cb_nodes, (long long) fd_size, (long long) off);
+assert(0);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
