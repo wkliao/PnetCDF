@@ -2573,8 +2573,8 @@ int ina_get(NC           *ncp,
     startT = endT;
 #endif
 
-#ifdef HAVE_MPI_STATUSES_IGNORE
     if (nreqs > 0) {
+#ifdef HAVE_MPI_STATUSES_IGNORE
         TRACE_COMM(MPI_Waitall)(nreqs, req, MPI_STATUSES_IGNORE);
 #else
         MPI_Status *statuses = (MPI_Status *)
@@ -2595,12 +2595,6 @@ fn_exit:
     /* offsets[] and lengths[] are used in ADIO read subroutines as flattened
      * filetype. They cannot be freed before the I/O is done.
      */
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    endT = MPI_Wtime();
-    ncp->ina_time_get[3] += endT - startT;
-#endif
-
     if (rd_buf != NULL && rd_buf != buf) NCI_Free(rd_buf);
     if (orig_lengths != NULL) NCI_Free(orig_lengths);
     if (orig_offsets != NULL) NCI_Free(orig_offsets);
@@ -2612,6 +2606,11 @@ fn_exit:
      */
     if (offsets != NULL) NCI_Free(offsets);
     if (lengths != NULL) NCI_Free(lengths);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    endT = MPI_Wtime();
+    ncp->ina_time_get[3] += endT - startT;
+#endif
 
     return status;
 }
