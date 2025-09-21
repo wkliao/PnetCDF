@@ -160,8 +160,8 @@ int main(int argc, char **argv) {
     int          rank, nprocs, blocklengths[2], **buf, *bufptr;
     int          array_of_sizes[2], array_of_subsizes[2], array_of_starts[2];
     int          buftype_size, expected_put_size, format;
-    float        **flt_buf, *flt_bufptr;
-    double       **dbl_buf, *dbl_bufptr;
+    float        **flt_buf=NULL, *flt_bufptr;
+    double       **dbl_buf=NULL, *dbl_bufptr;
     MPI_Offset   start[2], count[2], header_size, put_size, new_put_size;
     MPI_Aint     a0, a1, disps[2];
     MPI_Datatype buftype, ghost_buftype, rec_filetype, fix_filetype;
@@ -514,8 +514,14 @@ fn_exit:
     free(array_of_blocklengths);
     free(array_of_displacements);
     free(buf[0]); free(buf);
-    free(flt_buf[0]); free(flt_buf);
-    free(dbl_buf[0]); free(dbl_buf);
+    if (flt_buf != NULL) {
+        free(flt_buf[0]);
+        free(flt_buf);
+    }
+    if (dbl_buf != NULL) {
+        free(dbl_buf[0]);
+        free(dbl_buf);
+    }
 
     err = ncmpi_close(ncid); CHECK_ERR
 
