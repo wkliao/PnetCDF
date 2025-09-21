@@ -28,8 +28,9 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
                           MPI_Offset * fd_start, MPI_Offset * fd_end,
                           MPI_Aint * buf_idx);
 
-static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                            * flat_buf, MPI_Offset * offset_list,
+static void R_Exchange_data(PNCIO_File *fd, void *buf,
+                            PNCIO_Flat_list buf_view,
+                            MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                             MPI_Offset *len_list,
 #else
@@ -47,8 +48,8 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                             PNCIO_Access * others_req,
                             int iter, MPI_Aint * buf_idx,
                             MPI_Aint * actual_recved_bytes);
-static void Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                             * flat_buf, char **recv_buf,
+static void Fill_user_buffer(PNCIO_File *fd, void *buf,
+                             PNCIO_Flat_list buf_view, char **recv_buf,
                              MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                              MPI_Offset *len_list,
@@ -100,7 +101,6 @@ MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File      *fd,
 
 // printf("%s at %d:\n",__func__,__LINE__);
 
-
     MPI_Comm_size(fd->comm, &nprocs);
     MPI_Comm_rank(fd->comm, &myrank);
 
@@ -130,24 +130,25 @@ double curT = MPI_Wtime();
         st_offsets = (MPI_Offset *) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
         end_offsets = st_offsets + nprocs;
 
-        MPI_Allgather(&start_offset, 1, MPI_OFFSET, st_offsets, 1, MPI_OFFSET, fd->comm);
-        MPI_Allgather(&end_offset, 1, MPI_OFFSET, end_offsets, 1, MPI_OFFSET, fd->comm);
+        MPI_Allgather(&start_offset, 1, MPI_OFFSET, st_offsets, 1, MPI_OFFSET,
+                      fd->comm);
+        MPI_Allgather(&end_offset, 1, MPI_OFFSET, end_offsets, 1, MPI_OFFSET,
+                      fd->comm);
 
-        /* are the accesses of different processes interleaved? */
+        /* Are the accesses of different processes interleaved? Below is a
+         * rudimentary check for interleaving, but should suffice for the
+         * moment. */
         for (int i = 1; i < nprocs; i++)
-            if ((st_offsets[i] < end_offsets[i - 1]) && (st_offsets[i] <= end_offsets[i]))
+            if ((st_offsets[i] < end_offsets[i - 1]) &&
+                (st_offsets[i] <= end_offsets[i]))
                 interleave_count++;
-        /* This is a rudimentary check for interleaving, but should suffice
-         * for the moment. */
     }
 
-// printf("%s at %d: fd->flat_file.count=%lld interleave_count=%d\n",__func__,__LINE__,fd->flat_file.count,interleave_count);
     if (fd->hints->cb_read == PNCIO_HINT_DISABLE
         || (!interleave_count && (fd->hints->cb_read == PNCIO_HINT_AUTO))) {
+        /* switch to independent read */
 
-        /* don't do aggregation */
-        if (fd->hints->cb_read != PNCIO_HINT_DISABLE)
-            NCI_Free(st_offsets);
+        if (st_offsets != NULL) NCI_Free(st_offsets);
 
         if (buf_view.size == 0) return 0;
 
@@ -275,86 +276,6 @@ if (fd->flat_file.size > 0) assert(fd->flat_file.size == io_amnt);
         *contig_access_count_ptr = 1;
     }
     return;
-#if 0
-    size_t alloc_sz;
-
-    if (io_amnt == 0) { /* zero-sized request */
-        *offset_list_ptr = NULL;
-        *len_list_ptr = NULL;
-        *start_offset_ptr = 0;
-        *end_offset_ptr = -1;
-        *contig_access_count_ptr = 0;
-        return;
-    }
-
-    /* Note: PnetCDF always sets the same size for fileview and bufview and
-     * passes the flattened file offset and length pairs to set fileview API,
-     * so they can be reused.
-     */
-    if (fd->filetype == MPI_DATATYPE_NULL) {
-        if (fd->flat_file.count == 0) {
-            *offset_list_ptr = NULL;
-            *len_list_ptr = NULL;
-            *start_offset_ptr = 0;
-            *end_offset_ptr = -1;
-            *contig_access_count_ptr = 0;
-            return;
-        }
-
-        /* The fileview's flattened offset-length pairs, fd->flat_file.indices
-         * and fd->flat_file.blockens, have been populated in PnetCDF's
-         * subroutines, which also have been sorted in an increasng order.
-         */
-
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count n;
-#else
-    int n;
-#endif
-
-// offset should always be 0
-assert(offset == 0);
-/* find the first offset-length pair containing "offset" */
-        for (n=0; n<fd->flat_file.count; n++) {
-            if (offset < fd->flat_file.indices[n] + fd->flat_file.blocklens[n])
-                break;
-        }
-
-        *offset_list_ptr = fd->flat_file.indices + n;
-        *len_list_ptr = fd->flat_file.blocklens + n;
-
-        *start_offset_ptr = fd->flat_file.indices[n];
-        *end_offset_ptr = fd->flat_file.indices[fd->flat_file.count-1]
-                        + fd->flat_file.blocklens[fd->flat_file.count-1] - 1;
-
-        *contig_access_count_ptr = fd->flat_file.count - n;
-        return;
-    }
-    else if (fd->filetype == MPI_BYTE) {
-        *contig_access_count_ptr = 1;
-#ifdef HAVE_MPI_LARGE_COUNT
-        alloc_sz = sizeof(MPI_Offset) * 2;
-        *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz);
-        *len_list_ptr = (*offset_list_ptr + 1);
-        (*offset_list_ptr)[0] = fd->disp + offset;
-        (*len_list_ptr)[0] = io_amnt;
-#else
-        alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-        *offset_list_ptr = (MPI_Offset *) NCI_Malloc(alloc_sz);
-        *len_list_ptr = (int*) (*offset_list_ptr + 1);
-        (*offset_list_ptr)[0] = fd->disp + offset;
-        /* TODO: check int overflow
-        if (bufcount > NC_MAX_INT) NC_EINTOVERFLOW
-        */
-        (*len_list_ptr)[0] = (int) io_amnt;
-#endif
-        *start_offset_ptr = (*offset_list_ptr)[0];
-        *end_offset_ptr = (*offset_list_ptr)[0] + (*len_list_ptr)[0] - 1;
-    }
-    else
-        /* There should be no other filetype */
-        assert(fd->filetype == MPI_BYTE);
-#endif
 }
 
 static
@@ -390,7 +311,6 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
     /* Not convinced end_loc-st_loc couldn't be > int, so make these offsets */
     MPI_Offset real_size, size, for_curr_iter, for_next_iter;
     int rank;
-    PNCIO_Flatlist_node *flat_buf = NULL;
     MPI_Aint coll_bufsize;
     MPI_Aint actual_recved_bytes = 0;
     MPI_Offset r_len;
@@ -466,16 +386,6 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
     start_pos = recd_from_proc + nprocs;
     /* used to store the starting value of curr_offlen_ptr[i] in
      * this iteration */
-
-    PNCIO_Flatlist_node flatB;
-    flatB.count = buf_view.count;
-    flatB.indices = buf_view.off;
-    flatB.blocklens = buf_view.len;
-    // flatB.lb_idx = 0;
-    // flatB.ub_idx = 0;
-    // flatB.refct = 0;
-    // flatB.flag = 0;
-flat_buf = &flatB;
 
     done = 0;
     off = st_loc;
@@ -609,7 +519,7 @@ flat_buf = &flatB;
         for_curr_iter = for_next_iter;
 
         MPI_Aint recved_bytes = 0;
-        R_Exchange_data(fd, buf, flat_buf, offset_list, len_list,
+        R_Exchange_data(fd, buf, buf_view, offset_list, len_list,
                         send_size, recv_size, count,
                         start_pos, partial_send, recd_from_proc, nprocs,
                         myrank,
@@ -641,7 +551,7 @@ flat_buf = &flatB;
     for (m = ntimes; m < max_ntimes; m++) {
         /* nothing to send, but check for recv. */
         MPI_Aint recved_bytes = 0;
-        R_Exchange_data(fd, buf, flat_buf, offset_list, len_list,
+        R_Exchange_data(fd, buf, buf_view, offset_list, len_list,
                         send_size, recv_size, count,
                         start_pos, partial_send, recd_from_proc, nprocs,
                         myrank,
@@ -656,8 +566,8 @@ flat_buf = &flatB;
     return actual_recved_bytes;
 }
 
-static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                            *flat_buf, MPI_Offset * offset_list,
+static void R_Exchange_data(PNCIO_File *fd, void *buf,
+                            PNCIO_Flat_list buf_view, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                             MPI_Offset *len_list,
 #else
@@ -813,7 +723,7 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
 
         /* if noncontiguous, to the copies from the recv buffers */
         if (!buftype_is_contig)
-            Fill_user_buffer(fd, buf, flat_buf, recv_buf,
+            Fill_user_buffer(fd, buf, buf_view, recv_buf,
                              offset_list, len_list, recv_size,
                              requests, statuses, recd_from_proc,
                              nprocs, contig_access_count,
@@ -849,8 +759,8 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
         flat_buf_sz -= size_in_buf;                                 \
         if (!flat_buf_sz) {                                         \
             flat_buf_idx++;                                         \
-            user_buf_idx = flat_buf->indices[flat_buf_idx];         \
-            flat_buf_sz = flat_buf->blocklens[flat_buf_idx];        \
+            user_buf_idx = buf_view.off[flat_buf_idx];              \
+            flat_buf_sz = buf_view.len[flat_buf_idx];               \
         }                                                           \
         buf_incr -= size_in_buf;                                    \
     }                                                               \
@@ -867,8 +777,8 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
         flat_buf_sz -= size_in_buf;                                 \
         if (!flat_buf_sz) {                                         \
             flat_buf_idx++;                                         \
-            user_buf_idx = flat_buf->indices[flat_buf_idx];         \
-            flat_buf_sz = flat_buf->blocklens[flat_buf_idx];        \
+            user_buf_idx = buf_view.off[flat_buf_idx];              \
+            flat_buf_sz = buf_view.len[flat_buf_idx];               \
         }                                                           \
         size -= size_in_buf;                                        \
         buf_incr -= size_in_buf;                                    \
@@ -876,9 +786,9 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
     BUF_INCR                                                        \
 }
 
-static void Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                             *flat_buf, char **recv_buf, MPI_Offset
-                             *offset_list,
+static void Fill_user_buffer(PNCIO_File *fd, void *buf,
+                             PNCIO_Flat_list buf_view,
+                            char **recv_buf, MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                              MPI_Offset *len_list,
 #else
@@ -921,9 +831,9 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
         done_from_proc[i] = recd_from_proc[i];
     }
 
-    user_buf_idx = flat_buf->indices[0];
+    user_buf_idx = buf_view.off[0];
     flat_buf_idx = 0;
-    flat_buf_sz = flat_buf->blocklens[0];
+    flat_buf_sz = buf_view.len[0];
 
     /* flat_buf_idx = current index into flattened buftype
      * flat_buf_sz = size of current contiguous component in
