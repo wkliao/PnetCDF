@@ -63,23 +63,17 @@ MPI_Offset file_read(PNCIO_File      *fd,
                      void            *buf,
                      PNCIO_Flat_list  buf_view)
 {
-    int filetype_is_contig;
     MPI_Offset r_len=0;
-MPI_Offset off=offset;
 
 // printf("%s at %d: offset=%lld buf_view size=%lld\n",__func__,__LINE__, offset,buf_view.size);
 
 assert(fd->filetype == MPI_BYTE);
+if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
     if (buf_view.size == 0) /* zero-sized request */
         return NC_NOERR;
 
-if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
-
-// printf("%s at %d: flat_file.count=%lld buf_view.is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, fd->flat_file.count, buf_view.is_contig,filetype_is_contig);
-
-    filetype_is_contig = (fd->flat_file.count <= 1);
-    if (buf_view.is_contig && filetype_is_contig) {
+    if (buf_view.is_contig && fd->flat_file.is_contig) {
         if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
         r_len = PNCIO_ReadContig(fd, buf, buf_view.size, offset);
     }
