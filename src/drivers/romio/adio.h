@@ -281,8 +281,6 @@ extern
 MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh, MPI_Offset offset, void *buf,
                 PNCIO_Flat_list buf_view);
 
-PNCIO_Flatlist_node *PNCIO_Flatten_and_find(MPI_Datatype);
-
 int PNCIO_Lustre_create(PNCIO_File *fd, int access_mode);
 int PNCIO_Lustre_open(PNCIO_File *fd);
 

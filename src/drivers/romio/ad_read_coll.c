@@ -506,7 +506,6 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
     /* used to store the starting value of curr_offlen_ptr[i] in
      * this iteration */
 
-#if 1
     PNCIO_Flatlist_node flatB;
     flatB.count = buf_view.count;
     flatB.indices = buf_view.off;
@@ -516,11 +515,6 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
     // flatB.refct = 0;
     // flatB.flag = 0;
 flat_buf = &flatB;
-#else
-    if (!buftype_is_contig) {
-        flat_buf = PNCIO_Flatten_and_find(datatype);
-    }
-#endif
 
     done = 0;
     off = st_loc;

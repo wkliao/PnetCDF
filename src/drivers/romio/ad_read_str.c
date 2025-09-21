@@ -238,8 +238,6 @@ assert(buf_view.size == r_len);
         } else {
 /* noncontiguous in memory as well as in file */
 
-            // flat_buf = PNCIO_Flatten_and_find(datatype);
-
             k = num = buf_count = 0;
             i_offset = flat_buf->indices[0];
             j = st_index;

@@ -329,7 +329,6 @@ PNCIO_Flatlist_node tmp_buf;
             }
         } else {
 /* noncontiguous in memory as well as in file */
-            // flat_buf = PNCIO_Flatten_and_find(buftype);
 
             k = num = buf_count = 0;
             i_offset = flat_buf->indices[0];
