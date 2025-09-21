@@ -24,7 +24,7 @@ static MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf,
                            MPI_Aint * buf_idx);
 
 static MPI_Offset W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
-                            PNCIO_Flatlist_node * flat_buf,
+                            PNCIO_Flat_list buf_view,
                             MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                             MPI_Offset *len_list,
@@ -45,7 +45,7 @@ static MPI_Offset W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
                             MPI_Aint * buf_idx);
 
 static void Fill_send_buffer(PNCIO_File *fd, void *buf,
-                             PNCIO_Flatlist_node *flat_buf, char **send_buf,
+                             PNCIO_Flat_list buf_view, char **send_buf,
                              MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                              MPI_Offset *len_list,
@@ -79,11 +79,9 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
     /* array of nprocs access structures, one for each other process
      * whose request lies in this process's file domain. */
 
-    int i, nprocs, nprocs_for_coll, myrank;
-    int interleave_count = 0;
+    int i, nprocs, nprocs_for_coll, myrank, interleave_count=0;
     MPI_Aint *buf_idx = NULL;
-    MPI_Count contig_access_count=0;
-    MPI_Count *count_my_req_per_proc, count_my_req_procs;
+    MPI_Count contig_access_count=0, *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
     MPI_Offset start_offset, end_offset, fd_size, min_st_offset;
     MPI_Offset *offset_list=NULL, *st_offsets=NULL, *fd_start=NULL;
@@ -276,7 +274,6 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_Flat_list buf_view,
     MPI_Count *partial_recv, *sent_to_proc, *start_pos;
     int flag;
     MPI_Count *send_buf_idx, *curr_to_proc, *done_to_proc;
-    PNCIO_Flatlist_node *flat_buf = NULL;
     int info_flag;
     MPI_Aint coll_bufsize;
     char *value;
@@ -355,12 +352,6 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_Flat_list buf_view,
     start_pos = done_to_proc + nprocs;
     /* used to store the starting value of curr_offlen_ptr[i] in
      * this iteration */
-
-PNCIO_Flatlist_node tmp_buf;
-    flat_buf = &tmp_buf;
-    flat_buf->count = buf_view.count;
-    flat_buf->indices = buf_view.off;
-    flat_buf->blocklens = buf_view.len;
 
     done = 0;
     off = st_loc;
@@ -446,7 +437,7 @@ PNCIO_Flatlist_node tmp_buf;
             }
         }
 
-        w_len = W_Exchange_data(fd, buf, write_buf, flat_buf, offset_list,
+        w_len = W_Exchange_data(fd, buf, write_buf, buf_view, offset_list,
                                 len_list, send_size, recv_size, off, size,
                                 count, start_pos, partial_recv, sent_to_proc,
                                 nprocs, myrank, buf_view.is_contig,
@@ -480,7 +471,7 @@ PNCIO_Flatlist_node tmp_buf;
         count[i] = recv_size[i] = 0;
     for (m = ntimes; m < max_ntimes; m++) {
         /* nothing to recv, but check for send. */
-        w_len = W_Exchange_data(fd, buf, write_buf, flat_buf, offset_list,
+        w_len = W_Exchange_data(fd, buf, write_buf, buf_view, offset_list,
                                 len_list, send_size, recv_size, off, size,
                                 count, start_pos, partial_recv, sent_to_proc,
                                 nprocs, myrank, buf_view.is_contig,
@@ -504,7 +495,7 @@ PNCIO_Flatlist_node tmp_buf;
  */
 static
 MPI_Offset W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
-                           PNCIO_Flatlist_node * flat_buf,
+                           PNCIO_Flat_list buf_view,
                            MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                            MPI_Offset *len_list,
@@ -726,7 +717,7 @@ double curT = MPI_Wtime();
         for (i = 1; i < nprocs; i++)
             send_buf[i] = send_buf[i - 1] + send_size[i - 1];
 
-        Fill_send_buffer(fd, buf, flat_buf, send_buf, offset_list, len_list,
+        Fill_send_buffer(fd, buf, buf_view, send_buf, offset_list, len_list,
                          send_size, send_req, sent_to_proc, nprocs, myrank,
                          contig_access_count, min_st_offset, fd_size,
                          fd_start, fd_end, send_buf_idx, curr_to_proc,
@@ -817,8 +808,8 @@ double curT = MPI_Wtime();
         flat_buf_sz -= size_in_buf; \
         if (!flat_buf_sz) { \
             flat_buf_idx++; \
-            user_buf_idx = flat_buf->indices[flat_buf_idx]; \
-            flat_buf_sz = flat_buf->blocklens[flat_buf_idx]; \
+            user_buf_idx = buf_view.off[flat_buf_idx]; \
+            flat_buf_sz = buf_view.len[flat_buf_idx]; \
         } \
         buf_incr -= size_in_buf; \
     } \
@@ -835,8 +826,8 @@ double curT = MPI_Wtime();
         flat_buf_sz -= size_in_buf; \
         if (!flat_buf_sz) { \
             flat_buf_idx++; \
-            user_buf_idx = flat_buf->indices[flat_buf_idx]; \
-            flat_buf_sz = flat_buf->blocklens[flat_buf_idx]; \
+            user_buf_idx = buf_view.off[flat_buf_idx]; \
+            flat_buf_sz = buf_view.len[flat_buf_idx]; \
         } \
         size -= size_in_buf; \
         buf_incr -= size_in_buf; \
@@ -845,8 +836,8 @@ double curT = MPI_Wtime();
 }
 
 static
-void Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
-                      *flat_buf, char **send_buf,
+void Fill_send_buffer(PNCIO_File *fd, void *buf,
+                      PNCIO_Flat_list buf_view, char **send_buf,
                       MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                       MPI_Offset *len_list,
@@ -881,9 +872,9 @@ void Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
     }
     jj = 0;
 
-    user_buf_idx = flat_buf->indices[0];
+    user_buf_idx = buf_view.off[0];
     flat_buf_idx = 0;
-    flat_buf_sz = flat_buf->blocklens[0];
+    flat_buf_sz = buf_view.len[0];
 
     /* flat_buf_idx = current index into flattened buftype
      * flat_buf_sz = size of current contiguous component in
