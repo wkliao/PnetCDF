@@ -30,47 +30,6 @@ int PNCIO_Type_get_combiner(MPI_Datatype datatype, int *combiner)
     return ret;
 }
 
-/* utility function for freeing user-defined datatypes,
- * MPI_DATATYPE_NULL and predefined datatypes are ignored,
- * datatype is set to MPI_DATATYPE_NULL upon return */
-
-int PNCIO_Type_dispose(MPI_Datatype * datatype)
-{
-    int ret, flag;
-    if (*datatype == MPI_DATATYPE_NULL)
-        return MPI_SUCCESS;
-    ret = PNCIO_Type_ispredef(*datatype, &flag);
-    if (ret == MPI_SUCCESS && !flag)
-        ret = MPI_Type_free(datatype);
-    *datatype = MPI_DATATYPE_NULL;
-    return ret;
-}
-
-#define CAST_INT32(func_name, count, bklen, disp, dType, newType) {          \
-    int kk, iCount, *iBklen;                                                 \
-    MPI_Aint *iDisp;                                                         \
-    assert(count <= 2147483647); /* overflow 4-byte int */             \
-    iCount = (int)count;                                                     \
-    iBklen = (int*) NCI_Malloc(sizeof(int) * iCount);                      \
-    for (kk=0; kk<iCount; kk++) {                                            \
-        assert(bklen[kk] <= 2147483647); /* overflow 4-byte int */     \
-        iBklen[kk] = (int)bklen[kk];                                         \
-    }                                                                        \
-    if (sizeof(MPI_Aint) != sizeof(MPI_Count)) {                             \
-        iDisp = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * iCount);         \
-        for (kk=0; kk<iCount; kk++) {                                        \
-            assert(disp[kk] <= 2147483647); /* overflow 4-byte int */  \
-            iDisp[kk] = (MPI_Aint)disp[kk];                                  \
-        }                                                                    \
-    }                                                                        \
-    else                                                                     \
-        iDisp = (MPI_Aint*)disp;                                             \
-    ret = func_name(iCount, iBklen, iDisp, dType, newType);                  \
-    NCI_Free(iBklen);                                                      \
-    if (sizeof(MPI_Aint) != sizeof(MPI_Count))                               \
-        NCI_Free(iDisp);                                                   \
-}
-
 /* some systems do not have pread/pwrite, or requrie XOPEN_SOURCE set higher
  * than we would like.  see #1973 */
 #if (HAVE_DECL_PWRITE == 0)
