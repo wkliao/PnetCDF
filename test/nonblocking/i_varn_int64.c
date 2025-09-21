@@ -228,7 +228,7 @@ static int
 test_varn(int ncid, int rank, int *varid)
 {
     int i, j, k, err, nerrs=0, bufsize=0;
-    int nreqs, reqs[4], sts[4];
+    int nreqs=0, reqs[4], sts[4];
     long long *wbuf[4], *c_wbuf[4], *rbuf[4], *c_rbuf[4];
     int num_segs[4] = {4, 6, 5, 4};
     int req_lens[4], my_nsegs[4];
