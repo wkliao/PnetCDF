@@ -84,42 +84,23 @@ MPI_Offset file_write(PNCIO_File       *fd,
                       const void      *buf,
                       PNCIO_Flat_list  buf_view)
 {
-    int filetype_is_contig;
-    MPI_Offset w_len, off=offset;
+    MPI_Offset w_len;
 
     if (buf_view.size == 0) /* zero-sized request */
         return NC_NOERR;
 
 assert(fd->filetype == MPI_BYTE);
 
-    filetype_is_contig = (fd->flat_file.count <= 1);
-
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count m;
-#else
-    size_t m;
-#endif
-    MPI_Offset scan_sum=0;
-    for (m=0; m<fd->flat_file.count; m++) {
-        scan_sum += fd->flat_file.blocklens[m];
-        if (scan_sum > offset) {
-            if (scan_sum - offset >= buf_view.size) {
-                /* check if this request falls entirely in m's
-                 * offset-length pair
-                 */
-                off = fd->flat_file.indices[m] + offset -
-                      (scan_sum - fd->flat_file.blocklens[m]);
-            }
-            break;
-        }
+    if (buf_view.is_contig && fd->flat_file.is_contig) {
+        if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
+        w_len = PNCIO_WriteContig(fd, buf, buf_view.size, offset);
     }
-
-    if (buf_view.is_contig && filetype_is_contig)
-        w_len = PNCIO_WriteContig(fd, buf, buf_view.size, off);
     else if (fd->file_system == PNCIO_LUSTRE)
         w_len = PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view, offset);
-    else
+    else if (fd->file_system == PNCIO_UFS)
         w_len = PNCIO_GEN_WriteStrided(fd, buf, buf_view, offset);
+    else
+        return NC_EFSTYPE;
 
     return w_len; /* when w_len < 0, it is an NetCDF error code */
 }
