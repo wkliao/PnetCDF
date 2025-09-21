@@ -257,7 +257,7 @@ if (fd->flat_file.size > 0) assert(fd->flat_file.size == io_amnt);
     *offset_list_ptr = fd->flat_file.indices;
     *len_list_ptr = fd->flat_file.blocklens;
 
-    if (fd->flat_file.size == 0) {
+    if (fd->flat_file.size == 0) { /* TODO: is fd->flat_file.count == 0? */
         *start_offset_ptr = 0;
         *end_offset_ptr = -1;
         *contig_access_count_ptr = 0;
@@ -273,7 +273,7 @@ if (fd->flat_file.size > 0) assert(fd->flat_file.size == io_amnt);
     else {
         *start_offset_ptr = offset;
         *end_offset_ptr = offset + io_amnt - 1;
-        *contig_access_count_ptr = 1;
+        *contig_access_count_ptr = 1; /* TODO: redundant of fd->flat_file.count */
     }
     return;
 }
