@@ -816,11 +816,7 @@ double curT = MPI_Wtime();
         user_buf_idx += size_in_buf; \
         flat_buf_sz -= size_in_buf; \
         if (!flat_buf_sz) { \
-            if (flat_buf_idx < (flat_buf->count - 1)) flat_buf_idx++; \
-            else { \
-                flat_buf_idx = 0; \
-                n_buftypes++; \
-            } \
+            flat_buf_idx++; \
             user_buf_idx = flat_buf->indices[flat_buf_idx]; \
             flat_buf_sz = flat_buf->blocklens[flat_buf_idx]; \
         } \
@@ -828,24 +824,17 @@ double curT = MPI_Wtime();
     } \
 }
 
-
 #define BUF_COPY \
 { \
     while (size) { \
         size_in_buf = MPL_MIN(size, flat_buf_sz); \
-  assert((((MPI_Offset)(uintptr_t)buf) + user_buf_idx) == (MPI_Offset)(uintptr_t)((uintptr_t)buf + user_buf_idx)); \
-  assert(size_in_buf == (size_t)size_in_buf); \
         memcpy(&(send_buf[p][send_buf_idx[p]]), \
                ((char *) buf) + user_buf_idx, size_in_buf); \
         send_buf_idx[p] += size_in_buf; \
         user_buf_idx += size_in_buf; \
         flat_buf_sz -= size_in_buf; \
         if (!flat_buf_sz) { \
-            if (flat_buf_idx < (flat_buf->count - 1)) flat_buf_idx++; \
-            else { \
-                flat_buf_idx = 0; \
-                n_buftypes++; \
-            } \
+            flat_buf_idx++; \
             user_buf_idx = flat_buf->indices[flat_buf_idx]; \
             flat_buf_sz = flat_buf->blocklens[flat_buf_idx]; \
         } \
@@ -854,10 +843,6 @@ double curT = MPI_Wtime();
     } \
     BUF_INCR \
 }
-
-
-
-
 
 static
 void Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
@@ -881,7 +866,7 @@ void Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
 
     int p, jj;
     MPI_Offset flat_buf_idx, flat_buf_sz, size_in_buf, buf_incr, size;
-    MPI_Offset n_buftypes, off, len, rem_len, user_buf_idx;
+    MPI_Offset off, len, rem_len, user_buf_idx;
 
 /*  curr_to_proc[p] = amount of data sent to proc. p that has already
     been accounted for so far
@@ -898,7 +883,6 @@ void Fill_send_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
 
     user_buf_idx = flat_buf->indices[0];
     flat_buf_idx = 0;
-    n_buftypes = 0;
     flat_buf_sz = flat_buf->blocklens[0];
 
     /* flat_buf_idx = current index into flattened buftype

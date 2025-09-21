@@ -82,12 +82,12 @@ MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File      *fd,
     /* array of nprocs structures, one for each other process
      * whose request lies in this process's file domain. */
 
-    int filetype_is_contig, nprocs, nprocs_for_coll, myrank;
+    int nprocs, nprocs_for_coll, myrank;
     MPI_Count contig_access_count = 0;
     int interleave_count = 0;
     MPI_Count *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
-    MPI_Offset start_offset, end_offset, fd_size, min_st_offset, off;
+    MPI_Offset start_offset, end_offset, fd_size, min_st_offset;
     MPI_Offset *offset_list = NULL, *st_offsets = NULL, *fd_start = NULL,
         *fd_end = NULL, *end_offsets = NULL;
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -150,49 +150,10 @@ double curT = MPI_Wtime();
             NCI_Free(st_offsets);
 
         if (buf_view.size == 0) return 0;
-/*
-if (fd->flat_file.count == 1)printf("%s at %d: fd->flat_file.count=%lld offset=%lld indices=%lld blocklens=%lld\n",__func__,__LINE__,fd->flat_file.count,offset,fd->flat_file.indices[0],fd->flat_file.blocklens[0]);
-else if (fd->flat_file.count > 1)printf("%s at %d: fd->flat_file.count=%lld offset=%lld indices=%lld %lld blocklens=%lld %lld\n",__func__,__LINE__, fd->flat_file.count,offset,fd->flat_file.indices[0],fd->flat_file.blocklens[0],fd->flat_file.indices[1],fd->flat_file.blocklens[1]);
-*/
 
-#if 0
-        if (fd->filetype == MPI_DATATYPE_NULL) {
-            if (fd->flat_file.count == 0)
-                /* the whole file is visible */
-                filetype_is_contig = 1;
-            else {
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count m;
-#else
-                size_t m;
-#endif
-                MPI_Offset scan_sum=0;
-                filetype_is_contig = 0;
-                for (m=0; m<fd->flat_file.count; m++) {
-                    scan_sum += fd->flat_file.blocklens[m];
-                    if (scan_sum > offset) {
-                        if (scan_sum - offset >= buf_view.size) {
-                            /* check if this request falls entirely in m's
-                             * offset-length pair
-                             */
-                            filetype_is_contig = 1;
-                            off = fd->flat_file.indices[m] + offset -
-                                  (scan_sum - fd->flat_file.blocklens[m]);
-                        }
-                        break;
-                    }
-                }
-// printf("%s at %d: offset=%lld buf_view.size=%lld m=%lld scan_sum=%lld off=%lld filetype_is_contig=%d\n",__func__,__LINE__, offset,buf_view.size,m,scan_sum,off,filetype_is_contig);
-            }
-#else
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
-            filetype_is_contig = (fd->flat_file.count <= 1);
-
-#endif
-
-// printf("%s at %d: buf_view.is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, buf_view.is_contig,filetype_is_contig);
-        if (buf_view.is_contig && filetype_is_contig) {
+        if (buf_view.is_contig && fd->flat_file.is_contig) {
             if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
             return PNCIO_ReadContig(fd, buf, buf_view.size, offset);
         }
@@ -881,51 +842,39 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
     }
 }
 
-#define BUF_INCR                                                  \
-    {                                                                   \
-        while (buf_incr) {                                              \
-            size_in_buf = MPL_MIN(buf_incr, flat_buf_sz);               \
-            user_buf_idx += size_in_buf;                                \
-            flat_buf_sz -= size_in_buf;                                 \
-            if (!flat_buf_sz) {                                         \
-                if (flat_buf_idx < (flat_buf->count - 1)) flat_buf_idx++; \
-                else {                                                  \
-                    flat_buf_idx = 0;                                   \
-                    n_buftypes++;                                       \
-                }                                                       \
-                user_buf_idx = flat_buf->indices[flat_buf_idx];         \
-                flat_buf_sz = flat_buf->blocklens[flat_buf_idx];        \
-            }                                                           \
-            buf_incr -= size_in_buf;                                    \
-        }                                                               \
-    }
+#define BUF_INCR {                                                  \
+    while (buf_incr) {                                              \
+        size_in_buf = MPL_MIN(buf_incr, flat_buf_sz);               \
+        user_buf_idx += size_in_buf;                                \
+        flat_buf_sz -= size_in_buf;                                 \
+        if (!flat_buf_sz) {                                         \
+            flat_buf_idx++;                                         \
+            user_buf_idx = flat_buf->indices[flat_buf_idx];         \
+            flat_buf_sz = flat_buf->blocklens[flat_buf_idx];        \
+        }                                                           \
+        buf_incr -= size_in_buf;                                    \
+    }                                                               \
+}
 
 
-#define BUF_COPY                                                  \
-    {                                                                   \
-        while (size) {                                                  \
-            size_in_buf = MPL_MIN(size, flat_buf_sz);                   \
-            assert((((MPI_Offset)(uintptr_t)buf) + user_buf_idx) == (MPI_Offset)(uintptr_t)((uintptr_t)buf + user_buf_idx)); \
-            assert(size_in_buf == (size_t)size_in_buf);           \
-            memcpy(((char *) buf) + user_buf_idx,                       \
-                   &(recv_buf[p][recv_buf_idx[p]]), size_in_buf);       \
-            recv_buf_idx[p] += size_in_buf; /* already tested (size_t)size_in_buf*/ \
-            user_buf_idx += size_in_buf;                                \
-            flat_buf_sz -= size_in_buf;                                 \
-            if (!flat_buf_sz) {                                         \
-                if (flat_buf_idx < (flat_buf->count - 1)) flat_buf_idx++; \
-                else {                                                  \
-                    flat_buf_idx = 0;                                   \
-                    n_buftypes++;                                       \
-                }                                                       \
-                user_buf_idx = flat_buf->indices[flat_buf_idx];         \
-                flat_buf_sz = flat_buf->blocklens[flat_buf_idx];        \
-            }                                                           \
-            size -= size_in_buf;                                        \
-            buf_incr -= size_in_buf;                                    \
-        }                                                               \
-        BUF_INCR                                                  \
-    }
+#define BUF_COPY {                                                  \
+    while (size) {                                                  \
+        size_in_buf = MPL_MIN(size, flat_buf_sz);                   \
+        memcpy(((char *) buf) + user_buf_idx,                       \
+               &(recv_buf[p][recv_buf_idx[p]]), size_in_buf);       \
+        recv_buf_idx[p] += size_in_buf;                             \
+        user_buf_idx += size_in_buf;                                \
+        flat_buf_sz -= size_in_buf;                                 \
+        if (!flat_buf_sz) {                                         \
+            flat_buf_idx++;                                         \
+            user_buf_idx = flat_buf->indices[flat_buf_idx];         \
+            flat_buf_sz = flat_buf->blocklens[flat_buf_idx];        \
+        }                                                           \
+        size -= size_in_buf;                                        \
+        buf_incr -= size_in_buf;                                    \
+    }                                                               \
+    BUF_INCR                                                        \
+}
 
 static void Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
                              *flat_buf, char **recv_buf, MPI_Offset
@@ -948,7 +897,6 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
 
     int p, flat_buf_idx;
     MPI_Offset flat_buf_sz, size_in_buf, buf_incr, size;
-    int n_buftypes;
     MPI_Offset off, user_buf_idx;
     MPI_Offset len, rem_len;
     MPI_Count *curr_from_proc, *done_from_proc, *recv_buf_idx;
@@ -975,7 +923,6 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf, PNCIO_Flatlist_node
 
     user_buf_idx = flat_buf->indices[0];
     flat_buf_idx = 0;
-    n_buftypes = 0;
     flat_buf_sz = flat_buf->blocklens[0];
 
     /* flat_buf_idx = current index into flattened buftype

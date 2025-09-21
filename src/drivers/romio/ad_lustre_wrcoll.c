@@ -2111,7 +2111,7 @@ int Exchange_data_recv(
         else {
             MPI_Offset r_len;
             r_len = PNCIO_ReadContig(fd, write_buf, range_size, range_off);
-            if (r_len < 0) return r_len;
+            if (r_len < 0) return (int)r_len;
         }
 
         /* Once read, holes have been filled and thus the number of
