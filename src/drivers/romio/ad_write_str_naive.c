@@ -9,12 +9,12 @@
 
 #include <adio.h>
 
-MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
-                                        const void *buf,
-                                        PNCIO_Flat_list buf_view,
-                                        MPI_Offset offset)
+MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File      *fd,
+                                        const void      *buf,
+                                        PNCIO_Flat_list  buf_view,
+                                        MPI_Offset       offset)
 {
-    int b_index, buf_count;
+    int b_index;
     MPI_Count bufsize;
 
     /* bwr == buffer write; fwr == file write */
@@ -115,7 +115,8 @@ assert(fd->filetype == MPI_BYTE);
 
             f_index++;
             off = disp + fd->flat_file.indices[f_index];
-            fwr_size = MPL_MIN(fd->flat_file.blocklens[f_index], bufsize - userbuf_off);
+            fwr_size = MPL_MIN(fd->flat_file.blocklens[f_index],
+                               bufsize - userbuf_off);
         }
 
         /* End of calculations.  At this point the following values have
@@ -127,9 +128,8 @@ assert(fd->filetype == MPI_BYTE);
          */
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS)) {
-            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
-        }
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
         if (buf_view.is_contig && !fd->flat_file.is_contig) {
             /* contiguous in memory, noncontiguous in file. should be the
@@ -170,14 +170,15 @@ assert(fd->filetype == MPI_BYTE);
                 else {
                     f_index++;
                     off = disp + fd->flat_file.indices[f_index];
-                    fwr_size = MPL_MIN(fd->flat_file.blocklens[f_index], bufsize - userbuf_off);
+                    fwr_size = MPL_MIN(fd->flat_file.blocklens[f_index],
+                                       bufsize - userbuf_off);
                 }
             }
         } else {
             MPI_Offset i_offset, tmp_bufsize = 0;
             /* noncontiguous in memory as well as in file */
 
-            b_index = buf_count = 0;
+            b_index = 0;
             i_offset = buf_view.off[0];
             f_index = st_index;
             off = start_off;
@@ -216,7 +217,6 @@ assert(fd->filetype == MPI_BYTE);
                 if (size == bwr_size) {
                     /* reached end of contiguous block in memory */
                     b_index++;
-                    buf_count++;
                     i_offset = buf_view.off[b_index];
                     new_bwr_size = buf_view.len[b_index];
                     if (size != fwr_size) {
@@ -231,9 +231,9 @@ assert(fd->filetype == MPI_BYTE);
         }
 
         /* unlock the file region if we locked it */
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS)) {
+        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
-        }
+
     }   /* end of (else noncontiguous in file) */
 
     return total_w_len;
