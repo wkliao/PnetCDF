@@ -12,24 +12,6 @@
 
 #include <adio.h>
 
-/* utility function to query a datatype for its combiner,
- * convenience wrapper around MPI_Type_get_envelope[_c] */
-
-int PNCIO_Type_get_combiner(MPI_Datatype datatype, int *combiner)
-{
-    int ret;
-
-    assert(datatype != MPI_DATATYPE_NULL);
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count ni, na, nc, nt;
-    ret = MPI_Type_get_envelope_c(datatype, &ni, &na, &nc, &nt, combiner);
-#else
-    int ni, na, nt;
-    ret = MPI_Type_get_envelope(datatype, &ni, &na, &nt, combiner);
-#endif
-    return ret;
-}
-
 /* some systems do not have pread/pwrite, or requrie XOPEN_SOURCE set higher
  * than we would like.  see #1973 */
 #if (HAVE_DECL_PWRITE == 0)

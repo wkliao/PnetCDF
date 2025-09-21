@@ -372,8 +372,6 @@ int PNCIO_Type_create_darray(int size, int rank, int ndims,
                 const int *array_of_gsizes, const int *array_of_distribs,
                 const int *array_of_dargs, const int *array_of_psizes,
                 int order, MPI_Datatype oldtype, MPI_Datatype * newtype);
-int PNCIO_Type_get_combiner(MPI_Datatype datatype, int *combiner);
-
 
 int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
