@@ -31,7 +31,6 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File      *fd,
 
 printf("%s at %d:\n",__func__,__LINE__);
 
-    // PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
     filetype_is_contig = (fd->flat_file.count <= 1);
 
 int i;

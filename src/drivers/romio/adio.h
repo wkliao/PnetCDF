@@ -281,8 +281,6 @@ extern
 MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh, MPI_Offset offset, void *buf,
                 PNCIO_Flat_list buf_view);
 
-void PNCIO_Datatype_iscontig(MPI_Datatype datatype, int *flag);
-
 int PNCIO_Type_ispredef(MPI_Datatype datatype, int *flag);
 
 int PNCIO_Type_dispose(MPI_Datatype * datatype);

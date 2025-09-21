@@ -661,12 +661,6 @@ double curT = MPI_Wtime();
      * or not this rank's write request is contiguous in the file space. This
      * is because PNCIO_Calc_my_off_len has taken into account of both fileview
      * and user buffer type.
-     *
-     * Note PNCIO_Calc_my_off_len() checks whether a fileview is contiguous or
-     * not by calling
-     *     PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
-     * However, a filetype being contiguous or not is not equal to whether or
-     * not this rank's write is contiguous or not in the file.
      */
     flat_fview.is_contig = (flat_fview.count <= 1);
 

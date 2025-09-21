@@ -76,60 +76,6 @@ assert(fd->filetype == MPI_BYTE);
 
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
-#if 0
-    if (fd->filetype == MPI_DATATYPE_NULL) {
-        if (fd->flat_file.count == 0)
-            /* the whole file is visible */
-            filetype_is_contig = 1;
-        else {
-#ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Count m;
-#else
-            size_t m;
-#endif
-            MPI_Offset scan_sum=0;
-            filetype_is_contig = 0;
-            for (m=0; m<fd->flat_file.count; m++) {
-                scan_sum += fd->flat_file.blocklens[m];
-                if (scan_sum > offset) {
-                    if (scan_sum - offset >= buf_view.size) {
-                        /* check if this request falls entirely in m's
-                         * offset-length pair
-                         */
-                        filetype_is_contig = 1;
-                        off = fd->flat_file.indices[m] + offset -
-                              (scan_sum - fd->flat_file.blocklens[m]);
-                    }
-                    break;
-                }
-            }
-// printf("%s at %d: offset=%lld buf_view.size=%lld m=%lld scan_sum=%lld off=%lld filetype_is_contig=%d\n",__func__,__LINE__, offset,buf_view.size,m,scan_sum,off,filetype_is_contig);
-        }
-#if 0
-        else if (fd->flat_file.count == 1)
-            filetype_is_contig = 1;
-        else {
-#ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Count m;
-#else
-            size_t m;
-#endif
-            for (m=0; m<fd->flat_file.count; m++) {
-                if (offset < fd->flat_file.indices[m] + fd->flat_file.blocklens[m])
-                    break;
-            }
-            filetype_is_contig = (fd->flat_file.count - m == 1);
-        }
-#endif
-    }
-    else if (fd->filetype == MPI_BYTE)
-        filetype_is_contig = 1;
-    else {
-assert(0);
-        PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
-    }
-#endif
-
 // printf("%s at %d: flat_file.count=%lld buf_view.is_contig=%d filetype_is_contig=%d\n",__func__,__LINE__, fd->flat_file.count, buf_view.is_contig,filetype_is_contig);
 
     filetype_is_contig = (fd->flat_file.count <= 1);
