@@ -31,14 +31,10 @@ C_SRCS = ad_read.c \
          ad_write_coll.c \
          ad_write_str.c \
          ad_write_str_naive.c \
-         ad_subarray.c \
-         ad_darray.c \
          ad_utils.c \
          ad_lustre_open.c \
          ad_lustre_wrcoll.c \
          ad_lustre_wrstr.c \
-         ad_iscontig.c \
-         ad_flatten.c \
          ad_lock.c \
          ad_set_size.c \
          ad_sync.c \
