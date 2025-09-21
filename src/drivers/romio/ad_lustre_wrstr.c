@@ -118,7 +118,7 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
                                      MPI_Offset offset)
 {
     char *writebuf;
-    int i, j, k, st_index=0, stripe_size, buf_count;
+    int i, j, k, st_index=0, stripe_size;
     /* offset is in units of etype relative to the filetype. */
     MPI_Offset i_offset, sum, num, size, abs_off_in_filetype=0, off, disp;
     MPI_Offset userbuf_off, req_off, end_offset=0, writebuf_off, start_off;
@@ -153,7 +153,6 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-
         off = fd->disp + offset;
 
         start_off = off;
@@ -164,7 +163,8 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         writebuf_len = 0;
 
         /* if atomicity is true or data sieving is not disable, lock the region
-         * to be accessed */
+         * to be accessed
+         */
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, bufsize);
 
@@ -210,10 +210,10 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
         start_off = offset;
 
-        /* Wei-keng Liao:write request is within single flat_file
-         * contig block*/
-        /* this could happen, for example, with subarray types that are
-         * actually fairly contiguous */
+        /* Write request is within single flat_file contig block. This could
+         * happen, for example, with subarray types that are actually fairly
+         * contiguous.
+         */
         if (buf_view.is_contig && bufsize <= fwr_size) {
             req_off = start_off;
             req_len = bufsize;
@@ -260,7 +260,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
-            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
         writebuf_off = 0;
         writebuf_len = 0;
@@ -268,21 +268,15 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         memset(writebuf, -1, stripe_size);
 
         if (buf_view.is_contig && !fd->flat_file.is_contig) {
-
-/* contiguous in memory, noncontiguous in file. should be the most
-           common case. */
-
+            /* contiguous in memory, noncontiguous in file should be the most
+             * common case.
+             */
             i_offset = 0;
             j = st_index;
             off = offset;
             fwr_size = MPL_MIN(st_fwr_size, bufsize);
             while (i_offset < bufsize) {
                 if (fwr_size) {
-                    /* TYPE_UB and TYPE_LB can result in
-                     * fwr_size = 0. save system call in such cases */
-                    /* lseek(fd->fd_sys, off, SEEK_SET);
-                     * err = write(fd->fd_sys, ((char *) buf) + i_offset, fwr_size); */
-
                     req_off = off;
                     req_len = fwr_size;
                     userbuf_off = i_offset;
@@ -297,13 +291,13 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
                 else {
                     j++;
                     off = disp + fd->flat_file.indices[j];
-                    fwr_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
+                    fwr_size = MPL_MIN(fd->flat_file.blocklens[j],
+                                       bufsize - i_offset);
                 }
             }
         } else {
-/* noncontiguous in memory as well as in file */
-
-            k = num = buf_count = 0;
+            /* noncontiguous in memory as well as in file */
+            k = num = 0;
             i_offset = buf_view.off[0];
             j = st_index;
             off = offset;
@@ -323,7 +317,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
                 new_bwr_size = bwr_size;
 
                 if (size == fwr_size) {
-/* reached end of contiguous block in file */
+                    /* reached end of contiguous block in file */
                     j++;
                     off = disp + fd->flat_file.indices[j];
 
@@ -335,10 +329,8 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
                 }
 
                 if (size == bwr_size) {
-/* reached end of contiguous block in memory */
-
+                    /* reached end of contiguous block in memory */
                     k++;
-                    buf_count++;
                     i_offset = buf_view.off[k];
                     new_bwr_size = buf_view.len[k];
                     if (size != fwr_size) {
