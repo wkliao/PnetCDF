@@ -9,34 +9,33 @@
 
 #include <adio.h>
 
-#define BUFFERED_READ                                                        \
-    {                                                                        \
-        if (req_off >= readbuf_off + readbuf_len) {                          \
-            readbuf_off = req_off;                                           \
-            readbuf_len = MPL_MIN(max_bufsize, end_offset-readbuf_off+1);    \
-            r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off); \
-            if (r_len < 0) return r_len;                                     \
-            total_r_len += r_len;                                            \
-        }                                                                    \
-        while (req_len > readbuf_off + readbuf_len - req_off) {              \
-            partial_read = readbuf_off + readbuf_len - req_off;              \
-            tmp_buf = (char *) NCI_Malloc(partial_read);                     \
-            memcpy(tmp_buf, readbuf+readbuf_len-partial_read, partial_read); \
-            NCI_Free(readbuf);                                               \
-            readbuf = (char *) NCI_Malloc(partial_read + max_bufsize);       \
-            memcpy(readbuf, tmp_buf, partial_read);                          \
-            NCI_Free(tmp_buf);                                               \
-            readbuf_off += readbuf_len-partial_read;                         \
-            readbuf_len = partial_read +                                     \
-                          MPL_MIN(max_bufsize, end_offset-readbuf_off+1);    \
-            r_len = PNCIO_ReadContig(fd, readbuf+partial_read,               \
-                             readbuf_len-partial_read,                       \
-                             readbuf_off+partial_read);                      \
-            if (r_len < 0) return r_len;                                     \
-            total_r_len += r_len;                                            \
-        }                                                                    \
-        memcpy((char*)buf+userbuf_off, readbuf+req_off-readbuf_off, req_len); \
-    }
+#define BUFFERED_READ {                                                       \
+    if (req_off >= readbuf_off + readbuf_len) {                               \
+        readbuf_off = req_off;                                                \
+        readbuf_len = MPL_MIN(max_bufsize, end_offset-readbuf_off+1);         \
+        r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off);      \
+        if (r_len < 0) return r_len;                                          \
+        total_r_len += r_len;                                                 \
+    }                                                                         \
+    while (req_len > readbuf_off + readbuf_len - req_off) {                   \
+        partial_read = readbuf_off + readbuf_len - req_off;                   \
+        tmp_buf = (char *) NCI_Malloc(partial_read);                          \
+        memcpy(tmp_buf, readbuf+readbuf_len-partial_read, partial_read);      \
+        NCI_Free(readbuf);                                                    \
+        readbuf = (char *) NCI_Malloc(partial_read + max_bufsize);            \
+        memcpy(readbuf, tmp_buf, partial_read);                               \
+        NCI_Free(tmp_buf);                                                    \
+        readbuf_off += readbuf_len-partial_read;                              \
+        readbuf_len = partial_read +                                          \
+                      MPL_MIN(max_bufsize, end_offset-readbuf_off+1);         \
+        r_len = PNCIO_ReadContig(fd, readbuf+partial_read,                    \
+                                 readbuf_len-partial_read,                    \
+                                 readbuf_off+partial_read);                   \
+        if (r_len < 0) return r_len;                                          \
+        total_r_len += r_len;                                                 \
+    }                                                                         \
+    memcpy((char*)buf+userbuf_off, readbuf+req_off-readbuf_off, req_len);     \
+}
 
 
 MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
@@ -44,24 +43,15 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
                                  PNCIO_Flat_list buf_view,
                                  MPI_Offset offset)
 {
-
-
-/* offset is in units of etype relative to the filetype. */
-
-    PNCIO_Flatlist_node *flat_buf;
-    MPI_Offset i_offset, new_brd_size, brd_size, size;
-    int i, j, k, st_index = 0;
-    MPI_Count num, bufsize;
-    MPI_Offset abs_off_in_filetype = 0, new_frd_size, frd_size = 0, st_frd_size;
-    MPI_Count partial_read;
-    MPI_Aint buftype_extent;
-    int buf_count, filetype_is_contig;
-    MPI_Offset userbuf_off, req_len, sum;
-    MPI_Offset off, req_off, disp, end_offset = 0, readbuf_off, start_off;
     char *readbuf, *tmp_buf, *value;
-    int info_flag;
+    int i, j, k, st_index=0, info_flag;
+
     MPI_Aint max_bufsize, readbuf_len;
+    MPI_Offset i_offset, new_brd_size, brd_size, size, abs_off_in_filetype=0;
+    MPI_Offset new_frd_size, frd_size=0, st_frd_size, userbuf_off, req_len;
+    MPI_Offset sum, off, req_off, disp, end_offset=0, readbuf_off, start_off;
     MPI_Offset r_len, total_r_len=0;
+    MPI_Count num, bufsize, partial_read;
 
 // printf("%s at %d:\n",__func__,__LINE__);
 
@@ -74,14 +64,7 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
 
 /* This subroutine is entered with filetype being non-contiguous only */
 assert(fd->filetype == MPI_BYTE);
-
-    filetype_is_contig = (fd->flat_file.count <= 1);
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
-
-assert(filetype_is_contig == 0);
-
-    if (buf_view.is_contig) buftype_extent = buf_view.size;
-    else buftype_extent = buf_view.off[buf_view.count-1] + buf_view.len[buf_view.count-1] - buf_view.off[0];
 
     bufsize = buf_view.size;
 
@@ -92,18 +75,8 @@ assert(filetype_is_contig == 0);
     max_bufsize = atoi(value);
     NCI_Free(value);
 
-
-    PNCIO_Flatlist_node flat_tmp;
-    flat_buf = &flat_tmp;
-        flat_buf->count = buf_view.count;
-        flat_buf->indices = buf_view.off;
-        flat_buf->blocklens = buf_view.len;
-        // flat_buf->lb_idx = 0;
-        // flat_buf->ub_idx = 0;
-        // flat_buf->refct = 0;
-        // flat_buf->flag = 0;
-
-    if (!buf_view.is_contig && filetype_is_contig) {
+    if (!buf_view.is_contig && fd->flat_file.is_contig) {
+/* TODO: find a counter example !!! */
 assert(0);
 
 /* noncontiguous in memory, contiguous in file. */
@@ -123,12 +96,12 @@ assert(0);
         r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off);
         if (r_len < 0) return r_len;
 
-        for (i = 0; i < flat_buf->count; i++) {
-            userbuf_off = (MPI_Offset)j * buftype_extent + flat_buf->indices[i];
+        for (i = 0; i < buf_view.count; i++) {
+            userbuf_off = buf_view.off[i];
             req_off = off;
-            req_len = flat_buf->blocklens[i];
+            req_len = buf_view.len[i];
             BUFFERED_READ
-            off += flat_buf->blocklens[i];
+            off += buf_view.len[i];
         }
 
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
@@ -182,10 +155,7 @@ assert(buf_view.size == r_len);
             i_offset += frd_size;
             end_offset = off + frd_size - 1;
 
-            j = (j + 1) % fd->flat_file.count;
-            while (fd->flat_file.blocklens[j] == 0) {
-                j = (j + 1) % fd->flat_file.count;
-            }
+            j++;
             off = disp + fd->flat_file.indices[j];
             frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
         }
@@ -198,7 +168,7 @@ assert(buf_view.size == r_len);
         readbuf_len = 0;
         readbuf = (char *) NCI_Malloc(max_bufsize);
 
-        if (buf_view.is_contig && !filetype_is_contig) {
+        if (buf_view.is_contig && !fd->flat_file.is_contig) {
 
 /* contiguous in memory, noncontiguous in file. should be the most
    common case. */
@@ -227,10 +197,7 @@ assert(buf_view.size == r_len);
                 /* did not reach end of contiguous block in filetype.
                  * no more I/O needed. off is incremented by frd_size. */
                 else {
-                    j = (j + 1) % fd->flat_file.count;
-                    while (fd->flat_file.blocklens[j] == 0) {
-                        j = (j + 1) % fd->flat_file.count;
-                    }
+                    j++;
                     off = disp + fd->flat_file.indices[j];
                     frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
                 }
@@ -238,12 +205,12 @@ assert(buf_view.size == r_len);
         } else {
 /* noncontiguous in memory as well as in file */
 
-            k = num = buf_count = 0;
-            i_offset = flat_buf->indices[0];
+            k = num = 0;
+            i_offset = buf_view.off[0];
             j = st_index;
             off = offset;
             frd_size = st_frd_size;
-            brd_size = flat_buf->blocklens[0];
+            brd_size = buf_view.len[0];
 
             while (num < bufsize) {
                 size = MPL_MIN(frd_size, brd_size);
@@ -262,10 +229,7 @@ assert(buf_view.size == r_len);
 
                 if (size == frd_size) {
 /* reached end of contiguous block in file */
-                    j = (j + 1) % fd->flat_file.count;
-                    while (fd->flat_file.blocklens[j] == 0) {
-                        j = (j + 1) % fd->flat_file.count;
-                    }
+                    j++;
                     off = disp + fd->flat_file.indices[j];
 
                     new_frd_size = fd->flat_file.blocklens[j];
@@ -278,12 +242,9 @@ assert(buf_view.size == r_len);
                 if (size == brd_size) {
 /* reached end of contiguous block in memory */
 
-                    k = (k + 1) % flat_buf->count;
-                    buf_count++;
-                    i_offset =
-                        ((MPI_Offset) buftype_extent *
-                         (buf_count / flat_buf->count) + flat_buf->indices[k]);
-                    new_brd_size = flat_buf->blocklens[k];
+                    k++;
+                    i_offset = buf_view.off[k];
+                    new_brd_size = buf_view.len[k];
                     if (size != frd_size) {
                         off += size;
                         new_frd_size -= size;
