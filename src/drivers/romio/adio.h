@@ -394,9 +394,4 @@ extern
 MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
                 PNCIO_Flat_list buf_view, MPI_Offset offset);
 
-#define MPIR_ERR_RECOVERABLE 0
-int PNCIO_Err_create_code(int lastcode, int fatal, const char fcname[],
-                int line, int error_class, const char generic_msg[],
-                const char specific_msg[], ...);
-
 #endif

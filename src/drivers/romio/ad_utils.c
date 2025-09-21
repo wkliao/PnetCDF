@@ -264,28 +264,3 @@ void PNCIO_Heap_merge(PNCIO_Access * others_req, MPI_Count * count,
     NCI_Free(a);
 }
 
-int PNCIO_Err_create_code(int lastcode, int fatal, const char fcname[],
-                          int line, int error_class, const char generic_msg[],
-                          const char specific_msg[], ...)
-{
-    va_list Argp;
-    int idx = 0;
-    char *buf;
-
-    buf = (char *) NCI_Malloc(1024);
-    if (buf != NULL) {
-        idx += snprintf(buf, 1023, "%s (line %d): ", fcname, line);
-        if (specific_msg == NULL) {
-            snprintf(&buf[idx], 1023 - idx, "%s\n", generic_msg);
-        } else {
-            va_start(Argp, specific_msg);
-            vsnprintf(&buf[idx], 1023 - idx, specific_msg, Argp);
-            va_end(Argp);
-        }
-        fprintf(stderr, "%s", buf);
-        NCI_Free(buf);
-    }
-
-    return error_class;
-}
-
