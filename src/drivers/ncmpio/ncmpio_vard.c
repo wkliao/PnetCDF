@@ -70,7 +70,13 @@ getput_vard(NC               *ncp,
     int type_size;
 #endif
 
-    if (ncp->num_aggrs_per_node > 0 || ncp->fstype != PNCIO_FSTYPE_MPIIO) {
+    if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
+        fprintf(stderr, "PnetCDF vard APIs are only supported when using MPI-IO.\n");
+        fprintf(stderr, "Please set environment variable PNETCDF_HINTS to \"nc_use_mpi_io=true\"\n");
+        return NC_ENOTSUPPORT;
+    }
+
+    if (ncp->num_aggrs_per_node > 0) {
         fprintf(stderr, "PnetCDF vard APIs are not supported when intra-node agggregation is enabled\n");
         return NC_ENOTSUPPORT;
     }
