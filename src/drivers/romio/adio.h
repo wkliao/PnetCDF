@@ -248,10 +248,17 @@ typedef struct {
 extern int PNCIO_Flattened_type_keyval;
 
 /*---- APIs -----------------------------------------------------------------*/
+extern
 int PNCIO_FileSysType(const char *filename);
+
+extern
 int PNCIO_File_open(MPI_Comm comm, const char *filename, int amode,
                 MPI_Info info, PNCIO_File *fh);
+
+extern
 int PNCIO_File_close(PNCIO_File *fh);
+
+extern
 int PNCIO_File_set_view(PNCIO_File *fh, MPI_Offset disp, MPI_Datatype filetype,
                 MPI_Aint npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -260,13 +267,26 @@ int PNCIO_File_set_view(PNCIO_File *fh, MPI_Offset disp, MPI_Datatype filetype,
                 MPI_Offset *offsets, int *lengths
 #endif
 );
+
+extern
 int PNCIO_File_sync(PNCIO_File *fh);
+
+extern
 int PNCIO_File_delete(const char *filename);
+
+extern
 int PNCIO_File_set_size(PNCIO_File *fh, MPI_Offset size);
+
+extern
 int PNCIO_File_get_size(PNCIO_File *fh, MPI_Offset *size);
+
+extern
 int PNCIO_File_get_info(PNCIO_File *fh, MPI_Info *info_used);
+
+extern
 int PNCIO_File_SetInfo(PNCIO_File *fh, MPI_Info  users_info);
 
+/* PNC I/O APIs */
 extern
 MPI_Offset PNCIO_File_write_at(PNCIO_File *fh, MPI_Offset offset,
                 const void *buf, PNCIO_Flat_list buf_view);
@@ -281,16 +301,82 @@ extern
 MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh, MPI_Offset offset, void *buf,
                 PNCIO_Flat_list buf_view);
 
-int PNCIO_Lustre_create(PNCIO_File *fd, int access_mode);
-int PNCIO_Lustre_open(PNCIO_File *fd);
+extern
+MPI_Offset PNCIO_WriteContig(PNCIO_File *fd, const void *buf,
+                MPI_Offset w_size, MPI_Offset offset);
 
 extern
-MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+MPI_Offset PNCIO_ReadContig(PNCIO_File *fd, void *buf, MPI_Offset r_size,
+                MPI_Offset offset);
+
+/* utility APIs */
+extern
+void PNCIO_Calc_my_off_len(PNCIO_File *fd, MPI_Offset io_amnt,
+                MPI_Offset offset,
+                MPI_Offset **offset_list_ptr,
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Offset **len_list_ptr,
+#else
+                int **len_list_ptr,
+#endif
+                MPI_Offset *start_offset_ptr, MPI_Offset *end_offset_ptr,
+                MPI_Count *contig_access_count_ptr);
 
 extern
-MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+void PNCIO_Calc_file_domains(MPI_Offset * st_offsets,
+                MPI_Offset *end_offsets, int nprocs, int nprocs_for_coll,
+                MPI_Offset *min_st_offset_ptr, MPI_Offset **fd_start_ptr,
+                MPI_Offset **fd_end_ptr, MPI_Offset *fd_size_ptr,
+                int striping_unit);
+
+extern
+void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
+#ifdef HAVE_MPI_LARGE_COUNT
+                MPI_Offset *len_list,
+#else
+                int *len_list,
+#endif
+                MPI_Count contig_access_count,
+                MPI_Offset min_st_offset, MPI_Offset *fd_start,
+                MPI_Offset *fd_end, MPI_Offset fd_size, int nprocs,
+                MPI_Count *count_my_req_procs_ptr,
+                MPI_Count **count_my_req_per_proc_ptr,
+                PNCIO_Access **my_req_ptr, MPI_Aint **buf_idx_ptr);
+
+extern
+void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
+                MPI_Count *count_my_req_per_proc, PNCIO_Access *my_req,
+                int nprocs, int myrank, MPI_Count *count_others_req_procs_ptr,
+                MPI_Count **count_others_req_per_proc_ptr,
+                PNCIO_Access **others_req_ptr);
+
+extern
+void PNCIO_Free_my_req(int nprocs, MPI_Count *count_my_req_per_proc,
+                PNCIO_Access *my_req, MPI_Aint *buf_idx);
+
+extern
+void PNCIO_Free_others_req(int nprocs, MPI_Count *count_others_req_per_proc,
+                PNCIO_Access *others_req);
+
+
+extern
+int PNCIO_Calc_aggregator(PNCIO_File *fd, MPI_Offset off, MPI_Offset min_off,
+                MPI_Offset *len, MPI_Offset fd_size, MPI_Offset *fd_start,
+                MPI_Offset *fd_end);
+
+extern
+void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,
+                MPI_Offset *srt_off, MPI_Count *srt_len, MPI_Count *start_pos,
+                int nprocs, int nprocs_recv, MPI_Count total_elements);
+
+/* Generic APIs */
+extern
+int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
+                int whence, MPI_Offset len);
+
+extern
+int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
+                int whence, MPI_Offset len);
 
 extern
 MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf,
@@ -309,79 +395,26 @@ MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
                 PNCIO_Flat_list buf_view, MPI_Offset offset);
 
 extern
-MPI_Offset PNCIO_WriteContig(PNCIO_File *fd, const void *buf,
-                MPI_Offset w_size, MPI_Offset offset);
-
-extern
-MPI_Offset PNCIO_ReadContig(PNCIO_File *fd, void *buf, MPI_Offset r_size,
-                MPI_Offset offset);
-
-extern
 MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf,
                 PNCIO_Flat_list buf_view, MPI_Offset offset);
 
-void PNCIO_Calc_my_off_len(PNCIO_File *fd, MPI_Offset io_amnt,
-                MPI_Offset offset,
-                MPI_Offset **offset_list_ptr,
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Offset **len_list_ptr,
-#else
-                int **len_list_ptr,
-#endif
-                MPI_Offset *start_offset_ptr, MPI_Offset *end_offset_ptr,
-                MPI_Count *contig_access_count_ptr);
-
-void PNCIO_Calc_file_domains(MPI_Offset * st_offsets,
-                MPI_Offset *end_offsets, int nprocs, int nprocs_for_coll,
-                MPI_Offset *min_st_offset_ptr, MPI_Offset **fd_start_ptr,
-                MPI_Offset **fd_end_ptr, MPI_Offset *fd_size_ptr,
-                int striping_unit);
-void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Offset *len_list,
-#else
-                int *len_list,
-#endif
-                MPI_Count contig_access_count,
-                MPI_Offset min_st_offset, MPI_Offset *fd_start,
-                MPI_Offset *fd_end, MPI_Offset fd_size, int nprocs,
-                MPI_Count *count_my_req_procs_ptr,
-                MPI_Count **count_my_req_per_proc_ptr,
-                PNCIO_Access **my_req_ptr, MPI_Aint **buf_idx_ptr);
-void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
-                MPI_Count *count_my_req_per_proc, PNCIO_Access *my_req,
-                int nprocs, int myrank, MPI_Count *count_others_req_procs_ptr,
-                MPI_Count **count_others_req_per_proc_ptr,
-                PNCIO_Access **others_req_ptr);
-void PNCIO_Free_my_req(int nprocs, MPI_Count *count_my_req_per_proc,
-                PNCIO_Access *my_req, MPI_Aint *buf_idx);
-void PNCIO_Free_others_req(int nprocs, MPI_Count *count_others_req_per_proc,
-                PNCIO_Access *others_req);
-
-int PNCIO_Calc_aggregator(PNCIO_File *fd, MPI_Offset off, MPI_Offset min_off,
-                MPI_Offset *len, MPI_Offset fd_size, MPI_Offset *fd_start,
-                MPI_Offset *fd_end);
-
-
-int PNCIO_Type_create_subarray(int ndims, const int *array_of_sizes,
-                const int *array_of_subsizes, const int *array_of_starts,
-                int order, MPI_Datatype oldtype, MPI_Datatype *newtype);
-int PNCIO_Type_create_darray(int size, int rank, int ndims,
-                const int *array_of_gsizes, const int *array_of_distribs,
-                const int *array_of_dargs, const int *array_of_psizes,
-                int order, MPI_Datatype oldtype, MPI_Datatype * newtype);
-
-int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
-                int whence, MPI_Offset len);
-int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
-                int whence, MPI_Offset len);
-
-void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,
-                MPI_Offset *srt_off, MPI_Count *srt_len, MPI_Count *start_pos,
-                int nprocs, int nprocs_recv, MPI_Count total_elements);
-
 extern
 MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
+                PNCIO_Flat_list buf_view, MPI_Offset offset);
+
+/* Lustre */
+extern
+int PNCIO_Lustre_create(PNCIO_File *fd, int access_mode);
+
+extern
+int PNCIO_Lustre_open(PNCIO_File *fd);
+
+extern
+MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf,
+                PNCIO_Flat_list buf_view, MPI_Offset offset);
+
+extern
+MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
                 PNCIO_Flat_list buf_view, MPI_Offset offset);
 
 #endif
