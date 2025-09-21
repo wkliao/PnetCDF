@@ -41,10 +41,10 @@ int PNCIO_File_set_view(PNCIO_File    *fd,
 {
     MPI_Aint i;
 /* below 4 are no longer used */
-fd->flat_file.lb_idx    = -1;
-fd->flat_file.ub_idx    = -1;
-fd->flat_file.flag      = 0;
-fd->flat_file.refct     = 1;
+// fd->flat_file.lb_idx    = -1;
+// fd->flat_file.ub_idx    = -1;
+// fd->flat_file.flag      = 0;
+// fd->flat_file.refct     = 1;
 
 assert(filetype == MPI_BYTE);
 assert(disp == 0);
@@ -53,6 +53,10 @@ assert(disp == 0);
     fd->flat_file.indices   = offsets;
     fd->flat_file.blocklens = lengths;
 
+    /* Size of fileview must be calculated here, as PnetCDF may coalesce the
+     * offset-length pairs in order to make offsets sorted in a monotonically
+     * non-decreasing order.
+     */
     fd->flat_file.size = 0;
     for (i=0; i<npairs; i++) fd->flat_file.size += lengths[i];
 

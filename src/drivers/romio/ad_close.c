@@ -37,10 +37,12 @@ int PNCIO_File_close(PNCIO_File *fh)
 
     PNCIO_Type_dispose(&fh->filetype);
 
+#if 0
     if (PNCIO_Flattened_type_keyval != MPI_KEYVAL_INVALID) {
         MPI_Type_free_keyval(&PNCIO_Flattened_type_keyval);
         PNCIO_Flattened_type_keyval = MPI_KEYVAL_INVALID;
     }
+#endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     int i, rank;

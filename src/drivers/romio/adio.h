@@ -151,10 +151,10 @@ typedef struct {
     MPI_Offset  *off;       /* array of byte offsets of each block */
     int         *len;       /* array of contiguous block lengths (bytes) */
 #endif
-    MPI_Count    rnd;       /* number of whole type already consumed */
+    // MPI_Count    rnd;       /* number of whole type already consumed */
     MPI_Count    idx;       /* index of off-len pairs consumed so far */
     MPI_Aint     rem;       /* remaining amount in the pair to be consumed */
-    MPI_Aint     extent;    /* data type extent */
+    // MPI_Aint     extent;    /* data type extent */
     int          is_contig; /* for fileview, whether file access is contiguous
                              * for buffer, whether user buffer is contiguous
                              * Note this is not whether filetype or buftype
@@ -181,12 +181,13 @@ typedef struct {
      * resized, or struct of resized, perhaps?), indicate where in the
      * tuple-stream the lb and ub parts are kept
      * (-1 indicates "not explicitly set") */
-    MPI_Offset lb_idx;
-    MPI_Offset ub_idx;
-    int refct;                  /* when storing flattened representation on a
+    // MPI_Offset lb_idx;
+    // MPI_Offset ub_idx;
+    // int refct;
+    /* when storing flattened representation on a
                                  * type, attribute copy and delete routines
                                  * will manage refct */
-    int flag;                   /* PNCIO_TYPE_XXX */
+    // int flag;                   /* PNCIO_TYPE_XXX */
 } PNCIO_Flatlist_node;
 
 typedef struct {

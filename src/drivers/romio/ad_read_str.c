@@ -52,11 +52,9 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
     MPI_Offset i_offset, new_brd_size, brd_size, size;
     int i, j, k, st_index = 0;
     MPI_Count num, bufsize;
-    MPI_Count n_etypes_in_filetype;
-    MPI_Offset n_filetypes, etype_in_filetype, st_n_filetypes, size_in_filetype;
     MPI_Offset abs_off_in_filetype = 0, new_frd_size, frd_size = 0, st_frd_size;
     MPI_Count partial_read;
-    MPI_Aint filetype_extent, buftype_extent;
+    MPI_Aint buftype_extent;
     int buf_count, filetype_is_contig;
     MPI_Offset userbuf_off, req_len, sum;
     MPI_Offset off, req_off, disp, end_offset = 0, readbuf_off, start_off;
@@ -80,49 +78,6 @@ assert(fd->filetype == MPI_BYTE);
     filetype_is_contig = (fd->flat_file.count <= 1);
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
-#if 0
-    if (fd->filetype == MPI_DATATYPE_NULL) {
-        // assert(fd->flat_file != NULL);
-        MPI_Count m;
-
-        filetype_is_contig = 0;
-        filetype_size = 0;
-        for (m=0; m<fd->flat_file.count; m++)
-            filetype_size += fd->flat_file.blocklens[m];
-        if (fd->flat_file.count > 0) {
-            m = fd->flat_file.count - 1;
-            filetype_extent = fd->flat_file.indices[m]
-                            + fd->flat_file.blocklens[m]
-                            - fd->flat_file.indices[0];
-        }
-        else
-            filetype_extent = 0;
-
-
-        MPI_Count m, n;
-        for (m=0; m<fd->flat_file.count; m++) {
-            if (offset < fd->flat_file.indices[m] + fd->flat_file.blocklens[m])
-                break;
-        }
-
-        filetype_is_contig = (fd->flat_file.count - m == 1);
-        filetype_size = 0;
-        for (n=m; n<fd->flat_file.count; n++)
-            filetype_size += fd->flat_file.blocklens[n];
-        if (fd->flat_file.count > 0) {
-            n = fd->flat_file.count - 1;
-            filetype_extent = fd->flat_file.indices[n]
-                            + fd->flat_file.blocklens[n]
-                            - fd->flat_file.indices[m];
-        }
-        else
-            filetype_extent = 0;
-// printf("%s at %d: filetype_is_contig=%d filetype_size=%lld filetype_extent=%ld\n",__func__,__LINE__, filetype_is_contig,filetype_size,filetype_extent);
-
-    }
-else assert(0);
-#endif
-
 assert(filetype_is_contig == 0);
 
     if (buf_view.is_contig) buftype_extent = buf_view.size;
@@ -143,10 +98,10 @@ assert(filetype_is_contig == 0);
         flat_buf->count = buf_view.count;
         flat_buf->indices = buf_view.off;
         flat_buf->blocklens = buf_view.len;
-        flat_buf->lb_idx = 0;
-        flat_buf->ub_idx = 0;
-        flat_buf->refct = 0;
-        flat_buf->flag = 0;
+        // flat_buf->lb_idx = 0;
+        // flat_buf->ub_idx = 0;
+        // flat_buf->refct = 0;
+        // flat_buf->flag = 0;
 
     if (!buf_view.is_contig && filetype_is_contig) {
 assert(0);
@@ -183,12 +138,9 @@ assert(0);
     }
 
     else {      /* noncontiguous in file */
-        disp = fd->disp;
+        MPI_Offset size_in_filetype = offset;
 
-        n_etypes_in_filetype = fd->flat_file.size;
-        n_filetypes = offset / n_etypes_in_filetype;
-        etype_in_filetype = offset % n_etypes_in_filetype;
-        size_in_filetype = etype_in_filetype;
+        disp = fd->disp;
 
         sum = 0;
         for (i = 0; i < fd->flat_file.count; i++) {
@@ -203,7 +155,7 @@ assert(0);
         }
 
         /* abs. offset in bytes in the file */
-        offset = disp + n_filetypes * filetype_extent + abs_off_in_filetype;
+        offset = disp + abs_off_in_filetype;
 
         start_off = offset;
 
@@ -222,7 +174,6 @@ assert(buf_view.size == r_len);
          * e.g., if start_offset=0 and 100 bytes to be read, end_offset=99 */
 
         st_frd_size = frd_size;
-        st_n_filetypes = n_filetypes;
         i_offset = 0;
         j = st_index;
         off = offset;
@@ -232,12 +183,10 @@ assert(buf_view.size == r_len);
             end_offset = off + frd_size - 1;
 
             j = (j + 1) % fd->flat_file.count;
-            n_filetypes += (j == 0) ? 1 : 0;
             while (fd->flat_file.blocklens[j] == 0) {
                 j = (j + 1) % fd->flat_file.count;
-                n_filetypes += (j == 0) ? 1 : 0;
             }
-            off = disp + fd->flat_file.indices[j] + n_filetypes * filetype_extent;
+            off = disp + fd->flat_file.indices[j];
             frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
         }
 
@@ -257,7 +206,6 @@ assert(buf_view.size == r_len);
             i_offset = 0;
             j = st_index;
             off = offset;
-            n_filetypes = st_n_filetypes;
             frd_size = MPL_MIN(st_frd_size, bufsize);
             while (i_offset < bufsize) {
                 if (frd_size) {
@@ -274,19 +222,16 @@ assert(buf_view.size == r_len);
                 i_offset += frd_size;
 
                 if (off + frd_size < disp + fd->flat_file.indices[j] +
-                    fd->flat_file.blocklens[j] + n_filetypes * filetype_extent)
+                    fd->flat_file.blocklens[j])
                     off += frd_size;
                 /* did not reach end of contiguous block in filetype.
                  * no more I/O needed. off is incremented by frd_size. */
                 else {
                     j = (j + 1) % fd->flat_file.count;
-                    n_filetypes += (j == 0) ? 1 : 0;
                     while (fd->flat_file.blocklens[j] == 0) {
                         j = (j + 1) % fd->flat_file.count;
-                        n_filetypes += (j == 0) ? 1 : 0;
                     }
-                    off = disp + fd->flat_file.indices[j] +
-                        n_filetypes * filetype_extent;
+                    off = disp + fd->flat_file.indices[j];
                     frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
                 }
             }
@@ -299,7 +244,6 @@ assert(buf_view.size == r_len);
             i_offset = flat_buf->indices[0];
             j = st_index;
             off = offset;
-            n_filetypes = st_n_filetypes;
             frd_size = st_frd_size;
             brd_size = flat_buf->blocklens[0];
 
@@ -321,13 +265,10 @@ assert(buf_view.size == r_len);
                 if (size == frd_size) {
 /* reached end of contiguous block in file */
                     j = (j + 1) % fd->flat_file.count;
-                    n_filetypes += (j == 0) ? 1 : 0;
                     while (fd->flat_file.blocklens[j] == 0) {
                         j = (j + 1) % fd->flat_file.count;
-                        n_filetypes += (j == 0) ? 1 : 0;
                     }
-                    off = disp + fd->flat_file.indices[j] +
-                        n_filetypes * filetype_extent;
+                    off = disp + fd->flat_file.indices[j];
 
                     new_frd_size = fd->flat_file.blocklens[j];
                     if (size != brd_size) {

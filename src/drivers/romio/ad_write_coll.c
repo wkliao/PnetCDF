@@ -64,11 +64,12 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
                                       PNCIO_Flat_list buf_view,
                                       MPI_Offset offset) /* relative to fileview */
 {
-/* Uses a generalized version of the extended two-phase method described
-   in "An Extended Two-Phase Method for Accessing Sections of
-   Out-of-Core Arrays", Rajeev Thakur and Alok Choudhary,
-   Scientific Programming, (5)4:301--317, Winter 1996.
-   http://www.mcs.anl.gov/home/thakur/ext2ph.ps */
+    /* Uses a generalized version of the extended two-phase method described in
+     * "An Extended Two-Phase Method for Accessing Sections of Out-of-Core
+     * Arrays", Rajeev Thakur and Alok Choudhary, Scientific Programming,
+     * (5)4:301--317, Winter 1996.
+     * http://www.mcs.anl.gov/home/thakur/ext2ph.ps
+     */
 
     PNCIO_Access *my_req;
     /* array of nprocs access structures, one for each other process in
@@ -78,16 +79,15 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
     /* array of nprocs access structures, one for each other process
      * whose request lies in this process's file domain. */
 
-    int i, filetype_is_contig, nprocs, nprocs_for_coll, myrank;
-    MPI_Count contig_access_count = 0;
+    int i, nprocs, nprocs_for_coll, myrank;
     int interleave_count = 0;
+    MPI_Aint *buf_idx = NULL;
+    MPI_Count contig_access_count=0;
     MPI_Count *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
     MPI_Offset start_offset, end_offset, fd_size, min_st_offset;
-    MPI_Offset *offset_list = NULL, *st_offsets = NULL, *fd_start = NULL,
-        *fd_end = NULL, *end_offsets = NULL;
-    MPI_Offset w_len=0;
-    MPI_Aint *buf_idx = NULL;
+    MPI_Offset *offset_list=NULL, *st_offsets=NULL, *fd_start=NULL;
+    MPI_Offset *fd_end=NULL, *end_offsets=NULL, w_len=0;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Offset *len_list = NULL;
 #else
@@ -103,9 +103,9 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
 double curT = MPI_Wtime();
 #endif
 
-/* the number of processes that actually perform I/O, nprocs_for_coll,
- * is stored in the hints off the PNCIO_File structure
- */
+    /* the number of processes that actually perform I/O, nprocs_for_coll, is
+     * stored in the hints off the PNCIO_File structure
+     */
     nprocs_for_coll = fd->hints->cb_nodes;
 
     /* only check for interleaving if cb_write isn't disabled */
@@ -114,29 +114,34 @@ double curT = MPI_Wtime();
          * lengths in the file and determine the start and end offsets. */
 
         /* Note: end_offset points to the last byte-offset that will be
-         * accessed.  e.g., if start_offset=0 and 100 bytes to be read,
+         * accessed, e.g., if start_offset=0 and 100 bytes to be read,
          * end_offset=99 */
 
         PNCIO_Calc_my_off_len(fd, buf_view.size, offset, &offset_list,
                               &len_list, &start_offset, &end_offset,
                               &contig_access_count);
 
-        /* each process communicates its start and end offsets to other
+        /* Each process communicates its start and end offsets to other
          * processes. The result is an array each of start and end offsets
-         * stored in order of process rank. */
+         * stored in order of process rank.
+         */
 
         st_offsets = (MPI_Offset *) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
         end_offsets = st_offsets + nprocs;
 
-        MPI_Allgather(&start_offset, 1, MPI_OFFSET, st_offsets, 1, MPI_OFFSET, fd->comm);
-        MPI_Allgather(&end_offset, 1, MPI_OFFSET, end_offsets, 1, MPI_OFFSET, fd->comm);
+        MPI_Allgather(&start_offset, 1, MPI_OFFSET, st_offsets, 1, MPI_OFFSET,
+                      fd->comm);
+        MPI_Allgather(&end_offset, 1, MPI_OFFSET, end_offsets, 1, MPI_OFFSET,
+                      fd->comm);
 
-        /* are the accesses of different processes interleaved? */
+        /* Are the accesses of different processes interleaved? Below is a
+         * rudimentary check for interleaving, but should suffice for the
+         * moment.
+         */
         for (i = 1; i < nprocs; i++)
-            if ((st_offsets[i] < end_offsets[i - 1]) && (st_offsets[i] <= end_offsets[i]))
+            if (st_offsets[i] < end_offsets[i - 1] &&
+                st_offsets[i] <= end_offsets[i])
                 interleave_count++;
-        /* This is a rudimentary check for interleaving, but should suffice
-         * for the moment. */
     }
 
     if (fd->hints->cb_write == PNCIO_HINT_DISABLE ||
@@ -147,52 +152,10 @@ double curT = MPI_Wtime();
             NCI_Free(st_offsets);
         if (buf_view.size == 0) return 0;
 
-        filetype_is_contig = (fd->flat_file.count <= 1);
-
         /* offset is relative to fileview */
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
-#if 0
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count m;
-#else
-                size_t m;
-#endif
-                MPI_Offset scan_sum=0;
-                for (m=0; m<fd->flat_file.count; m++) {
-                    scan_sum += fd->flat_file.blocklens[m];
-                    if (scan_sum > offset) {
-                        if (scan_sum - offset >= buf_view.size) {
-                            /* check if this request falls entirely in m's
-                             * offset-length pair
-                             */
-                            off = fd->flat_file.indices[m] + offset -
-                                  (scan_sum - fd->flat_file.blocklens[m]);
-                        }
-                        break;
-                    }
-                }
-#endif
-// printf("%s at %d: offset=%lld buf_view.size=%lld m=%lld scan_sum=%lld off=%lld filetype_is_contig=%d\n",__func__,__LINE__, offset,buf_view.size,m,scan_sum,off,filetype_is_contig);
-#if 0
-            else if (fd->flat_file.count == 1)
-                filetype_is_contig = 1;
-            else {
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count m;
-#else
-                size_t m;
-#endif
-                for (m=0; m<fd->flat_file.count; m++) {
-                    if (offset < fd->flat_file.indices[m] + fd->flat_file.blocklens[m])
-                        break;
-                }
-                filetype_is_contig = (fd->flat_file.count - m == 1);
-            }
-#endif
-
-// printf("%s at %d: offset=%lld start_offset=%lld buf_view.is_contig=%d fd->flat_file.count=%lld filetype_is_contig=%d\n",__func__,__LINE__,offset,start_offset,buf_view.is_contig,fd->flat_file.count,filetype_is_contig);
-        if (buf_view.is_contig && filetype_is_contig) {
+        if (buf_view.is_contig && fd->flat_file.is_contig) {
             if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
             w_len = PNCIO_WriteContig(fd, buf, buf_view.size, offset);
         }
@@ -207,11 +170,9 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
    done by (logically) dividing the file into file domains (FDs); each
    process may directly access only its own file domain. */
 
-    PNCIO_Calc_file_domains(st_offsets, end_offsets, nprocs,
-                            nprocs_for_coll, &min_st_offset,
-                            &fd_start, &fd_end, &fd_size,
+    PNCIO_Calc_file_domains(st_offsets, end_offsets, nprocs, nprocs_for_coll,
+                            &min_st_offset, &fd_start, &fd_end, &fd_size,
                             fd->hints->striping_unit);
-
 
 /* calculate what portions of the access requests of this process are
    located in what file domains */

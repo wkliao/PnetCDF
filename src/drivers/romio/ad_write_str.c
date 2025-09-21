@@ -9,78 +9,44 @@
 
 #include <adio.h>
 
-#define BUFFERED_WRITE                                                  \
-    {                                                                   \
-        if (req_off >= writebuf_off + writebuf_len) {                   \
-            if (writebuf_len) {                                         \
-                w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,   \
-                                  writebuf_off);                        \
-                if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
-                    PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-                if (w_len < 0) goto fn_exit;                            \
-                total_w_len += w_len;                                   \
-            }                                                           \
-            writebuf_off = req_off;                                     \
-            writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1); \
-            if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
-                PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len,        \
-                                     writebuf_off);                     \
-            if (r_len < 0) goto fn_exit;                                \
-        }                                                               \
-        write_sz = (MPI_Aint) (MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
-        assert((MPI_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
-        memcpy(writebuf+req_off-writebuf_off, (char *)buf +userbuf_off, write_sz); \
-        while (write_sz != req_len) {                                   \
-            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,       \
-                                      writebuf_off);                    \
-            if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
-                PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            if (w_len < 0) goto fn_exit;                                \
-            total_w_len += w_len;                                       \
-            req_len -= write_sz;                                        \
-            userbuf_off += write_sz;                                    \
-            writebuf_off += writebuf_len;                               \
-            writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1); \
-            if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE) \
-                PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len); \
-            r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len,        \
-                                     writebuf_off);                     \
-            if (r_len < 0) goto fn_exit;                                \
-            write_sz = MPL_MIN(req_len, writebuf_len);                  \
-            memcpy(writebuf, (char *)buf + userbuf_off, write_sz);      \
-        }                                                               \
-    }
+#define BUFFERED_WRITE {                                                      \
+    if (req_off >= writebuf_off + writebuf_len) {                             \
+        if (writebuf_len) {                                                   \
+            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,             \
+                                      writebuf_off);                          \
+            if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)  \
+                    PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);   \
+            if (w_len < 0) goto fn_exit;                                      \
+            total_w_len += w_len;                                             \
+        }                                                                     \
+        writebuf_off = req_off;                                               \
+        writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1);        \
+        if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)      \
+            PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);       \
+        r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len, writebuf_off);   \
+        if (r_len < 0) goto fn_exit;                                          \
+    }                                                                         \
+    write_sz = (MPI_Aint)MPL_MIN(req_len, writebuf_off+writebuf_len-req_off); \
+    memcpy(writebuf+req_off-writebuf_off, (char*)buf +userbuf_off, write_sz); \
+    while (write_sz != req_len) {                                             \
+        w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);  \
+        if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)      \
+            PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);           \
+        if (w_len < 0) goto fn_exit;                                          \
+        total_w_len += w_len;                                                 \
+        req_len -= write_sz;                                                  \
+        userbuf_off += write_sz;                                              \
+        writebuf_off += writebuf_len;                                         \
+        writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1);        \
+        if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)      \
+            PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);       \
+        r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len, writebuf_off);   \
+        if (r_len < 0) goto fn_exit;                                          \
+        write_sz = MPL_MIN(req_len, writebuf_len);                            \
+        memcpy(writebuf, (char *)buf + userbuf_off, write_sz);                \
+    }                                                                         \
+}
 
-
-/* this macro is used when filetype is contig and buftype is not contig.
-   it does not do a read-modify-write and does not lock*/
-#define BUFFERED_WRITE_WITHOUT_READ                                     \
-    {                                                                   \
-        if (req_off >= writebuf_off + writebuf_len) {                   \
-            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,       \
-                                      writebuf_off);                    \
-            if (w_len < 0) goto fn_exit;                                \
-            total_w_len += w_len;                                       \
-            writebuf_off = req_off;                                     \
-            writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1); \
-        }                                                               \
-        write_sz = (MPI_Aint) (MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
-        assert((MPI_Offset)write_sz == MPL_MIN(req_len, writebuf_off + writebuf_len - req_off)); \
-        memcpy(writebuf+req_off-writebuf_off, (char *)buf +userbuf_off, write_sz); \
-        while (write_sz != req_len) {                                   \
-            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,       \
-                             writebuf_off);                             \
-            if (w_len < 0) goto fn_exit;                                \
-            total_w_len += w_len;                                       \
-            req_len -= write_sz;                                        \
-            userbuf_off += write_sz;                                    \
-            writebuf_off += writebuf_len;                               \
-            writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1); \
-            write_sz = MPL_MIN(req_len, writebuf_len);                  \
-            memcpy(writebuf, (char *)buf + userbuf_off, write_sz);      \
-        }                                                               \
-    }
 
 MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
                                   const void *buf,
@@ -90,83 +56,40 @@ MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
 
 /* offset is in units of etype relative to the filetype. */
 
-    PNCIO_Flatlist_node *flat_buf;
-    MPI_Offset i_offset, sum, size_in_filetype;
-    int i, j, k, st_index = 0;
-    MPI_Offset num, size, n_filetypes, etype_in_filetype, st_n_filetypes;
-    MPI_Offset n_etypes_in_filetype, abs_off_in_filetype = 0;
-    MPI_Count filetype_size;
-    MPI_Aint lb, filetype_extent;
-    int buf_count, filetype_is_contig;
-    MPI_Offset userbuf_off;
-    MPI_Offset off, req_off, disp, end_offset = 0, writebuf_off, start_off;
     char *writebuf = NULL;
-    MPI_Aint writebuf_len, max_bufsize, write_sz;
-    MPI_Aint bufsize;
-    MPI_Offset new_bwr_size, new_fwr_size, st_fwr_size, fwr_size = 0, bwr_size, req_len;
+    int i, j, k, st_index = 0, buf_count;
+    MPI_Aint writebuf_len, max_bufsize, write_sz, bufsize;
+    MPI_Offset i_offset, sum, num, size, abs_off_in_filetype=0;
+    MPI_Offset userbuf_off, off, req_off, disp, end_offset=0;
+    MPI_Offset writebuf_off, start_off, new_bwr_size, new_fwr_size;
+    MPI_Offset st_fwr_size, fwr_size = 0, bwr_size, req_len;
     MPI_Offset r_len, w_len, total_w_len=0;
-
-    if (fd->hints->ds_write == PNCIO_HINT_DISABLE) {
-        /* if user has disabled data sieving on reads, use naive
-         * approach instead.
-         */
-        return PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view, offset);
-    }
-
-assert(fd->filetype == MPI_BYTE);
-assert(fd->flat_file.size == buf_view.size);
-
-    filetype_size = fd->flat_file.size;
-    filetype_is_contig = (fd->flat_file.count <= 1);
-
-// printf("%s at %d: offset=%lld\n",__func__,__LINE__, offset);
-if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
-
-// printf("%s at %d: offset=%lld filetype_size=%lld\n",__func__,__LINE__, offset,filetype_size);
-
-// TODO: remove use of filetype_extent
-    if (fd->flat_file.count == 0)
-        filetype_extent = filetype_size;
-    else
-        filetype_extent = fd->flat_file.indices[fd->flat_file.count-1]
-                        + fd->flat_file.blocklens[fd->flat_file.count-1]
-                        - fd->flat_file.indices[0];
-#if 0
-    else if (fd->filetype == MPI_BYTE) {
-        filetype_is_contig = 1;
-        filetype_size = 1;
-        filetype_extent = 1;
-    }
-    else {
-        // PNCIO_Datatype_iscontig(fd->filetype, &filetype_is_contig);
-        filetype_is_contig = (fd->flat_file.count <= 1);
-        MPI_Type_size_x(fd->filetype, &filetype_size);
-        if (filetype_size == 0)
-            return NC_NOERR;
-        MPI_Type_get_extent(fd->filetype, &lb, &filetype_extent);
-    }
-#endif
-
-    bufsize = buf_view.size;
-
-/* get max_bufsize from the info object. */
-
-    max_bufsize = fd->hints->ind_wr_buffer_size;
 
     /* Contiguous both in buftype and filetype should have been handled in a
      * call to PNCIO_WriteContig() earlier.
      */
-    assert(!(buf_view.is_contig && filetype_is_contig));
+    assert(!(buf_view.is_contig && fd->flat_file.is_contig));
 
-PNCIO_Flatlist_node tmp_buf;
-    flat_buf = &tmp_buf;
-    flat_buf->count = buf_view.count;
-    flat_buf->indices = buf_view.off;
-    flat_buf->blocklens = buf_view.len;
+    if (fd->hints->ds_write == PNCIO_HINT_DISABLE) {
+        /* If user has disabled data sieving on reads, use naive approach
+         * instead.
+         */
+        return PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view, offset);
+    }
 
-    if (!buf_view.is_contig && filetype_is_contig) {
+// printf("%s at %d: offset=%lld\n",__func__,__LINE__, offset);
 
-/* noncontiguous in memory, contiguous in file. */
+assert(fd->filetype == MPI_BYTE);
+assert(fd->flat_file.size == buf_view.size);
+if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
+
+    bufsize = buf_view.size;
+
+    /* get max_bufsize from the info object. */
+    max_bufsize = fd->hints->ind_wr_buffer_size;
+
+    if (!buf_view.is_contig && fd->flat_file.is_contig) {
+        /* noncontiguous in memory, contiguous in file. */
 
         off = fd->disp + offset;
 assert(fd->disp == 0);
@@ -180,14 +103,41 @@ assert(fd->disp == 0);
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
-            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
-        for (i = 0; i < flat_buf->count; i++) {
-            userbuf_off = flat_buf->indices[i];
+        for (i = 0; i < buf_view.count; i++) {
+            userbuf_off = buf_view.off[i];
             req_off = off;
-            req_len = flat_buf->blocklens[i];
-            BUFFERED_WRITE_WITHOUT_READ;
-            off += flat_buf->blocklens[i];
+            req_len = buf_view.len[i];
+
+            /* BUFFERED_WRITE_WITHOUT_READ does neither read-modify-write nor
+             * file lock
+             */
+            if (req_off >= writebuf_off + writebuf_len) {
+                w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,
+                                          writebuf_off);
+                if (w_len < 0) goto fn_exit;
+                total_w_len += w_len;
+                writebuf_off = req_off;
+                writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1);
+            }
+            write_sz = MPL_MIN(req_len, writebuf_off + writebuf_len - req_off);
+            memcpy(writebuf+req_off-writebuf_off, (char*)buf +userbuf_off,
+                   write_sz);
+            while (write_sz != req_len) {
+                w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,
+                                          writebuf_off);
+                if (w_len < 0) goto fn_exit;
+                total_w_len += w_len;
+                req_len -= write_sz;
+                userbuf_off += write_sz;
+                writebuf_off += writebuf_len;
+                writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1);
+                write_sz = MPL_MIN(req_len, writebuf_len);
+                memcpy(writebuf, (char *)buf + userbuf_off, write_sz);
+            }
+
+            off += buf_view.len[i];
         }
 
         /* write the buffer out finally */
@@ -204,16 +154,11 @@ assert(fd->disp == 0);
         if (w_len < 0)
             goto fn_exit;
     }
-
     else { /* noncontiguous in file */
+        MPI_Offset size_in_filetype = offset;
 
         disp = fd->disp;
 assert(fd->disp == 0);
-
-        n_etypes_in_filetype = filetype_size;
-        n_filetypes = offset / n_etypes_in_filetype;
-        etype_in_filetype = offset % n_etypes_in_filetype;
-        size_in_filetype = etype_in_filetype;
 
         sum = 0;
         for (i = 0; i < fd->flat_file.count; i++) {
@@ -228,16 +173,17 @@ assert(fd->disp == 0);
         }
 
         /* abs. offset in bytes in the file */
-        offset = disp + (MPI_Offset) n_filetypes *filetype_extent + abs_off_in_filetype;
+        offset = disp + abs_off_in_filetype;
 
         start_off = offset;
 assert(offset == abs_off_in_filetype);
 
-// printf("%s at %d: start_off=%lld n_filetypes=%lld abs_off_in_filetype=%lld\n",__func__,__LINE__,start_off,n_filetypes,abs_off_in_filetype);
+// printf("%s at %d: start_off=%lld abs_off_in_filetype=%lld\n",__func__,__LINE__,start_off,abs_off_in_filetype);
 
-        /* Wei-keng Liao:write request is within single flat_file contig block */
-        /* this could happen, for example, with subarray types that are
-         * actually fairly contiguous */
+        /* Write request is within single flat_file contig block. This could
+         * happen, for example, with subarray types that are actually fairly
+         * contiguous.
+         */
         if (buf_view.is_contig && bufsize <= fwr_size) {
             /* though MPI api has an integer 'count' parameter, derived
              * datatypes might describe more bytes than can fit into an integer.
@@ -257,7 +203,6 @@ assert(offset == abs_off_in_filetype);
          * e.g., if start_offset=0 and 100 bytes to be write, end_offset=99 */
 
         st_fwr_size = fwr_size;
-        st_n_filetypes = n_filetypes;
         i_offset = 0;
         j = st_index;
         off = offset;
@@ -265,45 +210,31 @@ assert(offset == abs_off_in_filetype);
         while (i_offset < bufsize) {
             i_offset += fwr_size;
             end_offset = off + fwr_size - 1;
-
-            j = (j + 1) % fd->flat_file.count;
-            n_filetypes += (j == 0) ? 1 : 0;
-            while (fd->flat_file.blocklens[j] == 0) {
-                j = (j + 1) % fd->flat_file.count;
-                n_filetypes += (j == 0) ? 1 : 0;
-            }
-
-            off = disp + fd->flat_file.indices[j] + n_filetypes * (MPI_Offset) filetype_extent;
+            j++;
+            off = disp + fd->flat_file.indices[j];
             fwr_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
         }
 
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
-            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
         writebuf_off = 0;
         writebuf_len = 0;
         writebuf = (char *) NCI_Malloc(max_bufsize);
         memset(writebuf, -1, max_bufsize);
 
-        if (buf_view.is_contig && !filetype_is_contig) {
-
-/* contiguous in memory, noncontiguous in file. should be the most
-   common case. */
-
+        if (buf_view.is_contig && !fd->flat_file.is_contig) {
+            /* contiguous in memory, noncontiguous in file should be the most
+             * common case.
+             */
             i_offset = 0;
             j = st_index;
             off = offset;
-            n_filetypes = st_n_filetypes;
             fwr_size = MPL_MIN(st_fwr_size, bufsize);
             while (i_offset < bufsize) {
                 if (fwr_size) {
-                    /* TYPE_UB and TYPE_LB can result in
-                     * fwr_size = 0. save system call in such cases */
-                    /* lseek(fd->fd_sys, off, SEEK_SET);
-                     * err = write(fd->fd_sys, ((char *) buf) + i_offset, fwr_size); */
-
                     req_off = off;
                     req_len = fwr_size;
                     userbuf_off = i_offset;
@@ -312,39 +243,27 @@ assert(offset == abs_off_in_filetype);
                 i_offset += fwr_size;
 
                 if (off + fwr_size < disp + fd->flat_file.indices[j] +
-                    fd->flat_file.blocklens[j] + n_filetypes * (MPI_Offset) filetype_extent)
-                    off += fwr_size;
-                /* did not reach end of contiguous block in filetype.
-                 * no more I/O needed. off is incremented by fwr_size. */
+                                            fd->flat_file.blocklens[j])
+                    off += fwr_size; /* off is incremented by fwr_size. */
                 else {
-                    j = (j + 1) % fd->flat_file.count;
-                    n_filetypes += (j == 0) ? 1 : 0;
-                    while (fd->flat_file.blocklens[j] == 0) {
-                        j = (j + 1) % fd->flat_file.count;
-                        n_filetypes += (j == 0) ? 1 : 0;
-                    }
-                    off = disp + fd->flat_file.indices[j] +
-                        n_filetypes * (MPI_Offset) filetype_extent;
-                    fwr_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
+                    j++;
+                    off = disp + fd->flat_file.indices[j];
+                    fwr_size = MPL_MIN(fd->flat_file.blocklens[j],
+                                       bufsize - i_offset);
                 }
             }
         } else {
-/* noncontiguous in memory as well as in file */
-
+            /* noncontiguous in memory as well as in file */
             k = num = buf_count = 0;
-            i_offset = flat_buf->indices[0];
+            i_offset = buf_view.off[0];
             j = st_index;
             off = offset;
-            n_filetypes = st_n_filetypes;
             fwr_size = st_fwr_size;
-            bwr_size = flat_buf->blocklens[0];
+            bwr_size = buf_view.len[0];
 
             while (num < bufsize) {
                 size = MPL_MIN(fwr_size, bwr_size);
                 if (size) {
-                    /* lseek(fd->fd_sys, off, SEEK_SET);
-                     * err = write(fd->fd_sys, ((char *) buf) + i_offset, size); */
-
                     req_off = off;
                     req_len = size;
                     userbuf_off = i_offset;
@@ -355,17 +274,8 @@ assert(offset == abs_off_in_filetype);
                 new_bwr_size = bwr_size;
 
                 if (size == fwr_size) {
-/* reached end of contiguous block in file */
-                    j = (j + 1) % fd->flat_file.count;
-                    n_filetypes += (j == 0) ? 1 : 0;
-                    while (fd->flat_file.blocklens[j] == 0) {
-                        j = (j + 1) % fd->flat_file.count;
-                        n_filetypes += (j == 0) ? 1 : 0;
-                    }
-
-                    off = disp + fd->flat_file.indices[j] +
-                        n_filetypes * (MPI_Offset) filetype_extent;
-
+                    j++;
+                    off = disp + fd->flat_file.indices[j];
                     new_fwr_size = fd->flat_file.blocklens[j];
                     if (size != bwr_size) {
                         i_offset += size;
@@ -374,12 +284,12 @@ assert(offset == abs_off_in_filetype);
                 }
 
                 if (size == bwr_size) {
-/* reached end of contiguous block in memory */
+                    /* reached end of contiguous block in memory */
 
-                    k = (k + 1) % flat_buf->count;
+                    k++;
                     buf_count++;
-                    i_offset = flat_buf->indices[k];
-                    new_bwr_size = flat_buf->blocklens[k];
+                    i_offset = buf_view.off[k];
+                    new_bwr_size = buf_view.len[k];
                     if (size != fwr_size) {
                         off += size;
                         new_fwr_size -= size;

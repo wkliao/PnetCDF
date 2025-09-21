@@ -54,10 +54,10 @@ filetype_size += fd->flat_file.blocklens[i];
         flat_buf->count = buf_view.count;
         flat_buf->indices = buf_view.off;
         flat_buf->blocklens = buf_view.len;
-        flat_buf->lb_idx = 0;
-        flat_buf->ub_idx = 0;
-        flat_buf->refct = 0;
-        flat_buf->flag = 0;
+        // flat_buf->lb_idx = 0;
+        // flat_buf->ub_idx = 0;
+        // flat_buf->refct = 0;
+        // flat_buf->flag = 0;
 
     if (!buf_view.is_contig && filetype_is_contig) {
         /* noncontiguous in memory, contiguous in file. */

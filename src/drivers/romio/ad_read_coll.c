@@ -785,10 +785,10 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
     flatB.count = buf_view.count;
     flatB.indices = buf_view.off;
     flatB.blocklens = buf_view.len;
-    flatB.lb_idx = 0;
-    flatB.ub_idx = 0;
-    flatB.refct = 0;
-    flatB.flag = 0;
+    // flatB.lb_idx = 0;
+    // flatB.ub_idx = 0;
+    // flatB.refct = 0;
+    // flatB.flag = 0;
 flat_buf = &flatB;
 #else
     if (!buftype_is_contig) {

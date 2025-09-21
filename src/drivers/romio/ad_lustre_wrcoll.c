@@ -57,6 +57,7 @@ typedef struct {
 #endif
 } disp_len_list;
 
+#if 0
 typedef struct {
     MPI_Datatype type;      /* MPI derived datatype */
     MPI_Count    count;     /* number of off-len pairs (blocks) */
@@ -67,31 +68,30 @@ typedef struct {
     MPI_Offset  *off;       /* array of byte offsets of each block */
     int         *len;       /* array of contiguous block lengths (bytes) */
 #endif
-    MPI_Count    rnd;       /* number of whole type already consumed */
     MPI_Count    idx;       /* index of off-len pairs consumed so far */
     MPI_Aint     rem;       /* remaining amount in the pair to be consumed */
-    MPI_Aint     extent;    /* data type extent */
     int          is_contig; /* for fileview, whether file access is contiguous
                              * for buffer, whether user buffer is contiguous
                              * Note this is not whether filetype or buftype
                              * is contiguous or not.
                              */
 } Flat_list;
+#endif
 
 /* prototypes of functions used for collective writes only. */
 static MPI_Offset LUSTRE_Exch_and_write(PNCIO_File *fd,
                                         const void *buf,
-                                        Flat_list *flat_bview,
+                                        PNCIO_Flat_list *flat_bview,
                                         PNCIO_Access *others_req,
                                         PNCIO_Access *my_req,
-                                        Flat_list *flat_fview,
+                                        PNCIO_Flat_list *flat_fview,
                                         MPI_Offset min_st_loc,
                                         MPI_Offset max_end_loc,
                                         MPI_Offset **buf_idx);
 
 static void LUSTRE_Fill_send_buffer(PNCIO_File *fd, const void *buf,
-                                    Flat_list *flat_fview,
-                                    Flat_list *flat_bview,
+                                    PNCIO_Flat_list *flat_fview,
+                                    PNCIO_Flat_list *flat_bview,
                                     char **send_buf,
                                     size_t send_total_size,
                                     const MPI_Count *send_size,
@@ -102,8 +102,8 @@ static int Exchange_data_recv(PNCIO_File            *fd,
                               const void           *buf,
                                     char           *write_buf,
                                     char          **recv_buf,
-                                    Flat_list      *flat_fview,
-                                    Flat_list      *flat_bview,
+                                    PNCIO_Flat_list      *flat_fview,
+                                    PNCIO_Flat_list      *flat_bview,
                               const MPI_Count      *recv_size,
                                     MPI_Offset     range_off,
                                     MPI_Count       range_size,
@@ -118,8 +118,8 @@ static void Exchange_data_send(      PNCIO_File      *fd,
                                const void           *buf,
                                      char           *write_buf,
                                      char          **send_buf_ptr,
-                                     Flat_list      *flat_fview,
-                                     Flat_list      *flat_bview,
+                                     PNCIO_Flat_list      *flat_fview,
+                                     PNCIO_Flat_list      *flat_bview,
                                const MPI_Count      *send_size,
                                      MPI_Count       self_count,
                                      MPI_Count       start_pos,
@@ -168,7 +168,7 @@ int LUSTRE_Calc_aggregator(PNCIO_File  *fd,
  */
 static
 void LUSTRE_Calc_my_req(PNCIO_File    *fd,
-                        Flat_list      flat_fview,
+                        PNCIO_Flat_list      flat_fview,
                         int            buf_is_contig,
                         PNCIO_Access **my_req_ptr,
                         MPI_Offset   **buf_idx)
@@ -595,8 +595,8 @@ MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd,
     int do_collect = 1, do_ex_wr;
     MPI_Offset start_offset, end_offset;
     MPI_Offset min_st_loc = -1, max_end_loc = -1;
-    Flat_list flat_fview;
-    Flat_list flat_bview;
+    PNCIO_Flat_list flat_fview;
+    PNCIO_Flat_list flat_bview;
     MPI_Offset w_len=0;
 
     MPI_Comm_size(fd->comm, &nprocs);
@@ -631,14 +631,6 @@ double curT = MPI_Wtime();
      * set by the user are non-negative and monotonically non-decreasing. This
      * makes flat_fview.off[] to be monotonically non-decreasing.
      *
-     * TODO: In the current implementation, even for a small fileview type, the
-     *       flat_fview.count can still be large, when the write amount is
-     *       larger than the fileview type size. In order to reduce the memory
-     *       footprint of flat_fview, is should be modified to describe only
-     *       one fileview type and maybe use flat_fview.rnd, flat_fview.idx,
-     *       flat_fview.rem to keep track the latest processed offset-length
-     *       pairs, similar to the way flat_bview is used.
-     *
      * This rank's aggregate file access region is from start_offset to
      * end_offset. Note: end_offset points to the last byte-offset to be
      * accessed. E.g., if start_offset=0 and end_offset=99, then the aggregate
@@ -658,7 +650,6 @@ double curT = MPI_Wtime();
                           &flat_fview.len, &start_offset, &end_offset,
                           &flat_fview.count);
     flat_fview.idx = 0;
-    flat_fview.rnd = 0; /* currently for flat_fview, rnd is not used at all */
     flat_fview.rem = (flat_fview.count > 0) ? flat_fview.len[0] : 0;
 
 // if (flat_fview.count > 0) printf("%s at %d: offset=%lld flat_fview count=%lld off=%lld len=%lld\n",__func__,__LINE__, offset,flat_fview.count,flat_fview.off[0],flat_fview.len[0]);
@@ -677,7 +668,7 @@ double curT = MPI_Wtime();
      * However, a filetype being contiguous or not is not equal to whether or
      * not this rank's write is contiguous or not in the file.
      */
-    flat_fview.is_contig = (flat_fview.count > 1) ? 0 : 1;
+    flat_fview.is_contig = (flat_fview.count <= 1);
 
 // MPI_Offset count, MPI_Datatype buftype,
 #if 1
@@ -685,10 +676,6 @@ double curT = MPI_Wtime();
     flat_bview.count = buf_view.count;
     flat_bview.off = buf_view.off;
     flat_bview.len = buf_view.len;
-    flat_bview.extent = (flat_bview.count == 0) ? 0 :
-                        (flat_bview.count == 1) ? buf_view.size :
-                        (buf_view.off[buf_view.count-1] + buf_view.len[buf_view.count-1] - buf_view.off[0]);
-    flat_bview.rnd  = 0;
     flat_bview.idx  = 0;
     flat_bview.rem  = (flat_bview.count == 0) ? 0 :
                       (flat_bview.count == 1) ? buf_view.size :
@@ -714,7 +701,6 @@ double curT = MPI_Wtime();
 #endif
         flat_bview.off[0] = 0;
         flat_bview.len[0] = buftype_size;
-        flat_bview.extent = buftype_size;
     }
     else {
         MPI_Aint lb;
@@ -722,10 +708,8 @@ double curT = MPI_Wtime();
         flat_bview.count = flat_view->count;
         flat_bview.off   = flat_view->indices;
         flat_bview.len   = flat_view->blocklens;
-        MPI_Type_get_extent(buftype, &lb, &flat_bview.extent);
     }
     flat_bview.type = buftype;
-    flat_bview.rnd  = 0;
     flat_bview.idx  = 0;
     flat_bview.rem  = (flat_bview.count > 0) ? flat_bview.len[0] : 0;
 
@@ -743,9 +727,6 @@ double curT = MPI_Wtime();
         flat_bview.is_contig = 1;
     else if (flat_bview.count == 1) {
         if (count == 1) /* write amount is less than one buftype */
-            flat_bview.is_contig = 1;
-        else if (flat_bview.extent == flat_bview.len[0])
-            /* buftype extent is the same as the only length */
             flat_bview.is_contig = 1;
     }
 #endif
@@ -1362,10 +1343,10 @@ void commit_comm_phase(PNCIO_File     *fd,
 static
 MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
                                  const void    *buf,
-                                 Flat_list     *flat_bview,
+                                 PNCIO_Flat_list     *flat_bview,
                                  PNCIO_Access  *others_req,
                                  PNCIO_Access  *my_req,
-                                 Flat_list     *flat_fview,
+                                 PNCIO_Flat_list     *flat_fview,
                                  MPI_Offset     min_st_loc,
                                  MPI_Offset     max_end_loc,
                                  MPI_Offset   **buf_idx)
@@ -2024,9 +2005,9 @@ int Exchange_data_recv(
                                          * to file */
           char          **recv_buf,     /* OUT: [nbufs] internal buffer used to
                                          * receive from other processes */
-          Flat_list      *flat_fview,   /* IN/OUT: flattened file offset-length
+          PNCIO_Flat_list      *flat_fview,   /* IN/OUT: flattened file offset-length
                                          * pairs */
-          Flat_list      *flat_bview,   /* IN/OUT: flattened buffer
+          PNCIO_Flat_list      *flat_bview,   /* IN/OUT: flattened buffer
                                          * offset-length pairs */
     const MPI_Count      *recv_size,    /* [nprocs] recv_size[i] is amount of
                                          * this aggregator recv from rank i */
@@ -2265,9 +2246,9 @@ void Exchange_data_send(
                                          * self */
           char          **send_buf_ptr, /* OUT: [cb_nodes] point to internal
                                          * send buffer */
-          Flat_list      *flat_fview,   /* IN/OUT: flattened file offset-length
+          PNCIO_Flat_list      *flat_fview,   /* IN/OUT: flattened file offset-length
                                          * pairs */
-          Flat_list      *flat_bview,   /* IN/OUT: flattened buffer
+          PNCIO_Flat_list      *flat_bview,   /* IN/OUT: flattened buffer
                                          * offset-length pairs */
     const MPI_Count      *send_size,    /* [cb_nodes] send_size[i] is amount of
                                          * this rank sent to aggregator i */
@@ -2339,8 +2320,8 @@ void Exchange_data_send(
 
 static void LUSTRE_Fill_send_buffer(PNCIO_File       *fd,
                                     const void       *buf,
-                                    Flat_list        *flat_fview,
-                                    Flat_list        *flat_bview,
+                                    PNCIO_Flat_list        *flat_fview,
+                                    PNCIO_Flat_list        *flat_bview,
                                     char            **send_buf,
                                     size_t            send_total_size,
                                     const MPI_Count  *send_size,
@@ -2376,16 +2357,12 @@ int num_memcpy=0;
      *     increasing order, unlike fileview which is required by MPI to be
      *     sorted in a monotonically non-decreasing order.
      * flat_bview->len[i]: length of the ith pair
-     * flat_bview->rnd stores the current number of data types being processed.
      * flat_bview->idx: index to the offset-length pair currently being
      *     processed, incremented each round.
      * flat_bview->rem: amount of data in the pair that has not been copied
      *     over, changed each round.
-     * flat_bview->extent: extent size of user buffer data type.
      */
-assert(flat_fview->rnd == 0);
-    user_buf_idx = flat_bview->extent * flat_bview->rnd
-                 + flat_bview->off[flat_bview->idx]
+    user_buf_idx = flat_bview->off[flat_bview->idx]
                  + flat_bview->len[flat_bview->idx]
                  - flat_bview->rem;
                  /* in case data left to be copied from previous round */
@@ -2466,17 +2443,12 @@ num_memcpy++;
 #endif
                     }
                     /* update flat_bview->idx, flat_bview->rem,
-                     * flat_bview->rnd, and user_buf_idx
+                     * and user_buf_idx
                      */
                     if (flat_bview->idx < (flat_bview->count - 1))
                         flat_bview->idx++;
-                    else {
-                        flat_bview->idx = 0;
-                        flat_bview->rnd++;
-assert(size - size_in_buf == 0);
-                    }
-                    user_buf_idx = flat_bview->off[flat_bview->idx] +
-                                   flat_bview->rnd * flat_bview->extent;
+
+                    user_buf_idx = flat_bview->off[flat_bview->idx];
                     flat_bview->rem = flat_bview->len[flat_bview->idx];
                     user_buf_ptr = (char*) buf + user_buf_idx;
                 }
@@ -2520,19 +2492,7 @@ num_memcpy++;
 
         /* done with this off-len pair, move on to the next */
         if (flat_fview->rem == 0) {
-            if (flat_fview->idx == flat_fview->count-1) {
-                /* Note flat_fview->rnd is never used ! This is because
-                 * flat_fview consists of all offset-length pairs of this
-                 * collective write call. Unlike flat_bview whose offset-length
-                 * pairs can be used multiple rounds when 'count' is > 1.
-                 */
-                assert(flat_fview->rnd <= 1);
-                flat_fview->idx = 0;
-                flat_fview->rnd++;
-assert (send_total_size == 0);
-            }
-            else
-                flat_fview->idx++;
+            flat_fview->idx++;
             flat_fview->rem = flat_fview->len[flat_fview->idx];
         }
         off = flat_fview->off[flat_fview->idx];
@@ -2540,7 +2500,7 @@ assert (send_total_size == 0);
     }
 
 #ifdef WKL_DEBUG
-if (num_memcpy> 0) printf("---- flat_fview->count=%lld flat_bview->rnd=%lld flat_fview->idx=%lld flat_bview->count=%lld num_memcpy=%d\n",flat_fview->count,flat_bview->rnd,flat_fview->idx,flat_bview->count,num_memcpy);
+if (num_memcpy> 0) printf("---- flat_fview->count=%lld flat_fview->idx=%lld flat_bview->count=%lld num_memcpy=%d\n",flat_fview->count,flat_fview->idx,flat_bview->count,num_memcpy);
 #endif
 }
 
