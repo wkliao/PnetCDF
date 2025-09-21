@@ -57,7 +57,7 @@ MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
 /* offset is in units of etype relative to the filetype. */
 
     char *writebuf = NULL;
-    int i, j, k, st_index = 0, buf_count;
+    int i, j, k, st_index = 0;
     MPI_Aint writebuf_len, max_bufsize, write_sz, bufsize;
     MPI_Offset i_offset, sum, num, size, abs_off_in_filetype=0;
     MPI_Offset userbuf_off, off, req_off, disp, end_offset=0;
@@ -254,7 +254,7 @@ assert(offset == abs_off_in_filetype);
             }
         } else {
             /* noncontiguous in memory as well as in file */
-            k = num = buf_count = 0;
+            k = num = 0;
             i_offset = buf_view.off[0];
             j = st_index;
             off = offset;
@@ -287,7 +287,6 @@ assert(offset == abs_off_in_filetype);
                     /* reached end of contiguous block in memory */
 
                     k++;
-                    buf_count++;
                     i_offset = buf_view.off[k];
                     new_bwr_size = buf_view.len[k];
                     if (size != fwr_size) {
