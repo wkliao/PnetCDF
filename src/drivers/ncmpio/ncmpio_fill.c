@@ -360,7 +360,7 @@ fill_added_recs(NC *ncp, NC *old_ncp)
 static int
 fillerup_aggregate(NC *ncp, NC *old_ncp)
 {
-    int i, j, k, mpireturn, err, status=NC_NOERR;
+    int i, j, k, err, status=NC_NOERR;
     int start_vid, recno, nVarsFill;
     char *buf_ptr, *noFill;
     void *buf;
@@ -373,7 +373,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     MPI_Count *blocklengths=NULL, *offset=NULL;
 #else
     int *blocklengths=NULL;
-    MPI_Aint *offset=NULL;
+    MPI_Offset *offset=NULL;
 #endif
 
     /* When intra-node aggregation is enabled, use the communicator consisting
@@ -409,6 +409,8 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     MPI_Comm comm = (ncp->num_aggrs_per_node > 0) ? ncp->ina_comm : ncp->comm;
 
     if (nprocs > 1) {
+        int mpireturn;
+
         for (i=start_vid; i<ncp->vars.ndefined; i++)
             noFill[i-start_vid] = (char)(ncp->vars.value[i]->no_fill);
 
@@ -440,7 +442,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
 #ifdef HAVE_MPI_LARGE_COUNT
     offset = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * nsegs);
 #else
-    offset = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nsegs);
+    offset = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * nsegs);
 #endif
 
     /* calculate each segment's offset and count */
@@ -469,7 +471,11 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
         /* calculate the starting file offset */
         start *= varp->xsz;
         start += varp->begin;
-        offset[j] = (MPI_Aint)start;
+#ifdef HAVE_MPI_LARGE_COUNT
+        offset[j] = (MPI_Count)start;
+#else
+        offset[j] = start;
+#endif
         if (start != offset[j]) {
             DEBUG_ASSIGN_ERROR(err, NC_EINTOVERFLOW)
             if (status == NC_NOERR) status = err;
@@ -506,7 +512,11 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
             /* calculate the starting file offset */
             start *= varp->xsz;
             start += varp->begin + ncp->recsize * recno;
-            offset[j] = (MPI_Aint)start;
+#ifdef HAVE_MPI_LARGE_COUNT
+            offset[j] = (MPI_Count)start;
+#else
+            offset[j] = start;
+#endif
             if (start != offset[j]) {
                 DEBUG_ASSIGN_ERROR(err, NC_EINTOVERFLOW)
                 if (status == NC_NOERR) status = err;
@@ -610,13 +620,14 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     NCI_Free(noFill);
     NCI_Free(count);
 
-    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, k, offset,
-                               blocklengths);
+    err = ncmpio_file_set_view(ncp, 0, MPI_BYTE, k, offset, blocklengths);
     status = (status == NC_NOERR) ? err : status;
 
     buf_view.type = MPI_BYTE;
     if (buf_len > NC_MAX_INT) {
 #ifdef HAVE_MPI_LARGE_COUNT
+        int mpireturn;
+
         mpireturn = MPI_Type_contiguous_c((MPI_Count)buf_len, MPI_BYTE,
                                           &buf_view.type);
         if (mpireturn != MPI_SUCCESS) {

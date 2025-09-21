@@ -1166,9 +1166,20 @@ free(wkl);
                                                buf_view->off, MPI_BYTE,
                                                &buf_view->type);
 #else
-        mpireturn = MPI_Type_create_hindexed(num_reqs, buf_view->len,
-                                             buf_view->off, MPI_BYTE,
-                                             &buf_view->type);
+        MPI_Aint *disp;
+#if SIZEOF_MPI_AINT == SIZEOF_MPI_OFFSET
+        disp = (MPI_Aint*) buf_view->off;
+#else
+        disp = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * num_reqs);
+        for (j=0; j<num_reqs; j++)
+            disp[j] = (MPI_Aint) buf_view->off[j];
+#endif
+
+        mpireturn = MPI_Type_create_hindexed(num_reqs, buf_view->len, disp,
+                                             MPI_BYTE, &buf_view->type);
+#if SIZEOF_MPI_AINT != SIZEOF_MPI_OFFSET
+        NCI_Free(disp);
+#endif
 #endif
         if (mpireturn != MPI_SUCCESS) {
             err = ncmpii_error_mpi2nc(mpireturn, "MPI_Type_create_hindexed");
@@ -1565,7 +1576,7 @@ int ina_put(NC              *ncp,
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *off_ptr, *len_ptr;
 #else
-    MPI_Offset *off_ptr,
+    MPI_Offset *off_ptr;
     int *len_ptr;
 #endif
 
@@ -1874,7 +1885,7 @@ if (fake_overlap == 0) assert(npairs == i+1);
 #else
             int pos=0;
             MPI_Count num = (buf_view.is_contig) ? buf_view.size : 1;
-            MPI_Pack(inbuf, num, buf_view.type, recv_buf, buf_view.size, &pos,
+            MPI_Pack(buf, num, buf_view.type, recv_buf, buf_view.size, &pos,
                      MPI_COMM_SELF);
 #endif
         }
