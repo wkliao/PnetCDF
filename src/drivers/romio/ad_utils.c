@@ -30,28 +30,6 @@ int PNCIO_Type_get_combiner(MPI_Datatype datatype, int *combiner)
     return ret;
 }
 
-/* utility function to determine whether a datatype is predefined:
- * a datatype is predefined if its combiner is MPI_COMBINER_NAMED
- * or MPI_COMBINER_F90_{INTEGER|REAL|COMPLEX} */
-
-int PNCIO_Type_ispredef(MPI_Datatype datatype, int *flag)
-{
-    int ret, combiner;
-    ret = PNCIO_Type_get_combiner(datatype, &combiner);
-    switch (combiner) {
-        case MPI_COMBINER_NAMED:
-        case MPI_COMBINER_F90_INTEGER:
-        case MPI_COMBINER_F90_REAL:
-        case MPI_COMBINER_F90_COMPLEX:
-            *flag = 1;
-            break;
-        default:
-            *flag = 0;
-            break;
-    }
-    return ret;
-}
-
 /* utility function for freeing user-defined datatypes,
  * MPI_DATATYPE_NULL and predefined datatypes are ignored,
  * datatype is set to MPI_DATATYPE_NULL upon return */

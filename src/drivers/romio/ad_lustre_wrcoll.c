@@ -665,7 +665,6 @@ double curT = MPI_Wtime();
     flat_fview.is_contig = (flat_fview.count <= 1);
 
 // MPI_Offset count, MPI_Datatype buftype,
-#if 1
     flat_bview.type = MPI_BYTE;
     flat_bview.count = buf_view.count;
     flat_bview.off = buf_view.off;
@@ -675,55 +674,6 @@ double curT = MPI_Wtime();
                       (flat_bview.count == 1) ? buf_view.size :
                       flat_bview.len[0];
     flat_bview.is_contig = buf_view.is_contig;
-#else
-    PNCIO_Type_ispredef(buftype, &is_btype_predef);
-
-    /* flatten user buffer datatype, buftype */
-    if (is_btype_predef) {
-        int buftype_size;
-        size_t alloc_sz;
-        MPI_Type_size(buftype, &buftype_size);
-        flat_bview.count  = 1;
-#ifdef HAVE_MPI_LARGE_COUNT
-        alloc_sz = sizeof(MPI_Offset) * 2;
-        flat_bview.off = (MPI_Offset*)NCI_Malloc(alloc_sz);
-        flat_bview.len = flat_bview.off + 1;
-#else
-        alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-        flat_bview.off = (MPI_Offset*)NCI_Malloc(alloc_sz);
-        flat_bview.len = (int*) (flat_bview.off + 1);
-#endif
-        flat_bview.off[0] = 0;
-        flat_bview.len[0] = buftype_size;
-    }
-    else {
-        MPI_Aint lb;
-        PNCIO_Flatlist_node *flat_view = PNCIO_Flatten_and_find(buftype);
-        flat_bview.count = flat_view->count;
-        flat_bview.off   = flat_view->indices;
-        flat_bview.len   = flat_view->blocklens;
-    }
-    flat_bview.type = buftype;
-    flat_bview.idx  = 0;
-    flat_bview.rem  = (flat_bview.count > 0) ? flat_bview.len[0] : 0;
-
-    /* Check if the user buffer is truly contiguous or not. Note that
-     * flat_bview.count being 1 or > 1 is not the true indicator of whether or
-     * not buftype is contiguous. For example, a buftype may contain only one
-     * offset-length pair, but its ub and lb may have been resized to make
-     * buftype noncontiguous. In this case, if the value of argument 'count' of
-     * this collective write call is larger than 1, then the user buffer is not
-     * contiguous. Otherwise, when both 'count' == 1 and flat_bview.count == 1,
-     * the user buffer is contiguous.
-     */
-    flat_bview.is_contig = 0;
-    if (is_btype_predef)
-        flat_bview.is_contig = 1;
-    else if (flat_bview.count == 1) {
-        if (count == 1) /* write amount is less than one buftype */
-            flat_bview.is_contig = 1;
-    }
-#endif
 
     if (fd->hints->cb_write == PNCIO_HINT_DISABLE) {
         /* collective write is explicitly disabled by user */
