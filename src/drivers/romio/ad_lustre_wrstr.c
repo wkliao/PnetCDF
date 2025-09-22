@@ -149,15 +149,15 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
     /* get striping info */
     stripe_size = fd->hints->striping_unit;
 
-    /* Different buftype to different filetype */
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
-        /* noncontiguous in memory, contiguous in file. */
+        /* noncontiguous in write buffer, contiguous in file. */
 
         off = fd->disp + offset;
         if (fd->flat_file.count > 0) off += fd->flat_file.indices[0];
 
         start_off = off;
         end_offset = start_off + bufsize - 1;
+
         /* write stripe size buffer each time */
         writebuf = (char *) NCI_Malloc(MPL_MIN(bufsize, stripe_size));
         writebuf_off = 0;
@@ -177,7 +177,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
             off += buf_view.len[i];
         }
 
-        /* write the buffer out finally */
+        /* write the buffer out the last round */
         w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);
 
         if (fd->atomicity || fd->hints->ds_write != PNCIO_HINT_DISABLE)
@@ -189,19 +189,18 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         total_w_len += w_len;
 
     } else { /* contiguous buffer and non-contiguous in file */
-        MPI_Offset size_in_filetype = offset;
-
         disp = fd->disp;
+assert(disp == 0);
 
+        /* find the starting index in fd->flat_file offset-length pairs */
         sum = 0;
         for (i = 0; i < fd->flat_file.count; i++) {
-// printf("%s at %d: disp=%lld flat_file i=%d indices=%lld blocklens=%lld\n",__func__,__LINE__, disp,i,fd->flat_file.indices[0],fd->flat_file.blocklens[0]);
             sum += fd->flat_file.blocklens[i];
-            if (sum > size_in_filetype) {
+            if (sum > offset) {
                 st_index = i;
-                fwr_size = sum - size_in_filetype;
+                fwr_size = sum - offset;
                 abs_off_in_filetype = fd->flat_file.indices[i] +
-                    size_in_filetype - (sum - fd->flat_file.blocklens[i]);
+                    offset - (sum - fd->flat_file.blocklens[i]);
                 break;
             }
         }
@@ -226,7 +225,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
             userbuf_off = 0;
             BUFFERED_WRITE_WITHOUT_READ;
 
-            /* write the buffer out finally */
+            /* write the buffer out the last round */
             if (fd->hints->ds_write != PNCIO_HINT_DISABLE)
                 PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
 
@@ -345,7 +344,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
             }
         }
 
-        /* write the buffer out finally */
+        /* write the buffer out the last round */
         if (writebuf_len) {
             w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);
             if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)
