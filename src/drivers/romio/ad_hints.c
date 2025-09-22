@@ -172,8 +172,8 @@ fn_exit:
 #endif
 
 /*----< PNCIO_File_SetInfo() >------------------------------------------------*/
-/* For PnetCDF, a file info object can only be passed at file create or open
- * call, i.e. I/O hints cannot be overwritten after file create/open.
+/* For PnetCDF, a file info object can only be passed to PnetCDF at file create
+ * or open call, i.e. I/O hints cannot be changed after file create/open.
  *
  * When users_info == MPI_INFO_NULL, this subroutine is an independent call.
  * When users_info != MPI_INFO_NULL, this subroutine is a collective call,
