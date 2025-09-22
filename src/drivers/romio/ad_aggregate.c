@@ -69,10 +69,12 @@
  * actually available in this file domain.
  */
 int PNCIO_Calc_aggregator(PNCIO_File *fd,
-                          MPI_Offset off,
-                          MPI_Offset min_off,
-                          MPI_Offset * len,
-                          MPI_Offset fd_size, MPI_Offset * fd_start, MPI_Offset * fd_end)
+                          MPI_Offset  off,
+                          MPI_Offset  min_off,
+                          MPI_Offset *len,
+                          MPI_Offset  fd_size,
+                          MPI_Offset *fd_start,
+                          MPI_Offset *fd_end)
 {
     int rank_index, rank;
     MPI_Offset avail_bytes;
@@ -97,9 +99,8 @@ int PNCIO_Calc_aggregator(PNCIO_File *fd,
      * overrunning arrays.  Obviously, we should never ever hit this abort */
     if (rank_index >= fd->hints->cb_nodes || rank_index < 0) {
         fprintf(stderr,
-                "Error in PNCIO_Calc_aggregator(): rank_index(%d) >= fd->hints->cb_nodes (%d) fd_size=%lld off=%lld\n",
-                rank_index, fd->hints->cb_nodes, (long long) fd_size, (long long) off);
-assert(0);
+                "Error in PNCIO_Calc_aggregator(): rank_index(%d) >= fd->hints->cb_nodes (%d) fd_size="OFFFMT" off="OFFFMT"\n",
+                rank_index, fd->hints->cb_nodes, fd_size, off);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
