@@ -275,18 +275,6 @@ MPI_Offset PNCIO_ReadContig(PNCIO_File *fd, void *buf, MPI_Offset r_size,
 
 /* utility APIs */
 extern
-void PNCIO_Calc_my_off_len(PNCIO_File *fd, MPI_Offset io_amnt,
-                MPI_Offset offset,
-                MPI_Offset **offset_list_ptr,
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Offset **len_list_ptr,
-#else
-                int **len_list_ptr,
-#endif
-                MPI_Offset *start_offset_ptr, MPI_Offset *end_offset_ptr,
-                MPI_Count *contig_access_count_ptr);
-
-extern
 void PNCIO_Calc_file_domains(MPI_Offset * st_offsets,
                 MPI_Offset *end_offsets, int nprocs, int nprocs_for_coll,
                 MPI_Offset *min_st_offset_ptr, MPI_Offset **fd_start_ptr,
@@ -294,16 +282,9 @@ void PNCIO_Calc_file_domains(MPI_Offset * st_offsets,
                 int striping_unit);
 
 extern
-void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Offset *len_list,
-#else
-                int *len_list,
-#endif
-                MPI_Count contig_access_count,
-                MPI_Offset min_st_offset, MPI_Offset *fd_start,
-                MPI_Offset *fd_end, MPI_Offset fd_size, int nprocs,
-                MPI_Count *count_my_req_procs_ptr,
+void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset min_st_offset,
+                MPI_Offset *fd_start, MPI_Offset *fd_end, MPI_Offset fd_size,
+                int nprocs, MPI_Count *count_my_req_procs_ptr,
                 MPI_Count **count_my_req_per_proc_ptr,
                 PNCIO_Access **my_req_ptr, MPI_Aint **buf_idx_ptr);
 

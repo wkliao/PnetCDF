@@ -225,19 +225,16 @@ void PNCIO_Calc_file_domains(MPI_Offset * st_offsets, MPI_Offset
  * of this process are located in the file domains of various processes
  * (including this one)
  */
-void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                       MPI_Offset *len_list,
-#else
-                       int *len_list,
-#endif
-                       MPI_Count contig_access_count,
-                       MPI_Offset min_st_offset, MPI_Offset * fd_start,
-                       MPI_Offset * fd_end, MPI_Offset fd_size,
-                       int nprocs,
-                       MPI_Count * count_my_req_procs_ptr,
-                       MPI_Count ** count_my_req_per_proc_ptr,
-                       PNCIO_Access ** my_req_ptr, MPI_Aint ** buf_idx_ptr)
+void PNCIO_Calc_my_req(PNCIO_File    *fd,
+                       MPI_Offset     min_st_offset,
+                       MPI_Offset    *fd_start,
+                       MPI_Offset    *fd_end,
+                       MPI_Offset     fd_size,
+                       int            nprocs,
+                       MPI_Count     *count_my_req_procs_ptr,
+                       MPI_Count    **count_my_req_per_proc_ptr,
+                       PNCIO_Access **my_req_ptr,
+                       MPI_Aint     **buf_idx_ptr)
 /* Possibly reconsider if buf_idx's are ok as int's, or should they be aints/offsets?
    They are used as memory buffer indices so it seems like the 2G limit is in effect */
 {
@@ -270,16 +267,14 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
     for (int i = 0; i < nprocs; i++)
         buf_idx[i] = -1;
 
-    /* one pass just to calculate how much space to allocate for my_req;
-     * contig_access_count was calculated way back in PNCIO_Calc_my_off_len()
-     */
-    for (MPI_Count i = 0; i < contig_access_count; i++) {
+    /* one pass just to calculate how much space to allocate for my_req */
+    for (MPI_Count i = 0; i < fd->flat_file.count; i++) {
         /* short circuit offset/len processing if len == 0
          *      (zero-byte  read/write */
-        if (len_list[i] == 0)
+        if (fd->flat_file.len[i] == 0)
             continue;
-        off = offset_list[i];
-        fd_len = len_list[i];
+        off = fd->flat_file.off[i];
+        fd_len = fd->flat_file.len[i];
         /* note: we set fd_len to be the total size of the access.  then
          * PNCIO_Calc_aggregator() will modify the value to return the
          * amount that was available from the file domain that holds the
@@ -292,7 +287,7 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
          * part of the file domain that had the starting byte); we'll take
          * care of this data (if there is any) in the while loop below.
          */
-        rem_len = len_list[i] - fd_len;
+        rem_len = fd->flat_file.len[i] - fd_len;
 
         while (rem_len != 0) {
             off += fd_len;      /* point to first remaining byte */
@@ -345,13 +340,13 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
 
 /* now fill in my_req */
     curr_idx = 0;
-    for (MPI_Count i = 0; i < contig_access_count; i++) {
+    for (MPI_Count i = 0; i < fd->flat_file.count; i++) {
         /* short circuit offset/len processing if len == 0
          *      (zero-byte  read/write */
-        if (len_list[i] == 0)
+        if (fd->flat_file.len[i] == 0)
             continue;
-        off = offset_list[i];
-        fd_len = len_list[i];
+        off = fd->flat_file.off[i];
+        fd_len = fd->flat_file.len[i];
         proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_start, fd_end);
 
         /* for each separate contiguous access from this process */
@@ -363,7 +358,7 @@ void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset * offset_list,
         l = my_req[proc].count;
         curr_idx += fd_len;
 
-        rem_len = len_list[i] - fd_len;
+        rem_len = fd->flat_file.len[i] - fd_len;
 
         /* store the proc, offset, and len information in an array
          * of structures, my_req. Each structure contains the

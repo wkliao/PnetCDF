@@ -12,31 +12,19 @@
 /* prototypes of functions used for collective writes only. */
 static MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf,
                            PNCIO_View buf_view, int nprocs, int myrank,
-                           PNCIO_Access *others_req, MPI_Offset *offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                           MPI_Offset *len_list,
-#else
-                           int *len_list,
-#endif
-                           MPI_Count contig_access_count, MPI_Offset
-                           min_st_offset, MPI_Offset fd_size,
+                           PNCIO_Access *others_req,
+                           MPI_Offset min_st_offset, MPI_Offset fd_size,
                            MPI_Offset * fd_start, MPI_Offset * fd_end,
                            MPI_Aint * buf_idx);
 
 static MPI_Offset W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
                             PNCIO_View buf_view,
-                            MPI_Offset *offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                            MPI_Offset *len_list,
-#else
-                            int *len_list,
-#endif
                             MPI_Count * send_size, MPI_Count * recv_size,
                             MPI_Offset off, MPI_Count size,   /* 10 */
                             MPI_Count * count, MPI_Count * start_pos,
                             MPI_Count * partial_recv, MPI_Count *
                             sent_to_proc, int nprocs,
-                            int myrank, int buftype_is_contig, MPI_Count contig_access_count,
+                            int myrank,
                             MPI_Offset min_st_offset, MPI_Offset fd_size,
                             MPI_Offset * fd_start, MPI_Offset * fd_end,
                             PNCIO_Access * others_req,
@@ -46,15 +34,9 @@ static MPI_Offset W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
 
 static void Fill_send_buffer(PNCIO_File *fd, void *buf,
                              PNCIO_View buf_view, char **send_buf,
-                             MPI_Offset *offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                             MPI_Offset *len_list,
-#else
-                             int *len_list,
-#endif
                              MPI_Count *send_size, MPI_Request *requests,
                              MPI_Count *sent_to_proc, int nprocs, int myrank,
-                             MPI_Count contig_access_count, MPI_Offset min_st_offset,
+                             MPI_Offset min_st_offset,
                              MPI_Offset fd_size, MPI_Offset *fd_start,
                              MPI_Offset *fd_end, MPI_Count *send_buf_idx,
                              MPI_Count *curr_to_proc, MPI_Count *done_to_proc, int iter);
@@ -81,16 +63,11 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
 
     int i, nprocs, nprocs_for_coll, myrank, interleave_count=0;
     MPI_Aint *buf_idx = NULL;
-    MPI_Count contig_access_count=0, *count_my_req_per_proc, count_my_req_procs;
+    MPI_Count *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
     MPI_Offset start_offset, end_offset, fd_size, min_st_offset;
-    MPI_Offset *offset_list=NULL, *st_offsets=NULL, *fd_start=NULL;
+    MPI_Offset *st_offsets=NULL, *fd_start=NULL;
     MPI_Offset *fd_end=NULL, *end_offsets=NULL, w_len=0;
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Offset *len_list = NULL;
-#else
-    int *len_list = NULL;
-#endif
 
 // printf("%s at %d: offset=%lld buf_view.size=%lld\n",__func__,__LINE__, offset,buf_view.size);
 
@@ -108,16 +85,24 @@ double curT = MPI_Wtime();
 
     /* only check for interleaving if cb_write isn't disabled */
     if (fd->hints->cb_write != PNCIO_HINT_DISABLE) {
-        /* For this process's request, calculate the list of offsets and
-         * lengths in the file and determine the start and end offsets. */
-
-        /* Note: end_offset points to the last byte-offset that will be
-         * accessed, e.g., if start_offset=0 and 100 bytes to be read,
-         * end_offset=99 */
-
-        PNCIO_Calc_my_off_len(fd, buf_view.size, offset, &offset_list,
-                              &len_list, &start_offset, &end_offset,
-                              &contig_access_count);
+        /* For this process's request, calculate the file start and end
+         * offsets. Note: end_offset points to the last byte-offset that will
+         * be accessed, e.g., if start_offset=0 and 100 bytes to be read,
+         * end_offset=99.
+         */
+        if (fd->flat_file.size == 0) {
+            start_offset = 0;
+            end_offset = -1;
+        }
+        else if (fd->flat_file.count > 0) {
+            start_offset = offset + fd->flat_file.off[0];
+            end_offset   = fd->flat_file.off[fd->flat_file.count-1]
+                         + fd->flat_file.len[fd->flat_file.count-1] - 1;
+        }
+        else {
+            start_offset = offset;
+            end_offset   = offset + fd->flat_file.size - 1;
+        }
 
         /* Each process communicates its start and end offsets to other
          * processes. The result is an array each of start and end offsets
@@ -175,8 +160,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 /* calculate what portions of the access requests of this process are
    located in what file domains */
 
-    PNCIO_Calc_my_req(fd, offset_list, len_list, contig_access_count,
-                      min_st_offset, fd_start, fd_end, fd_size, nprocs,
+    PNCIO_Calc_my_req(fd, min_st_offset, fd_start, fd_end, fd_size, nprocs,
                       &count_my_req_procs, &count_my_req_per_proc, &my_req,
                       &buf_idx);
 
@@ -198,9 +182,8 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 /* exchange data and write in sizes of no more than coll_bufsize. */
     /* Cast away const'ness for the below function */
     w_len = Exch_and_write(fd, (char *) buf, buf_view, nprocs, myrank,
-                           others_req, offset_list, len_list,
-                           contig_access_count, min_st_offset, fd_size,
-                           fd_start, fd_end, buf_idx);
+                           others_req, min_st_offset, fd_size, fd_start,
+                           fd_end, buf_idx);
 
     /* If this collective write is followed by an independent write,
      * it's possible to have those subsequent writes on other processes
@@ -245,13 +228,7 @@ static
 MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
                           int nprocs,
                           int myrank,
-                          PNCIO_Access *others_req, MPI_Offset *offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                          MPI_Offset *len_list,
-#else
-                          int *len_list,
-#endif
-                          MPI_Count contig_access_count,
+                          PNCIO_Access *others_req,
                           MPI_Offset min_st_offset, MPI_Offset fd_size,
                           MPI_Offset * fd_start, MPI_Offset * fd_end,
                           MPI_Aint * buf_idx)
@@ -437,13 +414,12 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
             }
         }
 
-        w_len = W_Exchange_data(fd, buf, write_buf, buf_view, offset_list,
-                                len_list, send_size, recv_size, off, size,
-                                count, start_pos, partial_recv, sent_to_proc,
-                                nprocs, myrank, buf_view.is_contig,
-                                contig_access_count, min_st_offset, fd_size,
-                                fd_start, fd_end, others_req, send_buf_idx,
-                                curr_to_proc, done_to_proc, &hole, m, buf_idx);
+        w_len = W_Exchange_data(fd, buf, write_buf, buf_view, send_size,
+                                recv_size, off, size, count, start_pos,
+                                partial_recv, sent_to_proc, nprocs, myrank,
+                                min_st_offset, fd_size, fd_start, fd_end,
+                                others_req, send_buf_idx, curr_to_proc,
+                                done_to_proc, &hole, m, buf_idx);
 
         if (w_len < 0)
             return w_len;
@@ -471,13 +447,12 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
         count[i] = recv_size[i] = 0;
     for (m = ntimes; m < max_ntimes; m++) {
         /* nothing to recv, but check for send. */
-        w_len = W_Exchange_data(fd, buf, write_buf, buf_view, offset_list,
-                                len_list, send_size, recv_size, off, size,
-                                count, start_pos, partial_recv, sent_to_proc,
-                                nprocs, myrank, buf_view.is_contig,
-                                contig_access_count, min_st_offset, fd_size,
-                                fd_start, fd_end, others_req, send_buf_idx,
-                                curr_to_proc, done_to_proc, &hole, m, buf_idx);
+        w_len = W_Exchange_data(fd, buf, write_buf, buf_view, send_size,
+                                recv_size, off, size, count, start_pos,
+                                partial_recv, sent_to_proc, nprocs, myrank,
+                                min_st_offset, fd_size, fd_start, fd_end,
+                                others_req, send_buf_idx, curr_to_proc,
+                                done_to_proc, &hole, m, buf_idx);
         if (w_len < 0)
             return w_len;
         else
@@ -496,19 +471,12 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
 static
 MPI_Offset W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
                            PNCIO_View buf_view,
-                           MPI_Offset *offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                           MPI_Offset *len_list,
-#else
-                           int *len_list,
-#endif
                            MPI_Count *send_size, MPI_Count *recv_size,
                            MPI_Offset off, MPI_Count size,
                            MPI_Count *count, MPI_Count * start_pos,
                            MPI_Count *partial_recv,
                            MPI_Count *sent_to_proc, int nprocs,
-                           int myrank, int
-                           buftype_is_contig, MPI_Count contig_access_count,
+                           int myrank,
                            MPI_Offset min_st_offset,
                            MPI_Offset fd_size,
                            MPI_Offset * fd_start, MPI_Offset * fd_end,
@@ -671,7 +639,7 @@ double curT = MPI_Wtime();
                 MPI_Irecv(MPI_BOTTOM, 1, recv_types[j], i, 0,
                           fd->comm, requests + j);
                 j++;
-            } else if (buftype_is_contig) {
+            } else if (buf_view.is_contig) {
                 /* sen/recv to/from self uses MPI_Unpack() */
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count position=0;
@@ -689,10 +657,10 @@ double curT = MPI_Wtime();
         send_req = requests + j;
     }
 
-/* post sends. if buftype_is_contig, data can be directly sent from
+/* post sends. if buf_view.is_contig, data can be directly sent from
    user buf at location given by buf_idx. else use send_buf. */
 
-    if (buftype_is_contig) {
+    if (buf_view.is_contig) {
         j = 0;
         for (i = 0; i < nprocs; i++)
             if (send_size[i] && i != myrank) {
@@ -717,9 +685,8 @@ double curT = MPI_Wtime();
         for (i = 1; i < nprocs; i++)
             send_buf[i] = send_buf[i - 1] + send_size[i - 1];
 
-        Fill_send_buffer(fd, buf, buf_view, send_buf, offset_list, len_list,
-                         send_size, send_req, sent_to_proc, nprocs, myrank,
-                         contig_access_count, min_st_offset, fd_size,
+        Fill_send_buffer(fd, buf, buf_view, send_buf, send_size, send_req,
+                         sent_to_proc, nprocs, myrank, min_st_offset, fd_size,
                          fd_start, fd_end, send_buf_idx, curr_to_proc,
                          done_to_proc, iter);
 
@@ -739,7 +706,7 @@ double curT = MPI_Wtime();
                          fd->comm, &status);
             } else {
                 /* sen/recv to/from self uses MPI_Unpack() */
-                char *ptr = (buftype_is_contig) ? (char *) buf + buf_idx[i] : send_buf[i];
+                char *ptr = (buf_view.is_contig) ? (char *) buf + buf_idx[i] : send_buf[i];
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count position=0;
                 MPI_Unpack_c(ptr, recv_size[i], &position, write_buf, 1, self_recv_type,
@@ -753,7 +720,7 @@ double curT = MPI_Wtime();
                 buf_idx[i] += recv_size[i];
             }
         }
-    } else if (!buftype_is_contig && recv_size[myrank]) {
+    } else if (!buf_view.is_contig && recv_size[myrank]) {
 #ifdef HAVE_MPI_LARGE_COUNT
         MPI_Count position=0;
         MPI_Unpack_c(send_buf[myrank], recv_size[myrank], &position, write_buf, 1, self_recv_type,
@@ -792,7 +759,7 @@ double curT = MPI_Wtime();
     NCI_Free(statuses);
 #endif
     NCI_Free(requests);
-    if (!buftype_is_contig && nprocs_send) {
+    if (!buf_view.is_contig && nprocs_send) {
         NCI_Free(send_buf[0]);
         NCI_Free(send_buf);
     }
@@ -838,16 +805,9 @@ double curT = MPI_Wtime();
 static
 void Fill_send_buffer(PNCIO_File *fd, void *buf,
                       PNCIO_View buf_view, char **send_buf,
-                      MPI_Offset *offset_list,
-#ifdef HAVE_MPI_LARGE_COUNT
-                      MPI_Offset *len_list,
-#else
-                      int *len_list,
-#endif
                       MPI_Count * send_size,
                       MPI_Request * requests, MPI_Count * sent_to_proc,
                       int nprocs, int myrank,
-                      MPI_Count contig_access_count,
                       MPI_Offset min_st_offset, MPI_Offset fd_size,
                       MPI_Offset * fd_start, MPI_Offset * fd_end,
                       MPI_Count * send_buf_idx, MPI_Count * curr_to_proc,
@@ -880,9 +840,9 @@ void Fill_send_buffer(PNCIO_File *fd, void *buf,
      * flat_buf_sz = size of current contiguous component in
      * flattened buf */
 
-    for (MPI_Count i = 0; i < contig_access_count; i++) {
-        off = offset_list[i];
-        rem_len = len_list[i];
+    for (MPI_Count i = 0; i < fd->flat_file.count; i++) {
+        off = fd->flat_file.off[i];
+        rem_len = fd->flat_file.len[i];
 
         /*this request may span the file domains of more than one process */
         while (rem_len != 0) {
