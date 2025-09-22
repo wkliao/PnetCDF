@@ -151,10 +151,8 @@ typedef struct {
     MPI_Offset  *off;       /* array of byte offsets of each block */
     int         *len;       /* array of contiguous block lengths (bytes) */
 #endif
-    // MPI_Count    rnd;       /* number of whole type already consumed */
     MPI_Count    idx;       /* index of off-len pairs consumed so far */
     MPI_Aint     rem;       /* remaining amount in the pair to be consumed */
-    // MPI_Aint     extent;    /* data type extent */
     int          is_contig; /* for fileview, whether file access is contiguous
                              * for buffer, whether user buffer is contiguous
                              * Note this is not whether filetype or buftype
@@ -207,7 +205,7 @@ typedef struct {
 
     int skip_read;          /* whether to skip reads in read-modify-write */
 
-    MPI_Offset disp;       /* file displacement */
+    MPI_Offset disp;        /* file displacement */
     MPI_Datatype filetype;  /* file type set in fileview */
                             /* etype in fileview is always MPI_BYTE in PnetCDF */
     PNCIO_Flatlist_node flat_file; /* flattern filetype */
