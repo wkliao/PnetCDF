@@ -136,6 +136,11 @@ ncmpio_begin_indep_data(void *ncdp)
     /* raise independent flag */
     fSet(ncp->flags, NC_MODE_INDEP);
 
+    /* Barrier is necessary to prevent non-aggregators from calling open()
+     * before the file is being collectively created by the aggregators.
+     */
+    MPI_Barrier(ncp->comm);
+
     if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
         /* When using PnetCDF's ADIO driver, there are 2 scenarios:
          * 1. When intra-node aggregation (INA) is enabled, at the end of
@@ -156,7 +161,11 @@ ncmpio_begin_indep_data(void *ncdp)
         int err;
         char *filename;
 
-        if (ncp->adio_fh != NULL) /* this rank must be an INA aggregator */
+        if (ncp->adio_fh != NULL)
+            /* Only INA non-aggregators' adio_fh can be NULL, because
+             * aggregators open the file collectively and their adio_fh can
+             * never be NULL.
+             */
             return NC_NOERR;
 
         filename = ncmpii_remove_file_system_type_prefix(ncp->path);
@@ -167,8 +176,10 @@ ncmpio_begin_indep_data(void *ncdp)
         ncp->adio_fh->node_ids = (int*) NCI_Malloc(sizeof(int));
         ncp->adio_fh->node_ids[0] = 0;
 
-        err = PNCIO_File_open(MPI_COMM_SELF, filename, ncp->mpiomode,
-                              ncp->mpiinfo, ncp->adio_fh);
+        int omode = ncp->mpiomode | !MPI_MODE_CREATE;
+
+        err = PNCIO_File_open(MPI_COMM_SELF, filename, omode, ncp->mpiinfo,
+                              ncp->adio_fh);
         if (err != NC_NOERR)
             return err;
 
@@ -195,9 +206,8 @@ ncmpio_begin_indep_data(void *ncdp)
     if (ncp->independent_fh == MPI_FILE_NULL) {
         char *mpi_name;
         int mpireturn;
-        TRACE_IO(MPI_File_open, (MPI_COMM_SELF, ncp->path,
-                                 ncp->mpiomode, ncp->mpiinfo,
-                                 &ncp->independent_fh));
+        TRACE_IO(MPI_File_open, (MPI_COMM_SELF, ncp->path, ncp->mpiomode,
+                                 ncp->mpiinfo, &ncp->independent_fh));
         if (mpireturn != MPI_SUCCESS)
             return ncmpii_error_mpi2nc(mpireturn, mpi_name);
 
