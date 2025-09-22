@@ -153,7 +153,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         /* noncontiguous in write buffer, contiguous in file. */
 
         off = fd->disp + offset;
-        if (fd->flat_file.count > 0) off += fd->flat_file.indices[0];
+        if (fd->flat_file.count > 0) off += fd->flat_file.off[0];
 
         start_off = off;
         end_offset = start_off + bufsize - 1;
@@ -195,12 +195,12 @@ assert(disp == 0);
         /* find the starting index in fd->flat_file offset-length pairs */
         sum = 0;
         for (i = 0; i < fd->flat_file.count; i++) {
-            sum += fd->flat_file.blocklens[i];
+            sum += fd->flat_file.len[i];
             if (sum > offset) {
                 st_index = i;
                 fwr_size = sum - offset;
-                abs_off_in_filetype = fd->flat_file.indices[i] +
-                    offset - (sum - fd->flat_file.blocklens[i]);
+                abs_off_in_filetype = fd->flat_file.off[i] +
+                    offset - (sum - fd->flat_file.len[i]);
                 break;
             }
         }
@@ -253,8 +253,8 @@ assert(disp == 0);
             end_offset = off + fwr_size - 1;
 
             j++;
-            off = disp + fd->flat_file.indices[j];
-            fwr_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
+            off = disp + fd->flat_file.off[j];
+            fwr_size = MPL_MIN(fd->flat_file.len[j], bufsize - i_offset);
         }
 
         /* if atomicity is true or data sieving is not disable, lock the region
@@ -284,14 +284,14 @@ assert(disp == 0);
                 }
                 i_offset += fwr_size;
 
-                if (off + fwr_size < disp + fd->flat_file.indices[j] +
-                    fd->flat_file.blocklens[j])
+                if (off + fwr_size < disp + fd->flat_file.off[j] +
+                    fd->flat_file.len[j])
                     off += fwr_size;
                     /* no more I/O needed. off is incremented by fwr_size. */
                 else {
                     j++;
-                    off = disp + fd->flat_file.indices[j];
-                    fwr_size = MPL_MIN(fd->flat_file.blocklens[j],
+                    off = disp + fd->flat_file.off[j];
+                    fwr_size = MPL_MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
                 }
             }
@@ -319,9 +319,9 @@ assert(disp == 0);
                 if (size == fwr_size) {
                     /* reached end of contiguous block in file */
                     j++;
-                    off = disp + fd->flat_file.indices[j];
+                    off = disp + fd->flat_file.off[j];
 
-                    new_fwr_size = fd->flat_file.blocklens[j];
+                    new_fwr_size = fd->flat_file.len[j];
                     if (size != bwr_size) {
                         i_offset += size;
                         new_bwr_size -= size;

@@ -74,7 +74,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         return NC_NOERR;
 
     if (buf_view.is_contig && fd->flat_file.is_contig) {
-        if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
+        if (fd->flat_file.count > 0) offset += fd->flat_file.off[0];
         r_len = PNCIO_ReadContig(fd, buf, buf_view.size, offset);
     }
     else

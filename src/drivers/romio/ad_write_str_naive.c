@@ -83,12 +83,12 @@ assert(fd->filetype == MPI_BYTE);
 
         sum = 0;
         for (f_index = 0; f_index < fd->flat_file.count; f_index++) {
-            sum += fd->flat_file.blocklens[f_index];
+            sum += fd->flat_file.len[f_index];
             if (sum > size_in_filetype) {
                 st_index = f_index;
                 fwr_size = sum - size_in_filetype;
-                abs_off_in_filetype = fd->flat_file.indices[f_index] +
-                    size_in_filetype - (sum - fd->flat_file.blocklens[f_index]);
+                abs_off_in_filetype = fd->flat_file.off[f_index] +
+                    size_in_filetype - (sum - fd->flat_file.len[f_index]);
                 break;
             }
         }
@@ -114,8 +114,8 @@ assert(fd->filetype == MPI_BYTE);
             end_offset = off + fwr_size - 1;
 
             f_index++;
-            off = disp + fd->flat_file.indices[f_index];
-            fwr_size = MPL_MIN(fd->flat_file.blocklens[f_index],
+            off = disp + fd->flat_file.off[f_index];
+            fwr_size = MPL_MIN(fd->flat_file.len[f_index],
                                bufsize - userbuf_off);
         }
 
@@ -156,8 +156,8 @@ assert(fd->filetype == MPI_BYTE);
                 }
                 userbuf_off += fwr_size;
 
-                if (off + fwr_size < disp + fd->flat_file.indices[f_index] +
-                    fd->flat_file.blocklens[f_index]) {
+                if (off + fwr_size < disp + fd->flat_file.off[f_index] +
+                    fd->flat_file.len[f_index]) {
                     /* important that this value be correct, as it is
                      * used to set the offset in the fd near the end of
                      * this function.
@@ -169,8 +169,8 @@ assert(fd->filetype == MPI_BYTE);
                  */
                 else {
                     f_index++;
-                    off = disp + fd->flat_file.indices[f_index];
-                    fwr_size = MPL_MIN(fd->flat_file.blocklens[f_index],
+                    off = disp + fd->flat_file.off[f_index];
+                    fwr_size = MPL_MIN(fd->flat_file.len[f_index],
                                        bufsize - userbuf_off);
                 }
             }
@@ -206,8 +206,8 @@ assert(fd->filetype == MPI_BYTE);
 
                 if (size == fwr_size) {
                     f_index++;
-                    off = disp + fd->flat_file.indices[f_index];
-                    new_fwr_size = fd->flat_file.blocklens[f_index];
+                    off = disp + fd->flat_file.off[f_index];
+                    new_fwr_size = fd->flat_file.len[f_index];
                     if (size != bwr_size) {
                         i_offset += size;
                         new_bwr_size -= size;

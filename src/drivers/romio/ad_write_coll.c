@@ -154,7 +154,7 @@ double curT = MPI_Wtime();
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
         if (buf_view.is_contig && fd->flat_file.is_contig) {
-            if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
+            if (fd->flat_file.count > 0) offset += fd->flat_file.off[0];
             w_len = PNCIO_WriteContig(fd, buf, buf_view.size, offset);
         }
         else

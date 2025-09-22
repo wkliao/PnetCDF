@@ -155,7 +155,7 @@ double curT = MPI_Wtime();
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
         if (buf_view.is_contig && fd->flat_file.is_contig) {
-            if (fd->flat_file.count > 0) offset += fd->flat_file.indices[0];
+            if (fd->flat_file.count > 0) offset += fd->flat_file.off[0];
             return PNCIO_ReadContig(fd, buf, buf_view.size, offset);
         }
         else
@@ -254,8 +254,8 @@ void PNCIO_Calc_my_off_len(PNCIO_File    *fd,
 assert(fd->filetype == MPI_BYTE);
 if (fd->flat_file.size > 0) assert(fd->flat_file.size == io_amnt);
 
-    *offset_list_ptr = fd->flat_file.indices;
-    *len_list_ptr = fd->flat_file.blocklens;
+    *offset_list_ptr = fd->flat_file.off;
+    *len_list_ptr = fd->flat_file.len;
 
     if (fd->flat_file.size == 0) { /* TODO: is fd->flat_file.count == 0? */
         *start_offset_ptr = 0;
@@ -265,9 +265,9 @@ if (fd->flat_file.size > 0) assert(fd->flat_file.size == io_amnt);
     }
 
     if (fd->flat_file.count > 0) {
-        *start_offset_ptr = offset + fd->flat_file.indices[0];
-        *end_offset_ptr = fd->flat_file.indices[fd->flat_file.count-1]
-                        + fd->flat_file.blocklens[fd->flat_file.count-1] - 1;
+        *start_offset_ptr = offset + fd->flat_file.off[0];
+        *end_offset_ptr = fd->flat_file.off[fd->flat_file.count-1]
+                        + fd->flat_file.len[fd->flat_file.count-1] - 1;
         *contig_access_count_ptr = fd->flat_file.count;
     }
     else {

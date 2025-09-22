@@ -47,8 +47,8 @@ fd->filetype = filetype;
 fd->disp = 0;
 
     fd->flat_file.count     = npairs;
-    fd->flat_file.indices   = offsets;
-    fd->flat_file.blocklens = lengths;
+    fd->flat_file.off   = offsets;
+    fd->flat_file.len = lengths;
 
     /* Size of fileview must be calculated here, as PnetCDF may coalesce the
      * offset-length pairs in order to make offsets sorted in a monotonically

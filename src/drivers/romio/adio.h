@@ -180,7 +180,7 @@ typedef struct {
     MPI_Offset disp;        /* file displacement */
     MPI_Datatype filetype;  /* file type set in fileview */
                             /* etype in fileview is always MPI_BYTE in PnetCDF */
-    PNCIO_Flatlist_node flat_file; /* flattern filetype */
+    PNCIO_Flat_list flat_file; /* flattern filetype */
 
     int atomicity;          /* true=atomic, false=nonatomic */
     char *io_buf;           /* two-phase buffer allocated out of i/o path */

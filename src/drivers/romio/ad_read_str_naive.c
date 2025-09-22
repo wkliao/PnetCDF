@@ -81,12 +81,12 @@ printf("%s at %d:\n",__func__,__LINE__);
 
         sum = 0;
         for (f_index = 0; f_index < fd->flat_file.count; f_index++) {
-            sum += fd->flat_file.blocklens[f_index];
+            sum += fd->flat_file.len[f_index];
             if (sum > size_in_filetype) {
                 st_index = f_index;
                 frd_size = sum - size_in_filetype;
-                abs_off_in_filetype = fd->flat_file.indices[f_index] +
-                    size_in_filetype - (sum - fd->flat_file.blocklens[f_index]);
+                abs_off_in_filetype = fd->flat_file.off[f_index] +
+                    size_in_filetype - (sum - fd->flat_file.len[f_index]);
                 break;
             }
         }
@@ -113,8 +113,8 @@ printf("%s at %d:\n",__func__,__LINE__);
 
             f_index++;
 
-            off = disp + fd->flat_file.indices[f_index];
-            frd_size = MPL_MIN(fd->flat_file.blocklens[f_index],
+            off = disp + fd->flat_file.off[f_index];
+            frd_size = MPL_MIN(fd->flat_file.len[f_index],
                                bufsize - userbuf_off);
         }
 
@@ -155,8 +155,8 @@ printf("%s at %d:\n",__func__,__LINE__);
                 }
                 userbuf_off += frd_size;
 
-                if (off + frd_size < disp + fd->flat_file.indices[f_index] +
-                    fd->flat_file.blocklens[f_index]) {
+                if (off + frd_size < disp + fd->flat_file.off[f_index] +
+                    fd->flat_file.len[f_index]) {
                     /* important that this value be correct, as it is
                      * used to set the offset in the fd near the end of
                      * this function.
@@ -168,8 +168,8 @@ printf("%s at %d:\n",__func__,__LINE__);
                  */
                 else {
                     f_index++;
-                    off = disp + fd->flat_file.indices[f_index];
-                    frd_size = MPL_MIN(fd->flat_file.blocklens[f_index],
+                    off = disp + fd->flat_file.off[f_index];
+                    frd_size = MPL_MIN(fd->flat_file.len[f_index],
                                        bufsize - userbuf_off);
                 }
             }
@@ -206,9 +206,9 @@ printf("%s at %d:\n",__func__,__LINE__);
                 if (size == frd_size) {
                     /* reached end of contiguous block in file */
                     f_index++;
-                    off = disp + fd->flat_file.indices[f_index];
+                    off = disp + fd->flat_file.off[f_index];
 
-                    new_frd_size = fd->flat_file.blocklens[f_index];
+                    new_frd_size = fd->flat_file.len[f_index];
                     if (size != brd_size) {
                         i_offset += size;
                         new_brd_size -= size;

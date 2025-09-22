@@ -113,12 +113,12 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
         sum = 0;
         for (i = 0; i < fd->flat_file.count; i++) {
-            sum += fd->flat_file.blocklens[i];
+            sum += fd->flat_file.len[i];
             if (sum > size_in_filetype) {
                 st_index = i;
                 frd_size = sum - size_in_filetype;
-                abs_off_in_filetype = fd->flat_file.indices[i] +
-                    size_in_filetype - (sum - fd->flat_file.blocklens[i]);
+                abs_off_in_filetype = fd->flat_file.off[i] +
+                    size_in_filetype - (sum - fd->flat_file.len[i]);
                 break;
             }
         }
@@ -152,8 +152,8 @@ assert(buf_view.size == r_len);
             end_offset = off + frd_size - 1;
 
             j++;
-            off = disp + fd->flat_file.indices[j];
-            frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
+            off = disp + fd->flat_file.off[j];
+            frd_size = MPL_MIN(fd->flat_file.len[j], bufsize - i_offset);
         }
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
@@ -181,13 +181,13 @@ assert(buf_view.size == r_len);
                 }
                 i_offset += frd_size;
 
-                if (off + frd_size < disp + fd->flat_file.indices[j] +
-                    fd->flat_file.blocklens[j])
+                if (off + frd_size < disp + fd->flat_file.off[j] +
+                    fd->flat_file.len[j])
                     off += frd_size; /* off is incremented by frd_size */
                 else {
                     j++;
-                    off = disp + fd->flat_file.indices[j];
-                    frd_size = MPL_MIN(fd->flat_file.blocklens[j],
+                    off = disp + fd->flat_file.off[j];
+                    frd_size = MPL_MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
                 }
             }
@@ -215,9 +215,9 @@ assert(buf_view.size == r_len);
                 if (size == frd_size) {
                     /* reached end of contiguous block in file */
                     j++;
-                    off = disp + fd->flat_file.indices[j];
+                    off = disp + fd->flat_file.off[j];
 
-                    new_frd_size = fd->flat_file.blocklens[j];
+                    new_frd_size = fd->flat_file.len[j];
                     if (size != brd_size) {
                         i_offset += size;
                         new_brd_size -= size;
