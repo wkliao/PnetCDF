@@ -154,6 +154,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         /* noncontiguous in memory, contiguous in file. */
 
         off = fd->disp + offset;
+        if (fd->flat_file.count > 0) off += fd->flat_file.indices[0];
 
         start_off = off;
         end_offset = start_off + bufsize - 1;
