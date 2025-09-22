@@ -161,34 +161,6 @@ typedef struct {
 } PNCIO_Flat_list;
 
 typedef struct {
-    MPI_Count count;           /* no. of contiguous blocks */
-    MPI_Count size;            /* size in bytes */
-    int       is_contig;       /* whether or not is contiguous (redundant) */
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count *indices;   /* array of byte offsets of each block */
-    MPI_Count *blocklens; /* array of contiguous block lengths (bytes) */
-#else
-    MPI_Offset *indices;  /* array of byte offsets of each block */
-    int        *blocklens;/* array of contiguous block lengths (bytes) */
-#endif
-    /* the type processing code in ROMIO loops through the flattened
-     * representation to tile file views.  so, we cannot simply indicate a
-     * lower bound and upper bound with entries here -- those are instead
-     * indicated by offset-length pairs with zero length.  In order to deal
-     * with repeatedly resetting the LB and UB though (as in resized of
-     * resized, or struct of resized, perhaps?), indicate where in the
-     * tuple-stream the lb and ub parts are kept
-     * (-1 indicates "not explicitly set") */
-    // MPI_Offset lb_idx;
-    // MPI_Offset ub_idx;
-    // int refct;
-    /* when storing flattened representation on a
-                                 * type, attribute copy and delete routines
-                                 * will manage refct */
-    // int flag;                   /* PNCIO_TYPE_XXX */
-} PNCIO_Flatlist_node;
-
-typedef struct {
     MPI_Comm comm;          /* communicator indicating who called open */
     const char *filename;
     int file_system;        /* type of file system */
