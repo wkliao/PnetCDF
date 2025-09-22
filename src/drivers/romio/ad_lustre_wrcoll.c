@@ -57,27 +57,6 @@ typedef struct {
 #endif
 } disp_len_list;
 
-#if 0
-typedef struct {
-    MPI_Datatype type;      /* MPI derived datatype */
-    MPI_Count    count;     /* number of off-len pairs (blocks) */
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Offset  *off;       /* array of byte offsets of each block */
-    MPI_Offset  *len;       /* array of contiguous block lengths (bytes) */
-#else
-    MPI_Offset  *off;       /* array of byte offsets of each block */
-    int         *len;       /* array of contiguous block lengths (bytes) */
-#endif
-    MPI_Count    idx;       /* index of off-len pairs consumed so far */
-    MPI_Aint     rem;       /* remaining amount in the pair to be consumed */
-    int          is_contig; /* for fileview, whether file access is contiguous
-                             * for buffer, whether user buffer is contiguous
-                             * Note this is not whether filetype or buftype
-                             * is contiguous or not.
-                             */
-} Flat_list;
-#endif
-
 /* prototypes of functions used for collective writes only. */
 static MPI_Offset LUSTRE_Exch_and_write(PNCIO_File *fd,
                                         const void *buf,
