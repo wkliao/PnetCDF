@@ -44,40 +44,26 @@
 
 #include "adio.h"
 
-/*
- PNCIO_FileSysType_parentdir - determines a string pathname for the
- parent directory of a given filename.
-
-Input Parameters:
-. filename - pointer to file name character array
-
-Output Parameters:
-. dirnamep - pointer to location in which to store a pointer to a string
-
- Note that the caller should free the memory located at the pointer returned
- after the string is no longer needed.
-*/
-
-/* In a strict ANSI environment, S_ISLNK may not be defined.  Fix that
-   here.  We assume that S_ISLNK is *always* defined as a macro.  If
-   that is not universally true, then add a test to the romio
-   configure that tries to link a program that references S_ISLNK */
+/* In a strict ANSI environment, S_ISLNK may not be defined. Fix that here.
+ * We assume that S_ISLNK is *always* defined as a macro. If that is not
+ * universally true, then add a test to the romio configure that tries to link
+ * a program that references S_ISLNK
+ */
 #if !defined(S_ISLNK)
 #if defined(S_IFLNK)
-     /* Check for the link bit */
+/* Check for the link bit */
 #define S_ISLNK(mode) ((mode) & S_IFLNK)
 #else
-     /* no way to check if it is a link, so say false */
+/* no way to check if it is a link, so say false */
 #define S_ISLNK(mode) 0
 #endif
 #endif /* !(S_ISLNK) */
 
-/* PNCIO_FileSysType_parentdir
- *
- * Returns pointer to string in dirnamep; that string is allocated with
- * strdup and must be free()'d.
+/* Returns a string, the parent directory of a given filename.
+ * The caller should free the memory located returned by this subroutine.
  */
-static void PNCIO_FileSysType_parentdir(const char *filename, char **dirnamep)
+static
+void parentdir(const char *filename, char **dirnamep)
 {
     int err;
     char *dir = NULL, *slash;
@@ -86,15 +72,14 @@ static void PNCIO_FileSysType_parentdir(const char *filename, char **dirnamep)
     err = lstat(filename, &statbuf);
 
     if (err || (!S_ISLNK(statbuf.st_mode))) {
-        /* no such file, or file is not a link; these are the "normal"
-         * cases where we can just return the parent directory.
+        /* No such file, or file is not a link; these are the "normal" cases
+         * where we can just return the parent directory.
          */
         dir = NCI_Strdup(filename);
     } else {
-        /* filename is a symlink.  we've presumably already tried
-         * to stat it and found it to be missing (dangling link),
-         * but this code doesn't care if the target is really there
-         * or not.
+        /* filename is a symlink. We've presumably already tried to stat it
+         * and found it to be missing (dangling link), but this code doesn't
+         * care if the target is really there or not.
          */
         ssize_t namelen;
         char *linkbuf;
@@ -102,9 +87,9 @@ static void PNCIO_FileSysType_parentdir(const char *filename, char **dirnamep)
         linkbuf = NCI_Malloc(PATH_MAX + 1);
         namelen = readlink(filename, linkbuf, PATH_MAX + 1);
         if (namelen == -1) {
-            /* something strange has happened between the time that
-             * we determined that this was a link and the time that
-             * we attempted to read it; punt and use the old name.
+            /* Something strange has happened between the time that we
+             * determined that this was a link and the time that we attempted
+             * to read it; punt and use the old name.
              */
             dir = NCI_Strdup(filename);
         } else {
@@ -157,11 +142,14 @@ static int romio_statfs(const char *filename, int64_t * file_id)
         *file_id = vfsbuf.f_basetype;
 #endif
 
-/* remember above how I said 'statfs with f_type' was the common linux-y way to
- * report file system type?  Darwin (and probably the BSDs) *also* uses f_type
- * but it is "reserved" and does not give us anything meaningful.  Fine.  If
- * configure detects f_type we'll use it here and on those "reserved" platforms
- * we'll ignore that result and check the f_fstypename field  */
+    /* remember above how I said 'statfs with f_type' was the common linux-y
+     * way to report file system type?  Darwin (and probably the BSDs) *also*
+     * uses f_type but it is "reserved" and does not give us anything
+     * meaningful.  Fine.  If configure detects f_type we'll use it here and on
+     * those "reserved" platforms we'll ignore that result and check the
+     * f_fstypename field.
+     */
+
 #ifdef HAVE_STRUCT_STATFS_F_TYPE
     err = statfs(filename, &fsbuf);
     if (err == 0) {
@@ -212,7 +200,8 @@ int PNCIO_FileSysType(const char *filename)
     return PNCIO_LUSTRE;
 #endif
 
-/* NFS can get stuck and end up returning ESTALE "forever" */
+    /* NFS can get stuck and end up returning ESTALE "forever" */
+
 #define MAX_ESTALE_RETRY 10000
 
     retry_cnt = 0;
@@ -225,11 +214,11 @@ int PNCIO_FileSysType(const char *filename)
          * 1) no directory entry for "filename"
          * 2) "filename" is a dangling symbolic link
          *
-         * PNCIO_FileSysType_parentdir tries to deal with both cases.
+         * parentdir() tries to deal with both cases.
          */
         if (errno == ENOENT) {
             char *dir;
-            PNCIO_FileSysType_parentdir(filename, &dir);
+            parentdir(filename, &dir);
             err = romio_statfs(dir, &file_id);
             NCI_Free(dir);
         } else
