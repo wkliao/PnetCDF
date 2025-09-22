@@ -82,7 +82,7 @@ static
 MPI_Offset file_write(PNCIO_File       *fd,
                       MPI_Offset       offset,
                       const void      *buf,
-                      PNCIO_Flat_list  buf_view)
+                      PNCIO_View  buf_view)
 {
     MPI_Offset w_len;
 
@@ -113,7 +113,7 @@ assert(fd->filetype == MPI_BYTE);
 MPI_Offset PNCIO_File_write_at(PNCIO_File       *fh,
                                MPI_Offset       offset,
                                const void      *buf,
-                               PNCIO_Flat_list  buf_view)
+                               PNCIO_View  buf_view)
 {
     assert(fh != NULL);
 
@@ -136,7 +136,7 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File       *fh,
 MPI_Offset PNCIO_File_write_at_all(PNCIO_File       *fh,
                                    MPI_Offset       offset,
                                    const void      *buf,
-                                   PNCIO_Flat_list  buf_view)
+                                   PNCIO_View  buf_view)
 {
     int err=NC_NOERR;
     MPI_Offset w_len;

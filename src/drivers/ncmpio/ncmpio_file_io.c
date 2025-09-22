@@ -71,10 +71,10 @@ MPI_Offset get_count(MPI_Status   *mpistatus,
  */
 /* TODO: move check count against MAX_INT and call _c API */
 MPI_Offset
-ncmpio_file_read_at(NC              *ncp,
-                    MPI_Offset       offset,
-                    void            *buf,
-                    PNCIO_Flat_list  buf_view)
+ncmpio_file_read_at(NC         *ncp,
+                    MPI_Offset  offset,
+                    void       *buf,
+                    PNCIO_View  buf_view)
 {
     int err=NC_NOERR, mpireturn;
     MPI_Offset amnt=0;
@@ -137,10 +137,10 @@ ncmpio_file_read_at(NC              *ncp,
  * This function is collective.
  */
 MPI_Offset
-ncmpio_file_read_at_all(NC              *ncp,
-                        MPI_Offset       offset,
-                        void            *buf,
-                        PNCIO_Flat_list  buf_view)
+ncmpio_file_read_at_all(NC         *ncp,
+                        MPI_Offset  offset,
+                        void       *buf,
+                        PNCIO_View  buf_view)
 {
     int err=NC_NOERR, mpireturn;
     MPI_Offset amnt=0;
@@ -205,10 +205,10 @@ ncmpio_file_read_at_all(NC              *ncp,
  * This function is independent.
  */
 MPI_Offset
-ncmpio_file_write_at(NC              *ncp,
-                     MPI_Offset       offset,
-                     const void      *buf,
-                     PNCIO_Flat_list  buf_view)
+ncmpio_file_write_at(NC         *ncp,
+                     MPI_Offset  offset,
+                     const void *buf,
+                     PNCIO_View  buf_view)
 {
     int err=NC_NOERR, mpireturn;
     MPI_Offset amnt=0;
@@ -270,10 +270,10 @@ ncmpio_file_write_at(NC              *ncp,
  * This function is collective.
  */
 MPI_Offset
-ncmpio_file_write_at_all(NC              *ncp,
-                         MPI_Offset       offset,
-                         const void      *buf,
-                         PNCIO_Flat_list  buf_view)
+ncmpio_file_write_at_all(NC         *ncp,
+                         MPI_Offset  offset,
+                         const void *buf,
+                         PNCIO_View  buf_view)
 {
     int err=NC_NOERR, mpireturn;
     MPI_Offset amnt=0;
@@ -345,7 +345,7 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
 {
     int err, status=NC_NOERR;
     MPI_Offset rlen, wlen;
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
 
     buf_view.size = 0;
 
@@ -388,11 +388,11 @@ ncmpio_getput_zero_req(NC *ncp, int reqMode)
 
 /*----< ncmpio_read_write() >------------------------------------------------*/
 int
-ncmpio_read_write(NC              *ncp,
-                  int              rw_flag,     /* NC_REQ_WR or NC_REQ_RD */
-                  MPI_Offset       offset,
-                  PNCIO_Flat_list  buf_view,
-                  void            *buf)
+ncmpio_read_write(NC         *ncp,
+                  int         rw_flag,     /* NC_REQ_WR or NC_REQ_RD */
+                  MPI_Offset  offset,
+                  PNCIO_View  buf_view,
+                  void       *buf)
 {
     char *mpi_name;
     int i, status=NC_NOERR, err=NC_NOERR, mpireturn, coll_indep;

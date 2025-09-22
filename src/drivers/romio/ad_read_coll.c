@@ -14,7 +14,7 @@
 /* prototypes of functions used for collective reads only. */
 static
 MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
-                          PNCIO_Flat_list buf_view, int nprocs,
+                          PNCIO_View buf_view, int nprocs,
                           int myrank, PNCIO_Access *others_req,
                           MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -29,7 +29,7 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
                           MPI_Aint * buf_idx);
 
 static void R_Exchange_data(PNCIO_File *fd, void *buf,
-                            PNCIO_Flat_list buf_view,
+                            PNCIO_View buf_view,
                             MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                             MPI_Offset *len_list,
@@ -49,7 +49,7 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
                             int iter, MPI_Aint * buf_idx,
                             MPI_Aint * actual_recved_bytes);
 static void Fill_user_buffer(PNCIO_File *fd, void *buf,
-                             PNCIO_Flat_list buf_view, char **recv_buf,
+                             PNCIO_View buf_view, char **recv_buf,
                              MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                              MPI_Offset *len_list,
@@ -66,7 +66,7 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf,
 
 MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File      *fd,
                                      void            *buf,
-                                     PNCIO_Flat_list  buf_view,
+                                     PNCIO_View  buf_view,
                                      MPI_Offset       offset)
 {
 /* Uses a generalized version of the extended two-phase method described
@@ -280,7 +280,7 @@ if (fd->flat_file.size > 0) assert(fd->flat_file.size == io_amnt);
 
 static
 MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
-                         PNCIO_Flat_list buf_view, int nprocs,
+                         PNCIO_View buf_view, int nprocs,
                          int myrank, PNCIO_Access *others_req,
                          MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -567,7 +567,7 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
 }
 
 static void R_Exchange_data(PNCIO_File *fd, void *buf,
-                            PNCIO_Flat_list buf_view, MPI_Offset * offset_list,
+                            PNCIO_View buf_view, MPI_Offset * offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                             MPI_Offset *len_list,
 #else
@@ -787,7 +787,7 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
 }
 
 static void Fill_user_buffer(PNCIO_File *fd, void *buf,
-                             PNCIO_Flat_list buf_view,
+                             PNCIO_View buf_view,
                             char **recv_buf, MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                              MPI_Offset *len_list,

@@ -147,7 +147,7 @@ fill_var_rec(NC         *ncp,
     int err, status=NC_NOERR, mpireturn;
     void *buf;
     MPI_Offset var_len, start, count, offset, wlen;
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
 
     buf_view.type = MPI_BYTE;
     buf_view.count = 1;
@@ -367,7 +367,7 @@ fillerup_aggregate(NC *ncp, NC *old_ncp)
     size_t nsegs;
     MPI_Offset buf_len, var_len, nrecs, start, *count, wlen;
     NC_var *varp;
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *blocklengths=NULL, *offset=NULL;

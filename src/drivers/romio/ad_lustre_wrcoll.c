@@ -60,17 +60,17 @@ typedef struct {
 /* prototypes of functions used for collective writes only. */
 static MPI_Offset LUSTRE_Exch_and_write(PNCIO_File *fd,
                                         const void *buf,
-                                        PNCIO_Flat_list *flat_bview,
+                                        PNCIO_View *flat_bview,
                                         PNCIO_Access *others_req,
                                         PNCIO_Access *my_req,
-                                        PNCIO_Flat_list *flat_fview,
+                                        PNCIO_View *flat_fview,
                                         MPI_Offset min_st_loc,
                                         MPI_Offset max_end_loc,
                                         MPI_Offset **buf_idx);
 
 static void LUSTRE_Fill_send_buffer(PNCIO_File *fd, const void *buf,
-                                    PNCIO_Flat_list *flat_fview,
-                                    PNCIO_Flat_list *flat_bview,
+                                    PNCIO_View *flat_fview,
+                                    PNCIO_View *flat_bview,
                                     char **send_buf,
                                     size_t send_total_size,
                                     const MPI_Count *send_size,
@@ -81,8 +81,8 @@ static int Exchange_data_recv(PNCIO_File            *fd,
                               const void           *buf,
                                     char           *write_buf,
                                     char          **recv_buf,
-                                    PNCIO_Flat_list      *flat_fview,
-                                    PNCIO_Flat_list      *flat_bview,
+                                    PNCIO_View      *flat_fview,
+                                    PNCIO_View      *flat_bview,
                               const MPI_Count      *recv_size,
                                     MPI_Offset     range_off,
                                     MPI_Count       range_size,
@@ -97,8 +97,8 @@ static void Exchange_data_send(      PNCIO_File      *fd,
                                const void           *buf,
                                      char           *write_buf,
                                      char          **send_buf_ptr,
-                                     PNCIO_Flat_list      *flat_fview,
-                                     PNCIO_Flat_list      *flat_bview,
+                                     PNCIO_View      *flat_fview,
+                                     PNCIO_View      *flat_bview,
                                const MPI_Count      *send_size,
                                      MPI_Count       self_count,
                                      MPI_Count       start_pos,
@@ -147,7 +147,7 @@ int LUSTRE_Calc_aggregator(PNCIO_File  *fd,
  */
 static
 void LUSTRE_Calc_my_req(PNCIO_File    *fd,
-                        PNCIO_Flat_list      flat_fview,
+                        PNCIO_View      flat_fview,
                         int            buf_is_contig,
                         PNCIO_Access **my_req_ptr,
                         MPI_Offset   **buf_idx)
@@ -560,7 +560,7 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fd,
 
 MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd,
                                          const void *buf,
-                                         PNCIO_Flat_list buf_view,
+                                         PNCIO_View buf_view,
                                          MPI_Offset offset)
 {
     /* Uses a generalized version of the extended two-phase method described in
@@ -574,8 +574,8 @@ MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd,
     int do_collect = 1, do_ex_wr;
     MPI_Offset start_offset, end_offset;
     MPI_Offset min_st_loc = -1, max_end_loc = -1;
-    PNCIO_Flat_list flat_fview;
-    PNCIO_Flat_list flat_bview;
+    PNCIO_View flat_fview;
+    PNCIO_View flat_bview;
     MPI_Offset w_len=0;
 
     MPI_Comm_size(fd->comm, &nprocs);
@@ -1266,10 +1266,10 @@ void commit_comm_phase(PNCIO_File     *fd,
 static
 MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
                                  const void    *buf,
-                                 PNCIO_Flat_list     *flat_bview,
+                                 PNCIO_View     *flat_bview,
                                  PNCIO_Access  *others_req,
                                  PNCIO_Access  *my_req,
-                                 PNCIO_Flat_list     *flat_fview,
+                                 PNCIO_View     *flat_fview,
                                  MPI_Offset     min_st_loc,
                                  MPI_Offset     max_end_loc,
                                  MPI_Offset   **buf_idx)
@@ -1928,9 +1928,9 @@ int Exchange_data_recv(
                                          * to file */
           char          **recv_buf,     /* OUT: [nbufs] internal buffer used to
                                          * receive from other processes */
-          PNCIO_Flat_list      *flat_fview,   /* IN/OUT: flattened file offset-length
+          PNCIO_View      *flat_fview,   /* IN/OUT: flattened file offset-length
                                          * pairs */
-          PNCIO_Flat_list      *flat_bview,   /* IN/OUT: flattened buffer
+          PNCIO_View      *flat_bview,   /* IN/OUT: flattened buffer
                                          * offset-length pairs */
     const MPI_Count      *recv_size,    /* [nprocs] recv_size[i] is amount of
                                          * this aggregator recv from rank i */
@@ -2169,9 +2169,9 @@ void Exchange_data_send(
                                          * self */
           char          **send_buf_ptr, /* OUT: [cb_nodes] point to internal
                                          * send buffer */
-          PNCIO_Flat_list      *flat_fview,   /* IN/OUT: flattened file offset-length
+          PNCIO_View      *flat_fview,   /* IN/OUT: flattened file offset-length
                                          * pairs */
-          PNCIO_Flat_list      *flat_bview,   /* IN/OUT: flattened buffer
+          PNCIO_View      *flat_bview,   /* IN/OUT: flattened buffer
                                          * offset-length pairs */
     const MPI_Count      *send_size,    /* [cb_nodes] send_size[i] is amount of
                                          * this rank sent to aggregator i */
@@ -2243,8 +2243,8 @@ void Exchange_data_send(
 
 static void LUSTRE_Fill_send_buffer(PNCIO_File       *fd,
                                     const void       *buf,
-                                    PNCIO_Flat_list        *flat_fview,
-                                    PNCIO_Flat_list        *flat_bview,
+                                    PNCIO_View        *flat_fview,
+                                    PNCIO_View        *flat_bview,
                                     char            **send_buf,
                                     size_t            send_total_size,
                                     const MPI_Count  *send_size,

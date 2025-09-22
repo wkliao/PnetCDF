@@ -231,7 +231,7 @@ move_file_block(NC         *ncp,
                 chunk_size = 0;
         }
 
-        PNCIO_Flat_list buf_view;
+        PNCIO_View buf_view;
         buf_view.type = MPI_BYTE;
         buf_view.size = chunk_size;
         buf_view.count = 1;
@@ -549,7 +549,7 @@ write_NC(NC *ncp)
 {
     int status=NC_NOERR, is_coll=0;
     MPI_Offset i, header_wlen, ntimes;
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
 
     assert(!NC_readonly(ncp));
 

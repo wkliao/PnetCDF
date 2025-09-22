@@ -114,7 +114,7 @@
 
 MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
                                      const void *buf,
-                                     PNCIO_Flat_list buf_view,
+                                     PNCIO_View buf_view,
                                      MPI_Offset offset)
 {
     char *writebuf;

@@ -142,23 +142,19 @@ typedef struct {
 
 typedef struct {
     MPI_Datatype type;      /* MPI derived datatype */
-    MPI_Offset   size;      /* total size in bytes (sum or len[*]) */
-    MPI_Count    count;     /* number of off-len pairs (blocks) */
+    MPI_Offset   size;      /* total size in bytes (sum of len[*]) */
+    MPI_Count    count;     /* number of off-len pairs */
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Offset  *off;       /* array of byte offsets of each block */
-    MPI_Offset  *len;       /* array of contiguous block lengths (bytes) */
+    MPI_Offset  *off;       /* [count] byte offsets */
+    MPI_Offset  *len;       /* [count] block lengths in bytes */
 #else
-    MPI_Offset  *off;       /* array of byte offsets of each block */
-    int         *len;       /* array of contiguous block lengths (bytes) */
+    MPI_Offset  *off;       /* [count] byte offsets */
+    int         *len;       /* [count] block lengths in bytes */
 #endif
     MPI_Count    idx;       /* index of off-len pairs consumed so far */
     MPI_Aint     rem;       /* remaining amount in the pair to be consumed */
-    int          is_contig; /* for fileview, whether file access is contiguous
-                             * for buffer, whether user buffer is contiguous
-                             * Note this is not whether filetype or buftype
-                             * is contiguous or not.
-                             */
-} PNCIO_Flat_list;
+    int          is_contig; /* whether view of file or buffer is contiguous */
+} PNCIO_View;
 
 typedef struct {
     MPI_Comm comm;          /* communicator indicating who called open */
@@ -180,7 +176,7 @@ typedef struct {
     MPI_Offset disp;        /* file displacement */
     MPI_Datatype filetype;  /* file type set in fileview */
                             /* etype in fileview is always MPI_BYTE in PnetCDF */
-    PNCIO_Flat_list flat_file; /* flattern filetype */
+    PNCIO_View flat_file;   /* flattern filetype */
 
     int atomicity;          /* true=atomic, false=nonatomic */
     char *io_buf;           /* two-phase buffer allocated out of i/o path */
@@ -198,24 +194,22 @@ typedef struct {
 } PNCIO_File;
 
 typedef struct {
-    MPI_Offset *offsets; /* array of offsets */
+    MPI_Offset *offsets;  /* array of offsets */
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Offset *lens;    /* array of lengths */
-    MPI_Count *mem_ptrs;  /* array of pointers. used in the read/write
-                           * phase to indicate where the data
-                           * is stored in memory
-                           * promoted to MPI_Count so we can construct
-                           * types with _c versions */
-    MPI_Count count;      /* size of above arrays */
+    MPI_Offset *lens;     /* array of lengths */
+    MPI_Count  *mem_ptrs; /* array of pointers. used in the read/write phase to
+                           * indicate where the data is stored in memory
+                           * promoted to MPI_Count so we can construct types
+                           * with _c versions
+                           */
+    MPI_Count   count;    /* size of above arrays */
 #else
-    int      *lens;       /* array of lengths */
-    MPI_Aint *mem_ptrs;
-    size_t    count;
+    int        *lens;
+    MPI_Aint   *mem_ptrs;
+    size_t      count;
 #endif
-    size_t    curr; /* index of offsets/lens that is currently being processed */
+    size_t curr; /* index of offsets/lens that is currently being processed */
 } PNCIO_Access;
-
-extern int PNCIO_Flattened_type_keyval;
 
 /*---- APIs -----------------------------------------------------------------*/
 extern
@@ -259,17 +253,17 @@ int PNCIO_File_SetInfo(PNCIO_File *fh, MPI_Info  users_info);
 /* PNC I/O APIs */
 extern
 MPI_Offset PNCIO_File_write_at(PNCIO_File *fh, MPI_Offset offset,
-                const void *buf, PNCIO_Flat_list buf_view);
+                const void *buf, PNCIO_View buf_view);
 extern
 MPI_Offset PNCIO_File_write_at_all(PNCIO_File *fh, MPI_Offset offset,
-                const void *buf, PNCIO_Flat_list buf_view);
+                const void *buf, PNCIO_View buf_view);
 
 extern
 MPI_Offset PNCIO_File_read_at(PNCIO_File *fh, MPI_Offset offset, void *buf,
-                PNCIO_Flat_list buf_view);
+                PNCIO_View buf_view);
 extern
 MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh, MPI_Offset offset, void *buf,
-                PNCIO_Flat_list buf_view);
+                PNCIO_View buf_view);
 
 extern
 MPI_Offset PNCIO_WriteContig(PNCIO_File *fd, const void *buf,
@@ -350,27 +344,27 @@ int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
 
 extern
 MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+                PNCIO_View buf_view, MPI_Offset offset);
 
 extern
 MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+                PNCIO_View buf_view, MPI_Offset offset);
 
 extern
 MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+                PNCIO_View buf_view, MPI_Offset offset);
 
 extern
 MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+                PNCIO_View buf_view, MPI_Offset offset);
 
 extern
 MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+                PNCIO_View buf_view, MPI_Offset offset);
 
 extern
 MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+                PNCIO_View buf_view, MPI_Offset offset);
 
 /* Lustre */
 extern
@@ -381,10 +375,10 @@ int PNCIO_Lustre_open(PNCIO_File *fd);
 
 extern
 MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+                PNCIO_View buf_view, MPI_Offset offset);
 
 extern
 MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
-                PNCIO_Flat_list buf_view, MPI_Offset offset);
+                PNCIO_View buf_view, MPI_Offset offset);
 
 #endif

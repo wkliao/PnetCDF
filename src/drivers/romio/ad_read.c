@@ -61,7 +61,7 @@ static
 MPI_Offset file_read(PNCIO_File      *fd,
                      MPI_Offset       offset, /* relative to fileview */
                      void            *buf,
-                     PNCIO_Flat_list  buf_view)
+                     PNCIO_View  buf_view)
 {
     MPI_Offset r_len=0;
 
@@ -91,7 +91,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 MPI_Offset PNCIO_File_read_at(PNCIO_File      *fh,
                               MPI_Offset       offset,
                               void            *buf,
-                              PNCIO_Flat_list  buf_view)
+                              PNCIO_View  buf_view)
 {
     assert(fh != NULL);
 
@@ -113,7 +113,7 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File      *fh,
 MPI_Offset PNCIO_File_read_at_all(PNCIO_File      *fh,
                                   MPI_Offset       offset,
                                   void            *buf,
-                                  PNCIO_Flat_list  buf_view)
+                                  PNCIO_View  buf_view)
 {
     int err=NC_NOERR;
     MPI_Offset r_len;

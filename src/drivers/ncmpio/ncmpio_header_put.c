@@ -504,7 +504,7 @@ int ncmpio_write_header(NC *ncp)
 {
     int status=NC_NOERR, mpireturn;
     size_t i, ntimes;
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
 
     buf_view.count = 1;
     buf_view.is_contig = 1;

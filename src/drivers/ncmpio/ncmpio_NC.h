@@ -656,26 +656,26 @@ ncmpio_calc_start_end(const NC *ncp, const NC_var *varp,
 /* Begin defined in ncmpio_file_io.c ----------------------------------------*/
 extern MPI_Offset
 ncmpio_file_read_at(NC *ncp, MPI_Offset offset, void *buf,
-                    PNCIO_Flat_list buf_view);
+                    PNCIO_View buf_view);
 
 extern MPI_Offset
 ncmpio_file_read_at_all(NC *ncp, MPI_Offset offset, void *buf,
-                    PNCIO_Flat_list buf_view);
+                    PNCIO_View buf_view);
 
 extern MPI_Offset
 ncmpio_file_write_at(NC *ncp, MPI_Offset offset, const void *buf,
-                    PNCIO_Flat_list buf_view);
+                    PNCIO_View buf_view);
 
 extern MPI_Offset
 ncmpio_file_write_at_all(NC *ncp, MPI_Offset offset, const void *buf,
-                    PNCIO_Flat_list buf_view);
+                    PNCIO_View buf_view);
 
 extern int
 ncmpio_getput_zero_req(NC *ncp, int rw_flag);
 
 extern int
 ncmpio_read_write(NC *ncp, int rw_flag, MPI_Offset offset,
-                  PNCIO_Flat_list flat_btype, void *buf);
+                  PNCIO_View flat_btype, void *buf);
 
 extern int
 ncmpio_file_close(NC *ncp);

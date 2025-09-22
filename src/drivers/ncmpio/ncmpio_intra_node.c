@@ -997,12 +997,12 @@ flatten_reqs(NC            *ncp,
  * the request is split into into multiple NC_req objects, one for each record.
  */
 static int
-flat_buf_type(const NC         *ncp,
-              int               reqMode,    /* IN: NC_REQ_RD or NC_REQ_WR */
-              int               num_reqs,   /* IN: # requests */
-              const NC_req     *reqs,       /* IN: [num_reqs] requests */
-              PNCIO_Flat_list  *buf_view, /* OUT: flattened buftype */
-              void            **buf)        /* OUT: pointer to I/O buffer */
+flat_buf_type(const NC      *ncp,
+              int            reqMode,  /* IN: NC_REQ_RD or NC_REQ_WR */
+              int            num_reqs, /* IN: # requests */
+              const NC_req  *reqs,     /* IN: [num_reqs] requests */
+              PNCIO_View    *buf_view, /* OUT: flattened buftype */
+              void         **buf)      /* OUT: pointer to I/O buffer */
 /* TODO: */
 #if 1
 {
@@ -1556,18 +1556,18 @@ int ina_collect_md(NC          *ncp,
 /* This subroutine implements the intra-node aggregation for write operations.
  */
 static
-int ina_put(NC              *ncp,
-            int              is_incr,   /* if offsets are incremental */
-            MPI_Aint         num_pairs, /* number of offset-length pairs */
+int ina_put(NC         *ncp,
+            int         is_incr,   /* if offsets are incremental */
+            MPI_Aint    num_pairs, /* number of offset-length pairs */
 #ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Count       *offsets,
-            MPI_Count       *lengths,
+            MPI_Count  *offsets,
+            MPI_Count  *lengths,
 #else
-            MPI_Offset      *offsets,
-            int             *lengths,
+            MPI_Offset *offsets,
+            int        *lengths,
 #endif
-            PNCIO_Flat_list  buf_view,
-            void            *buf)       /* user buffer */
+            PNCIO_View  buf_view,
+            void       *buf)       /* user buffer */
 {
     int i, j, err, mpireturn, status=NC_NOERR;
     char *recv_buf=NULL, *wr_buf = NULL;
@@ -2053,18 +2053,18 @@ size_t bin_search(
 /* This subroutine implements the intra-node aggregation for read operations.
  */
 static
-int ina_get(NC           *ncp,
-            int           is_incr,   /* if offsets are incremental */
-            MPI_Aint      num_pairs, /* number of offset-length pairs */
+int ina_get(NC         *ncp,
+            int         is_incr,   /* if offsets are incremental */
+            MPI_Aint    num_pairs, /* number of offset-length pairs */
 #ifdef HAVE_MPI_LARGE_COUNT
-            MPI_Count    *offsets,
-            MPI_Count    *lengths,
+            MPI_Count  *offsets,
+            MPI_Count  *lengths,
 #else
-            MPI_Offset   *offsets,
-            int          *lengths,
+            MPI_Offset *offsets,
+            int        *lengths,
 #endif
-            PNCIO_Flat_list buf_view,
-            void         *buf)      /* user buffer */
+            PNCIO_View  buf_view,
+            void       *buf)      /* user buffer */
 {
     int i, j, err, mpireturn, status=NC_NOERR, nreqs;
     int do_sort=0, indv_sorted=1, overlap=0;
@@ -2072,7 +2072,7 @@ int ina_get(NC           *ncp,
     MPI_Aint npairs=0, max_npairs, *meta=NULL, *count=NULL;
     MPI_Offset send_amnt=0, rd_amnt=0;
     MPI_Request *req=NULL;
-    PNCIO_Flat_list rd_buf_view;
+    PNCIO_View rd_buf_view;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double endT, startT = MPI_Wtime();
@@ -2720,7 +2720,7 @@ ncmpio_ina_nreqs(NC         *ncp,
      * nonblocking requests. If buf is non-contiguous, buf to NULL and
      * buf_view.type will be a derived datatype constructed using MPI_BOTTOM.
      */
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
     err = flat_buf_type(ncp, reqMode, num_reqs, reqs, &buf_view, &buf);
     if (status == NC_NOERR) status = err;
 if (num_reqs > 0) assert(buf != NULL);
@@ -2826,7 +2826,7 @@ ncmpio_ina_req(NC               *ncp,
 {
     int err, status=NC_NOERR, is_incr=1;
     MPI_Aint num_pairs;
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Count *offsets=NULL, *lengths=NULL;
 #else

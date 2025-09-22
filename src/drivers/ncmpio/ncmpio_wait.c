@@ -2058,7 +2058,7 @@ req_aggregation(NC     *ncp,
 
 assert(0);
 /* This subroutine is no longer used.
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
     err = ncmpio_read_write(ncp, rw_flag, 0, buf_view, buf);
 */
 
@@ -2397,7 +2397,7 @@ mpi_io:
     /* call MPI_File_read_at_all/MPI_File_write_at_all */
     // err = ncmpio_read_write(ncp, rw_flag, 0, buf_count, buf_type, buf);
     assert(0);
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
     err = ncmpio_read_write(ncp, rw_flag, 0, buf_view, buf);
     if (status == NC_NOERR) status = err;
 

@@ -40,7 +40,7 @@ ncmpio_write_numrecs(NC         *ncp,
                      MPI_Offset  new_numrecs)
 {
     int err=NC_NOERR;
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
 
     buf_view.type = MPI_BYTE;
     buf_view.size = 0;

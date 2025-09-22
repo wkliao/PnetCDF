@@ -322,7 +322,7 @@ hdr_len_NC_vararray(const NC_vararray *ncap,
 static int
 hdr_fetch(bufferinfo *gbp) {
     int rank, nprocs, err=NC_NOERR, mpireturn;
-    PNCIO_Flat_list buf_view;
+    PNCIO_View buf_view;
 
     assert(gbp->base != NULL);
 

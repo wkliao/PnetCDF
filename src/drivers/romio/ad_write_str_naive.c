@@ -11,7 +11,7 @@
 
 MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File      *fd,
                                         const void      *buf,
-                                        PNCIO_Flat_list  buf_view,
+                                        PNCIO_View  buf_view,
                                         MPI_Offset       offset)
 {
     int b_index;

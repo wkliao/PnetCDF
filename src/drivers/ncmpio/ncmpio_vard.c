@@ -333,7 +333,7 @@ err_check:
     if (ncp->nprocs > 1 && !fIsSet(ncp->flags, NC_MODE_INDEP))
         coll_indep = NC_REQ_COLL;
 
-    PNCIO_Flat_list  buf_view;
+    PNCIO_View buf_view;
     buf_view.type = MPI_BYTE;
     buf_view.size = filetype_size;
     buf_view.count = 1;

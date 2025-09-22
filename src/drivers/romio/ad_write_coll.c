@@ -11,7 +11,7 @@
 
 /* prototypes of functions used for collective writes only. */
 static MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf,
-                           PNCIO_Flat_list buf_view, int nprocs, int myrank,
+                           PNCIO_View buf_view, int nprocs, int myrank,
                            PNCIO_Access *others_req, MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                            MPI_Offset *len_list,
@@ -24,7 +24,7 @@ static MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf,
                            MPI_Aint * buf_idx);
 
 static MPI_Offset W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
-                            PNCIO_Flat_list buf_view,
+                            PNCIO_View buf_view,
                             MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                             MPI_Offset *len_list,
@@ -45,7 +45,7 @@ static MPI_Offset W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
                             MPI_Aint * buf_idx);
 
 static void Fill_send_buffer(PNCIO_File *fd, void *buf,
-                             PNCIO_Flat_list buf_view, char **send_buf,
+                             PNCIO_View buf_view, char **send_buf,
                              MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                              MPI_Offset *len_list,
@@ -61,7 +61,7 @@ static void Fill_send_buffer(PNCIO_File *fd, void *buf,
 
 MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
                                       const void *buf,
-                                      PNCIO_Flat_list buf_view,
+                                      PNCIO_View buf_view,
                                       MPI_Offset offset) /* relative to fileview */
 {
     /* Uses a generalized version of the extended two-phase method described in
@@ -242,7 +242,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
  * (negative value) is returned.
  */
 static
-MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_Flat_list buf_view,
+MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
                           int nprocs,
                           int myrank,
                           PNCIO_Access *others_req, MPI_Offset *offset_list,
@@ -495,7 +495,7 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_Flat_list buf_view,
  */
 static
 MPI_Offset W_Exchange_data(PNCIO_File *fd, void *buf, char *write_buf,
-                           PNCIO_Flat_list buf_view,
+                           PNCIO_View buf_view,
                            MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                            MPI_Offset *len_list,
@@ -837,7 +837,7 @@ double curT = MPI_Wtime();
 
 static
 void Fill_send_buffer(PNCIO_File *fd, void *buf,
-                      PNCIO_Flat_list buf_view, char **send_buf,
+                      PNCIO_View buf_view, char **send_buf,
                       MPI_Offset *offset_list,
 #ifdef HAVE_MPI_LARGE_COUNT
                       MPI_Offset *len_list,
