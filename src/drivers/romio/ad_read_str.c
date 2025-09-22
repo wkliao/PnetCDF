@@ -68,18 +68,14 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
     bufsize = buf_view.size;
 
-/* get max_bufsize from the info object. */
-
+    /* get max_bufsize from the info object. */
     value = (char *) NCI_Malloc((MPI_MAX_INFO_VAL + 1) * sizeof(char));
     MPI_Info_get(fd->info, "ind_rd_buffer_size", MPI_MAX_INFO_VAL, value, &info_flag);
     max_bufsize = atoi(value);
     NCI_Free(value);
 
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
-/* TODO: find a counter example !!! */
-assert(0);
-
-/* noncontiguous in memory, contiguous in file. */
+        /* noncontiguous in memory, contiguous in file. */
 
         off = fd->disp + offset;
 
@@ -89,9 +85,9 @@ assert(0);
         readbuf = (char *) NCI_Malloc(max_bufsize);
         readbuf_len = MPL_MIN(max_bufsize, end_offset - readbuf_off + 1);
 
-/* if atomicity is true, lock (exclusive) the region to be accessed */
+        /* if atomicity is true, lock (exclusive) the region to be accessed */
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
-            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
         r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off);
         if (r_len < 0) return r_len;
@@ -160,30 +156,24 @@ assert(buf_view.size == r_len);
             frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
         }
 
-/* if atomicity is true, lock (exclusive) the region to be accessed */
+        /* if atomicity is true, lock (exclusive) the region to be accessed */
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
-            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
         readbuf_off = 0;
         readbuf_len = 0;
         readbuf = (char *) NCI_Malloc(max_bufsize);
 
         if (buf_view.is_contig && !fd->flat_file.is_contig) {
-
-/* contiguous in memory, noncontiguous in file. should be the most
-   common case. */
-
+            /* contiguous in memory, noncontiguous in file should be the most
+             * common case.
+             */
             i_offset = 0;
             j = st_index;
             off = offset;
             frd_size = MPL_MIN(st_frd_size, bufsize);
             while (i_offset < bufsize) {
                 if (frd_size) {
-                    /* TYPE_UB and TYPE_LB can result in
-                     * frd_size = 0. save system call in such cases */
-                    /* lseek(fd->fd_sys, off, SEEK_SET);
-                     * err = read(fd->fd_sys, ((char *) buf) + i, frd_size); */
-
                     req_off = off;
                     req_len = frd_size;
                     userbuf_off = i_offset;
@@ -193,18 +183,16 @@ assert(buf_view.size == r_len);
 
                 if (off + frd_size < disp + fd->flat_file.indices[j] +
                     fd->flat_file.blocklens[j])
-                    off += frd_size;
-                /* did not reach end of contiguous block in filetype.
-                 * no more I/O needed. off is incremented by frd_size. */
+                    off += frd_size; /* off is incremented by frd_size */
                 else {
                     j++;
                     off = disp + fd->flat_file.indices[j];
-                    frd_size = MPL_MIN(fd->flat_file.blocklens[j], bufsize - i_offset);
+                    frd_size = MPL_MIN(fd->flat_file.blocklens[j],
+                                       bufsize - i_offset);
                 }
             }
         } else {
-/* noncontiguous in memory as well as in file */
-
+            /* noncontiguous in memory as well as in file */
             k = num = 0;
             i_offset = buf_view.off[0];
             j = st_index;
@@ -215,9 +203,6 @@ assert(buf_view.size == r_len);
             while (num < bufsize) {
                 size = MPL_MIN(frd_size, brd_size);
                 if (size) {
-                    /* lseek(fd->fd_sys, off, SEEK_SET);
-                     * err = read(fd->fd_sys, ((char *) buf) + i, size); */
-
                     req_off = off;
                     req_len = size;
                     userbuf_off = i_offset;
@@ -228,7 +213,7 @@ assert(buf_view.size == r_len);
                 new_brd_size = brd_size;
 
                 if (size == frd_size) {
-/* reached end of contiguous block in file */
+                    /* reached end of contiguous block in file */
                     j++;
                     off = disp + fd->flat_file.indices[j];
 
@@ -240,8 +225,7 @@ assert(buf_view.size == r_len);
                 }
 
                 if (size == brd_size) {
-/* reached end of contiguous block in memory */
-
+                    /* reached end of contiguous block in memory */
                     k++;
                     i_offset = buf_view.off[k];
                     new_brd_size = buf_view.len[k];
