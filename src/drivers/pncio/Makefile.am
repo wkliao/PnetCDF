@@ -15,35 +15,35 @@ if PNETCDF_DEBUG
    AM_CPPFLAGS += -DPNETCDF_DEBUG
 endif
 
-noinst_LTLIBRARIES = libromio.la
+noinst_LTLIBRARIES = libpncio.la
 
-H_SRCS = adio.h
+H_SRCS = pncio.h
 
-C_SRCS = ad_read.c \
-         ad_write.c \
-         ad_open.c \
-         ad_close.c \
-         ad_fstype.c \
-         ad_aggregate.c \
-         ad_read_str.c \
-         ad_read_coll.c \
-         ad_read_str_naive.c \
-         ad_write_coll.c \
-         ad_write_str.c \
-         ad_write_str_naive.c \
-         ad_utils.c \
-         ad_lustre_open.c \
-         ad_lustre_wrcoll.c \
-         ad_lustre_wrstr.c \
-         ad_lock.c \
-         ad_set_size.c \
-         ad_sync.c \
-         ad_delete.c \
-         ad_set_view.c \
-         ad_hints.c
+C_SRCS = pncio_read.c \
+         pncio_write.c \
+         pncio_open.c \
+         pncio_close.c \
+         pncio_fstype.c \
+         pncio_aggregate.c \
+         pncio_read_str.c \
+         pncio_read_coll.c \
+         pncio_read_str_naive.c \
+         pncio_write_coll.c \
+         pncio_write_str.c \
+         pncio_write_str_naive.c \
+         pncio_utils.c \
+         pncio_lustre_open.c \
+         pncio_lustre_wrcoll.c \
+         pncio_lustre_wrstr.c \
+         pncio_lock.c \
+         pncio_set_size.c \
+         pncio_sync.c \
+         pncio_delete.c \
+         pncio_set_view.c \
+         pncio_hints.c
 
 
-libromio_la_SOURCES = $(C_SRCS) $(H_SRCS)
+libpncio_la_SOURCES = $(C_SRCS) $(H_SRCS)
 
 CLEANFILES = core core.* *.gcda *.gcno *.gcov gmon.out
 
