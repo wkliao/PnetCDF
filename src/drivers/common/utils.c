@@ -61,7 +61,7 @@ ncmpii_xlen_nc_type(nc_type xtype, int *size)
     }
 }
 
-/* File system types recognized by ROMIO in MPICH 4.0.0 */
+/* File system types recognized by ROMIO in MPICH 4.0.0, and by PnetCDF */
 static const char* fstypes[] = {"ufs", "nfs", "xfs", "pvfs2", "gpfs", "panfs", "lustre", "daos", "testfs", "ime", "quobyte", NULL};
 
 /* Return a pointer to filename by removing the file system type prefix name if

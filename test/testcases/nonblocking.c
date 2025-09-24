@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
     /* When using PVFS2, unexpected buffer value error message might occur.
      * This is due to  a possible bug in ADIOI_PVFS2_OldWriteStrided() when
      * filetype is contiguous and buftype is non-contiguous.
-     * Fix: Add ROMIO hint to force ADIO driever to use POSIX I/O */
+     * Fix: Add ROMIO hint to force MPI-IO to use POSIX I/O driver */
     /* MPI_Info_set(info, "romio_pvfs2_posix_write", "enable"); */
 
     /* disable internal buffering for small non-blocking APIs */
