@@ -16,7 +16,7 @@
 
 #include <dispatch.h>
 #include "ncmpio_driver.h"
-#include "adio.h"
+#include "pncio.h"
 
 #define NC_DEFAULT_H_MINFREE 0
 #define NC_DEFAULT_V_ALIGN   512
@@ -418,9 +418,9 @@ struct NC {
     int           num_nodes;      /* no. unique compute nodes allocated */
     int          *node_ids;       /* [nprocs] node IDs of each rank */
     MPI_Info      mpiinfo;        /* used MPI info object */
-    MPI_File      collective_fh;  /* file handle for collective mode */
-    MPI_File      independent_fh; /* file handle for independent mode */
-    PNCIO_File    *adio_fh;       /* romio file handler */
+    MPI_File      collective_fh;  /* MPI-IO file handle for collective mode */
+    MPI_File      independent_fh; /* MPI-IO file handle for independent mode */
+    PNCIO_File    *pncio_fh;      /* PNCIO file handler */
     int           fstype;         /* file system type: PNCIO_LUSTRE, PNCIO_UFS */
 
     NC_dimarray   dims;     /* dimensions defined */

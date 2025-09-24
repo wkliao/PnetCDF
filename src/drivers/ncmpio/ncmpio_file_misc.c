@@ -142,56 +142,56 @@ ncmpio_begin_indep_data(void *ncdp)
     MPI_Barrier(ncp->comm);
 
     if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        /* When using PnetCDF's ADIO driver, there are 2 scenarios:
+        /* When using PnetCDF's PNCIO driver, there are 2 scenarios:
          * 1. When intra-node aggregation (INA) is enabled, at the end of
-         *    ncmpi_create/ncmpi_open, non-aggregators' adio_fh are NULL. Thus
-         *    switching to independent data mode, we can re-use adio_fh to
+         *    ncmpi_create/ncmpi_open, non-aggregators' pncio_fh are NULL. Thus
+         *    switching to independent data mode, we can re-use pncio_fh to
          *    store file handler of file opened with MPI_COMM_SELF. Note
-         *    whether adio_fh is NULL or not does not tell whether INA is
+         *    whether pncio_fh is NULL or not does not tell whether INA is
          *    enabled or not.
          * 2. When INA is disabled, all ranks calls PNCIO_File_open() and thus
-         *    adio_fh should not be NULL. In other word, this scenario should
-         *    not reach here at all. Because PnetCDF's ADIO driver relaxes
+         *    pncio_fh should not be NULL. In other word, this scenario should
+         *    not reach here at all. Because PnetCDF's PNCIO driver relaxes
          *    File_setview subroutine to be able to called independently, the
-         *    same adio_fh can be used for both collective and independent I/O
-         *    APIs. Note we cannot re-used adio_fh for the above scenario 1,
+         *    same pncio_fh can be used for both collective and independent I/O
+         *    APIs. Note we cannot re-used pncio_fh for the above scenario 1,
          *    because in the collective data mode, all ranks must participate
          *    each collective I/O call,
          */
         int err;
         char *filename;
 
-        if (ncp->adio_fh != NULL)
-            /* Only INA non-aggregators' adio_fh can be NULL, because
-             * aggregators open the file collectively and their adio_fh can
+        if (ncp->pncio_fh != NULL)
+            /* Only INA non-aggregators' pncio_fh can be NULL, because
+             * aggregators open the file collectively and their pncio_fh can
              * never be NULL.
              */
             return NC_NOERR;
 
         filename = ncmpii_remove_file_system_type_prefix(ncp->path);
 
-        ncp->adio_fh = (PNCIO_File*) NCI_Calloc(1,sizeof(PNCIO_File));
-        ncp->adio_fh->file_system = ncp->fstype;
-        ncp->adio_fh->num_nodes = 1;
-        ncp->adio_fh->node_ids = (int*) NCI_Malloc(sizeof(int));
-        ncp->adio_fh->node_ids[0] = 0;
+        ncp->pncio_fh = (PNCIO_File*) NCI_Calloc(1,sizeof(PNCIO_File));
+        ncp->pncio_fh->file_system = ncp->fstype;
+        ncp->pncio_fh->num_nodes = 1;
+        ncp->pncio_fh->node_ids = (int*) NCI_Malloc(sizeof(int));
+        ncp->pncio_fh->node_ids[0] = 0;
 
         int omode = ncp->mpiomode | !MPI_MODE_CREATE;
 
         err = PNCIO_File_open(MPI_COMM_SELF, filename, omode, ncp->mpiinfo,
-                              ncp->adio_fh);
+                              ncp->pncio_fh);
         if (err != NC_NOERR)
             return err;
 
         /* get the I/O hints used/modified by MPI-IO */
-        err = PNCIO_File_get_info(ncp->adio_fh, &ncp->mpiinfo);
+        err = PNCIO_File_get_info(ncp->pncio_fh, &ncp->mpiinfo);
         if (err != NC_NOERR) return err;
 
         /* Add PnetCDF hints into ncp->mpiinfo */
         ncmpio_hint_set(ncp, ncp->mpiinfo);
 
-        NCI_Free(ncp->adio_fh->node_ids);
-        ncp->adio_fh->node_ids = NULL;
+        NCI_Free(ncp->pncio_fh->node_ids);
+        ncp->pncio_fh->node_ids = NULL;
 
         return NC_NOERR;
     }

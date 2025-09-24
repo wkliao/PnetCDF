@@ -85,7 +85,7 @@ ncmpio_create(MPI_Comm     comm,
 
     /* Extract hints from user_info. Two hints must be extracted now in order
      * to continue:
-     * nc_use_mpi_io: whether to user MPI-IO or PnetCDF's ADIO driver.
+     * nc_use_mpi_io: whether to user MPI-IO or PnetCDF's PNCIO driver.
      * nc_num_aggrs_per_node: number of processes per node to be aggregators.
      *
      * ncp->fstype will be set in ncmpio_hint_extract().
@@ -94,7 +94,7 @@ ncmpio_create(MPI_Comm     comm,
 
     if (ncp->fstype == PNCIO_FSTYPE_CHECK)
         /* Check file system type. If the given file does not exist, check its
-         * folder. Currently PnetCDF's ADIO drivers support Lustre
+         * folder. Currently PnetCDF's PNCIO drivers support Lustre
          * (PNCIO_LUSTRE) and Unix File System (PNCIO_UFS).
          */
         ncp->fstype = PNCIO_FileSysType(path);
@@ -234,15 +234,16 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
                  */
                 err = NC_NOERR;
                 if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-                    PNCIO_File adio_fh;
-                    adio_fh = (PNCIO_File*) NCI_Calloc(1,sizeof(PNCIO_File));
-                    err = PNCIO_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDWR,
-                                         MPI_INFO_NULL, adio_fh);
+                    PNCIO_File pncio_fh;
+                    pncio_fh = (PNCIO_File*) NCI_Calloc(1,sizeof(PNCIO_File));
+                    err = PNCIO_File_open(MPI_COMM_SELF, filename,
+                                          MPI_MODE_RDWR, MPI_INFO_NULL,
+                                          pncio_fh);
                     if (err == NC_NOERR)
-                        PNCIO_File_set_size(adio_fh, 0); /* can be expensive */
+                        PNCIO_File_set_size(pncio_fh, 0); /* can be expensive */
                     else
-                        PNCIO_File_close(&adio_fh);
-                    NCI_Free(adio_fh);
+                        PNCIO_File_close(&pncio_fh);
+                    NCI_Free(pncio_fh);
                 }
                 else {
                     TRACE_IO(MPI_File_open, (MPI_COMM_SELF, path, MPI_MODE_RDWR, MPI_INFO_NULL, &fh));
@@ -284,7 +285,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
      */
 
     ncp->path     = path;     /* reuse path duplicated in dispatch layer */
-    ncp->adio_fh  = NULL;     /* non-aggregators have NULL adio_fh */
+    ncp->pncio_fh = NULL;     /* non-aggregators have NULL pncio_fh */
     ncp->mpiomode = mpiomode;
     ncp->mpiinfo  = MPI_INFO_NULL;
 
@@ -335,12 +336,12 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
     /* Construct a list of unique IDs of compute nodes allocated to this job
      * and save it in ncp->node_ids[nprocs], which contains node IDs of each
      * rank. The node IDs are used either when intra-node aggregation (INA) is
-     * enabled or when using PnetCDF's ADIO driver.
+     * enabled or when using PnetCDF's PNCIO driver.
      *
      * When intra-node aggregation (INA) is enabled, node IDs are used to
      * create a new MPI communicator consisting of the intra-node aggregators
      * only. The communicator will be used to call file open in MPI-IO or
-     * PnetCDF's ADIO driver. This means only intra-node aggregators will
+     * PnetCDF's PNCIO driver. This means only intra-node aggregators will
      * perform file I/O in PnetCDF collective put and get operations.
      */
     ncp->node_ids = NULL;
@@ -375,7 +376,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
          *     aggregators across all nodes, which will be used when calling
          *     MPI_File_open(). For non-aggregator, it == MPI_COMM_NULL.
          * ncp->node_ids[] will be modified to contain the nodes IDs of all
-         *     intra-node aggregators, and will be passed to adio_fh.
+         *     intra-node aggregators, and will be passed to pncio_fh.
          */
         err = ncmpio_ina_init(ncp);
         if (err != NC_NOERR) return err;
@@ -443,19 +444,20 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
             return ncmpii_error_mpi2nc(mpireturn, mpi_name);
     }
     else {
-        /* When ncp->fstype != PNCIO_FSTYPE_MPIIO, use PnetCDF's ADIO driver */
-        ncp->adio_fh = (PNCIO_File*) NCI_Calloc(1, sizeof(PNCIO_File));
-        ncp->adio_fh->file_system = ncp->fstype;
-        ncp->adio_fh->num_nodes   = ncp->num_nodes;
-        ncp->adio_fh->node_ids    = ncp->node_ids;
+        /* When ncp->fstype != PNCIO_FSTYPE_MPIIO, use PnetCDF's PNCIO driver */
+        ncp->pncio_fh = (PNCIO_File*) NCI_Calloc(1, sizeof(PNCIO_File));
+        ncp->pncio_fh->file_system = ncp->fstype;
+        ncp->pncio_fh->num_nodes   = ncp->num_nodes;
+        ncp->pncio_fh->node_ids    = ncp->node_ids;
 
-        err = PNCIO_File_open(comm, filename, mpiomode, user_info, ncp->adio_fh);
+        err = PNCIO_File_open(comm, filename, mpiomode, user_info,
+                              ncp->pncio_fh);
         if (err != NC_NOERR) DEBUG_RETURN_ERROR(err)
 
         /* Now the file has been successfully created, obtain the I/O hints
-         * used/modified by ADIO driver.
+         * used/modified by PNCIO driver.
          */
-        err = PNCIO_File_get_info(ncp->adio_fh, &ncp->mpiinfo);
+        err = PNCIO_File_get_info(ncp->pncio_fh, &ncp->mpiinfo);
         if (err != NC_NOERR) DEBUG_RETURN_ERROR(err)
     }
 
@@ -526,8 +528,8 @@ if (ncp->rank == 0) {
         NCI_Free(ncp->node_ids);
         ncp->node_ids = NULL;
     }
-    if (ncp->adio_fh != NULL)
-        ncp->adio_fh->node_ids = NULL;
+    if (ncp->pncio_fh != NULL)
+        ncp->pncio_fh->node_ids = NULL;
 
     return NC_NOERR;
 }

@@ -123,7 +123,7 @@ ncmpio_file_read_at(NC         *ncp,
             amnt = get_count(&mpistatus, buf_view.type);
     }
     else
-        amnt = PNCIO_File_read_at(ncp->adio_fh, offset, buf, buf_view);
+        amnt = PNCIO_File_read_at(ncp->pncio_fh, offset, buf, buf_view);
 
     /* update the number of bytes read since file open */
     if (amnt >= 0) ncp->get_size += amnt;
@@ -191,7 +191,7 @@ ncmpio_file_read_at_all(NC         *ncp,
             amnt = get_count(&mpistatus, buf_view.type);
     }
     else
-        amnt = PNCIO_File_read_at_all(ncp->adio_fh, offset, buf, buf_view);
+        amnt = PNCIO_File_read_at_all(ncp->pncio_fh, offset, buf, buf_view);
 
     /* update the number of bytes read since file open */
     if (amnt >= 0) ncp->get_size += amnt;
@@ -256,7 +256,7 @@ ncmpio_file_write_at(NC         *ncp,
             amnt = get_count(&mpistatus, buf_view.type);
     }
     else
-        amnt = PNCIO_File_write_at(ncp->adio_fh, offset, buf, buf_view);
+        amnt = PNCIO_File_write_at(ncp->pncio_fh, offset, buf, buf_view);
 
     /* update the number of bytes written since file open */
     if (amnt >= 0) ncp->put_size += amnt;
@@ -323,7 +323,7 @@ ncmpio_file_write_at_all(NC         *ncp,
             amnt = get_count(&mpistatus, buf_view.type);
     }
     else
-        amnt = PNCIO_File_write_at_all(ncp->adio_fh, offset, buf, buf_view);
+        amnt = PNCIO_File_write_at_all(ncp->pncio_fh, offset, buf, buf_view);
 
     /* update the number of bytes written since file open */
     if (amnt >= 0) ncp->put_size += amnt;
@@ -697,12 +697,12 @@ ncmpio_file_close(NC *ncp)
     }
     else {
         /* When intra-node aggregation is enabled, only aggregators have a
-         * non-NULL ncp->adio_fh and non-aggregators has adio_fh == NULL.
+         * non-NULL ncp->pncio_fh and non-aggregators has pncio_fh == NULL.
          */
-        if (ncp->adio_fh != NULL) {
-            err = PNCIO_File_close(ncp->adio_fh);
-            NCI_Free(ncp->adio_fh);
-            ncp->adio_fh = NULL;
+        if (ncp->pncio_fh != NULL) {
+            err = PNCIO_File_close(ncp->pncio_fh);
+            NCI_Free(ncp->pncio_fh);
+            ncp->pncio_fh = NULL;
         }
     }
 
@@ -750,9 +750,9 @@ ncmpio_file_sync(NC *ncp) {
     int mpireturn;
 
     if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        if (ncp->adio_fh == NULL)
+        if (ncp->pncio_fh == NULL)
             return NC_NOERR;
-        return PNCIO_File_sync(ncp->adio_fh);
+        return PNCIO_File_sync(ncp->pncio_fh);
     }
 
     /* the remaining of this subroutine are for when using MPI-IO */
@@ -809,8 +809,8 @@ assert(filetype == MPI_BYTE);
 assert(disp == 0);
 
     if (ncp->fstype != PNCIO_FSTYPE_MPIIO) {
-        /* Skip setting fileview for ranks whose adio_fh is NULL */
-        if (ncp->adio_fh == NULL)
+        /* Skip setting fileview for ranks whose pncio_fh is NULL */
+        if (ncp->pncio_fh == NULL)
             return NC_NOERR;
 
         /* When PnetCDF's internal PNCIO driver is used, the request has been
@@ -820,7 +820,7 @@ assert(disp == 0);
          * type struct, which avoids repeated work of constructing and
          * flattening the filetype.
          */
-        return PNCIO_File_set_view(ncp->adio_fh, disp, filetype, npairs,
+        return PNCIO_File_set_view(ncp->pncio_fh, disp, filetype, npairs,
                                    offsets, lengths);
     }
 
@@ -909,15 +909,15 @@ ncmpio_file_open(NC         *ncp,
             err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
     }
     else { /* ncp->fstype != PNCIO_FSTYPE_MPIIO */
-        ncp->adio_fh = (PNCIO_File*) NCI_Calloc(1,sizeof(PNCIO_File));
+        ncp->pncio_fh = (PNCIO_File*) NCI_Calloc(1,sizeof(PNCIO_File));
 
-        err = PNCIO_File_open(comm, path, omode, info, ncp->adio_fh);
+        err = PNCIO_File_open(comm, path, omode, info, ncp->pncio_fh);
         if (err != NC_NOERR) return err;
 
         /* Now the file has been successfully opened, obtain the I/O hints
-         * used/modified by ADIO driver.
+         * used/modified by PNCIO driver.
          */
-        err = PNCIO_File_get_info(ncp->adio_fh, &ncp->mpiinfo);
+        err = PNCIO_File_get_info(ncp->pncio_fh, &ncp->mpiinfo);
     }
 
     return err;

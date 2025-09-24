@@ -481,11 +481,11 @@ ncmpio_ina_init(NC *ncp)
      * intra-node aggregators. It will later be used to call MPI_File_open(),
      * so that only aggregators call MPI-IO functions to access the file.
      *
-     * When using the PnetCDF's internal ADIO driver, we can pass a list of
-     * node_ids of the new communicator to the ADIO file handler, ncp->adio_fh,
-     * so to prevent the driver from the repeated work of constructing the list
-     * of node IDs, node_ids. If using MPI-IO driver, then ROMIO will do this
-     * internally again anyway.
+     * When using the PnetCDF's internal PNCIO driver, we can pass a list of
+     * node_ids of the new communicator to the PNCIO file handler,
+     * ncp->pncio_fh, so to prevent the driver from the repeated work of
+     * constructing the list of node IDs, node_ids. If using MPI-IO driver,
+     * then ROMIO will do this internally again anyway.
      */
 
     do_io = (ncp->my_aggr == ncp->rank) ? 1 : 0;
@@ -522,7 +522,7 @@ ncmpio_ina_init(NC *ncp)
             ncp->ina_node_list[j] = i;
             /* Modify ncp->node_ids[] to store the node IDs of the processes in
              * the new communicator. Note ncp->node_ids[] from now on is used
-             * by PnetCDF's ADIO driver only.
+             * by PnetCDF's PNCIO driver only.
              */
             ncp->node_ids[j] = ncp->node_ids[i];
             j++;
@@ -2592,7 +2592,7 @@ int ina_get(NC         *ncp,
     NCI_Free(disps);
 
 fn_exit:
-    /* offsets[] and lengths[] are used in ADIO read subroutines as flattened
+    /* offsets[] and lengths[] are used in PNCIO read subroutines as flattened
      * filetype. They cannot be freed before the I/O is done.
      */
     if (rd_buf != NULL && rd_buf != buf) NCI_Free(rd_buf);

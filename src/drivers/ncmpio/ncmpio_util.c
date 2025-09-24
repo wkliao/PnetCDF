@@ -221,7 +221,7 @@ void ncmpio_hint_extract(NC       *ncp,
         }
     }
 
-    /* If user explicitly want to use MPI-IO instead of PnetCDF's internal ADIO
+    /* If user explicitly want to use MPI-IO instead of PnetCDF's internal PNCIO
      * driver, then set PnetCDF I/O hint "nc_use_mpi_io" to "true".
      */
     MPI_Info_get(info, "nc_use_mpi_io", MPI_MAX_INFO_VAL-1, value, &flag);
@@ -303,7 +303,7 @@ void ncmpio_hint_set(NC       *ncp,
     snprintf(int_str, MAX_INT_LEN, "%d", ncp->hash_size_attr);
     MPI_Info_set(info, "nc_hash_size_vattr", int_str);
 
-    /* Whether using MPI-IO instead of PnetCDF's internal ADIO driver. */
+    /* Whether using MPI-IO instead of PnetCDF's internal PNCIO driver. */
     if (ncp->fstype == PNCIO_FSTYPE_MPIIO)
         MPI_Info_set(info, "nc_use_mpi_io", "true");
     else
