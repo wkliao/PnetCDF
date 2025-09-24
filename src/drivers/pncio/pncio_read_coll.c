@@ -9,7 +9,7 @@
 
 #include <stdbool.h> /* type bool */
 
-#include <adio.h>
+#include <pncio.h>
 
 /* prototypes of functions used for collective reads only. */
 static

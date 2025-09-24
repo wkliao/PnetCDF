@@ -18,7 +18,7 @@
 
 #include <mpi.h>
 
-#include "adio.h"
+#include "pncio.h"
 
 /*----< GEN_set_cb_node_list() >---------------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.

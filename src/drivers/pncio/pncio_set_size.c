@@ -20,7 +20,7 @@
 
 #include <pnc_debug.h>
 #include <common.h>
-#include "adio.h"
+#include "pncio.h"
 
 /*----< PNCIO_File_set_size() >-----------------------------------------------*/
 int PNCIO_File_set_size(PNCIO_File  *fd,

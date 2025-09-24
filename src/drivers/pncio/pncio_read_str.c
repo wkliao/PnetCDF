@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <adio.h>
+#include <pncio.h>
 
 #define BUFFERED_READ {                                                       \
     if (req_off >= readbuf_off + readbuf_len) {                               \

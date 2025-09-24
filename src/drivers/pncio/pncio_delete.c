@@ -20,7 +20,7 @@
 
 #include <pnc_debug.h>
 #include <common.h>
-#include "adio.h"
+#include "pncio.h"
 
 /*----< PNCIO_File_delete() >-------------------------------------------------*/
 int PNCIO_File_delete(const char *filename)

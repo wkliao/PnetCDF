@@ -42,11 +42,11 @@
 
 #include <mpi.h>
 
-#include "adio.h"
+#include "pncio.h"
 
 /* In a strict ANSI environment, S_ISLNK may not be defined. Fix that here.
  * We assume that S_ISLNK is *always* defined as a macro. If that is not
- * universally true, then add a test to the romio configure that tries to link
+ * universally true, then add a test to the configure that tries to link
  * a program that references S_ISLNK
  */
 #if !defined(S_ISLNK)
@@ -119,7 +119,7 @@ void parentdir(const char *filename, char **dirnamep)
 #define LL_SUPER_MAGIC 0x0BD00BD0
 #endif
 
-static int romio_statfs(const char *filename, int64_t * file_id)
+static int check_statfs(const char *filename, int64_t * file_id)
 {
     int err = 0;
 
@@ -206,7 +206,7 @@ int PNCIO_FileSysType(const char *filename)
 
     retry_cnt = 0;
     do {
-        err = romio_statfs(filename, &file_id);
+        err = check_statfs(filename, &file_id);
     } while (err && (errno == ESTALE) && retry_cnt++ < MAX_ESTALE_RETRY);
 
     if (err) {
@@ -219,7 +219,7 @@ int PNCIO_FileSysType(const char *filename)
         if (errno == ENOENT) {
             char *dir;
             parentdir(filename, &dir);
-            err = romio_statfs(dir, &file_id);
+            err = check_statfs(dir, &file_id);
             NCI_Free(dir);
         } else
             return 0;

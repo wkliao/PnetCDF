@@ -20,7 +20,7 @@
 
 #include <pnc_debug.h>
 #include <common.h>
-#include "adio.h"
+#include "pncio.h"
 
 /*----< PNCIO_File_sync() >---------------------------------------------------*/
 int PNCIO_File_sync(PNCIO_File *fd)

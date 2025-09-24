@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include "adio.h"
+#include "pncio.h"
 
 /* prototypes of functions used for collective writes only. */
 static MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf,

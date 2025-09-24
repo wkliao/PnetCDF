@@ -15,7 +15,7 @@
 
 #include <mpi.h>
 
-#include "adio.h"
+#include "pncio.h"
 
 /*----< PNCIO_File_close() >--------------------------------------------------*/
 int PNCIO_File_close(PNCIO_File *fh)

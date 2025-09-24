@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <adio.h>
+#include <pncio.h>
 
 static int use_alltoallw;
 

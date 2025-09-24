@@ -29,7 +29,7 @@
 
 #include <mpi.h>
 
-#include "adio.h"
+#include "pncio.h"
 
 #ifdef MIMIC_LUSTRE
 #define xstr(s) str(s)

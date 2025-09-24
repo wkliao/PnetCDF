@@ -17,7 +17,7 @@
 
 #include <pnc_debug.h>
 #include <common.h>
-#include "adio.h"
+#include "pncio.h"
 
 /*----< PNCIO_File_get_info() >-----------------------------------------------*/
 int PNCIO_File_get_info(PNCIO_File *fd,

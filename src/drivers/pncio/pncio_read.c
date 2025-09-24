@@ -15,7 +15,7 @@
 
 #include <mpi.h>
 
-#include "adio.h"
+#include "pncio.h"
 
 /*----< PNCIO_ReadContig() >--------------------------------------------------*/
 MPI_Offset PNCIO_ReadContig(PNCIO_File *fd,

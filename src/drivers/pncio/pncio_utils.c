@@ -10,7 +10,7 @@
 #include <limits.h>
 #include <stdarg.h> /* va_start(), va_end() */
 
-#include <adio.h>
+#include <pncio.h>
 
 /* some systems do not have pread/pwrite, or requrie XOPEN_SOURCE set higher
  * than we would like.  see #1973 */

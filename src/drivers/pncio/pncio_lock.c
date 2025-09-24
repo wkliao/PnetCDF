@@ -9,7 +9,7 @@
 
 #include <fcntl.h>
 
-#include <adio.h>
+#include <pncio.h>
 
 static
 const char *GEN_flock_cmd_to_string(int cmd)

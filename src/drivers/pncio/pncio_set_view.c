@@ -17,7 +17,7 @@
 
 #include <pnc_debug.h>
 #include <common.h>
-#include "adio.h"
+#include "pncio.h"
 
 /*----< PNCIO_File_set_view() >-----------------------------------------------*/
 /* For PnetCDF, this subroutine is an independent call, because PnetCDF only

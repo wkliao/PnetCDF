@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <adio.h>
+#include <pncio.h>
 
 MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File      *fd,
                                         const void      *buf,

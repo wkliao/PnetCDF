@@ -7,7 +7,7 @@
 # include <config.h>
 #endif
 
-#include <adio.h>
+#include <pncio.h>
 
 #define BUFFERED_WRITE {                                                      \
     if (req_off >= writebuf_off + writebuf_len) {                             \

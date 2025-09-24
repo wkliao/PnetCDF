@@ -15,7 +15,7 @@
 
 #include <mpi.h>
 
-#include "adio.h"
+#include "pncio.h"
 
 #ifdef WKL_DEBUG
 int first_ost_id;

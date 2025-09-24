@@ -3,8 +3,8 @@
  *  See COPYRIGHT notice in top-level directory.
  */
 
-#ifndef H_ADIO
-#define H_ADIO
+#ifndef H_PNCIO
+#define H_PNCIO
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,7 +58,7 @@
 #define PNCIO_UFS           152    /* Unix file system */
 #define PNCIO_LUSTRE        163    /* Lustre */
 #define PNCIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
-#define PNCIO_FSTYPE_CHECK  0      /* Use PnetCDF ADIO drivers */
+#define PNCIO_FSTYPE_CHECK  0      /* Use PnetCDF PNCIO drivers */
 
 #define PNCIO_LUSTRE_MAX_OSTS 256  /* Maximum number of Lustre OSTs if hint
                                     * striping_factor is not set by user.
