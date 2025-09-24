@@ -6,7 +6,7 @@
 #
 # @configure_input@
 
-SUBDIRS = include common ncmpio romio
+SUBDIRS = include common ncmpio pncio
 
 if BUILD_DRIVER_FOO
    SUBDIRS += ncfoo
@@ -24,7 +24,7 @@ if ENABLE_ADIOS
    SUBDIRS += ncadios
 endif
 
-DIST_SUBDIRS = include common ncmpio ncfoo ncbbio nc4io ncadios romio
+DIST_SUBDIRS = include common ncmpio ncfoo ncbbio nc4io ncadios pncio
 
 # For VPATH build (parallel build), try delete all sub-directories
 distclean-local:
