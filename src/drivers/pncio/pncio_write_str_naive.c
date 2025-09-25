@@ -105,18 +105,16 @@ assert(fd->filetype == MPI_BYTE);
         /* Calculate end_offset, the last byte-offset that will be accessed.
          * e.g., if start_off=0 and 100 bytes to be written, end_offset=99
          */
-        userbuf_off = 0;
         f_index = st_index;
-        off = start_off;
         fwr_size = MPL_MIN(st_fwr_size, bufsize);
+        userbuf_off = fwr_size;
+        end_offset = start_off + fwr_size - 1;
         while (userbuf_off < bufsize) {
-            userbuf_off += fwr_size;
-            end_offset = off + fwr_size - 1;
-
             f_index++;
-            off = disp + fd->flat_file.off[f_index];
             fwr_size = MPL_MIN(fd->flat_file.len[f_index],
                                bufsize - userbuf_off);
+            userbuf_off += fwr_size;
+            end_offset = disp + fd->flat_file.off[f_index] + fwr_size - 1;
         }
 
         /* End of calculations.  At this point the following values have
@@ -155,6 +153,7 @@ assert(fd->filetype == MPI_BYTE);
                     total_w_len += w_len;
                 }
                 userbuf_off += fwr_size;
+                if (userbuf_off >= bufsize) break;
 
                 if (off + fwr_size < disp + fd->flat_file.off[f_index] +
                     fd->flat_file.len[f_index]) {

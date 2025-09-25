@@ -204,16 +204,15 @@ assert(offset == abs_off_in_filetype);
          * e.g., if start_offset=0 and 100 bytes to be write, end_offset=99 */
 
         st_fwr_size = fwr_size;
-        i_offset = 0;
         j = st_index;
-        off = offset;
-        fwr_size = MPL_MIN(st_fwr_size, bufsize);
+        fwr_size = MPL_MIN(fwr_size, bufsize);
+        i_offset = fwr_size;
+        end_offset = offset + fwr_size - 1;
         while (i_offset < bufsize) {
-            i_offset += fwr_size;
-            end_offset = off + fwr_size - 1;
             j++;
-            off = disp + fd->flat_file.off[j];
             fwr_size = MPL_MIN(fd->flat_file.len[j], bufsize - i_offset);
+            i_offset += fwr_size;
+            end_offset = disp + fd->flat_file.off[j] + fwr_size - 1;
         }
 
         /* if atomicity is true or data sieving is not disable, lock the region
@@ -242,6 +241,7 @@ assert(offset == abs_off_in_filetype);
                     BUFFERED_WRITE;
                 }
                 i_offset += fwr_size;
+                if (i_offset >= bufsize) break;
 
                 if (off + fwr_size < disp + fd->flat_file.off[j] +
                                             fd->flat_file.len[j])
