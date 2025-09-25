@@ -79,6 +79,7 @@ MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
 
 // printf("%s at %d: offset=%lld\n",__func__,__LINE__, offset);
 
+/* PnetCDF always set these 3 conditions */
 assert(fd->filetype == MPI_BYTE);
 assert(fd->flat_file.size == buf_view.size);
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
@@ -240,6 +241,7 @@ assert(offset == abs_off_in_filetype);
                     userbuf_off = i_offset;
                     BUFFERED_WRITE;
                 }
+
                 i_offset += fwr_size;
                 if (i_offset >= bufsize) break;
 
@@ -248,6 +250,7 @@ assert(offset == abs_off_in_filetype);
                     off += fwr_size; /* off is incremented by fwr_size. */
                 else {
                     j++;
+assert(j < fd->flat_file.count);
                     off = disp + fd->flat_file.off[j];
                     fwr_size = MPL_MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
@@ -271,11 +274,15 @@ assert(offset == abs_off_in_filetype);
                     BUFFERED_WRITE;
                 }
 
+                num += size;
+                if (num >= bufsize) break;
+
                 new_fwr_size = fwr_size;
                 new_bwr_size = bwr_size;
 
                 if (size == fwr_size) {
                     j++;
+assert(j < fd->flat_file.count);
                     off = disp + fd->flat_file.off[j];
                     new_fwr_size = fd->flat_file.len[j];
                     if (size != bwr_size) {
@@ -288,6 +295,7 @@ assert(offset == abs_off_in_filetype);
                     /* reached end of contiguous block in memory */
 
                     k++;
+assert(k < buf_view.count);
                     i_offset = buf_view.off[k];
                     new_bwr_size = buf_view.len[k];
                     if (size != fwr_size) {
@@ -295,7 +303,6 @@ assert(offset == abs_off_in_filetype);
                         new_fwr_size -= size;
                     }
                 }
-                num += size;
                 fwr_size = new_fwr_size;
                 bwr_size = new_bwr_size;
             }

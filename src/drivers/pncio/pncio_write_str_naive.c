@@ -23,6 +23,7 @@ MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File      *fd,
     MPI_Offset off, req_off, disp, end_offset = 0, start_off;
     MPI_Offset w_len, total_w_len=0;
 
+/* PnetCDF always sets fd->filetype == MPI_BYTE */
 assert(fd->filetype == MPI_BYTE);
 
     /* Contiguous both in buftype and filetype should have been handled in a
@@ -168,6 +169,7 @@ assert(fd->filetype == MPI_BYTE);
                  */
                 else {
                     f_index++;
+assert(f_index < fd->flat_file.count);
                     off = disp + fd->flat_file.off[f_index];
                     fwr_size = MPL_MIN(fd->flat_file.len[f_index],
                                        bufsize - userbuf_off);
@@ -203,8 +205,12 @@ assert(fd->filetype == MPI_BYTE);
                     total_w_len += w_len;
                 }
 
+                if (tmp_bufsize >= bufsize) break;
+                tmp_bufsize += size;
+
                 if (size == fwr_size) {
                     f_index++;
+assert(f_index < fd->flat_file.count);
                     off = disp + fd->flat_file.off[f_index];
                     new_fwr_size = fd->flat_file.len[f_index];
                     if (size != bwr_size) {
@@ -216,6 +222,7 @@ assert(fd->filetype == MPI_BYTE);
                 if (size == bwr_size) {
                     /* reached end of contiguous block in memory */
                     b_index++;
+assert(b_index < buf_view.count);
                     i_offset = buf_view.off[b_index];
                     new_bwr_size = buf_view.len[b_index];
                     if (size != fwr_size) {
@@ -223,7 +230,6 @@ assert(fd->filetype == MPI_BYTE);
                         new_fwr_size -= size;
                     }
                 }
-                tmp_bufsize += size;
                 fwr_size = new_fwr_size;
                 bwr_size = new_bwr_size;
             }

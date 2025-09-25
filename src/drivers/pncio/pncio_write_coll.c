@@ -773,12 +773,12 @@ double curT = MPI_Wtime();
         size_in_buf = MPL_MIN(buf_incr, flat_buf_sz); \
         user_buf_idx += size_in_buf; \
         flat_buf_sz -= size_in_buf; \
-        if (!flat_buf_sz) { \
+        buf_incr -= size_in_buf; \
+        if (buf_incr > 0 && !flat_buf_sz) { \
             flat_buf_idx++; \
             user_buf_idx = buf_view.off[flat_buf_idx]; \
             flat_buf_sz = buf_view.len[flat_buf_idx]; \
         } \
-        buf_incr -= size_in_buf; \
     } \
 }
 
@@ -791,13 +791,13 @@ double curT = MPI_Wtime();
         send_buf_idx[p] += size_in_buf; \
         user_buf_idx += size_in_buf; \
         flat_buf_sz -= size_in_buf; \
-        if (!flat_buf_sz) { \
+        size -= size_in_buf; \
+        buf_incr -= size_in_buf; \
+        if (size > 0 && !flat_buf_sz) { \
             flat_buf_idx++; \
             user_buf_idx = buf_view.off[flat_buf_idx]; \
             flat_buf_sz = buf_view.len[flat_buf_idx]; \
         } \
-        size -= size_in_buf; \
-        buf_incr -= size_in_buf; \
     } \
     BUF_INCR \
 }

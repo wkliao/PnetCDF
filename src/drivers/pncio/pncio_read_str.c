@@ -151,6 +151,7 @@ assert(buf_view.size == r_len);
             i_offset += frd_size;
             end_offset = off + frd_size - 1;
 
+if (i_offset >= bufsize) break;
             j++;
             off = disp + fd->flat_file.off[j];
             frd_size = MPL_MIN(fd->flat_file.len[j], bufsize - i_offset);
@@ -179,13 +180,16 @@ assert(buf_view.size == r_len);
                     userbuf_off = i_offset;
                     BUFFERED_READ
                 }
+
                 i_offset += frd_size;
+                if (i_offset >= bufsize) break;
 
                 if (off + frd_size < disp + fd->flat_file.off[j] +
                     fd->flat_file.len[j])
                     off += frd_size; /* off is incremented by frd_size */
                 else {
                     j++;
+assert(j < fd->flat_file.count);
                     off = disp + fd->flat_file.off[j];
                     frd_size = MPL_MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
@@ -209,14 +213,17 @@ assert(buf_view.size == r_len);
                     BUFFERED_READ
                 }
 
+                num += size;
+                if (num >= bufsize) break;
+
                 new_frd_size = frd_size;
                 new_brd_size = brd_size;
 
                 if (size == frd_size) {
                     /* reached end of contiguous block in file */
                     j++;
+assert(j < fd->flat_file.count);
                     off = disp + fd->flat_file.off[j];
-
                     new_frd_size = fd->flat_file.len[j];
                     if (size != brd_size) {
                         i_offset += size;
@@ -227,6 +234,7 @@ assert(buf_view.size == r_len);
                 if (size == brd_size) {
                     /* reached end of contiguous block in memory */
                     k++;
+assert(k < buf_view.count);
                     i_offset = buf_view.off[k];
                     new_brd_size = buf_view.len[k];
                     if (size != frd_size) {
@@ -234,7 +242,6 @@ assert(buf_view.size == r_len);
                         new_frd_size -= size;
                     }
                 }
-                num += size;
                 frd_size = new_frd_size;
                 brd_size = new_brd_size;
             }

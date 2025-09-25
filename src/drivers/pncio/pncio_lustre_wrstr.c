@@ -140,6 +140,7 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
     }
 
 
+/* PnetCDF always sets these 3 conditions */
 assert(fd->filetype == MPI_BYTE);
 assert(fd->flat_file.size == buf_view.size);
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
@@ -190,6 +191,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
     } else { /* contiguous buffer and non-contiguous in file */
         disp = fd->disp;
+/* for non-contiguous in file, PnetCDF always uses disp == 0 */
 assert(disp == 0);
 
         /* find the starting index in fd->flat_file offset-length pairs */
@@ -244,17 +246,16 @@ assert(disp == 0);
          * e.g., if start_offset=0 and 100 bytes to be write, end_offset=99 */
 
         st_fwr_size = fwr_size;
-        i_offset = 0;
         j = st_index;
-        off = offset;
-        fwr_size = MPL_MIN(st_fwr_size, bufsize);
+        i_offset = fwr_size = MPL_MIN(st_fwr_size, bufsize);
+        end_offset = offset + fwr_size - 1;
         while (i_offset < bufsize) {
-            i_offset += fwr_size;
-            end_offset = off + fwr_size - 1;
-
             j++;
+assert(j < fd->flat_file.count);
             off = disp + fd->flat_file.off[j];
             fwr_size = MPL_MIN(fd->flat_file.len[j], bufsize - i_offset);
+            i_offset += fwr_size;
+            end_offset = off + fwr_size - 1;
         }
 
         /* if atomicity is true or data sieving is not disable, lock the region
@@ -283,6 +284,7 @@ assert(disp == 0);
                     BUFFERED_WRITE;
                 }
                 i_offset += fwr_size;
+                if (i_offset >= bufsize) break;
 
                 if (off + fwr_size < disp + fd->flat_file.off[j] +
                     fd->flat_file.len[j])
@@ -290,6 +292,7 @@ assert(disp == 0);
                     /* no more I/O needed. off is incremented by fwr_size. */
                 else {
                     j++;
+assert(j < fd->flat_file.count);
                     off = disp + fd->flat_file.off[j];
                     fwr_size = MPL_MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
@@ -312,6 +315,8 @@ assert(disp == 0);
                     userbuf_off = i_offset;
                     BUFFERED_WRITE;
                 }
+                num += size;
+                if (num >= bufsize) break;
 
                 new_fwr_size = fwr_size;
                 new_bwr_size = bwr_size;
@@ -319,6 +324,7 @@ assert(disp == 0);
                 if (size == fwr_size) {
                     /* reached end of contiguous block in file */
                     j++;
+assert(j < fd->flat_file.count);
                     off = disp + fd->flat_file.off[j];
 
                     new_fwr_size = fd->flat_file.len[j];
@@ -331,6 +337,7 @@ assert(disp == 0);
                 if (size == bwr_size) {
                     /* reached end of contiguous block in memory */
                     k++;
+assert(k < buf_view.count);
                     i_offset = buf_view.off[k];
                     new_bwr_size = buf_view.len[k];
                     if (size != fwr_size) {
@@ -338,7 +345,6 @@ assert(disp == 0);
                         new_fwr_size -= size;
                     }
                 }
-                num += size;
                 fwr_size = new_fwr_size;
                 bwr_size = new_bwr_size;
             }

@@ -103,19 +103,18 @@ printf("%s at %d:\n",__func__,__LINE__);
         /* Calculate end_offset, the last byte-offset that will be accessed.
          * e.g., if start_off=0 and 100 bytes to be read, end_offset=99
          */
-        userbuf_off = 0;
         f_index = st_index;
-        off = start_off;
-        frd_size = MPL_MIN(st_frd_size, bufsize);
+        userbuf_off = frd_size = MPL_MIN(st_frd_size, bufsize);
+        end_offset = start_off + frd_size - 1;
         while (userbuf_off < bufsize) {
-            userbuf_off += frd_size;
-            end_offset = off + frd_size - 1;
-
             f_index++;
+assert(f_index < fd->flat_file.count);
 
             off = disp + fd->flat_file.off[f_index];
             frd_size = MPL_MIN(fd->flat_file.len[f_index],
                                bufsize - userbuf_off);
+            userbuf_off += frd_size;
+            end_offset = off + frd_size - 1;
         }
 
         /* End of calculations.  At this point the following values have
@@ -154,6 +153,7 @@ printf("%s at %d:\n",__func__,__LINE__);
                     total_r_len += r_len;
                 }
                 userbuf_off += frd_size;
+                if (userbuf_off >= bufsize) break;
 
                 if (off + frd_size < disp + fd->flat_file.off[f_index] +
                     fd->flat_file.len[f_index]) {
@@ -168,6 +168,7 @@ printf("%s at %d:\n",__func__,__LINE__);
                  */
                 else {
                     f_index++;
+assert(f_index < fd->flat_file.count);
                     off = disp + fd->flat_file.off[f_index];
                     frd_size = MPL_MIN(fd->flat_file.len[f_index],
                                        bufsize - userbuf_off);
@@ -203,9 +204,13 @@ printf("%s at %d:\n",__func__,__LINE__);
                     total_r_len += r_len;
                 }
 
+                tmp_bufsize += size;
+                if (tmp_bufsize >= bufsize) break;
+
                 if (size == frd_size) {
                     /* reached end of contiguous block in file */
                     f_index++;
+assert(f_index < fd->flat_file.count);
                     off = disp + fd->flat_file.off[f_index];
 
                     new_frd_size = fd->flat_file.len[f_index];
@@ -217,8 +222,8 @@ printf("%s at %d:\n",__func__,__LINE__);
 
                 if (size == brd_size) {
                     /* reached end of contiguous block in memory */
-
                     b_index++;
+assert(b_index < buf_view.count);
                     i_offset = buf_view.off[b_index];
                     new_brd_size = buf_view.len[b_index];
                     if (size != frd_size) {
@@ -226,7 +231,6 @@ printf("%s at %d:\n",__func__,__LINE__);
                         new_frd_size -= size;
                     }
                 }
-                tmp_bufsize += size;
                 frd_size = new_frd_size;
                 brd_size = new_brd_size;
             }

@@ -133,6 +133,7 @@ double curT = MPI_Wtime();
 
         if (buf_view.size == 0) return 0;
 
+/* PnetCDF always sets this condition, i.e. when fileview is non-contiguous, offset in this call is always 0. */
 if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
         if (buf_view.is_contig && fd->flat_file.is_contig) {
@@ -676,6 +677,7 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
         flat_buf_sz -= size_in_buf;                                 \
         if (!flat_buf_sz) {                                         \
             flat_buf_idx++;                                         \
+assert(flat_buf_idx < buf_view.count); \
             user_buf_idx = buf_view.off[flat_buf_idx];              \
             flat_buf_sz = buf_view.len[flat_buf_idx];               \
         }                                                           \
@@ -694,6 +696,7 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
         flat_buf_sz -= size_in_buf;                                 \
         if (!flat_buf_sz) {                                         \
             flat_buf_idx++;                                         \
+assert(flat_buf_idx < buf_view.count); \
             user_buf_idx = buf_view.off[flat_buf_idx];              \
             flat_buf_sz = buf_view.len[flat_buf_idx];               \
         }                                                           \
