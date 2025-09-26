@@ -1831,8 +1831,7 @@ if (gap >= 0) fake_overlap=1;
                 }
             }
         }
-MPI_Aint old_npairs = npairs;
-if (ncp->num_nonaggrs == 1 && do_sort == 1) printf("%s at %d: overlap=%d do_sort=%d after coalesce npairs changed from %ld to %ld wr_amnt=%lld recv_amnt=%lld\n",__func__,__LINE__, overlap, do_sort,old_npairs,npairs,wr_amnt,recv_amnt);
+if (ncp->num_nonaggrs == 1 && do_sort == 1) printf("%s at %d: overlap=%d do_sort=%d after coalesce npairs changed from %ld to %d wr_amnt=%lld recv_amnt=%lld\n",__func__,__LINE__, overlap, do_sort,npairs,i+1,wr_amnt,recv_amnt);
 /*
 */
 
