@@ -1840,8 +1840,15 @@ if test "x${debug}" = xyes; then
    if test "x$?" != x0 ; then
       CFLAGS="$CFLAGS -g"
    fi
-   CFLAGS=`echo $CFLAGS | ${SED} 's/-O. *//g' | ${SED} 's/-fast *//g'`
-   CFLAGS="$CFLAGS -O0"
+
+   # remove -fast if set by user
+   CFLAGS=`echo $CFLAGS | ${SED} 's/-fast *//g'`
+
+   # check if -O is set by user, if not, then add -O0
+   str_found=`echo "${CFLAGS}" | ${EGREP} -- "-O"`
+   if test "x$str_found" = x ; then
+      CFLAGS="$CFLAGS -O0"
+   fi
 
    if test "x${has_mpicxx}" = xyes ; then
       str_found=`echo "${CXXFLAGS}" | ${EGREP} -- "-g"`
