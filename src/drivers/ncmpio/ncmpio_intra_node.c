@@ -2738,14 +2738,14 @@ if (num_reqs > 0) assert(buf != NULL);
     if (ncp->rank == ncp->my_aggr) ncp->ina_time_flatten += MPI_Wtime() - timing;
 #endif
 
-    int save_my_aggr, saved_num_nonaggrs;
+    int saved_my_aggr, saved_num_nonaggrs;
+    saved_my_aggr = ncp->my_aggr;
+    saved_num_nonaggrs = ncp->num_nonaggrs;
     if (ncp->num_aggrs_per_node == 0 || fIsSet(ncp->flags, NC_MODE_INDEP)) {
         /* Temporarily set ncp->my_aggr and ncp->num_nonaggrs to be as if
          * self rank is an INA aggregator and the INA group size is 1.
          */
-        save_my_aggr = ncp->my_aggr;
         ncp->my_aggr = ncp->rank;
-        saved_num_nonaggrs = ncp->num_nonaggrs;
         ncp->num_nonaggrs = 1;
     }
 
@@ -2759,7 +2759,7 @@ if (num_reqs > 0) assert(buf != NULL);
 
     if (ncp->num_aggrs_per_node == 0 || fIsSet(ncp->flags, NC_MODE_INDEP)) {
         /* restore ncp->my_aggr and ncp->num_nonaggrs */
-        ncp->my_aggr = save_my_aggr = ncp->my_aggr;
+        ncp->my_aggr = saved_my_aggr;
         ncp->num_nonaggrs = saved_num_nonaggrs;
     }
 
@@ -2885,15 +2885,14 @@ ncmpio_ina_req(NC               *ncp,
         ncp->ina_time_flatten += MPI_Wtime() - timing;
 #endif
 
-    int save_my_aggr, saved_num_nonaggrs;
-
+    int saved_my_aggr, saved_num_nonaggrs;
+    saved_my_aggr = ncp->my_aggr;
+    saved_num_nonaggrs = ncp->num_nonaggrs;
     if (ncp->num_aggrs_per_node == 0 || fIsSet(ncp->flags, NC_MODE_INDEP)) {
         /* Temporarily set ncp->my_aggr and ncp->num_nonaggrs to be as if
          * self rank is an INA aggregator and the INA group size is 1.
          */
-        save_my_aggr = ncp->my_aggr;
         ncp->my_aggr = ncp->rank;
-        saved_num_nonaggrs = ncp->num_nonaggrs;
         ncp->num_nonaggrs = 1;
     }
 
@@ -2927,7 +2926,7 @@ printf("%s at %d: buf_view count=%lld size=%lld\n",__func__,__LINE__, buf_view.c
 
     if (ncp->num_aggrs_per_node == 0 || fIsSet(ncp->flags, NC_MODE_INDEP)) {
         /* restore ncp->my_aggr and ncp->num_nonaggrs */
-        ncp->my_aggr = save_my_aggr = ncp->my_aggr;
+        ncp->my_aggr = saved_my_aggr;
         ncp->num_nonaggrs = saved_num_nonaggrs;
     }
 
