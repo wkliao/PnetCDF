@@ -113,7 +113,6 @@ typedef struct {
     int cb_write;
     int cb_nodes;
     int cb_buffer_size;
-    int cb_ds_threshold;
     int ds_read;
     int ds_write;
     int no_indep_rw;
@@ -125,8 +124,6 @@ typedef struct {
     union {
         struct {
             int num_osts;
-            int co_ratio;
-            int coll_threshold;
             int overstriping_ratio;
         } lustre;
     } fs_hints;

@@ -222,11 +222,6 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
         MPI_Info_set(info, "romio_no_indep_rw", "false");
         fd->hints->no_indep_rw = 0;
 
-        /* hint to set a threshold percentage for a datatype's size/extent at
-         * which data sieving should be done in collective I/O */
-        MPI_Info_set(info, "romio_cb_ds_threshold", "0");
-        fd->hints->cb_ds_threshold = 0;
-
         /* buffer size for data sieving in independent reads */
         MPI_Info_set(info, "ind_rd_buffer_size",
                        PNCIO_IND_RD_BUFFER_SIZE_DFLT);
@@ -263,12 +258,6 @@ PNCIO_File_SetInfo(PNCIO_File *fd,
     if (users_info != MPI_INFO_NULL) {
         Info_check_and_install_int(fd, users_info, "cb_buffer_size",
                                    &(fd->hints->cb_buffer_size));
-
-        /* for collective I/O, try to be smarter about when to do data sieving
-         * using a specific threshold for the datatype size/extent
-         * (percentage 0-100%) */
-        Info_check_and_install_int(fd, users_info, "romio_cb_ds_threshold",
-                                   &(fd->hints->cb_ds_threshold));
 
         /* new hints for enabling/disabling coll. buffering on
          * reads/writes
