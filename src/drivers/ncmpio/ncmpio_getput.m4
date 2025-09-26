@@ -121,7 +121,7 @@ put_varm(NC               *ncp,
     int mpireturn, err=NC_NOERR, status=NC_NOERR, buftype_is_contig;
     int el_size, need_convert=0, need_swap=0, need_swap_back_buf=0;
     MPI_Offset nelems=0, bnelems=0, nbytes=0;
-    MPI_Datatype itype, xtype=MPI_BYTE, imaptype;
+    MPI_Datatype itype, imaptype;
 
     if (varp == NULL) { /* zero-sized request */
         itype = MPI_BYTE;
@@ -240,16 +240,14 @@ put_varm(NC               *ncp,
         }
     }
 
-    /* Set nelems and xtype which will be used in MPI read/write */
+    /* Set nelems which will be used in MPI read/write */
     if (buf != xbuf) {
         /* xbuf is a contiguous buffer */
-        xtype = ncmpii_nc2mpitype(varp->xtype);
         nelems = bnelems;
     }
     else {
         /* we can safely use bufcount and buftype in MPI File read/write */
         nelems = (bufcount == NC_COUNT_IGNORE) ? bnelems : bufcount;
-        xtype = buftype;
     }
 
 err_check:
@@ -265,22 +263,19 @@ err_check:
          */
         nbytes   = 0;
         nelems   = 0;
-        xtype    = MPI_BYTE;
     }
 
 #ifdef ALWAYS_USE_INA
-    void *wbuf = (nbytes == 0) ? NULL : xbuf;
-#if 1
     err = ncmpio_ina_req(ncp, NC_REQ_WR, varp, start, count, stride, nbytes,
-                         wbuf);
-#else
-    err = ncmpio_intra_node_aggregation(ncp, NC_REQ_WR, varp, start, count,
-                                        stride, nelems, xtype, wbuf);
-#endif
+                         xbuf);
     if (status == NC_NOERR) status = err;
 #else
     MPI_Offset offset=0;
-    MPI_Datatype filetype=MPI_BYTE;
+    MPI_Datatype filetype=MPI_BYTE, xtype;
+
+    /* Set xtype which will be used in MPI read/write */
+    xtype = (nbytes == 0) ? MPI_BYTE
+          : (buf != xbuf) ? ncmpii_nc2mpitype(varp->xtype) : buftype;
 
     if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
         /* intra-node aggregation must be in collective mode */
@@ -409,7 +404,7 @@ get_varm(NC               *ncp,
     int err=NC_NOERR, status=NC_NOERR;
     int el_size, buftype_is_contig, need_swap=0, need_convert=0;
     MPI_Offset nelems=0, bnelems=0, nbytes=0;
-    MPI_Datatype itype, xtype=MPI_BYTE, imaptype=MPI_DATATYPE_NULL;
+    MPI_Datatype itype, imaptype=MPI_DATATYPE_NULL;
 
     if (varp == NULL) { /* zero-sized request */
         itype = MPI_BYTE;
@@ -500,16 +495,14 @@ get_varm(NC               *ncp,
      * contents are in the external type.
      */
 
-    /* Set nelems and xtype which will be used in MPI read/write */
+    /* Set nelems which will be used in MPI read/write */
     if (buf != xbuf) {
         /* xbuf is a contiguous buffer */
         nelems = bnelems;
-        xtype = ncmpii_nc2mpitype(varp->xtype);
     }
     else {
         /* we can safely use bufcount and buftype in MPI File read/write */
         nelems = (bufcount == NC_COUNT_IGNORE) ? bnelems : bufcount;
-        xtype = buftype;
     }
 
 err_check:
@@ -522,24 +515,21 @@ err_check:
         /* for collective API, this process needs to participate the collective
          * I/O operations, but with zero-length request
          */
-        xtype    = MPI_BYTE;
         nbytes   = 0;
         nelems   = 0;
     }
 
 #ifdef ALWAYS_USE_INA
-    void *rbuf = (nbytes == 0) ? NULL : xbuf;
-#if 1
     err = ncmpio_ina_req(ncp, NC_REQ_RD, varp, start, count, stride, nbytes,
-                         rbuf);
-#else
-    err = ncmpio_intra_node_aggregation(ncp, NC_REQ_RD, varp, start, count,
-                                        stride, nelems, xtype, rbuf);
-#endif
+                         xbuf);
     if (status == NC_NOERR) status = err;
 #else
     MPI_Offset offset=0;
-    MPI_Datatype filetype=MPI_BYTE;
+    MPI_Datatype filetype=MPI_BYTE, xtype;
+
+    /* Set xtype which will be used in MPI read/write */
+    xtype = (nbytes == 0) ? MPI_BYTE
+          : (buf != xbuf) ? ncmpii_nc2mpitype(varp->xtype) : buftype;
 
     if (fIsSet(reqMode, NC_REQ_COLL) && ncp->num_aggrs_per_node > 0) {
         /* intra-node aggregation must be in collective mode */
