@@ -277,8 +277,8 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
 
     for (i = 0; i < nprocs; i++)
         for (MPI_Count j = 0; j < others_req[i].count; j++) {
-            st_loc = MPL_MIN(st_loc, others_req[i].offsets[j]);
-            end_loc = MPL_MAX(end_loc, (others_req[i].offsets[j]
+            st_loc = MIN(st_loc, others_req[i].offsets[j]);
+            end_loc = MAX(end_loc, (others_req[i].offsets[j]
                                         + others_req[i].lens[j] - 1));
         }
 
@@ -355,7 +355,7 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
         for (i = 0; i < nprocs; i++)
             count[i] = recv_size[i] = 0;
 
-        size = MPL_MIN(coll_bufsize, end_loc - st_loc + 1 - done);
+        size = MIN(coll_bufsize, end_loc - st_loc + 1 - done);
 
         for (i = 0; i < nprocs; i++) {
             if (others_req[i].count) {
@@ -386,7 +386,7 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
                         }
                         else
                             others_req[i].mem_ptrs[j] = req_off - off;
-                        recv_size[i] += MPL_MIN(off + size - req_off, req_len);
+                        recv_size[i] += MIN(off + size - req_off, req_len);
 
                         if (off + size - req_off < req_len) {
                             partial_recv[i] = (off + size - req_off);
@@ -770,7 +770,7 @@ double curT = MPI_Wtime();
 #define BUF_INCR \
 { \
     while (buf_incr) { \
-        size_in_buf = MPL_MIN(buf_incr, flat_buf_sz); \
+        size_in_buf = MIN(buf_incr, flat_buf_sz); \
         user_buf_idx += size_in_buf; \
         flat_buf_sz -= size_in_buf; \
         buf_incr -= size_in_buf; \
@@ -785,7 +785,7 @@ double curT = MPI_Wtime();
 #define BUF_COPY \
 { \
     while (size) { \
-        size_in_buf = MPL_MIN(size, flat_buf_sz); \
+        size_in_buf = MIN(size, flat_buf_sz); \
         memcpy(&(send_buf[p][send_buf_idx[p]]), \
                ((char *) buf) + user_buf_idx, size_in_buf); \
         send_buf_idx[p] += size_in_buf; \
@@ -851,12 +851,12 @@ void Fill_send_buffer(PNCIO_File *fd, void *buf,
              * longer than the single region that processor "p" is responsible
              * for.
              */
-            p = PNCIO_Calc_aggregator(fd, off, min_st_offset, &len, fd_size, fd_start, fd_end);
+            p = PNCIO_Calc_aggregator(fd, off, min_st_offset, &len, fd_size, fd_end);
 
             if (send_buf_idx[p] < send_size[p]) {
                 if (curr_to_proc[p] + len > done_to_proc[p]) {
                     if (done_to_proc[p] > curr_to_proc[p]) {
-                        size = MPL_MIN(curr_to_proc[p] + len -
+                        size = MIN(curr_to_proc[p] + len -
                                        done_to_proc[p], send_size[p] - send_buf_idx[p]);
                         buf_incr = done_to_proc[p] - curr_to_proc[p];
                         BUF_INCR
@@ -865,7 +865,7 @@ void Fill_send_buffer(PNCIO_File *fd, void *buf,
                         curr_to_proc[p] = done_to_proc[p] + size;
                         BUF_COPY
                     } else {
-                        size = MPL_MIN(len, send_size[p] - send_buf_idx[p]);
+                        size = MIN(len, send_size[p] - send_buf_idx[p]);
                         buf_incr = len;
                         curr_to_proc[p] += size;
                         BUF_COPY

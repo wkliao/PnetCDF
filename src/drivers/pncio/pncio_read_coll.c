@@ -37,7 +37,6 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
 static void Fill_user_buffer(PNCIO_File *fd, void *buf,
                              PNCIO_View buf_view, char **recv_buf,
                              MPI_Count * recv_size,
-                             MPI_Request * requests, MPI_Status * statuses,
                              MPI_Count * recd_from_proc, int nprocs,
                              MPI_Offset min_st_offset,
                              MPI_Offset fd_size, MPI_Offset * fd_start,
@@ -265,8 +264,8 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
     /* now find the real values */
     for (i = 0; i < nprocs; i++)
         for (MPI_Count j = 0; j < others_req[i].count; j++) {
-            st_loc = MPL_MIN(st_loc, others_req[i].offsets[j]);
-            end_loc = MPL_MAX(end_loc, (others_req[i].offsets[j]
+            st_loc = MIN(st_loc, others_req[i].offsets[j]);
+            end_loc = MAX(end_loc, (others_req[i].offsets[j]
                                         + others_req[i].lens[j] - 1));
         }
 
@@ -362,7 +361,7 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
          * minus what was satisfied in previous iteration
          * req_size = size corresponding to req_off */
 
-        size = MPL_MIN(coll_bufsize, end_loc - st_loc + 1 - done);
+        size = MIN(coll_bufsize, end_loc - st_loc + 1 - done);
         bool flag = false;
         for (i = 0; i < nprocs; i++) {
             if (others_req[i].count) {
@@ -424,7 +423,7 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
                         MPI_Aint addr;
                         MPI_Get_address(read_buf + req_off - real_off, &addr);
                         others_req[i].mem_ptrs[j] = addr;
-                        send_size[i] += (MPL_MIN(real_off + real_size - req_off, req_len));
+                        send_size[i] += (MIN(real_off + real_size - req_off, req_len));
 
                         if (real_off + real_size - req_off < req_len) {
                             partial_send[i] = (real_off + real_size - req_off);
@@ -432,7 +431,7 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
                                 (others_req[i].offsets[j + 1] < real_off + real_size)) {
                                 /* this is the case illustrated in the
                                  * figure above. */
-                                for_next_iter = MPL_MAX(for_next_iter,
+                                for_next_iter = MAX(for_next_iter,
                                                         real_off + real_size -
                                                         others_req[i].offsets[j + 1]);
                                 /* max because it must cover requests
@@ -643,8 +642,8 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
 
         /* if noncontiguous, to the copies from the recv buffers */
         if (!buf_view.is_contig)
-            Fill_user_buffer(fd, buf, buf_view, recv_buf, recv_size, requests,
-                             statuses, recd_from_proc, nprocs, min_st_offset,
+            Fill_user_buffer(fd, buf, buf_view, recv_buf, recv_size,
+                             recd_from_proc, nprocs, min_st_offset,
                              fd_size, fd_start, fd_end);
     }
 
@@ -672,7 +671,7 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
 
 #define BUF_INCR {                                                  \
     while (buf_incr) {                                              \
-        size_in_buf = MPL_MIN(buf_incr, flat_buf_sz);               \
+        size_in_buf = MIN(buf_incr, flat_buf_sz);               \
         user_buf_idx += size_in_buf;                                \
         flat_buf_sz -= size_in_buf;                                 \
         if (!flat_buf_sz) {                                         \
@@ -688,7 +687,7 @@ assert(flat_buf_idx < buf_view.count); \
 
 #define BUF_COPY {                                                  \
     while (size) {                                                  \
-        size_in_buf = MPL_MIN(size, flat_buf_sz);                   \
+        size_in_buf = MIN(size, flat_buf_sz);                   \
         memcpy(((char *) buf) + user_buf_idx,                       \
                &(recv_buf[p][recv_buf_idx[p]]), size_in_buf);       \
         recv_buf_idx[p] += size_in_buf;                             \
@@ -710,7 +709,6 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf,
                              PNCIO_View buf_view,
                              char **recv_buf,
                              MPI_Count * recv_size,
-                             MPI_Request * requests, MPI_Status * statuses,
                              MPI_Count * recd_from_proc, int nprocs,
                              MPI_Offset min_st_offset,
                              MPI_Offset fd_size, MPI_Offset * fd_start,
@@ -724,9 +722,6 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf,
     MPI_Offset off, user_buf_idx;
     MPI_Offset len, rem_len;
     MPI_Count *curr_from_proc, *done_from_proc, *recv_buf_idx;
-
-    MPL_UNREFERENCED_ARG(requests);
-    MPL_UNREFERENCED_ARG(statuses);
 
 /*  curr_from_proc[p] = amount of data recd from proc. p that has already
                         been accounted for so far
@@ -764,12 +759,12 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf,
              * longer than the single region that processor "p" is responsible
              * for.
              */
-            p = PNCIO_Calc_aggregator(fd, off, min_st_offset, &len, fd_size, fd_start, fd_end);
+            p = PNCIO_Calc_aggregator(fd, off, min_st_offset, &len, fd_size, fd_end);
 
             if (recv_buf_idx[p] < recv_size[p]) {
                 if (curr_from_proc[p] + len > done_from_proc[p]) {
                     if (done_from_proc[p] > curr_from_proc[p]) {
-                        size = MPL_MIN(curr_from_proc[p] + len -
+                        size = MIN(curr_from_proc[p] + len -
                                        done_from_proc[p], recv_size[p] - recv_buf_idx[p]);
                         buf_incr = done_from_proc[p] - curr_from_proc[p];
                         BUF_INCR
@@ -777,7 +772,7 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf,
                         curr_from_proc[p] = done_from_proc[p] + size;
                         BUF_COPY
                     } else {
-                        size = MPL_MIN(len, recv_size[p] - recv_buf_idx[p]);
+                        size = MIN(len, recv_size[p] - recv_buf_idx[p]);
                         buf_incr = len;
                         curr_from_proc[p] += size;
                         BUF_COPY

@@ -73,22 +73,19 @@ int PNCIO_Calc_aggregator(PNCIO_File *fd,
                           MPI_Offset  min_off,
                           MPI_Offset *len,
                           MPI_Offset  fd_size,
-                          MPI_Offset *fd_start,
                           MPI_Offset *fd_end)
 {
     int rank_index, rank;
     MPI_Offset avail_bytes;
 
-    MPL_UNREFERENCED_ARG(fd_start);
-
     /* get an index into our array of aggregators */
     rank_index = (int) ((off - min_off + fd_size) / fd_size - 1);
 
     if (fd->hints->striping_unit > 0) {
-        /* wkliao: implementation for file domain alignment
-         * fd_start[] and fd_end[] have been aligned with file lock
-         * boundaries when returned from PNCIO_Calc_file_domains() so cannot
-         * just use simple arithmetic as above */
+        /* Implementation for file domain alignment. Note fd_end[] have been
+         * aligned with file system lock boundaries when it was produced by
+         * PNCIO_Calc_file_domains().
+         */
         rank_index = 0;
         while (off > fd_end[rank_index])
             rank_index++;
@@ -144,8 +141,8 @@ void PNCIO_Calc_file_domains(MPI_Offset * st_offsets, MPI_Offset
     max_end_offset = end_offsets[0];
 
     for (i = 1; i < nprocs; i++) {
-        min_st_offset = MPL_MIN(min_st_offset, st_offsets[i]);
-        max_end_offset = MPL_MAX(max_end_offset, end_offsets[i]);
+        min_st_offset = MIN(min_st_offset, st_offsets[i]);
+        max_end_offset = MAX(max_end_offset, end_offsets[i]);
     }
 
 /* determine the "file domain (FD)" of each process, i.e., the portion of
@@ -280,7 +277,7 @@ void PNCIO_Calc_my_req(PNCIO_File    *fd,
          * amount that was available from the file domain that holds the
          * first part of the access.
          */
-        proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_start, fd_end);
+        proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_end);
         count_my_req_per_proc[proc]++;
 
         /* figure out how much data is remaining in the access (i.e. wasn't
@@ -293,7 +290,7 @@ void PNCIO_Calc_my_req(PNCIO_File    *fd,
             off += fd_len;      /* point to first remaining byte */
             fd_len = rem_len;   /* save remaining size, pass to calc */
             proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len,
-                                         fd_size, fd_start, fd_end);
+                                         fd_size, fd_end);
 
             count_my_req_per_proc[proc]++;
             rem_len -= fd_len;  /* reduce remaining length by amount from fd */
@@ -347,7 +344,7 @@ void PNCIO_Calc_my_req(PNCIO_File    *fd,
             continue;
         off = fd->flat_file.off[i];
         fd_len = fd->flat_file.len[i];
-        proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_start, fd_end);
+        proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_end);
 
         /* for each separate contiguous access from this process */
         if (buf_idx[proc] == -1) {
@@ -373,7 +370,7 @@ void PNCIO_Calc_my_req(PNCIO_File    *fd,
             off += fd_len;
             fd_len = rem_len;
             proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len,
-                                         fd_size, fd_start, fd_end);
+                                         fd_size, fd_end);
 
             if (buf_idx[proc] == -1) {
                 assert(curr_idx == (MPI_Aint) curr_idx);

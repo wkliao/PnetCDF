@@ -31,14 +31,6 @@
 #define NMEASURES 8
 #endif
 
-#ifndef MPL_MAX
-#define MPL_MAX MAX
-#endif
-#ifndef MPL_MIN
-#define MPL_MIN MIN
-#endif
-#define MPL_UNREFERENCED_ARG(a)
-
 #define PNCIO_LOCKS  300    /* file system supports fcntl()-style locking */
 #define PNCIO_Feature(a, b) ((b == PNCIO_LOCKS) ? 1 : 0)
 
@@ -306,8 +298,7 @@ void PNCIO_Free_others_req(int nprocs, MPI_Count *count_others_req_per_proc,
 
 extern
 int PNCIO_Calc_aggregator(PNCIO_File *fd, MPI_Offset off, MPI_Offset min_off,
-                MPI_Offset *len, MPI_Offset fd_size, MPI_Offset *fd_start,
-                MPI_Offset *fd_end);
+                MPI_Offset *len, MPI_Offset fd_size, MPI_Offset *fd_end);
 
 extern
 void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,

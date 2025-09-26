@@ -107,12 +107,12 @@ assert(fd->filetype == MPI_BYTE);
          * e.g., if start_off=0 and 100 bytes to be written, end_offset=99
          */
         f_index = st_index;
-        fwr_size = MPL_MIN(st_fwr_size, bufsize);
+        fwr_size = MIN(st_fwr_size, bufsize);
         userbuf_off = fwr_size;
         end_offset = start_off + fwr_size - 1;
         while (userbuf_off < bufsize) {
             f_index++;
-            fwr_size = MPL_MIN(fd->flat_file.len[f_index],
+            fwr_size = MIN(fd->flat_file.len[f_index],
                                bufsize - userbuf_off);
             userbuf_off += fwr_size;
             end_offset = disp + fd->flat_file.off[f_index] + fwr_size - 1;
@@ -138,7 +138,7 @@ assert(fd->filetype == MPI_BYTE);
             userbuf_off = 0;
             f_index = st_index;
             off = start_off;
-            fwr_size = MPL_MIN(st_fwr_size, bufsize);
+            fwr_size = MIN(st_fwr_size, bufsize);
 
             /* while there is still space in the buffer, write more data */
             while (userbuf_off < bufsize) {
@@ -171,7 +171,7 @@ assert(fd->filetype == MPI_BYTE);
                     f_index++;
 assert(f_index < fd->flat_file.count);
                     off = disp + fd->flat_file.off[f_index];
-                    fwr_size = MPL_MIN(fd->flat_file.len[f_index],
+                    fwr_size = MIN(fd->flat_file.len[f_index],
                                        bufsize - userbuf_off);
                 }
             }
@@ -190,9 +190,9 @@ assert(f_index < fd->flat_file.count);
             while (tmp_bufsize < bufsize) {
                 MPI_Offset new_bwr_size = bwr_size, new_fwr_size = fwr_size;
 
-                size = MPL_MIN(fwr_size, bwr_size);
+                size = MIN(fwr_size, bwr_size);
                 /* keep max of a single read amount <= INT_MAX */
-                size = MPL_MIN(size, INT_MAX);
+                size = MIN(size, INT_MAX);
 
                 if (size) {
                     req_off = off;

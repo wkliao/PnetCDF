@@ -104,14 +104,14 @@ printf("%s at %d:\n",__func__,__LINE__);
          * e.g., if start_off=0 and 100 bytes to be read, end_offset=99
          */
         f_index = st_index;
-        userbuf_off = frd_size = MPL_MIN(st_frd_size, bufsize);
+        userbuf_off = frd_size = MIN(st_frd_size, bufsize);
         end_offset = start_off + frd_size - 1;
         while (userbuf_off < bufsize) {
             f_index++;
 assert(f_index < fd->flat_file.count);
 
             off = disp + fd->flat_file.off[f_index];
-            frd_size = MPL_MIN(fd->flat_file.len[f_index],
+            frd_size = MIN(fd->flat_file.len[f_index],
                                bufsize - userbuf_off);
             userbuf_off += frd_size;
             end_offset = off + frd_size - 1;
@@ -137,7 +137,7 @@ assert(f_index < fd->flat_file.count);
             userbuf_off = 0;
             f_index = st_index;
             off = start_off;
-            frd_size = MPL_MIN(st_frd_size, bufsize);
+            frd_size = MIN(st_frd_size, bufsize);
 
             /* while there is still space in the buffer, read more data */
             while (userbuf_off < bufsize) {
@@ -170,7 +170,7 @@ assert(f_index < fd->flat_file.count);
                     f_index++;
 assert(f_index < fd->flat_file.count);
                     off = disp + fd->flat_file.off[f_index];
-                    frd_size = MPL_MIN(fd->flat_file.len[f_index],
+                    frd_size = MIN(fd->flat_file.len[f_index],
                                        bufsize - userbuf_off);
                 }
             }
@@ -189,9 +189,9 @@ assert(f_index < fd->flat_file.count);
             while (tmp_bufsize < bufsize) {
                 MPI_Offset new_brd_size = brd_size, new_frd_size = frd_size;
 
-                size = MPL_MIN(frd_size, brd_size);
+                size = MIN(frd_size, brd_size);
                 /* keep max of a single read amount <= INT_MAX */
-                size = MPL_MIN(size, INT_MAX);
+                size = MIN(size, INT_MAX);
 
                 if (size) {
                     req_off = off;

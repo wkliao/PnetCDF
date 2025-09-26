@@ -26,7 +26,7 @@
         }                                                                     \
         writebuf_off = req_off;                                               \
         /* stripe_size alignment */                                           \
-        writebuf_len = MPL_MIN(end_offset - writebuf_off + 1,                 \
+        writebuf_len = MIN(end_offset - writebuf_off + 1,                 \
                                (writebuf_off / stripe_size + 1) *             \
                                stripe_size - writebuf_off);                   \
         if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)      \
@@ -38,7 +38,7 @@
             return r_len;                                                     \
         }                                                                     \
     }                                                                         \
-    write_sz = (MPL_MIN(req_len, writebuf_off + writebuf_len - req_off));     \
+    write_sz = (MIN(req_len, writebuf_off + writebuf_len - req_off));     \
     memcpy(writebuf + req_off - writebuf_off, (char *)buf +userbuf_off,       \
            write_sz);                                                         \
     while (write_sz != req_len) {                                             \
@@ -55,7 +55,7 @@
         userbuf_off += write_sz;                                              \
         writebuf_off += writebuf_len;                                         \
         /* stripe_size alignment */                                           \
-        writebuf_len = MPL_MIN(end_offset - writebuf_off + 1,                 \
+        writebuf_len = MIN(end_offset - writebuf_off + 1,                 \
                                (writebuf_off / stripe_size + 1) *             \
                                stripe_size - writebuf_off);                   \
         if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)      \
@@ -66,7 +66,7 @@
             NCI_Free(writebuf);                                               \
             return r_len;                                                     \
         }                                                                     \
-        write_sz = MPL_MIN(req_len, writebuf_len);                            \
+        write_sz = MIN(req_len, writebuf_len);                            \
         memcpy(writebuf, (char *)buf + userbuf_off, write_sz);                \
     }                                                                         \
 }
@@ -85,11 +85,11 @@
         total_w_len += w_len;                                                 \
         writebuf_off = req_off;                                               \
         /* stripe_size alignment */                                           \
-        writebuf_len = MPL_MIN(end_offset - writebuf_off + 1,                 \
+        writebuf_len = MIN(end_offset - writebuf_off + 1,                 \
                                (writebuf_off / stripe_size + 1) *             \
                                stripe_size - writebuf_off);                   \
     }                                                                         \
-    write_sz = MPL_MIN(req_len, writebuf_off + writebuf_len - req_off);       \
+    write_sz = MIN(req_len, writebuf_off + writebuf_len - req_off);       \
     memcpy(writebuf + req_off - writebuf_off,                                 \
            (char *)buf + userbuf_off, write_sz);                              \
     while (write_sz != req_len) {                                             \
@@ -104,10 +104,10 @@
         userbuf_off += write_sz;                                              \
         writebuf_off += writebuf_len;                                         \
         /* stripe_size alignment */                                           \
-        writebuf_len = MPL_MIN(end_offset - writebuf_off + 1,                 \
+        writebuf_len = MIN(end_offset - writebuf_off + 1,                 \
                                (writebuf_off / stripe_size + 1) *             \
                                stripe_size - writebuf_off);                   \
-        write_sz = MPL_MIN(req_len, writebuf_len);                            \
+        write_sz = MIN(req_len, writebuf_len);                            \
         memcpy(writebuf, (char *)buf + userbuf_off, write_sz);                \
     }                                                                         \
 }
@@ -160,7 +160,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         end_offset = start_off + bufsize - 1;
 
         /* write stripe size buffer each time */
-        writebuf = (char *) NCI_Malloc(MPL_MIN(bufsize, stripe_size));
+        writebuf = (char *) NCI_Malloc(MIN(bufsize, stripe_size));
         writebuf_off = 0;
         writebuf_len = 0;
 
@@ -220,8 +220,8 @@ assert(disp == 0);
             req_off = start_off;
             req_len = bufsize;
             end_offset = start_off + bufsize - 1;
-            writebuf = (char *) NCI_Malloc(MPL_MIN(bufsize, stripe_size));
-            memset(writebuf, -1, (size_t)MPL_MIN(bufsize, stripe_size));
+            writebuf = (char *) NCI_Malloc(MIN(bufsize, stripe_size));
+            memset(writebuf, -1, (size_t)MIN(bufsize, stripe_size));
             writebuf_off = 0;
             writebuf_len = 0;
             userbuf_off = 0;
@@ -247,13 +247,13 @@ assert(disp == 0);
 
         st_fwr_size = fwr_size;
         j = st_index;
-        i_offset = fwr_size = MPL_MIN(st_fwr_size, bufsize);
+        i_offset = fwr_size = MIN(st_fwr_size, bufsize);
         end_offset = offset + fwr_size - 1;
         while (i_offset < bufsize) {
             j++;
 assert(j < fd->flat_file.count);
             off = disp + fd->flat_file.off[j];
-            fwr_size = MPL_MIN(fd->flat_file.len[j], bufsize - i_offset);
+            fwr_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
             i_offset += fwr_size;
             end_offset = off + fwr_size - 1;
         }
@@ -275,7 +275,7 @@ assert(j < fd->flat_file.count);
             i_offset = 0;
             j = st_index;
             off = offset;
-            fwr_size = MPL_MIN(st_fwr_size, bufsize);
+            fwr_size = MIN(st_fwr_size, bufsize);
             while (i_offset < bufsize) {
                 if (fwr_size) {
                     req_off = off;
@@ -294,7 +294,7 @@ assert(j < fd->flat_file.count);
                     j++;
 assert(j < fd->flat_file.count);
                     off = disp + fd->flat_file.off[j];
-                    fwr_size = MPL_MIN(fd->flat_file.len[j],
+                    fwr_size = MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
                 }
             }
@@ -308,7 +308,7 @@ assert(j < fd->flat_file.count);
             bwr_size = buf_view.len[0];
 
             while (num < bufsize) {
-                size = MPL_MIN(fwr_size, bwr_size);
+                size = MIN(fwr_size, bwr_size);
                 if (size) {
                     req_off = off;
                     req_len = size;

@@ -20,13 +20,13 @@
             total_w_len += w_len;                                             \
         }                                                                     \
         writebuf_off = req_off;                                               \
-        writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1);        \
+        writebuf_len = MIN(max_bufsize,end_offset-writebuf_off+1);        \
         if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)      \
             PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);       \
         r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len, writebuf_off);   \
         if (r_len < 0) goto fn_exit;                                          \
     }                                                                         \
-    write_sz = (MPI_Aint)MPL_MIN(req_len, writebuf_off+writebuf_len-req_off); \
+    write_sz = (MPI_Aint)MIN(req_len, writebuf_off+writebuf_len-req_off); \
     memcpy(writebuf+req_off-writebuf_off, (char*)buf +userbuf_off, write_sz); \
     while (write_sz != req_len) {                                             \
         w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);  \
@@ -37,12 +37,12 @@
         req_len -= write_sz;                                                  \
         userbuf_off += write_sz;                                              \
         writebuf_off += writebuf_len;                                         \
-        writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1);        \
+        writebuf_len = MIN(max_bufsize,end_offset-writebuf_off+1);        \
         if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)      \
             PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);       \
         r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len, writebuf_off);   \
         if (r_len < 0) goto fn_exit;                                          \
-        write_sz = MPL_MIN(req_len, writebuf_len);                            \
+        write_sz = MIN(req_len, writebuf_len);                            \
         memcpy(writebuf, (char *)buf + userbuf_off, write_sz);                \
     }                                                                         \
 }
@@ -100,7 +100,7 @@ assert(fd->disp == 0);
         end_offset = off + bufsize - 1;
         writebuf_off = off;
         writebuf = (char *) NCI_Malloc(max_bufsize);
-        writebuf_len = MPL_MIN(max_bufsize, end_offset - writebuf_off + 1);
+        writebuf_len = MIN(max_bufsize, end_offset - writebuf_off + 1);
 
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed */
@@ -121,9 +121,9 @@ assert(fd->disp == 0);
                 if (w_len < 0) goto fn_exit;
                 total_w_len += w_len;
                 writebuf_off = req_off;
-                writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1);
+                writebuf_len = MIN(max_bufsize,end_offset-writebuf_off+1);
             }
-            write_sz = MPL_MIN(req_len, writebuf_off + writebuf_len - req_off);
+            write_sz = MIN(req_len, writebuf_off + writebuf_len - req_off);
             memcpy(writebuf+req_off-writebuf_off, (char*)buf +userbuf_off,
                    write_sz);
             while (write_sz != req_len) {
@@ -134,8 +134,8 @@ assert(fd->disp == 0);
                 req_len -= write_sz;
                 userbuf_off += write_sz;
                 writebuf_off += writebuf_len;
-                writebuf_len = MPL_MIN(max_bufsize,end_offset-writebuf_off+1);
-                write_sz = MPL_MIN(req_len, writebuf_len);
+                writebuf_len = MIN(max_bufsize,end_offset-writebuf_off+1);
+                write_sz = MIN(req_len, writebuf_len);
                 memcpy(writebuf, (char *)buf + userbuf_off, write_sz);
             }
 
@@ -206,12 +206,12 @@ assert(offset == abs_off_in_filetype);
 
         st_fwr_size = fwr_size;
         j = st_index;
-        fwr_size = MPL_MIN(fwr_size, bufsize);
+        fwr_size = MIN(fwr_size, bufsize);
         i_offset = fwr_size;
         end_offset = offset + fwr_size - 1;
         while (i_offset < bufsize) {
             j++;
-            fwr_size = MPL_MIN(fd->flat_file.len[j], bufsize - i_offset);
+            fwr_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
             i_offset += fwr_size;
             end_offset = disp + fd->flat_file.off[j] + fwr_size - 1;
         }
@@ -233,7 +233,7 @@ assert(offset == abs_off_in_filetype);
             i_offset = 0;
             j = st_index;
             off = offset;
-            fwr_size = MPL_MIN(st_fwr_size, bufsize);
+            fwr_size = MIN(st_fwr_size, bufsize);
             while (i_offset < bufsize) {
                 if (fwr_size) {
                     req_off = off;
@@ -252,7 +252,7 @@ assert(offset == abs_off_in_filetype);
                     j++;
 assert(j < fd->flat_file.count);
                     off = disp + fd->flat_file.off[j];
-                    fwr_size = MPL_MIN(fd->flat_file.len[j],
+                    fwr_size = MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
                 }
             }
@@ -266,7 +266,7 @@ assert(j < fd->flat_file.count);
             bwr_size = buf_view.len[0];
 
             while (num < bufsize) {
-                size = MPL_MIN(fwr_size, bwr_size);
+                size = MIN(fwr_size, bwr_size);
                 if (size) {
                     req_off = off;
                     req_len = size;

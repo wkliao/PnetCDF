@@ -12,7 +12,7 @@
 #define BUFFERED_READ {                                                       \
     if (req_off >= readbuf_off + readbuf_len) {                               \
         readbuf_off = req_off;                                                \
-        readbuf_len = MPL_MIN(max_bufsize, end_offset-readbuf_off+1);         \
+        readbuf_len = MIN(max_bufsize, end_offset-readbuf_off+1);         \
         r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off);      \
         if (r_len < 0) return r_len;                                          \
         total_r_len += r_len;                                                 \
@@ -27,7 +27,7 @@
         NCI_Free(tmp_buf);                                                    \
         readbuf_off += readbuf_len-partial_read;                              \
         readbuf_len = partial_read +                                          \
-                      MPL_MIN(max_bufsize, end_offset-readbuf_off+1);         \
+                      MIN(max_bufsize, end_offset-readbuf_off+1);         \
         r_len = PNCIO_ReadContig(fd, readbuf+partial_read,                    \
                                  readbuf_len-partial_read,                    \
                                  readbuf_off+partial_read);                   \
@@ -83,7 +83,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         end_offset = off + bufsize - 1;
         readbuf_off = off;
         readbuf = (char *) NCI_Malloc(max_bufsize);
-        readbuf_len = MPL_MIN(max_bufsize, end_offset - readbuf_off + 1);
+        readbuf_len = MIN(max_bufsize, end_offset - readbuf_off + 1);
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
@@ -146,7 +146,7 @@ assert(buf_view.size == r_len);
         i_offset = 0;
         j = st_index;
         off = offset;
-        frd_size = MPL_MIN(st_frd_size, bufsize);
+        frd_size = MIN(st_frd_size, bufsize);
         while (i_offset < bufsize) {
             i_offset += frd_size;
             end_offset = off + frd_size - 1;
@@ -154,7 +154,7 @@ assert(buf_view.size == r_len);
 if (i_offset >= bufsize) break;
             j++;
             off = disp + fd->flat_file.off[j];
-            frd_size = MPL_MIN(fd->flat_file.len[j], bufsize - i_offset);
+            frd_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
         }
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
@@ -172,7 +172,7 @@ if (i_offset >= bufsize) break;
             i_offset = 0;
             j = st_index;
             off = offset;
-            frd_size = MPL_MIN(st_frd_size, bufsize);
+            frd_size = MIN(st_frd_size, bufsize);
             while (i_offset < bufsize) {
                 if (frd_size) {
                     req_off = off;
@@ -191,7 +191,7 @@ if (i_offset >= bufsize) break;
                     j++;
 assert(j < fd->flat_file.count);
                     off = disp + fd->flat_file.off[j];
-                    frd_size = MPL_MIN(fd->flat_file.len[j],
+                    frd_size = MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
                 }
             }
@@ -205,7 +205,7 @@ assert(j < fd->flat_file.count);
             brd_size = buf_view.len[0];
 
             while (num < bufsize) {
-                size = MPL_MIN(frd_size, brd_size);
+                size = MIN(frd_size, brd_size);
                 if (size) {
                     req_off = off;
                     req_len = size;
