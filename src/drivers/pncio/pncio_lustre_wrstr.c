@@ -221,7 +221,7 @@ assert(disp == 0);
             req_len = bufsize;
             end_offset = start_off + bufsize - 1;
             writebuf = (char *) NCI_Malloc(MPL_MIN(bufsize, stripe_size));
-            memset(writebuf, -1, MPL_MIN(bufsize, stripe_size));
+            memset(writebuf, -1, (size_t)MPL_MIN(bufsize, stripe_size));
             writebuf_off = 0;
             writebuf_len = 0;
             userbuf_off = 0;

@@ -1397,7 +1397,7 @@ val_get_NC_attr(int          fd,
                 NC_attr    **attrpp,
                 const char  *loc)
 {
-    char *name=NULL, xloc[1024];
+    char *name=NULL, xloc[2048];
     int err, status=NC_NOERR;
     size_t err_addr, name_len;
     nc_type xtype;
