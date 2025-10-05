@@ -237,11 +237,11 @@ get_type(int type)
 /*----< main() >--------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
+    /* int verbose; is defined as a locally global variable in ncvalidator.c */
     extern char *optarg;
     extern int optind;
-    char *str, *ptr;
     size_t nbytes;
-    int i, j, k, m, n, c, err, verbose, quiet, isDiff;
+    int i, j, k, m, n, c, err, quiet, isDiff;
     int fd[2], nvars[2], ndims[2], nattrs[2], check_tolerance;
     int cmp_nvars, check_header, check_variable_list, check_entire_file;
     long long numVarDIFF=0, numHeadDIFF=0, numDIFF;
@@ -264,7 +264,8 @@ int main(int argc, char **argv)
     var_list.nvars      = 0;
     check_tolerance     = 0;
 
-    while ((c = getopt(argc, argv, "bhqv:t:")) != -1)
+    while ((c = getopt(argc, argv, "bhqv:t:")) != -1) {
+        char *str, *ptr;
         switch(c) {
             case 'h':               /* compare header only */
                 check_header = 1;
@@ -301,6 +302,7 @@ int main(int argc, char **argv)
                 usage(argv[0]);
                 break;
         }
+    }
 
     /* quiet mode overwrites verbose */
     if (quiet) verbose = 0;

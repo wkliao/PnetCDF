@@ -821,7 +821,6 @@ hdr_get_NC_attrV(bufferinfo *gbp, NC_attr *attrp)
             value = (void *)((char *)value + attcount);
             bufremain -= attcount;
         } else {
-            int err;
             err = hdr_fetch(gbp);
             if (err != NC_NOERR) return err;
             bufremain = gbp->ncp->chunk;

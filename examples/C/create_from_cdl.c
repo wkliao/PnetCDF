@@ -174,7 +174,6 @@ int main(int argc, char **argv)
 
         for (j=0; j<nattrs; j++) {
             void *value;
-            nc_type xtype;
             MPI_Offset nelems;
 
             /* retrieve metadata of attribute j associated with variable i */

@@ -2070,7 +2070,7 @@ int main(int argc, char *argv[])
     /* print fixed-size variables first */
     if (num_fix_vars) printf("\nfixed-size variables:\n");
     for (i=0; i<fspecp->nlvars; i++) {
-        int j, ndims, cdots;
+        int ndims, cdots;
         char type_str[16], str[1024], *line;
         size_t lineLen;
         long long size;
@@ -2162,7 +2162,7 @@ int main(int argc, char *argv[])
     /* print record variables */
     if (num_rec_vars) printf("\nrecord variables:\n");
     for (i=0; i<fspecp->nlvars; i++) {
-        int j, ndims, cdots;
+        int ndims, cdots;
         char type_str[16], str[1024], *line;
         size_t lineLen;
         long long var_begin, var_end, size, numrecs;

@@ -677,14 +677,14 @@ fn_exit:
  */
 #define CHECK_ERROR(err) {                                              \
     if (ncp->safe_mode == 1 && ncp->nprocs > 1) {                       \
-        int status;                                                     \
-        TRACE_COMM(MPI_Allreduce)(&err, &status, 1, MPI_INT, MPI_MIN,   \
+        int min_err;                                                    \
+        TRACE_COMM(MPI_Allreduce)(&err, &min_err, 1, MPI_INT, MPI_MIN,  \
                                   ncp->comm);                           \
         if (mpireturn != MPI_SUCCESS) {                                 \
             err = ncmpii_error_mpi2nc(mpireturn, "MPI_Allreduce");      \
             DEBUG_RETURN_ERROR(err)                                     \
         }                                                               \
-        if (status != NC_NOERR) return status;                          \
+        if (min_err != NC_NOERR) return min_err;                        \
     }                                                                   \
     else if (err != NC_NOERR)                                           \
         return err;                                                     \

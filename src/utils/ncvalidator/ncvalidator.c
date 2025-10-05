@@ -2401,7 +2401,7 @@ val_get_NC(int fd, NC *ncp)
 
     /* check zero padding in the blank space betwee header size and extent */
     if (repair && ncp->begin_var - ncp->xsz > 0) {
-        size_t i, gap = ncp->begin_var - ncp->xsz;
+        size_t gap = ncp->begin_var - ncp->xsz;
         ssize_t readLen;
         char *buf = (char*) malloc(gap);
 
