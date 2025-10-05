@@ -79,9 +79,9 @@ ioerr:
 /*----< file_write() >-------------------------------------------------------*/
 /* This is an independent call. */
 static
-MPI_Offset file_write(PNCIO_File       *fd,
-                      MPI_Offset       offset,
-                      const void      *buf,
+MPI_Offset file_write(PNCIO_File *fd,
+                      MPI_Offset  offset,
+                      const void *buf,
                       PNCIO_View  buf_view)
 {
     MPI_Offset w_len;
@@ -110,9 +110,9 @@ assert(fd->filetype == MPI_BYTE);
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-MPI_Offset PNCIO_File_write_at(PNCIO_File       *fh,
-                               MPI_Offset       offset,
-                               const void      *buf,
+MPI_Offset PNCIO_File_write_at(PNCIO_File *fh,
+                               MPI_Offset  offset,
+                               const void *buf,
                                PNCIO_View  buf_view)
 {
     assert(fh != NULL);
@@ -133,9 +133,9 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File       *fh,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-MPI_Offset PNCIO_File_write_at_all(PNCIO_File       *fh,
-                                   MPI_Offset       offset,
-                                   const void      *buf,
+MPI_Offset PNCIO_File_write_at_all(PNCIO_File *fh,
+                                   MPI_Offset  offset,
+                                   const void *buf,
                                    PNCIO_View  buf_view)
 {
     int err=NC_NOERR;

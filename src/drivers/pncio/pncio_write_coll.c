@@ -43,8 +43,8 @@ static void Fill_send_buffer(PNCIO_File *fd, void *buf,
 
 MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
                                       const void *buf,
-                                      PNCIO_View buf_view,
-                                      MPI_Offset offset) /* relative to fileview */
+                                      PNCIO_View  buf_view,
+                                      MPI_Offset  offset) /* relative to fileview */
 {
     /* Uses a generalized version of the extended two-phase method described in
      * "An Extended Two-Phase Method for Accessing Sections of Out-of-Core
@@ -205,8 +205,8 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         MPI_Allreduce(MPI_IN_PLACE, &w_len, 1, MPI_OFFSET, MPI_MIN, fd->comm);
 
     /* free all memory allocated for collective I/O */
-    PNCIO_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
-    PNCIO_Free_others_req(nprocs, count_others_req_per_proc, others_req);
+    PNCIO_Free_my_req(count_my_req_per_proc, my_req, buf_idx);
+    PNCIO_Free_others_req(count_others_req_per_proc, others_req);
 
     NCI_Free(st_offsets);
     NCI_Free(fd_start);

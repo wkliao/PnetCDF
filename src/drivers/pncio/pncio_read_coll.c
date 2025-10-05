@@ -42,10 +42,10 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf,
                              MPI_Offset fd_size, MPI_Offset * fd_start,
                              MPI_Offset * fd_end);
 
-MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File      *fd,
-                                     void            *buf,
+MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File *fd,
+                                     void       *buf,
                                      PNCIO_View  buf_view,
-                                     MPI_Offset       offset)
+                                     MPI_Offset  offset)
 {
 /* Uses a generalized version of the extended two-phase method described
    in "An Extended Two-Phase Method for Accessing Sections of
@@ -202,8 +202,8 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
     if (r_len > 0) total_r_len += r_len;
 
     /* free all memory allocated for collective I/O */
-    PNCIO_Free_my_req(nprocs, count_my_req_per_proc, my_req, buf_idx);
-    PNCIO_Free_others_req(nprocs, count_others_req_per_proc, others_req);
+    PNCIO_Free_my_req(count_my_req_per_proc, my_req, buf_idx);
+    PNCIO_Free_others_req(count_others_req_per_proc, others_req);
 
     NCI_Free(st_offsets);
     NCI_Free(fd_start);
@@ -671,7 +671,7 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
 
 #define BUF_INCR {                                                  \
     while (buf_incr) {                                              \
-        size_in_buf = MIN(buf_incr, flat_buf_sz);               \
+        size_in_buf = MIN(buf_incr, flat_buf_sz);                   \
         user_buf_idx += size_in_buf;                                \
         flat_buf_sz -= size_in_buf;                                 \
         if (!flat_buf_sz) {                                         \
@@ -687,7 +687,7 @@ assert(flat_buf_idx < buf_view.count); \
 
 #define BUF_COPY {                                                  \
     while (size) {                                                  \
-        size_in_buf = MIN(size, flat_buf_sz);                   \
+        size_in_buf = MIN(size, flat_buf_sz);                       \
         memcpy(((char *) buf) + user_buf_idx,                       \
                &(recv_buf[p][recv_buf_idx[p]]), size_in_buf);       \
         recv_buf_idx[p] += size_in_buf;                             \

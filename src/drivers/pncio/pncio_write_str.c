@@ -20,13 +20,13 @@
             total_w_len += w_len;                                             \
         }                                                                     \
         writebuf_off = req_off;                                               \
-        writebuf_len = MIN(max_bufsize,end_offset-writebuf_off+1);        \
+        writebuf_len = MIN(max_bufsize,end_offset-writebuf_off+1);            \
         if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)      \
             PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);       \
         r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len, writebuf_off);   \
         if (r_len < 0) goto fn_exit;                                          \
     }                                                                         \
-    write_sz = (MPI_Aint)MIN(req_len, writebuf_off+writebuf_len-req_off); \
+    write_sz = (MPI_Aint)MIN(req_len, writebuf_off+writebuf_len-req_off);     \
     memcpy(writebuf+req_off-writebuf_off, (char*)buf +userbuf_off, write_sz); \
     while (write_sz != req_len) {                                             \
         w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);  \
@@ -37,12 +37,12 @@
         req_len -= write_sz;                                                  \
         userbuf_off += write_sz;                                              \
         writebuf_off += writebuf_len;                                         \
-        writebuf_len = MIN(max_bufsize,end_offset-writebuf_off+1);        \
+        writebuf_len = MIN(max_bufsize,end_offset-writebuf_off+1);            \
         if (!fd->atomicity && fd->hints->ds_write == PNCIO_HINT_DISABLE)      \
             PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);       \
         r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len, writebuf_off);   \
         if (r_len < 0) goto fn_exit;                                          \
-        write_sz = MIN(req_len, writebuf_len);                            \
+        write_sz = MIN(req_len, writebuf_len);                                \
         memcpy(writebuf, (char *)buf + userbuf_off, write_sz);                \
     }                                                                         \
 }
@@ -50,8 +50,8 @@
 
 MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
                                   const void *buf,
-                                  PNCIO_View buf_view,
-                                  MPI_Offset offset)
+                                  PNCIO_View  buf_view,
+                                  MPI_Offset  offset)
 {
 
 /* offset is in units of etype relative to the filetype. */

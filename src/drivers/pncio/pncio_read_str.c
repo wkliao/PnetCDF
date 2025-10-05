@@ -12,7 +12,7 @@
 #define BUFFERED_READ {                                                       \
     if (req_off >= readbuf_off + readbuf_len) {                               \
         readbuf_off = req_off;                                                \
-        readbuf_len = MIN(max_bufsize, end_offset-readbuf_off+1);         \
+        readbuf_len = MIN(max_bufsize, end_offset-readbuf_off+1);             \
         r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off);      \
         if (r_len < 0) return r_len;                                          \
         total_r_len += r_len;                                                 \
@@ -27,7 +27,7 @@
         NCI_Free(tmp_buf);                                                    \
         readbuf_off += readbuf_len-partial_read;                              \
         readbuf_len = partial_read +                                          \
-                      MIN(max_bufsize, end_offset-readbuf_off+1);         \
+                      MIN(max_bufsize, end_offset-readbuf_off+1);             \
         r_len = PNCIO_ReadContig(fd, readbuf+partial_read,                    \
                                  readbuf_len-partial_read,                    \
                                  readbuf_off+partial_read);                   \
@@ -39,9 +39,9 @@
 
 
 MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
-                                 void *buf,
-                                 PNCIO_View buf_view,
-                                 MPI_Offset offset)
+                                 void       *buf,
+                                 PNCIO_View  buf_view,
+                                 MPI_Offset  offset)
 {
     char *readbuf, *tmp_buf, *value;
     int i, j, k, st_index=0, info_flag;

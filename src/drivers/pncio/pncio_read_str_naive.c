@@ -9,10 +9,10 @@
 
 #include <pncio.h>
 
-MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File      *fd,
-                                       void            *buf,
+MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
+                                       void       *buf,
                                        PNCIO_View  buf_view,
-                                       MPI_Offset       offset)
+                                       MPI_Offset  offset)
 {
     int b_index;
     MPI_Offset size, brd_size, frd_size=0, req_len, sum, off, req_off, disp;

@@ -26,7 +26,7 @@
  *   Argument datarep is always "native".
  *   Argument info is always MPI_INFO_NULL.
  */
-int PNCIO_File_set_view(PNCIO_File    *fd,
+int PNCIO_File_set_view(PNCIO_File   *fd,
                         MPI_Offset    disp,
                         MPI_Datatype  filetype,
                         MPI_Aint      npairs,

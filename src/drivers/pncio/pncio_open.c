@@ -109,7 +109,7 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
  */
 static int
 GEN_create(PNCIO_File *fd,
-           int       access_mode)
+           int         mpi_io_mode)
 {
     int err=NC_NOERR, rank, amode, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
@@ -121,7 +121,7 @@ if (rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd->filen
 #endif
 
     amode = O_CREAT;
-    if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
+    if (mpi_io_mode & MPI_MODE_RDWR) amode |= O_RDWR;
 
     old_mask = umask(022);
     umask(old_mask);
@@ -222,7 +222,7 @@ int PNCIO_File_open(MPI_Comm    comm,
                     const char *filename,
                     int         amode,
                     MPI_Info    info,
-                    PNCIO_File  *fd)
+                    PNCIO_File *fd)
 {
     /* Before reaching to this subroutine, PNCIO_FileSysType() should have been
      * called to check the file system type.

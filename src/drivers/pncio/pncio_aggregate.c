@@ -121,12 +121,15 @@ int PNCIO_Calc_aggregator(PNCIO_File *fd,
     return rank;
 }
 
-void PNCIO_Calc_file_domains(MPI_Offset * st_offsets, MPI_Offset
-                             * end_offsets, int nprocs, int nprocs_for_coll,
-                             MPI_Offset * min_st_offset_ptr,
-                             MPI_Offset ** fd_start_ptr, MPI_Offset
-                             ** fd_end_ptr, MPI_Offset * fd_size_ptr,
-                             int striping_unit)
+void PNCIO_Calc_file_domains(MPI_Offset  *st_offsets,
+                             MPI_Offset  *end_offsets,
+                             int          nprocs,
+                             int          nprocs_for_coll,
+                             MPI_Offset  *min_st_offset_ptr,
+                             MPI_Offset **fd_start_ptr,
+                             MPI_Offset **fd_end_ptr,
+                             MPI_Offset  *fd_size_ptr,
+                             int          striping_unit)
 {
 /* Divide the I/O workload among "nprocs_for_coll" processes. This is
    done by (logically) dividing the file into file domains (FDs); each
@@ -391,8 +394,9 @@ void PNCIO_Calc_my_req(PNCIO_File    *fd,
     *buf_idx_ptr = buf_idx;
 }
 
-void PNCIO_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
-                       PNCIO_Access * my_req, MPI_Aint * buf_idx)
+void PNCIO_Free_my_req(MPI_Count    *count_my_req_per_proc,
+                       PNCIO_Access *my_req,
+                       MPI_Aint     *buf_idx)
 {
     NCI_Free(count_my_req_per_proc);
     NCI_Free(my_req[0].offsets);
@@ -400,13 +404,15 @@ void PNCIO_Free_my_req(int nprocs, MPI_Count * count_my_req_per_proc,
     NCI_Free(buf_idx);
 }
 
-void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
-                           MPI_Count * count_my_req_per_proc,
-                           PNCIO_Access * my_req,
-                           int nprocs, int myrank,
-                           MPI_Count * count_others_req_procs_ptr,
-                           MPI_Count ** count_others_req_per_proc_ptr,
-                           PNCIO_Access ** others_req_ptr)
+void PNCIO_Calc_others_req(PNCIO_File    *fd,
+                           MPI_Count      count_my_req_procs,
+                           MPI_Count     *count_my_req_per_proc,
+                           PNCIO_Access  *my_req,
+                           int            nprocs,
+                           int            myrank,
+                           MPI_Count     *count_others_req_procs_ptr,
+                           MPI_Count    **count_others_req_per_proc_ptr,
+                           PNCIO_Access **others_req_ptr)
 {
 /* determine what requests of other processes lie in this process's
    file domain */
@@ -544,8 +550,8 @@ void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
     *count_others_req_procs_ptr = count_others_req_procs;
 }
 
-void PNCIO_Free_others_req(int nprocs, MPI_Count * count_others_req_per_proc,
-                           PNCIO_Access * others_req)
+void PNCIO_Free_others_req(MPI_Count    *count_others_req_per_proc,
+                           PNCIO_Access *others_req)
 {
     NCI_Free(count_others_req_per_proc);
     NCI_Free(others_req[0].offsets);

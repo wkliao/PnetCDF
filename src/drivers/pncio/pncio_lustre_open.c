@@ -637,7 +637,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
  */
 int
 PNCIO_Lustre_create(PNCIO_File *fd,
-                    int        access_mode)
+                    int         mpi_io_mode)
 {
     char int_str[16];
     int err=NC_NOERR, rank, perm, old_mask;
@@ -656,7 +656,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
 
 #if defined(HAVE_LUSTRE) || defined(MIMIC_LUSTRE)
     int amode = O_CREAT;
-    if (access_mode & MPI_MODE_RDWR)  amode |= O_RDWR;
+    if (mpi_io_mode & MPI_MODE_RDWR) amode |= O_RDWR;
 #endif
 
     old_mask = umask(022);

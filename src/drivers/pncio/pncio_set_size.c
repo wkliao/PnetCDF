@@ -23,7 +23,7 @@
 #include "pncio.h"
 
 /*----< PNCIO_File_set_size() >-----------------------------------------------*/
-int PNCIO_File_set_size(PNCIO_File  *fd,
+int PNCIO_File_set_size(PNCIO_File *fd,
                         MPI_Offset  size)
 {
     int err = NC_NOERR, rank;
@@ -42,7 +42,7 @@ int PNCIO_File_set_size(PNCIO_File  *fd,
 }
 
 /*----< PNCIO_File_get_size() >-----------------------------------------------*/
-int PNCIO_File_get_size(PNCIO_File  *fd,
+int PNCIO_File_get_size(PNCIO_File *fd,
                         MPI_Offset *size)
 {
     int err = NC_NOERR, rank;

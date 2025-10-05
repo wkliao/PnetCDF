@@ -58,9 +58,9 @@ ioerr:
 /*----< file_read() >--------------------------------------------------------*/
 /* This is an independent call. */
 static
-MPI_Offset file_read(PNCIO_File      *fd,
-                     MPI_Offset       offset, /* relative to fileview */
-                     void            *buf,
+MPI_Offset file_read(PNCIO_File *fd,
+                     MPI_Offset  offset, /* relative to fileview */
+                     void       *buf,
                      PNCIO_View  buf_view)
 {
     MPI_Offset r_len=0;
@@ -88,9 +88,9 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-MPI_Offset PNCIO_File_read_at(PNCIO_File      *fh,
-                              MPI_Offset       offset,
-                              void            *buf,
+MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
+                              MPI_Offset  offset,
+                              void       *buf,
                               PNCIO_View  buf_view)
 {
     assert(fh != NULL);
@@ -110,9 +110,9 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File      *fh,
  * offset is a position in the file relative to the current view, expressed as
  * a count of etypes.
  */
-MPI_Offset PNCIO_File_read_at_all(PNCIO_File      *fh,
-                                  MPI_Offset       offset,
-                                  void            *buf,
+MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh,
+                                  MPI_Offset  offset,
+                                  void       *buf,
                                   PNCIO_View  buf_view)
 {
     int err=NC_NOERR;

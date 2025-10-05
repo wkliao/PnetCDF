@@ -21,7 +21,7 @@
 
 /*----< PNCIO_File_get_info() >-----------------------------------------------*/
 int PNCIO_File_get_info(PNCIO_File *fd,
-                        MPI_Info  *info_used)
+                        MPI_Info   *info_used)
 {
     int err;
 
@@ -36,7 +36,7 @@ int PNCIO_File_get_info(PNCIO_File *fd,
 
 /*----< Info_check_and_install_int() >---------------------------------------*/
 static
-int Info_check_and_install_int(PNCIO_File  *fd,
+int Info_check_and_install_int(PNCIO_File *fd,
                                MPI_Info    info,
                                const char *key,
                                int        *local_cache)
@@ -68,7 +68,7 @@ fn_exit:
 
 /*----< Info_check_and_install_enabled() >-----------------------------------*/
 static
-int Info_check_and_install_enabled(PNCIO_File  *fd,
+int Info_check_and_install_enabled(PNCIO_File *fd,
                                    MPI_Info    info,
                                    const char *key,
                                    int        *local_cache)
@@ -112,7 +112,7 @@ fn_exit:
 
 /*----< Info_check_and_install_true() >--------------------------------------*/
 static
-int Info_check_and_install_true(PNCIO_File  *fd,
+int Info_check_and_install_true(PNCIO_File *fd,
                                 MPI_Info    info,
                                 const char *key,
                                 int        *local_cache)
@@ -182,7 +182,7 @@ fn_exit:
  */
 int
 PNCIO_File_SetInfo(PNCIO_File *fd,
-                   MPI_Info   users_info)
+                   MPI_Info    users_info)
 {
     int nprocs = 0;
     char value[MPI_MAX_INFO_VAL + 1];
