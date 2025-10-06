@@ -705,6 +705,9 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
      * fd->hints->fs_hints.lustre.overstriping_ratio = 1;
      */
 
+#ifdef INHERIT_DIR_STRIPING
+    /* Inherit the file striping settings of the folder. */
+
     if (str_factor == 0 || str_unit == 0 ||
         (overstriping_ratio > 1 && start_iodev < 0)) {
         /* When not all of the striping parameters are set by users, inherit
@@ -735,6 +738,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
         /* in case of default striping setting is used */
         if (numOSTs == 0) numOSTs = 1;
     }
+#endif
 
     /* If hint striping_factor is not set by the user and the new file's folder
      * has not set its striping parameters, then we set the number of unique
