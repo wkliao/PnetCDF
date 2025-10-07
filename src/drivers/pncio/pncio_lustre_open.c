@@ -298,7 +298,7 @@ int set_striping(const char *path,
     }
 
     /* create a new file with desired striping */
-    fd = llapi_layout_file_create(path, O_CREAT|O_RDWR, 0660, layout);
+    fd = llapi_layout_file_create(path, O_CREAT|O_RDWR, PNCIO_PERM, layout);
     if (fd < 0) {
         fprintf(stderr,"Error at %s (%d) llapi_layout_file_create() fails (%s)\n",
                 __FILE__, __LINE__, strerror(errno));
@@ -655,13 +655,16 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
 #endif
 
 #if defined(HAVE_LUSTRE) || defined(MIMIC_LUSTRE)
+assert(mpi_io_mode & MPI_MODE_CREATE);
+
+/* Note ncmpi_create always creates a file with readable and writable permission. */
     int amode = O_CREAT;
     if (mpi_io_mode & MPI_MODE_RDWR) amode |= O_RDWR;
 #endif
 
     old_mask = umask(022);
     umask(old_mask);
-    perm = old_mask ^ 0666;
+    perm = old_mask ^ PNCIO_PERM;
 
     /* root process creates the file first, followed by all processes open the
      * file.
@@ -718,7 +721,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
         dirc = NCI_Strdup(fd->filename);
         dname = dirname(dirc);
 
-        dd = open(dname, O_RDONLY, 0600);
+        dd = open(dname, O_RDONLY, PNCIO_PERM);
 
         numOSTs = get_striping(dd, dname, &pattern,
                                    &stripe_count,
@@ -908,7 +911,7 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
 
     old_mask = umask(022);
     umask(old_mask);
-    perm = old_mask ^ 0666;
+    perm = old_mask ^ PNCIO_PERM;
 
     /* All processes open the file. */
     fd->fd_sys = open(fd->filename, O_RDWR, perm);

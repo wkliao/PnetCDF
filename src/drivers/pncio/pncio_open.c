@@ -125,7 +125,7 @@ if (rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd->filen
 
     old_mask = umask(022);
     umask(old_mask);
-    perm = old_mask ^ 0666;
+    perm = old_mask ^ PNCIO_PERM;
 
     /* root process creates the file first, followed by all processes open the
      * file.
@@ -181,7 +181,7 @@ if (rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd->filen
 
     old_mask = umask(022);
     umask(old_mask);
-    perm = old_mask ^ 0666;
+    perm = old_mask ^ PNCIO_PERM;
 
     /* All processes open the file. */
     fd->fd_sys = open(fd->filename, O_RDWR, perm);

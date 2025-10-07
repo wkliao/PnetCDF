@@ -47,6 +47,8 @@
 #endif
 
 
+#define PNCIO_PERM          0666   /* file creation permission mask */
+
 #define PNCIO_UFS           152    /* Unix file system */
 #define PNCIO_LUSTRE        163    /* Lustre */
 #define PNCIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
