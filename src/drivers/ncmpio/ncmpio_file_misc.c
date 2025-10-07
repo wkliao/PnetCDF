@@ -176,7 +176,7 @@ ncmpio_begin_indep_data(void *ncdp)
         ncp->pncio_fh->node_ids = (int*) NCI_Malloc(sizeof(int));
         ncp->pncio_fh->node_ids[0] = 0;
 
-        int omode = ncp->mpiomode | !MPI_MODE_CREATE;
+        int omode = fClr(ncp->mpiomode, MPI_MODE_CREATE);
 
         err = PNCIO_File_open(MPI_COMM_SELF, filename, omode, ncp->mpiinfo,
                               ncp->pncio_fh);

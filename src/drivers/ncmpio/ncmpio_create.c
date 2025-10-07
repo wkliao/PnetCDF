@@ -208,8 +208,11 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
             }
             else {
                 /* If file is not a regular file (e.g. a symbolic link), we
-                 * must truncate it to zero size.
+                 * cannot delete it and must truncate it to zero size. In this
+                 * case, file open mode needs to remove MPI_MODE_CREATE.
                  */
+                mpiomode = MPI_MODE_RDWR;
+
 #ifdef HAVE_TRUNCATE
                 err = truncate(filename, 0); /* This may be expensive */
                 if (err < 0 && errno != ENOENT)
@@ -274,10 +277,17 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
             if (errno == ENOENT) errno = 0; /* reset errno */
         }
         /* All processes must wait here until clobbering file by root process
-         * is completed.
+         * is completed. Note mpiomode may be changed to remove MPI_MODE_CREATE
+         * when the file to be clobbered is a symbolic link.
          */
-        if (nprocs > 1)
-            TRACE_COMM(MPI_Bcast)(&err, 1, MPI_INT, 0, comm);
+        if (nprocs > 1) {
+            int msg[2];
+            msg[0] = err;
+            msg[1] = mpiomode;
+            TRACE_COMM(MPI_Bcast)(&msg, 2, MPI_INT, 0, comm);
+            err = msg[0];
+            mpiomode = msg[1];
+        }
         if (err != NC_NOERR) return err;
     }
     /* Now file has been clobbered, i.e. deleted if it is not a symbolic link.
