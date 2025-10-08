@@ -20,7 +20,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
     MPI_Offset r_len, total_r_len=0;
     MPI_Count bufsize;
 
-printf("%s at %d:\n",__func__,__LINE__);
+// printf("%s at %d:\n",__func__,__LINE__);
 
     if (fd->flat_file.size == 0)
         return 0;
