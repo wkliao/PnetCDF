@@ -150,9 +150,11 @@ fill_var_rec(NC         *ncp,
     PNCIO_View buf_view;
 
     buf_view.type = MPI_BYTE;
-    buf_view.count = 1;
+    buf_view.count = 0;
     buf_view.is_contig = 1;
     buf_view.size = 0;
+    buf_view.off = NULL;
+    buf_view.len = NULL;
 
     /* When intra-node aggregation is enabled, use the communicator consisting
      * of aggregators in comm, nprocs, and rank. Non-aggregators do not
@@ -225,6 +227,8 @@ fill_var_rec(NC         *ncp,
 
     if (status == NC_NOERR)
         buf_view.size = count;
+
+// if (ncp->rank ==0) printf("%s at %d: buf_view count=%lld size=%lld offset=%lld\n",__func__,__LINE__, buf_view.count,buf_view.size,offset);
 
     /* write to variable collectively */
     if (nprocs > 1)
