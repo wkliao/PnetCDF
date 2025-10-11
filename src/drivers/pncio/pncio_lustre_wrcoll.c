@@ -68,7 +68,7 @@ static MPI_Offset LUSTRE_Exch_and_write(PNCIO_File *fd,
                                         MPI_Offset **buf_idx);
 
 static void LUSTRE_Fill_send_buffer(PNCIO_File *fd, const void *buf,
-                                    PNCIO_View  buf_view,
+                                    PNCIO_View *buf_view,
                                     char **send_buf,
                                     size_t send_total_size,
                                     const MPI_Count *send_size,
@@ -79,7 +79,7 @@ static int Exchange_data_recv(PNCIO_File           *fd,
                               const void           *buf,
                                     char           *write_buf,
                                     char          **recv_buf,
-                                    PNCIO_View      buf_view,
+                              const PNCIO_View     *buf_view,
                               const MPI_Count      *recv_size,
                                     MPI_Offset      range_off,
                                     MPI_Count       range_size,
@@ -94,7 +94,7 @@ static void Exchange_data_send(      PNCIO_File     *fd,
                                const void           *buf,
                                      char           *write_buf,
                                      char          **send_buf_ptr,
-                                     PNCIO_View      buf_view,
+                                     PNCIO_View     *buf_view,
                                const MPI_Count      *send_size,
                                      MPI_Count       self_count,
                                      MPI_Count       start_pos,
@@ -595,10 +595,32 @@ double curT = MPI_Wtime();
      * file access region is of size 100 bytes. If this rank has no data to
      * write, end_offset == (start_offset - 1)
      */
-    if (fd->flat_file.size == 0) { /* TODO: is fd->flat_file.count == 0? */
-        start_offset = 0;
-        end_offset = -1;
+    MPI_Offset one_off;
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Offset one_len;
+#else
+    int one_len;
+#endif
+
+    if (fd->flat_file.count == 0) { /* TODO: is fd->flat_file.count == 0? */
+        /* whole file is visible */
+        start_offset = offset;
+        end_offset = offset + buf_view.size - 1;
+        if (buf_view.size > 0) { /* no-zero sized request */
+            /* setting fd->flat_file is necessary for constructing my_req */
+            one_off = offset;
+            one_len = buf_view.size;
+            fd->flat_file.off = &one_off;
+            fd->flat_file.len = &one_len;
+            fd->flat_file.count = 1;
+        }
     }
+    else {
+        start_offset = offset + fd->flat_file.off[0];
+        end_offset   = fd->flat_file.off[fd->flat_file.count-1]
+                     + fd->flat_file.len[fd->flat_file.count-1] - 1;
+    }
+/*
     else if (fd->flat_file.count > 0) {
         start_offset = offset + fd->flat_file.off[0];
         end_offset   = fd->flat_file.off[fd->flat_file.count-1]
@@ -608,6 +630,8 @@ double curT = MPI_Wtime();
         start_offset = offset;
         end_offset   = offset + fd->flat_file.size - 1;
     }
+*/
+// if (myrank==0) printf("%s %d: fd->flat_file size=%lld count=%lld offset=%lld start_offset=%lld end_offset=%lld\n",__func__,__LINE__, fd->flat_file.size, fd->flat_file.count,offset,start_offset,end_offset);
 
     buf_view.idx  = 0;
     buf_view.rem = buf_view.size;
@@ -675,11 +699,13 @@ double curT = MPI_Wtime();
         }
         NCI_Free(st_end_all);
 
+// if (myrank==0) printf("%s %d: do_collect=%d is_interleaved=%d buf_view size=%lld count=%lld is_contig=%d start_offset=%lld end_offset=%lld\n",__func__,__LINE__, do_collect,is_interleaved,buf_view.size,buf_view.count,buf_view.is_contig, start_offset,end_offset);
         if (fd->hints->cb_write == PNCIO_HINT_ENABLE) {
             /* explicitly enabled by user */
             do_collect = 1;
         }
         else if (fd->hints->cb_write == PNCIO_HINT_AUTO) {
+// if (myrank==0) printf("%s %d: large_indv_req=%d cb_nodes=%d striping_factor=%d\n",__func__,__LINE__, large_indv_req,fd->hints->cb_nodes , fd->hints->striping_factor);
             /* Check if collective write is actually necessary, only when
              * cb_write hint is set to PNCIO_HINT_AUTO.
              *
@@ -691,11 +717,9 @@ double curT = MPI_Wtime();
              *      redistribute requests from non-aggregators to I/O
              *      aggregators.
              */
-            if (is_interleaved > 0)
-                do_collect = 1;
-            else if (nprocs == 1)
+            if (nprocs == 1)
                 do_collect = 0;
-            else if (large_indv_req &&
+            else if (!is_interleaved && large_indv_req &&
                      fd->hints->cb_nodes <= fd->hints->striping_factor) {
                 /* do independent write, if every rank's write range >
                  * striping_range and writes are not interleaved in file
@@ -1269,6 +1293,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
     for (m = 0; m < ntimes; m++)
         off_list[m] = max_end_loc;
     for (i = 0; i < nprocs; i++) {
+// if (myrank == 0) printf("%s at %d: others_req[%d] count=%lld\n",__func__,__LINE__, i,others_req[i].count);
         for (j = 0; j < others_req[i].count; j++) {
             req_off = others_req[i].offsets[j];
             m = (int) ((req_off - min_st_loc) / step_size);
@@ -1276,6 +1301,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
             end_loc = MAX(end_loc, (others_req[i].offsets[j] + others_req[i].lens[j] - 1));
         }
     }
+// if (myrank == 0) printf("%s at %d: end_loc=%lld nbufs=%d recv_list=%s\n",__func__,__LINE__, end_loc,nbufs,(recv_list==NULL)?"NULL":"NOT NULL");
 
     /* Allocate displacement-length pair arrays, describing the send buffer.
      * send_list[i].count: number displacement-length pairs.
@@ -1511,6 +1537,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
         /* Exchange_data_recv() and Exchange_data_send() below perform one
          * round of communication phase and there are ntimes rounds.
          */
+// printf("%s at %d: end_loc=%lld nbufs=%d recv_list=%s\n",__func__,__LINE__, end_loc,nbufs,(recv_list==NULL)?"NULL":"NOT NULL");
         if (recv_list != NULL) { /* this aggregator has something to received */
             char *rbuf = (recv_buf  == NULL) ? NULL :  recv_buf[ibuf];
             int err;
@@ -1519,7 +1546,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
                                buf,                /* IN: user buffer */
                                wbuf,               /* OUT: write buffer */
                                &rbuf,              /* OUT: receive buffer */
-                               buf_view,
+                               &buf_view,
                                recv_size[ibuf],     /* IN: changed each round */
                                range_off,           /* IN: changed each round */
                                range_size,          /* IN: changed each round */
@@ -1552,7 +1579,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
                            buf,             /* IN: user buffer */
                            wbuf,            /* OUT: write buffer */
                            &send_buf[ibuf], /* OUT: send buffer */
-                           buf_view,
+                           &buf_view,
                            send_size,       /* IN: changed each round */
                            self_count,
                            self_start_pos,
@@ -1568,6 +1595,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
             /* commit communication and write this batch of numBufs to file */
             int numBufs = ibuf + 1;
 
+// printf("%s at %d: m=%d nbufs=%d ntimes=%d\n",__func__,__LINE__, m,nbufs,ntimes);
             /* reset ibuf to the first element of nbufs */
             ibuf = 0;
 
@@ -1639,6 +1667,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
                  * srt_off_len[j].num) have been coalesced in
                  * LUSTRE_W_Exchange_data().
                  */
+// printf("%s at %d: num=%d\n",__func__,__LINE__, srt_off_len[j].num);
                 for (i = 0; i < srt_off_len[j].num; i++) {
                     /* all write requests in this round should fall into file
                      * range of [range_off, range_off+range_size). This below
@@ -1647,6 +1676,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
                     assert(srt_off_len[j].off[i] < range_off + range_size &&
                            srt_off_len[j].off[i] >= range_off);
 
+// printf("%s at %d: PNCIO_WriteContig num=%d [%d] off=%lld len=%lld\n",__func__,__LINE__, srt_off_len[j].num,i,srt_off_len[j].off[i],srt_off_len[j].len[i]);
                     w_len = PNCIO_WriteContig(fd,
                                      write_buf[j] + (srt_off_len[j].off[i] - range_off),
                                      srt_off_len[j].len[i],
@@ -1847,7 +1877,7 @@ int Exchange_data_recv(
                                         * to file */
           char          **recv_buf,    /* OUT: [nbufs] internal buffer used to
                                         * receive from other processes */
-          PNCIO_View      buf_view,    /* IN/OUT: flattened buffer
+    const PNCIO_View     *buf_view,    /* IN: flattened buffer
                                         * offset-length pairs */
     const MPI_Count      *recv_size,   /* [nprocs] recv_size[i] is amount of
                                         * this aggregator recv from rank i */
@@ -2066,7 +2096,7 @@ int Exchange_data_recv(
                 CACHE_REQ(recv_list[i], recv_size[i],
                           write_buf + others_req[i].mem_ptrs[start_pos[i]])
             }
-        } else if (buf_view.is_contig && recv_count[i] > 0) {
+        } else if (buf_view->is_contig && recv_count[i] > 0) {
             /* send/recv to/from self uses memcpy(). The case when buftype is
              * not contiguous will be handled later in Exchange_data_send().
              */
@@ -2086,7 +2116,7 @@ void Exchange_data_send(
                                          * self */
           char          **send_buf_ptr, /* OUT: [cb_nodes] point to internal
                                          * send buffer */
-          PNCIO_View      buf_view,     /* IN/OUT: flattened buffer
+          PNCIO_View     *buf_view,     /* IN/OUT: flattened buffer
                                          * offset-length pairs */
     const MPI_Count      *send_size,    /* [cb_nodes] send_size[i] is amount of
                                          * this rank sent to aggregator i */
@@ -2108,11 +2138,13 @@ void Exchange_data_send(
     MPI_Comm_rank(fd->comm, &myrank);
 
     cb_nodes = fd->hints->cb_nodes;
-    if (buf_view.is_contig) {
+// if (myrank==0) printf("%s at %d: cb_nodes=%d\n",__func__,__LINE__, cb_nodes);
+    if (buf_view->is_contig) {
         /* If buftype is contiguous, data can be directly sent from user buf
          * at location given by buf_idx.
          */
         for (i = 0; i < cb_nodes; i++) {
+// if (myrank==0 && send_size[i]) printf("%s at %d: cb_nodes=%d send_size[%d]=%lld my_cb_nodes_index=%d\n",__func__,__LINE__, cb_nodes,i,send_size[i],fd->my_cb_nodes_index);
             if (send_size[i] && i != fd->my_cb_nodes_index)
                 CACHE_REQ(send_list[i], send_size[i], (char*)buf + buf_idx[i]);
         }
@@ -2158,7 +2190,7 @@ void Exchange_data_send(
 
 static void LUSTRE_Fill_send_buffer(PNCIO_File       *fd,
                                     const void       *buf,
-                                    PNCIO_View        buf_view,
+                                    PNCIO_View       *buf_view, /* IN/OUT */
                                     char            **send_buf,
                                     size_t            send_total_size,
                                     const MPI_Count  *send_size,
@@ -2199,9 +2231,9 @@ int num_memcpy=0;
      * buf_view.rem: amount of data in the pair that has not been copied
      *     over, changed each round.
      */
-    user_buf_idx = buf_view.off[buf_view.idx]
-                 + buf_view.len[buf_view.idx]
-                 - buf_view.rem;
+    user_buf_idx = buf_view->off[buf_view->idx]
+                 + buf_view->len[buf_view->idx]
+                 - buf_view->rem;
                  /* in case data left to be copied from previous round */
 
     /* fd->flat_file.count: the number of noncontiguous file segments this
@@ -2217,8 +2249,10 @@ int num_memcpy=0;
             - fd->flat_file.rem;
     rem_len = fd->flat_file.rem;
 
+// int rank; MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     while (send_total_size > 0) {
         /* this off-len request may span to more than one I/O aggregator */
+// if (rank == 0) printf("rank 0 %s at %d send_total_size=%zd rem_len=%lld\n",__func__,__LINE__,send_total_size,rem_len);
         while (rem_len != 0) {
             len = rem_len;
             q = LUSTRE_Calc_aggregator(fd, off, &len);
@@ -2240,6 +2274,8 @@ int num_memcpy=0;
              * len and send_size[q] are all always <= striping_unit
              */
 
+// if (rank == 0) printf("rank 0 %s at %d rem_len=%lld len=%lld first_q=%d q=%d idx=%lld\n",__func__,__LINE__,rem_len,len,first_q,q,buf_view->idx);
+
             if (first_q != q) {
                 assert(send_size_rem == 0);
                 first_q = q;
@@ -2256,43 +2292,53 @@ int num_memcpy=0;
             size = len;
 
             while (size) {
-                MPI_Count size_in_buf = MIN(size, buf_view.rem);
+                MPI_Count size_in_buf = MIN(size, buf_view->rem);
                 copy_size += size_in_buf;
                 user_buf_idx += size_in_buf;
                 send_size_rem -= size_in_buf;
-                buf_view.rem -= size_in_buf;
-                if (buf_view.rem == 0) { /* move on to next off-len pair */
-                    if (! buf_view.is_contig) {
+                buf_view->rem -= size_in_buf;
+// if (rank == 0) printf("rank 0 %s at %d size=%lld size_in_buf=%lld copy_size=%lld rem=%ld\n",__func__,__LINE__, size, size_in_buf, copy_size,buf_view->rem);
+                if (buf_view->rem == 0) { /* move on to next off-len pair */
+                    if (! buf_view->is_contig) {
                         /* user buffer type is not contiguous */
                         if (send_size_rem) {
                             /* after this copy send_buf[q] is still not full */
                             isUserBuf = 0;
+// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 1 size=%lld user_buf_ptr=%p\n",copy_size,user_buf_ptr);
                             memcpy(send_buf_ptr, user_buf_ptr, copy_size);
+user_buf_ptr += copy_size;
                             send_buf_ptr += copy_size;
                             copy_size = 0;
                         } else if (isUserBuf == 0) {
                             /* send_buf[q] is full and not using user buf,
                              * copy the remaining delayed data */
+// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 2 size=%lld\n",copy_size);
                             memcpy(send_buf_ptr, user_buf_ptr, copy_size);
+user_buf_ptr += copy_size;
                         }
 #ifdef WKL_DEBUG
 num_memcpy++;
 #endif
                     }
-                    /* update buf_view.idx, buf_view.rem,
+                    /* update buf_view->idx, buf_view->rem,
                      * and user_buf_idx
                      */
-                    if (buf_view.idx < (buf_view.count - 1))
-                        buf_view.idx++;
+                        buf_view->idx++;
+assert(buf_view->idx <= buf_view->count);
 
-                    user_buf_idx = buf_view.off[buf_view.idx];
-                    buf_view.rem = buf_view.len[buf_view.idx];
+if (buf_view->idx < buf_view->count) {
+                    user_buf_idx = buf_view->off[buf_view->idx];
+                    buf_view->rem = buf_view->len[buf_view->idx];
                     user_buf_ptr = (char*) buf + user_buf_idx;
+}
+else assert(size - size_in_buf == 0);
+
                 }
                 else if (send_size_rem == 0 && isUserBuf == 0) {
-                    /* buf_view.rem > 0, send_buf[q] is full, and not using
+                    /* buf_view->rem > 0, send_buf[q] is full, and not using
                      * user buf to send, copy the remaining delayed data
                      */
+// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 3 size=%lld\n",copy_size);
                     memcpy(send_buf_ptr, user_buf_ptr, copy_size);
 #ifdef WKL_DEBUG
 num_memcpy++;
@@ -2337,7 +2383,7 @@ num_memcpy++;
     }
 
 #ifdef WKL_DEBUG
-if (num_memcpy> 0) printf("---- fd->flat_file.count=%lld fd->flat_file.idx=%lld buf_view.count=%lld num_memcpy=%d\n",fd->flat_file.count,fd->flat_file.idx,buf_view.count,num_memcpy);
+if (num_memcpy> 0) printf("---- fd->flat_file.count=%lld fd->flat_file.idx=%lld buf_view->count=%lld num_memcpy=%d\n",fd->flat_file.count,fd->flat_file.idx,buf_view->count,num_memcpy);
 #endif
 }
 

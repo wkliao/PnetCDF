@@ -2677,6 +2677,7 @@ ncmpio_ina_nreqs(NC         *ncp,
 
             if (IS_RECVAR(varp)) off += reqs[i].start[0] * ncp->recsize;
 
+// printf("%s at %d: num_reqs=%d reqs[%d].npairs == 1 offset_start=%lld off=%lld\n", __func__,__LINE__,num_reqs,i,reqs[i].offset_start,off);
             reqs[i].offset_start += off;
         }
         else {
@@ -2715,6 +2716,23 @@ ncmpio_ina_nreqs(NC         *ncp,
     else
         num_pairs = 0;
 
+#if 0
+if (0 && num_pairs==10) printf("%s at %d: num_reqs=%d num_pairs=%ld off=%lld %lld %lld %lld %lld %lld %lld %lld %lld %lld len=%lld %lld %lld %lld %lld %lld %lld %lld %lld %lld\n",__func__,__LINE__, num_reqs, num_pairs,
+offsets[0],offsets[1],offsets[2],offsets[3],offsets[4],offsets[5],
+offsets[6],offsets[7],offsets[8],offsets[9],
+lengths[0],lengths[1],lengths[2],lengths[3],lengths[4],lengths[5],
+lengths[6],lengths[7],lengths[8],lengths[9]);
+
+else if (num_pairs==12) printf("%s at %d: num_reqs=%d num_pairs=%ld off=%lld %lld %lld %lld %lld %lld %lld %lld %lld %lld %lld %lld len=%lld %lld %lld %lld %lld %lld %lld %lld %lld %lld %lld %lld\n",__func__,__LINE__, num_reqs, num_pairs,
+offsets[0],offsets[1],offsets[2],offsets[3],offsets[4],
+offsets[5],offsets[6],offsets[7],offsets[8],offsets[9],
+offsets[10],offsets[11],
+lengths[0],lengths[1],lengths[2],lengths[3],lengths[4],
+lengths[5],lengths[6],lengths[7],lengths[8],lengths[9],
+lengths[10],lengths[11]);
+else if (num_pairs) printf("%s at %d: num_reqs=%d num_pairs=%ld off=%lld len=%lld\n",__func__,__LINE__, num_reqs, num_pairs,offsets[0],lengths[0]);
+#endif
+
     /* Populate buf_view, which contains metadata of the user buffers in the
      * nonblocking requests. If buf is non-contiguous, buf to NULL and
      * buf_view.type will be a derived datatype constructed using MPI_BOTTOM.
@@ -2724,6 +2742,24 @@ ncmpio_ina_nreqs(NC         *ncp,
     if (status == NC_NOERR) status = err;
 if (num_reqs > 0) assert(buf != NULL);
 
+#if 0
+if (buf_view.count > 1) printf("%s at %d: buf_view count=%lld off=%lld %lld len=%lld %lld\n",__func__,__LINE__, buf_view.count, buf_view.off[0], buf_view.off[1], buf_view.len[0],buf_view.len[1]);
+else if (buf_view.count) printf("%s at %d: buf_view count=%lld off=%lld len=%lld\n",__func__,__LINE__, buf_view.count, buf_view.off[0], buf_view.len[0]);
+
+{int *wkl;
+int nelems, j,k, xsz=4;
+char *xbuf, msg[1024],str[64];
+printf("%s at %d: buf_view count=%lld size=%lld\n",__func__,__LINE__, buf_view.count,buf_view.size);
+    wkl = (int*) malloc(buf_view.size);
+    nelems=buf_view.size/xsz;
+    xbuf = buf;
+    memcpy(wkl, xbuf, buf_view.size); ncmpii_in_swapn(wkl, nelems, xsz);
+    sprintf(msg,"%s at %d: nelems=%d buf=(%p) ",__func__,__LINE__, nelems, xbuf);
+    for (k=0; k<nelems; k++) { sprintf(str," %d",wkl[k]); strcat(msg, str);}
+    printf("%s\n",msg);
+    free(wkl);
+}
+#endif
 
 // if (reqMode == NC_REQ_RD) printf("%s at %d: buf_view count=%lld size=%lld is_contig=%d type=%s\n",__func__,__LINE__, buf_view.count, buf_view.size, buf_view.is_contig, (buf_view.type == MPI_BYTE)?"MPI_BYTE":"NOT MPI_BYTE");
 
@@ -2748,7 +2784,7 @@ if (num_reqs > 0) assert(buf != NULL);
         ncp->num_nonaggrs = 1;
     }
 
-// printf("%s at %d: is_incr=%d\n",__func__,__LINE__, is_incr);
+// printf("%s at %d: is_incr=%d buf=%p\n",__func__,__LINE__, is_incr,buf);
     /* perform intra-node aggregation */
     if (fIsSet(reqMode, NC_REQ_WR))
         err = ina_put(ncp, is_incr, num_pairs, offsets, lengths, buf_view, buf);
@@ -2894,6 +2930,8 @@ ncmpio_ina_req(NC               *ncp,
         ncp->my_aggr = ncp->rank;
         ncp->num_nonaggrs = 1;
     }
+// if (num_pairs) printf("%s at %d: num_pairs=%ld off=%lld len=%lld\n",__func__,__LINE__, num_pairs,offsets[0],lengths[0]);
+// if (buf_view.count) printf("%s at %d: buf_view count=%lld off=%lld len=%lld\n",__func__,__LINE__, buf_view.count, buf_view.off[0], buf_view.len[0]);
 
 // printf("%s at %d: buf_view count=%lld size=%lld is_contig=%d buf=%p\n",__func__,__LINE__, buf_view.count,buf_view.size,buf_view.is_contig,buf);
     /* perform intra-node aggregation */
@@ -2908,16 +2946,17 @@ ncmpio_ina_req(NC               *ncp,
 
 #if 0
 if (fIsSet(reqMode, NC_REQ_RD))
-{int *wkl;
-int nelems, j,k, xsz=4;
+{unsigned long long *wkl; int xsz=8; // int *wkl; int xsz=4;
+int nelems, j,k;
 char *xbuf, msg[1024],str[64];
 printf("%s at %d: buf_view count=%lld size=%lld\n",__func__,__LINE__, buf_view.count,buf_view.size);
-    wkl = (int*) malloc(buf_view.size);
+    wkl = (unsigned long long*) malloc(buf_view.size); // wkl = (int*) malloc(buf_view.size);
     nelems=buf_view.size/xsz;
     xbuf = buf;
     memcpy(wkl, xbuf, buf_view.size); ncmpii_in_swapn(wkl, nelems, xsz);
-    sprintf(msg,"%s at %d: nelems=%d buf=(%p) ",__func__,__LINE__, nelems, xbuf);
-    for (k=0; k<nelems; k++) { sprintf(str," %d",wkl[k]); strcat(msg, str);}
+    sprintf(msg,"%s at %d: %s nelems=%d buf=(%p) ",__func__,__LINE__, ncp->path,nelems, xbuf);
+    // for (k=0; k<nelems; k++) { sprintf(str," %d",wkl[k]); strcat(msg, str);}
+    for (k=0; k<nelems; k++) { sprintf(str," %llu",wkl[k]); strcat(msg, str);}
     printf("%s\n",msg);
     free(wkl);
 }

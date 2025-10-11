@@ -52,6 +52,14 @@ ioerr:
     if (err == -1)
         bytes_xfered = ncmpii_error_posix2nc("pread");
 
+/*
+if (offset > 0) {unsigned long long wkl[4];
+    memcpy(wkl, buf, sizeof(unsigned long long) * 4);
+    ncmpii_in_swapn(wkl, 4, 8);
+    printf("%s at %d: %s pread offset=%lld r_size=%lld wkl=%llu %lld %lld %lld\n",__func__,__LINE__,fd->filename,offset,r_size,wkl[0],wkl[1],wkl[2],wkl[3]);
+}
+*/
+
     return bytes_xfered;
 }
 

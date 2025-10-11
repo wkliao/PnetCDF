@@ -509,8 +509,9 @@ printf("%s at %d: req i=%d xbuf=%ld off=%ld nelems=%lld\n",__func__,__LINE__, i,
             /* calculate number of flattened offset-length pairs */
             req->npairs = 1;
             if (counts == NULL || counts[i] == NULL) {
-                /* meaning var1 API, equivalent to all 1s */
-                req->offset_start = 0;
+                /* equivalent to all multiple var1 APIs */
+                ncmpio_calc_off(ncp, varp, starts[i], &req->offset_start);
+                // req->offset_end = req->offset_start + varp->xsz;
                 req->offset_end = varp->xsz;
             }
             else {
@@ -518,8 +519,7 @@ printf("%s at %d: req i=%d xbuf=%ld off=%ld nelems=%lld\n",__func__,__LINE__, i,
                     req->npairs *= counts[i][j];
                 /* special treatment for when there is only one pair */
                 if (req->npairs == 1) {
-                    ncmpio_calc_off(ncp, varp, starts[i], counts[i],
-                                    &req->offset_start);
+                    ncmpio_calc_off(ncp, varp, starts[i], &req->offset_start);
                     req->offset_end = req->nelems * varp->xsz;
                 }
             }
@@ -555,8 +555,9 @@ printf("%s at %d: req i=%d xbuf=%ld off=%ld nelems=%lld\n",__func__,__LINE__, i,
             /* calculate number of flattened offset-length pairs */
             req->npairs = 1;
             if (counts == NULL || counts[i] == NULL) {
-                /* meaning var1 API, equivalent to all 1s */
-                req->offset_start = 0;
+                /* equivalent to all multiple var1 APIs */
+                ncmpio_calc_off(ncp, varp, starts[i], &req->offset_start);
+                // req->offset_end = req->offset_start + varp->xsz;
                 req->offset_end = varp->xsz;
             }
             else {
@@ -564,8 +565,7 @@ printf("%s at %d: req i=%d xbuf=%ld off=%ld nelems=%lld\n",__func__,__LINE__, i,
                     req->npairs *= counts[i][j];
                 /* special treatment for when there is only one pair */
                 if (req->npairs == 1) {
-                    ncmpio_calc_off(ncp, varp, starts[i], counts[i],
-                                    &req->offset_start);
+                    ncmpio_calc_off(ncp, varp, starts[i], &req->offset_start);
                     req->offset_end = req->nelems * varp->xsz;
                 }
             }
