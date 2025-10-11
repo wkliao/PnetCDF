@@ -84,6 +84,7 @@ for i in ${check_PROGRAMS} ; do
         # echo ""
     done
     done
+    done
     # delete output files
     rm -f ${OUTDIR}/$i.nc
 done
