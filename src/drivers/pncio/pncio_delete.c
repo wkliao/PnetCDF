@@ -7,18 +7,11 @@
 # include <config.h>
 #endif
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <assert.h>
-#include <sys/errno.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h> /* unlink() */
 #endif
 
-#include <mpi.h>
-
-#include <pnc_debug.h>
 #include <common.h>
 #include "pncio.h"
 
