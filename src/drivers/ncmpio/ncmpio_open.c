@@ -302,7 +302,6 @@ fn_exit:
         err = ncmpio_get_att(ncp, NC_GLOBAL, "_PnetCDF_SubFiling.num_subfiles",
                              &ncp->num_subfiles, MPI_INT);
         if (err == NC_NOERR && ncp->num_subfiles > 1) {
-            int i;
             /* ignore error NC_ENOTATT if this attribute is not defined */
             for (i=0; i<ncp->vars.ndefined; i++) {
                 /* variables may have different numbers of subfiles */
