@@ -509,12 +509,15 @@ ncmpi_delete(const char *filename,
     if (err != 0)
         err = ncmpii_error_posix2nc("unlink");
 #else
+    err = PNCIO_File_delete(filename);
+#if 0
     char *mpi_name;
     int mpireturn;
 
     TRACE_IO(MPI_File_delete, (filename, info));
     if (mpireturn != MPI_SUCCESS)
         err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+#endif
 #endif
     return err;
 }
