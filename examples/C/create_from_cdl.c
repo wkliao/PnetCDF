@@ -168,6 +168,10 @@ int main(int argc, char **argv)
         err = ncmpi_def_var(ncid, name, xtype, ndims, dimids, &varid);
         CHECK_ERR
 
+        /* fill with default fill value */
+        err = ncmpi_def_var_fill(ncid, varid, 0, NULL);
+        CHECK_ERR
+
         /* retrieve metadata of attribute j associated with variable i */
         err = cdl_hdr_inq_nattrs(hid, i, &nattrs);
         CHECK_ERR

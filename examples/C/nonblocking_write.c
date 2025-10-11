@@ -172,9 +172,14 @@ int main(int argc, char **argv)
                psizes[0],psizes[1],psizes[2]);
 
     starts[0] = 0;
+#if NDIMS == 3
     starts[1] = (rank / (psizes[1] * psizes[2])) % psizes[0];
     starts[2] = (rank / psizes[2]) % psizes[1];
     starts[3] = rank % psizes[2];
+#elif NDIMS == 2
+    starts[1] = (rank / psizes[1]) % psizes[0];
+    starts[2] = rank % psizes[1];
+#endif
 
     counts[0] = 1;
     nelems = 1;
@@ -206,7 +211,7 @@ int main(int argc, char **argv)
             rec_buf[i] = sca_buf + SCA_NVARS + FIX_NVARS * nelems + nelems * i;
     }
     else {
-        /* allocate individual buffers separately +1 ensure non-contiguity*/
+        /* allocate individual buffers separately +1 ensure non-contiguity */
         sca_buf = (int*) malloc(sizeof(int) * (SCA_NVARS+1));
         for (i=0; i<FIX_NVARS; i++)
             fix_buf[i] = (int *) malloc(sizeof(int) * (nelems+1));
@@ -265,22 +270,22 @@ int main(int argc, char **argv)
     /* define scalar variables */
     for (i=0; i<SCA_NVARS; i++) {
         sprintf(str, "scalar_var_%d", i);
-        err = ncmpi_def_var(ncid, str, NC_INT, 0, NULL, &sca_var[i]);
-        ERR
+        err = ncmpi_def_var(ncid, str, NC_INT, 0, NULL, &sca_var[i]); ERR
+        err = ncmpi_def_var_fill(ncid, sca_var[i], 0, NULL); ERR
     }
 
     /* define fix-sized variables */
     for (i=0; i<FIX_NVARS; i++) {
         sprintf(str, "fix_var_%d", i);
-        err = ncmpi_def_var(ncid, str, NC_INT, NDIMS, dimids+1, &fix_var[i]);
-        ERR
+        err = ncmpi_def_var(ncid, str, NC_INT, NDIMS, dimids+1, &fix_var[i]); ERR
+        err = ncmpi_def_var_fill(ncid, fix_var[i], 0, NULL); ERR
     }
 
     /* define record variables */
     for (i=0; i<REC_NVARS; i++) {
         sprintf(str, "rec_var_%d", i);
-        err = ncmpi_def_var(ncid, str, NC_INT, NDIMS+1, dimids, &rec_var[i]);
-        ERR
+        err = ncmpi_def_var(ncid, str, NC_INT, NDIMS+1, dimids, &rec_var[i]); ERR
+        err = ncmpi_def_var_fill(ncid, rec_var[i], 0, NULL); ERR
     }
 
     /* exit the define mode */
@@ -290,6 +295,12 @@ int main(int argc, char **argv)
     /* get all the MPI-IO and PnetCDF hints used */
     err = ncmpi_inq_file_info(ncid, &info_used);
     ERR
+
+    /* fill all record variables */
+    for (j=0; j<NTIMES; j++)
+        for (i=0; i<REC_NVARS; i++) {
+            err = ncmpi_fill_var_rec(ncid, rec_var[i], j); ERR
+        }
 
     if (!use_bput) {
         k = 0;

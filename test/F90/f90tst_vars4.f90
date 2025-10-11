@@ -22,10 +22,9 @@ program f90tst_vars4
 
   ! We need these ids and other gunk for netcdf.
   integer :: ncid, varid, dimids(MAX_DIMS)
-  integer :: x_dimid, y_dimid
+  integer :: x, y, x_dimid, y_dimid, old_fillmode
   integer :: mode_flag
   integer :: nvars, ngatts, ndims, unlimdimid, file_format
-  integer :: x, y
   integer, parameter :: CACHE_SIZE = 1000000
   integer :: xtype_in, natts_in, dimids_in(MAX_DIMS)
   character (len = NF90_MAX_NAME) :: name_in
@@ -72,6 +71,8 @@ program f90tst_vars4
 
   ! Define the variable.
   call handle_err(nf90mpi_def_var(ncid, 'data', NF90_INT, dimids, varid))
+
+  call handle_err(nf90mpi_set_fill(ncid, NF90_FILL, old_fillmode))
 
   ! enddef must be called.
   call handle_err(nf90mpi_enddef(ncid))

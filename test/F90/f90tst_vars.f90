@@ -78,6 +78,9 @@ program f90tst_vars
   ! Define the variable.
   call handle_err(nf90mpi_def_var(ncid, "data", NF90_INT, dimids, varid))
 
+  ! fill with default fill value
+  call handle_err(nf90mpi_def_var_fill(ncid, varid, 0, NF90_FILL_INT))
+
   ! With classic model netCDF-4 file, enddef must be called.
   call handle_err(nf90mpi_enddef(ncid))
 
