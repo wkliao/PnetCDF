@@ -377,8 +377,6 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
                     }
                     if (req_off < off + size) {
                         count[i]++;
-                        assert((((MPI_Offset) (uintptr_t) write_buf) + req_off - off) ==
-                                 (MPI_Offset) (uintptr_t) (write_buf + req_off - off));
                         if (myrank != i) {
                             MPI_Aint addr;
                             MPI_Get_address(write_buf + req_off - off, &addr);

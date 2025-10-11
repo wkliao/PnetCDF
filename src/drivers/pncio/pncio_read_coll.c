@@ -418,8 +418,6 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
                     }
                     if (req_off < real_off + real_size) {
                         count[i]++;
-                        assert((((MPI_Offset) (uintptr_t) read_buf) + req_off - real_off) ==
-                                     (MPI_Offset) (uintptr_t) (read_buf + req_off - real_off));
                         MPI_Aint addr;
                         MPI_Get_address(read_buf + req_off - real_off, &addr);
                         others_req[i].mem_ptrs[j] = addr;
@@ -458,9 +456,6 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
 
         if (for_next_iter) {
             tmp_buf = (char *) NCI_Malloc(for_next_iter);
-            assert((((MPI_Offset) (uintptr_t) read_buf) + real_size - for_next_iter) ==
-                         (MPI_Offset) (uintptr_t) (read_buf + real_size - for_next_iter));
-            assert((for_next_iter + coll_bufsize) == (size_t) (for_next_iter + coll_bufsize));
             memcpy(tmp_buf, read_buf + real_size - for_next_iter, for_next_iter);
             NCI_Free(fd->io_buf);
             fd->io_buf = (char *) NCI_Malloc(for_next_iter + coll_bufsize);
