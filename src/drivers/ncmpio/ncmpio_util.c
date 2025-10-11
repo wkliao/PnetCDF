@@ -884,7 +884,6 @@ int
 ncmpio_calc_off(const NC         *ncp,
                 const NC_var     *varp,
                 const MPI_Offset *start,  /* [varp->ndims] */
-                const MPI_Offset *count,  /* [varp->ndims] */
                 MPI_Offset       *offset) /* OUT: start offset */
 {
     int i, ndims = varp->ndims; /* number of dimensions of this variable */

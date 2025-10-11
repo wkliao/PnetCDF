@@ -645,7 +645,7 @@ ncmpio_unpack_xbuf(int format, NC_var *varp, MPI_Offset bufcount,
 
 extern int
 ncmpio_calc_off(const NC *ncp, const NC_var *varp, const MPI_Offset *start,
-                const MPI_Offset *count, MPI_Offset *offset);
+                MPI_Offset *offset);
 
 extern int
 ncmpio_calc_start_end(const NC *ncp, const NC_var *varp,

@@ -580,7 +580,7 @@ ncmpio_igetput_varm(NC               *ncp,
 
     /* special treatment when there is only one offset-length pair */
     if (req->npairs == 1 && varp->ndims > 0) {
-        ncmpio_calc_off(ncp, varp, start, count, &req->offset_start);
+        ncmpio_calc_off(ncp, varp, start, &req->offset_start);
         req->offset_end = req->nelems * varp->xsz;
     }
 
