@@ -170,7 +170,7 @@ err_out:
 static int
 GEN_open(PNCIO_File *fd)
 {
-    int err=NC_NOERR, rank, perm, old_mask;
+    int err=NC_NOERR, rank, perm, old_mask, omode;
     int stripin_info[4] = {1048576, -1, -1, -1};
 
     MPI_Comm_rank(fd->comm, &rank);
@@ -183,8 +183,13 @@ if (rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd->filen
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
 
+    if (fIsSet(fd->access_mode, MPI_MODE_RDWR))
+        omode = O_RDWR;
+    else
+        omode = O_RDONLY;
+
     /* All processes open the file. */
-    fd->fd_sys = open(fd->filename, O_RDWR, perm);
+    fd->fd_sys = open(fd->filename, omode, perm);
     if (fd->fd_sys == -1) {
         fprintf(stderr, "%s line %d: rank %d failure to open file %s (%s)\n",
                 __func__,__LINE__, rank, fd->filename, strerror(errno));
