@@ -112,7 +112,7 @@
           err = nf90mpi_def_dim(ncid, 'X', 3_MPI_OFFSET_KIND, dimid(1))
           call check(err, 'In nf90mpi_def_dim: ')
 
-          err = nf90mpi_def_var(ncid, 'var', NF90_INT, 1, dimid, varid)
+          err = nf90mpi_def_var(ncid, 'var', NF90_INT, dimid, varid)
           call check(err, 'In nf90mpi_def_var: ')
 
           ! fill with default fill value
@@ -129,8 +129,8 @@
 
           start(1) = 1
           count(1) = 3
-          err = nf90mpi_bput_vara_int(ncid, varid, start, count, ibuf, req(1))
-          call check(err, 'In nf90mpi_bput_vara_int: ')
+          err = nfmpi_bput_vara_int(ncid, varid, start, count, ibuf(1:), req(1))
+          call check(err, 'In nfmpi_bput_vara_int: ')
 
           err = nf90mpi_wait_all(ncid, 1, req, status)
           call check(err, 'In nf90mpi_wait_all: ')
