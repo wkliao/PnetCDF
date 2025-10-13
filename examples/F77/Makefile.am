@@ -41,6 +41,7 @@ check_PROGRAMS = nonblocking_write \
                  get_info \
                  hints \
                  put_vara \
+                 get_vara \
                  put_varn_real \
                  put_varn_int \
                  transpose \
