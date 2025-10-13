@@ -162,28 +162,28 @@ for i in ${check_PROGRAMS} ; do
     if test "$i" = put_all_kinds || test "$i" = iput_all_kinds ; then
        for j in 1 2 5; do
           # echo "--- ncmpidiff $OUT_PREFIX.mpio.nc$j $OUT_PREFIX.mpio.ina.nc$j ---"
-          ${MPIRUN} $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc$j $OUT_PREFIX.mpio.ina.nc$j
+          $MPIRUN $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc$j $OUT_PREFIX.mpio.ina.nc$j
           # echo "--- ncmpidiff $OUT_PREFIX.mpio.nc$j $OUT_PREFIX.pncio.nc$j ---"
-          ${MPIRUN} $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc$j $OUT_PREFIX.pncio.nc$j
+          $MPIRUN $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc$j $OUT_PREFIX.pncio.nc$j
           # echo "--- ncmpidiff $OUT_PREFIX.mpio.nc$j $OUT_PREFIX.pncio.ina.nc$j ---"
-          ${MPIRUN} $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc$j $OUT_PREFIX.pncio.ina.nc$j
+          $MPIRUN $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc$j $OUT_PREFIX.pncio.ina.nc$j
        done
     elif test "$i" = tst_pthread ; then
        for j in `seq 0 ${NTHREADS}` ; do
           # echo "--- ncmpidiff $OUT_PREFIX.mpio.nc.$j $OUT_PREFIX.mpio.ina.nc.$j ---"
-          ${MPIRUN} $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc.$j $OUT_PREFIX.mpio.ina.nc.$j
+          $MPIRUN $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc.$j $OUT_PREFIX.mpio.ina.nc.$j
           # echo "--- ncmpidiff $OUT_PREFIX.mpio.nc.$j $OUT_PREFIX.pncio.nc.$j ---"
-          ${MPIRUN} $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc.$j $OUT_PREFIX.pncio.nc.$j
+          $MPIRUN $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc.$j $OUT_PREFIX.pncio.nc.$j
           # echo "--- ncmpidiff $OUT_PREFIX.mpio.nc.$j $OUT_PREFIX.pncio.ina.nc.$j ---"
-          ${MPIRUN} $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc.$j $OUT_PREFIX.pncio.ina.nc.$j
+          $MPIRUN $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc.$j $OUT_PREFIX.pncio.ina.nc.$j
        done
     else
-       # echo "--- ncmpidiff ${OUT_PREFIX}.mpio.nc ${OUT_PREFIX}.mpio.ina.nc ---"
-       ${MPIRUN} ${NCMPIDIFF} ${DIFF_OPT} ${OUT_PREFIX}.mpio.nc ${OUT_PREFIX}.mpio.ina.nc
-       # echo "--- ncmpidiff ${OUT_PREFIX}.mpio.nc ${OUT_PREFIX}.pncio.nc ---"
-       ${MPIRUN} ${NCMPIDIFF} ${DIFF_OPT} ${OUT_PREFIX}.mpio.nc ${OUT_PREFIX}.pncio.nc
-       # echo "--- ncmpidiff ${OUT_PREFIX}.mpio.nc ${OUT_PREFIX}.pncio.ina.nc ---"
-       ${MPIRUN} ${NCMPIDIFF} ${DIFF_OPT} ${OUT_PREFIX}.mpio.nc ${OUT_PREFIX}.pncio.ina.nc
+       # echo "--- ncmpidiff $OUT_PREFIX.mpio.nc $OUT_PREFIX.mpio.ina.nc ---"
+       $MPIRUN $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc $OUT_PREFIX.mpio.ina.nc
+       # echo "--- ncmpidiff $OUT_PREFIX.mpio.nc $OUT_PREFIX.pncio.nc ---"
+       $MPIRUN $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc $OUT_PREFIX.pncio.nc
+       # echo "--- ncmpidiff $OUT_PREFIX.mpio.nc $OUT_PREFIX.pncio.ina.nc ---"
+       $MPIRUN $NCMPIDIFF $DIFF_OPT $OUT_PREFIX.mpio.nc $OUT_PREFIX.pncio.ina.nc
     fi
 
     done # safe_modes
