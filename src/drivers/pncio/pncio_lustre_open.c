@@ -913,8 +913,10 @@ static int wkl=0; if (wkl == 0 && rank == 0) { printf("\nxxxx %s at %d: %s ---- 
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
 
+    int omode = (fd->access_mode & MPI_MODE_RDWR) ? O_RDWR : O_RDONLY;
+
     /* All processes open the file. */
-    fd->fd_sys = open(fd->filename, O_RDWR, perm);
+    fd->fd_sys = open(fd->filename, omode, perm);
     if (fd->fd_sys == -1) {
         fprintf(stderr, "%s line %d: rank %d failure to open file %s (%s)\n",
                 __FILE__,__LINE__, rank, fd->filename, strerror(errno));
