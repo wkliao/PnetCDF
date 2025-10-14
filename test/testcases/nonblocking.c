@@ -64,6 +64,10 @@ int tst_mode(const char *filename,
     err = ncmpi_def_var(ncid, "var", NC_INT, 2, dimids, &varid); CHECK_ERR
     err = ncmpi_enddef(ncid); CHECK_ERR
 
+    if (mode == MODE_INDEP) {
+        err = ncmpi_sync(ncid); CHECK_ERR
+    }
+
     /* initialize the contents of the array */
     for (j=0; j<NY+1; j++) for (i=0; i<NX; i++) buf[j][i] = j;
 
@@ -116,7 +120,7 @@ int tst_mode(const char *filename,
 
     if (mode == MODE_INDEP) {
         err = ncmpi_begin_indep_data(ncid);
-        CHECK_ERR
+        CHECK_ERR_ALL
     }
 
     /* initialize the contents of the array to a different value */
