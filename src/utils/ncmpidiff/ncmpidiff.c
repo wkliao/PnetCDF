@@ -60,6 +60,15 @@
     }                                                                        \
 }
 
+#define HANDLE_FILE_ERR(filename) {                                          \
+    if (err != NC_NOERR) {                                                   \
+        fprintf(stderr, "Error at line %d: input file %s (%s)\n", __LINE__,  \
+               filename, ncmpi_strerror(err));                               \
+        MPI_Abort(MPI_COMM_WORLD, -1);                                       \
+        exit(-1);                                                            \
+    }                                                                        \
+}
+
 #define CHECK_GLOBAL_ATT_DIFF_CHAR {                                         \
     int pos;                                                                 \
     char *b1 = (char *)calloc((attlen[0] + 1) * 2, sizeof(char));            \
@@ -450,7 +459,7 @@ int main(int argc, char **argv)
 
         /* file format version */
         err = ncmpi_inq_file_format(argv[optind+i], &fmt[i]);
-        HANDLE_ERROR
+        HANDLE_FILE_ERR(argv[optind+i])
 
         if (fmt[i] == NC_FORMAT_NETCDF4 || fmt[i] == NC_FORMAT_NETCDF4_CLASSIC) {
 #ifndef ENABLE_NETCDF4
