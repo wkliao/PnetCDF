@@ -98,7 +98,8 @@ TESTPROGRAMS = file_create_open \
                test_get_varn \
                tst_del_attr \
                tst_redefine \
-               tst_grow_header
+               tst_grow_header \
+               tst_varn_var1
 
 M4_SRCS      = put_all_kinds.m4 \
                erange_fill.m4 \
