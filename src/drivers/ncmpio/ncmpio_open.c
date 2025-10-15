@@ -150,7 +150,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
     ncp->node_ids = NULL;
     if (ncp->fstype != PNCIO_FSTYPE_MPIIO || ncp->num_aggrs_per_node != 0) {
         err = ncmpii_construct_node_list(comm, &ncp->num_nodes, &ncp->node_ids);
-        if (err != NC_NOERR) return err;
+        if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err);
 
         /* When the total number of aggregators >= number of processes, disable
          * intra-node aggregation.
@@ -182,7 +182,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
          *     intra-node aggregators only, which will be passed to pncio_fh.
          */
         err = ncmpio_ina_init(ncp);
-        if (err != NC_NOERR) return err;
+        if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err);
 
         /* As non-aggregators will not perform any file I/O, we now can replace
          * comm with ina_comm. Same for nprocs.
@@ -203,8 +203,10 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
     /* open file collectively ---------------------------------------------- */
     if (ncp->fstype == PNCIO_FSTYPE_MPIIO) {
         TRACE_IO(MPI_File_open, (comm, path, mpiomode, user_info, &fh));
-        if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+            DEBUG_FOPEN_ERROR(err);
+        }
 
         /* Now the file has been successfully opened */
         ncp->collective_fh  = fh;
@@ -212,8 +214,10 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
 
         /* get the I/O hints used/modified by MPI-IO */
         TRACE_IO(MPI_File_get_info, (fh, &ncp->mpiinfo));
-        if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+            DEBUG_FOPEN_ERROR(err);
+        }
     }
     else {
         /* When ncp->fstype != PNCIO_FSTYPE_MPIIO, use PnetCDF's PNCIO driver */
@@ -224,13 +228,13 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
 
         err = PNCIO_File_open(comm, filename, mpiomode, user_info,
                               ncp->pncio_fh);
-        if (err != NC_NOERR) return err;
+        if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err);
 
         /* Now the file has been successfully opened, obtain the I/O hints
          * used/modified by PNCIO driver.
          */
         err = PNCIO_File_get_info(ncp->pncio_fh, &ncp->mpiinfo);
-        if (err != NC_NOERR) return err;
+        if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err);
     }
 
     /* Copy MPI-IO hints into ncp->mpiinfo */
@@ -292,8 +296,9 @@ fn_exit:
     if (err == NC_ENULLPAD) status = NC_ENULLPAD; /* non-fatal error */
     else if (err != NC_NOERR) { /* fatal error */
         ncmpio_file_close(ncp);
+        if (ncp->ina_comm != MPI_COMM_NULL) MPI_Comm_free(&ncp->ina_comm);
         ncmpio_free_NC(ncp);
-        return err;
+        DEBUG_RETURN_ERROR(err);
     }
 
 #ifdef ENABLE_SUBFILING
@@ -308,22 +313,22 @@ fn_exit:
                 err = ncmpio_get_att(ncp, i, "_PnetCDF_SubFiling.num_subfiles",
                              &ncp->vars.value[i]->num_subfiles,MPI_INT);
                 if (err == NC_ENOTATT) continue;
-                if (err != NC_NOERR) return err;
+                if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err);
                 if (ncp->vars.value[i]->num_subfiles > 1) {
                     /* find the orginal ndims of variable i */
                     err = ncmpio_get_att(ncp,i,"_PnetCDF_SubFiling.ndims_org",
                                  &ncp->vars.value[i]->ndims_org,MPI_INT);
-                    if (err != NC_NOERR) return err;
+                    if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err);
                     ncp->vars.value[i]->dimids_org = (int*) NCI_Malloc(
                               ncp->vars.value[i]->ndims_org * SIZEOF_INT);
                     err = ncmpio_get_att(ncp,i,"_PnetCDF_SubFiling.dimids_org",
                               ncp->vars.value[i]->dimids_org, MPI_INT);
-                    if (err != NC_NOERR) return err;
+                    if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err);
                 }
             }
             /* open subfile */
             err = ncmpio_subfile_open(ncp);
-            if (err != NC_NOERR) return err;
+            if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err);
         }
         else ncp->num_subfiles = 0;
     }

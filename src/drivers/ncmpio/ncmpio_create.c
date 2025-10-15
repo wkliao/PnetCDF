@@ -389,7 +389,7 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
          *     intra-node aggregators, and will be passed to pncio_fh.
          */
         err = ncmpio_ina_init(ncp);
-        if (err != NC_NOERR) return err;
+        if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err);
 
         /* As non-aggregators will not perform any file I/O, we now can replace
          * comm with ina_comm. Same for nprocs.
@@ -427,11 +427,12 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
                     TRACE_COMM(MPI_Bcast)(&errno, 1, MPI_INT, 0, comm);
                 if (errno == EEXIST) {
                     NCI_Free(ncp);
-                    DEBUG_RETURN_ERROR(NC_EEXIST)
+                    DEBUG_FOPEN_ERROR(NC_EEXIST)
                 }
             }
 #endif
-            return ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
+            err = ncmpii_error_mpi2nc(mpireturn, "MPI_File_open");
+            DEBUG_FOPEN_ERROR(err);
             /* for NC_NOCLOBBER, MPI_MODE_EXCL was added to mpiomode. If the
              * file already exists, MPI-IO should return error class
              * MPI_ERR_FILE_EXISTS which PnetCDF will return error code
@@ -450,8 +451,10 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
 
         /* get the I/O hints used/modified by MPI-IO */
         TRACE_IO(MPI_File_get_info, (fh, &ncp->mpiinfo));
-        if (mpireturn != MPI_SUCCESS)
-            return ncmpii_error_mpi2nc(mpireturn, mpi_name);
+        if (mpireturn != MPI_SUCCESS) {
+            err = ncmpii_error_mpi2nc(mpireturn, mpi_name);
+            DEBUG_FOPEN_ERROR(err);
+        }
     }
     else {
         /* When ncp->fstype != PNCIO_FSTYPE_MPIIO, use PnetCDF's PNCIO driver */
@@ -462,13 +465,13 @@ if (rank == 0) printf("%s at %d fstype=%s\n", __func__,__LINE__,(ncp->fstype == 
 
         err = PNCIO_File_open(comm, filename, mpiomode, user_info,
                               ncp->pncio_fh);
-        if (err != NC_NOERR) DEBUG_RETURN_ERROR(err)
+        if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err)
 
         /* Now the file has been successfully created, obtain the I/O hints
          * used/modified by PNCIO driver.
          */
         err = PNCIO_File_get_info(ncp->pncio_fh, &ncp->mpiinfo);
-        if (err != NC_NOERR) DEBUG_RETURN_ERROR(err)
+        if (err != NC_NOERR) DEBUG_FOPEN_ERROR(err)
     }
 
     /* Copy MPI-IO hints into ncp->mpiinfo */
