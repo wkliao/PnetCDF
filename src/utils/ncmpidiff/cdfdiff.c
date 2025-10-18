@@ -187,9 +187,9 @@ struct vspec {
 
 /*----< get_var_names() >-----------------------------------------------------*/
 static void
-get_var_names(char *optarg, struct vspec* vspecp)
+get_var_names(char *opt_arg, struct vspec* vspecp)
 {
-    char *cp=optarg, **cpp;
+    char *cp=opt_arg, **cpp;
     int nvars = 1;
 
     /* compute number of variable names in comma-delimited list */
@@ -203,7 +203,7 @@ get_var_names(char *optarg, struct vspec* vspecp)
 
     cpp = vspecp->names;
     /* copy variable names into list */
-    for (cp = strtok(optarg, ",");
+    for (cp = strtok(opt_arg, ",");
          cp != NULL;
          cp = strtok((char *) NULL, ",")) {
 

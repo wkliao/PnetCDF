@@ -1802,9 +1802,9 @@ struct fspec {
 };
 
 static void
-make_lvars(char *optarg, struct fspec* fspecp)
+make_lvars(char *opt_arg, struct fspec* fspecp)
 {
-    char *cp = optarg;
+    char *cp = opt_arg;
     int nvars = 1;
     char ** cpp;
 
@@ -1819,7 +1819,7 @@ make_lvars(char *optarg, struct fspec* fspecp)
 
     cpp = fspecp->lvars;
     /* copy variable names into list */
-    for (cp = strtok(optarg, ",");
+    for (cp = strtok(opt_arg, ",");
          cp != NULL;
          cp = strtok((char *) NULL, ",")) {
 
