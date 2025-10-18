@@ -30,12 +30,16 @@ fi
 # prevent user environment setting of PNETCDF_HINTS to interfere
 unset PNETCDF_HINTS
 
+fixed_length=23
+
 for i in ${check_PROGRAMS} ; do
     for j in ${safe_modes} ; do
         if test "$j" = 1 ; then # test only in safe mode
            SAFE_HINTS="romio_no_indep_rw=true"
+           safe_hint="  SAFE"
         else
            SAFE_HINTS="romio_no_indep_rw=false"
+           safe_hint="NOSAFE"
         fi
         OUT_PREFIX="${TESTOUTDIR}/$i"
 
@@ -43,17 +47,21 @@ for i in ${check_PROGRAMS} ; do
         if test "$mpiio_mode" = 1 ; then
            USEMPIO_HINTS="nc_use_mpi_io=true"
            DRIVER_OUT_FILE="${OUT_PREFIX}.mpio"
+           driver_hint=" MPIO"
         else
            USEMPIO_HINTS="nc_use_mpi_io=false"
            DRIVER_OUT_FILE="${OUT_PREFIX}.pncio"
+           driver_hint="PNCIO"
         fi
     for intra_aggr in 0 1 ; do
         if test "$intra_aggr" = 1 ; then
            INA_HINTS="nc_num_aggrs_per_node=2"
            INA_OUT_FILE="${DRIVER_OUT_FILE}.ina"
+           ina_hint="  INA"
         else
            INA_HINTS="nc_num_aggrs_per_node=0"
            INA_OUT_FILE="${DRIVER_OUT_FILE}"
+           ina_hint="NOINA"
         fi
 
         OUT_FILE=$INA_OUT_FILE
@@ -80,6 +88,8 @@ for i in ${check_PROGRAMS} ; do
         export PNETCDF_SAFE_MODE=$j
         # echo "PNETCDF_SAFE_MODE=$PNETCDF_SAFE_MODE PNETCDF_HINTS=$PNETCDF_HINTS"
 
+        TEST_OPTS="$safe_hint $driver_hint $ina_hint"
+
         CMD_OPT=-q
         IN_FILE=
         if test "$i" = create_from_cdl ; then
@@ -93,7 +103,7 @@ for i in ${check_PROGRAMS} ; do
                ${TESTSEQRUN} ${VALIDATOR} -q ${OUT_FILE}.nc.$k
            done
            if test $? = 0 ; then
-              echo "PASS: $2 parallel run on $1 processes --------------- $i"
+              printf "PASS: %-3s nprocs=$1 %-${fixed_length}s   -------- $i\n" $2 "$TEST_OPTS"
            fi
            continue
         elif test "$i" = put_vara ; then
@@ -101,12 +111,12 @@ for i in ${check_PROGRAMS} ; do
            # echo "--- validating file ${OUT_FILE}.nc"
            ${TESTSEQRUN} ${VALIDATOR} -q ${OUT_FILE}.nc
            if test $? = 0 ; then
-              echo "PASS: $2 parallel run on $1 processes --------------- $i"
+              printf "PASS: %-3s nprocs=$1 %-${fixed_length}s   -------- $i\n" $2 "$TEST_OPTS"
            fi
 
            ${MPIRUN} ./get_vara $CMD_OPT ${OUT_FILE}.nc
            if test $? = 0 ; then
-              echo "PASS: $2 parallel run on $1 processes --------------- get_vara"
+              printf "PASS: %-3s nprocs=$1 %-${fixed_length}s   -------- get_vara\n" $2 "$TEST_OPTS"
            fi
         elif test "$i" = get_vara ; then
            continue
@@ -114,13 +124,13 @@ for i in ${check_PROGRAMS} ; do
            # create_from_cdl reads a CDL header file
            ${MPIRUN} ./$i $CMD_OPT -o ${OUT_FILE}.nc $IN_FILE
            if test $? = 0 ; then
-              echo "PASS: $2 parallel run on $1 processes --------------- $i"
+              printf "PASS: %-3s nprocs=$1 %-${fixed_length}s   -------- $i\n" $2 "$TEST_OPTS"
            fi
         else
            # echo "${LINENO}: ${MPIRUN} ./$i $CMD_OPT ${OUT_FILE}.nc"
            ${MPIRUN} ./$i $CMD_OPT ${OUT_FILE}.nc
            if test $? = 0 ; then
-              echo "PASS: $2 parallel run on $1 processes --------------- $i"
+              printf "PASS: %-3s nprocs=$1 %-${fixed_length}s   -------- $i\n" $2 "$TEST_OPTS"
            fi
         fi
 
@@ -139,7 +149,7 @@ for i in ${check_PROGRAMS} ; do
               ${MPIRUN} ./$i $CMD_OPT ${OUT_FILE}.bb.nc
            fi
            if test $? = 0 ; then
-              echo "PASS: $2 parallel run on $1 processes --------------- $i"
+              printf "PASS: %-3s nprocs=$1 %-${fixed_length}s   -------- $i\n" $2 "$TEST_OPTS BB"
            fi
            export PNETCDF_HINTS=${saved_PNETCDF_HINTS}
 
@@ -159,7 +169,7 @@ for i in ${check_PROGRAMS} ; do
            # echo "test netCDF-4 feature"
            ${MPIRUN} ./$i ${OUT_FILE}.nc4 4
            if test $? = 0 ; then
-              echo "PASS: $2 parallel run on $1 processes --------------- $i"
+              printf "PASS: %-3s nprocs=$1 %-${fixed_length}s   -------- $i\n" $2 "$TEST_OPTS"
            fi
            # Validator does not support nc4
         fi

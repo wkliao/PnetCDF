@@ -32,13 +32,17 @@ unset PNETCDF_HINTS
 
 FILE_EXTS="ncmpi_chk_0000 ncmpi_plt_cnt_0000 ncmpi_plt_crn_0000"
 
+fixed_length=23
+
 for i in ${check_PROGRAMS} ; do
 
     for j in ${safe_modes} ; do
         if test "$j" = 1 ; then # test only in safe mode
            SAFE_HINTS="romio_no_indep_rw=true"
+           safe_hint="  SAFE"
         else
            SAFE_HINTS="romio_no_indep_rw=false"
+           safe_hint="NOSAFE"
         fi
         OUT_PREFIX="${TESTOUTDIR}/$i"
 
@@ -46,20 +50,25 @@ for i in ${check_PROGRAMS} ; do
         if test "$mpiio_mode" = 1 ; then
            USEMPIO_HINTS="nc_use_mpi_io=true"
            DRIVER_OUT_FILE="${OUT_PREFIX}.mpio"
+           driver_hint=" MPIO"
         else
            USEMPIO_HINTS="nc_use_mpi_io=false"
            DRIVER_OUT_FILE="${OUT_PREFIX}.pncio"
+           driver_hint="PNCIO"
         fi
     for intra_aggr in 0 1 ; do
         if test "$intra_aggr" = 1 ; then
            INA_HINTS="nc_num_aggrs_per_node=2"
            INA_OUT_FILE="${DRIVER_OUT_FILE}.ina"
+           ina_hint="  INA"
         else
            INA_HINTS="nc_num_aggrs_per_node=0"
            INA_OUT_FILE="${DRIVER_OUT_FILE}"
+           ina_hint="NOINA"
         fi
 
         OUT_FILE=$INA_OUT_FILE
+        TEST_OPTS="$safe_hint $driver_hint $ina_hint"
 
         PNETCDF_HINTS=
         if test "x$SAFE_HINTS" != x ; then
@@ -82,7 +91,7 @@ for i in ${check_PROGRAMS} ; do
         ${MPIRUN} ./$i $CMD_OPTS
 
         if test $? = 0 ; then
-           echo "PASS: F90 parallel run on $1 processes --------------- $i"
+           printf "PASS: F90 nprocs=$1 %-${fixed_length}s   -------- $i\n" "$TEST_OPTS"
         fi
 
         if test "x${BUILD_BENCHMARKS_IN_PNETCDF}" != x1 ; then
@@ -103,7 +112,7 @@ for i in ${check_PROGRAMS} ; do
            ${MPIRUN} ./$i $CMD_OPTS
 
            if test $? = 0 ; then
-              echo "PASS: F90 parallel run on $1 processes --------------- $i"
+              printf "PASS: F90 nprocs=$1 %-${fixed_length}s   -------- $i\n" "$TEST_OPTS BB"
            fi
 
            export PNETCDF_HINTS=${saved_PNETCDF_HINTS}

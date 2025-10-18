@@ -30,6 +30,8 @@ fi
 # prevent user environment setting of PNETCDF_HINTS to interfere
 unset PNETCDF_HINTS
 
+fixed_length=23
+
 for i in ${check_PROGRAMS} ; do
     if test "$i" = tst_io ; then
        # this is designed to run 1 process
@@ -54,8 +56,10 @@ for i in ${check_PROGRAMS} ; do
     for j in ${safe_modes} ; do
         if test "$j" = 1 ; then # test only in safe mode
            SAFE_HINTS="romio_no_indep_rw=true"
+           safe_hint="  SAFE"
         else
            SAFE_HINTS="romio_no_indep_rw=false"
+           safe_hint="NOSAFE"
         fi
         OUT_PREFIX="${TESTOUTDIR}/$i"
 
@@ -63,20 +67,25 @@ for i in ${check_PROGRAMS} ; do
         if test "$mpiio_mode" = 1 ; then
            USEMPIO_HINTS="nc_use_mpi_io=true"
            DRIVER_OUT_FILE="${OUT_PREFIX}.mpio"
+           driver_hint=" MPIO"
         else
            USEMPIO_HINTS="nc_use_mpi_io=false"
            DRIVER_OUT_FILE="${OUT_PREFIX}.pncio"
+           driver_hint="PNCIO"
         fi
     for intra_aggr in 0 1 ; do
         if test "$intra_aggr" = 1 ; then
            INA_HINTS="nc_num_aggrs_per_node=2"
            INA_OUT_FILE="${DRIVER_OUT_FILE}.ina"
+           ina_hint="  INA"
         else
            INA_HINTS="nc_num_aggrs_per_node=0"
            INA_OUT_FILE="${DRIVER_OUT_FILE}"
+           ina_hint="NOINA"
         fi
 
         OUT_FILE=$INA_OUT_FILE
+        TEST_OPTS="$safe_hint $driver_hint $ina_hint"
 
         if [[ "$i" == *"vard"* ]] ; then
            if test "x$mpiio_mode" == x0 || test "x$intra_aggr" == x1 ; then
