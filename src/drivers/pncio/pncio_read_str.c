@@ -253,5 +253,7 @@ assert(k < buf_view.count);
         NCI_Free(readbuf);    /* malloced in the buffered_read macro */
     }
 
+    assert(total_r_len >= buf_view.size);
+
     return buf_view.size;
 }
