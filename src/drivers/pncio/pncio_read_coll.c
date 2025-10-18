@@ -669,13 +669,12 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
         size_in_buf = MIN(buf_incr, flat_buf_sz);                   \
         user_buf_idx += size_in_buf;                                \
         flat_buf_sz -= size_in_buf;                                 \
-        if (!flat_buf_sz) {                                         \
+        buf_incr -= size_in_buf;                                    \
+        if (buf_incr > 0 && flat_buf_sz == 0) {                     \
             flat_buf_idx++;                                         \
-assert(flat_buf_idx < buf_view.count); \
             user_buf_idx = buf_view.off[flat_buf_idx];              \
             flat_buf_sz = buf_view.len[flat_buf_idx];               \
         }                                                           \
-        buf_incr -= size_in_buf;                                    \
     }                                                               \
 }
 
@@ -688,14 +687,13 @@ assert(flat_buf_idx < buf_view.count); \
         recv_buf_idx[p] += size_in_buf;                             \
         user_buf_idx += size_in_buf;                                \
         flat_buf_sz -= size_in_buf;                                 \
-        if (!flat_buf_sz) {                                         \
+        size -= size_in_buf;                                        \
+        buf_incr -= size_in_buf;                                    \
+        if (size > 0 && flat_buf_sz == 0) {                         \
             flat_buf_idx++;                                         \
-assert(flat_buf_idx < buf_view.count); \
             user_buf_idx = buf_view.off[flat_buf_idx];              \
             flat_buf_sz = buf_view.len[flat_buf_idx];               \
         }                                                           \
-        size -= size_in_buf;                                        \
-        buf_incr -= size_in_buf;                                    \
     }                                                               \
     BUF_INCR                                                        \
 }
@@ -759,8 +757,8 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf,
             if (recv_buf_idx[p] < recv_size[p]) {
                 if (curr_from_proc[p] + len > done_from_proc[p]) {
                     if (done_from_proc[p] > curr_from_proc[p]) {
-                        size = MIN(curr_from_proc[p] + len -
-                                       done_from_proc[p], recv_size[p] - recv_buf_idx[p]);
+                        size = MIN(curr_from_proc[p] + len - done_from_proc[p],
+                                   recv_size[p] - recv_buf_idx[p]);
                         buf_incr = done_from_proc[p] - curr_from_proc[p];
                         BUF_INCR
                         buf_incr = curr_from_proc[p] + len - done_from_proc[p];

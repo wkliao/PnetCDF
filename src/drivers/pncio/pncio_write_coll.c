@@ -772,7 +772,7 @@ double curT = MPI_Wtime();
         user_buf_idx += size_in_buf; \
         flat_buf_sz -= size_in_buf; \
         buf_incr -= size_in_buf; \
-        if (buf_incr > 0 && !flat_buf_sz) { \
+        if (buf_incr > 0 && flat_buf_sz == 0) { \
             flat_buf_idx++; \
             user_buf_idx = buf_view.off[flat_buf_idx]; \
             flat_buf_sz = buf_view.len[flat_buf_idx]; \
@@ -791,7 +791,7 @@ double curT = MPI_Wtime();
         flat_buf_sz -= size_in_buf; \
         size -= size_in_buf; \
         buf_incr -= size_in_buf; \
-        if (size > 0 && !flat_buf_sz) { \
+        if (size > 0 && flat_buf_sz == 0) { \
             flat_buf_idx++; \
             user_buf_idx = buf_view.off[flat_buf_idx]; \
             flat_buf_sz = buf_view.len[flat_buf_idx]; \
