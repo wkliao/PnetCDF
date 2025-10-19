@@ -354,12 +354,12 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
         nprocs_per_node[k]++;
     }
 
-    /* All processes run the same codes below to calculate num_aggr, number of
-     * aggregators, so we can save a call to MPI_Bcast().
-     * Given the number of nodes, fd->num_nodes, and processes per node,
-     * nprocs_per_node, we can now set num_aggr, the number of I/O aggregators.
-     * At this moment, all processes should have obtained the Lustre file
-     * striping settings.
+    /* To save a call to MPI_Bcast(), all processes run the same codes below to
+     * calculate num_aggr, the number of aggregators (later becomes cb_nodes).
+     *
+     * The calculation is based on the number of compute nodes, fd->num_nodes,
+     * and processes per node, nprocs_per_node.  At this moment, all processes
+     * should have obtained the Lustre file striping settings.
      */
     striping_factor = fd->hints->striping_factor;
 
@@ -708,6 +708,21 @@ assert(mpi_io_mode & MPI_MODE_CREATE);
      * fd->hints->fs_hints.lustre.overstriping_ratio = 1;
      */
 
+    /* In many cases, the Lustre striping configuration of the file to be
+     * created is not explicitly set by the users (through I/O hints
+     * striping_factor and striping_unit) or the striping configuration of
+     * parent folder to store the new file is not explicitly set by the users.
+     *
+     * Here, if application did not set the file striping hints, we set the new
+     * file's striping count to be equal to the number of compute nodes
+     * allocated to fd->comm and the striping size to 1 MiB. Inheriting the
+     * striping from the parent folder is disabled. But if inheritance is
+     * desired, this can be changed by defining macro INHERIT_DIR_STRIPING
+     * which enables the code block below.
+     *
+     * Note if the application explicitly set hints striping_factor and
+     * striping_unit, then they take precedence over the default.
+     */
 #ifdef INHERIT_DIR_STRIPING
     /* Inherit the file striping settings of the folder. */
 
