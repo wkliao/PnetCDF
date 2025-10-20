@@ -15,7 +15,7 @@ dnl AC_REVISION([$Revision$])dnl
 dnl autoconf v2.70 and later is required. See https://github.com/Parallel-NetCDF/PnetCDF/issues/94
 dnl autoconf v2.70 was released in 2021-01-28
 AC_PREREQ([2.70])
-AC_INIT([PnetCDF], [1.14.1],
+AC_INIT([PnetCDF], [1.15.0-alpha],
         [parallel-netcdf@mcs.anl.gov],
         [pnetcdf],
         [https://parallel-netcdf.github.io])
@@ -69,8 +69,8 @@ AM_EXTRA_RECURSIVE_TARGETS([tests])
 dnl parse the version numbers to 4 env variables
 PNETCDF_VERSION_MAJOR=`echo ${PACKAGE_VERSION} | cut -d. -f1`
 PNETCDF_VERSION_MINOR=`echo ${PACKAGE_VERSION} | cut -d. -f2`
-PNETCDF_VERSION_SUB=`echo ${PACKAGE_VERSION} | cut -d. -f3`
-PNETCDF_VERSION_PRE=`echo ${PACKAGE_VERSION} | cut -d. -f4`
+PNETCDF_VERSION_SUB=`echo ${PACKAGE_VERSION} | cut -d. -f3 | cut -d'-' -f1`
+PNETCDF_VERSION_PRE=`echo ${PACKAGE_VERSION} | cut -d'-' -f2`
 
 dnl Note major, minor, and sub are required, but pre is not.
 PNETCDF_VERSION=${PACKAGE_VERSION}
