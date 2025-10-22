@@ -108,7 +108,6 @@ enum {
 };
 
 typedef struct {
-    int initialized;
     int striping_factor;
     int striping_unit;
     int cb_read;
