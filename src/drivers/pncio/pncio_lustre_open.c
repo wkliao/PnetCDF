@@ -59,34 +59,105 @@
     printf("\t%-14s = %-25s (0x%lx)\n",#val,PATTERN_STR(val, int_str),val); \
 }
 
-#ifdef LUSTRE_QUERY_POOL_SIZE
 /*----< get_total_avail_osts() >---------------------------------------------*/
 static
-int get_total_avail_osts(void)
+int get_total_avail_osts(const char *filename)
 {
-    char **members, *buffer, *pool="scratch.original";
-    int num_OSTs, list_size = 1024;
-    members = (char**)NCI_Malloc(sizeof(char*) * list_size);
-    buffer = (char*)NCI_Calloc(list_size * 64, sizeof(char));
+    char *dirc=NULL, *dname, *tail, **members=NULL, *buffer=NULL;
+    char pool_name[64], fsname[64], full_pool_name[128];
+    int err, dd, num_members=0;
+    int max_members = 2048;    /* Maximum number of members to retrieve */
+    int buffer_size = 1048576; /* Buffer size for member names */
+    struct llapi_layout *layout=NULL;
 
-    num_OSTs = llapi_get_poolmembers(pool, members, list_size, buffer,
-                                     list_size * 64);
+    /* find the parent folder name */
+    dirc = NCI_Strdup(filename);
+    dname = dirname(dirc);
+
+    dd = open(dname, O_RDONLY, 0600);
+    if (dd < 0) {
+        fprintf(stderr,"Error at %s (%d) fails to open folder %s (%s)\n",
+                __FILE__,__LINE__, dname, strerror(errno));
+        goto err_out;
+    }
+
+    /* obtain Lustre layout object */
+    layout = llapi_layout_get_by_fd(dd, LLAPI_LAYOUT_GET_COPY);
+    if (layout == NULL) {
+        fprintf(stderr,"Error at %s (%d) llapi_layout_get_by_fd() fails (%s)\n",
+                __FILE__, __LINE__,strerror(errno));
+        goto err_out;
+    }
+
+    /* find the pool name */
+    err = llapi_layout_pool_name_get(layout, pool_name, sizeof(pool_name)-1);
+    if (err < 0) {
+        fprintf(stderr,"Error at %s (%d) llapi_layout_pool_name_get() fails (%s)\n",
+                __FILE__, __LINE__,strerror(errno));
+        goto err_out;
+    }
+    /* pool_name "original" is returned */
+
+    /* Using pool_name returned from llapi_layout_pool_name_get() is not enough
+     * when calling  llapi_get_poolmembers(). We need to prepend it with
+     * 'fsname', which can be obtained by calling llapi_getname(). Note that
+     * console command 'lfs getname -n' returns fsname, i.e.
+     *    login39::~/Lustre(12:52) #1165  lfs getname -n $SCRATCH/dummy
+     *    scratch
+     */
+    err = llapi_getname(dname, fsname, 63);
+    if (err < 0) {
+        fprintf(stderr,"Error at %s (%d) llapi_getname() fails (%s)\n",
+                __FILE__, __LINE__,strerror(errno));
+        goto err_out;
+    }
+
+    /* When dname is a folder, fsname returned from llapi_getname() may contain
+     * a trailing ID, e.g.  scratch-ffff9ca88d9bd800. Must remove the trailing
+     * ID, otherwise llapi_get_poolmembers() is not able to find it.
+     */
+    tail = strchr(fsname, '-');
+    if (tail != NULL) *tail = '\0';
+    sprintf(full_pool_name, "%s.%s", fsname, pool_name);
+
 #ifdef DEBUG
-    int i;
-    printf("Lustre pool %s has %d OSTs\n",pool, num_OSTs);
-    printf("\tFirst %d OSTs and last are\n",10);
-    for (i=0; i<10; i++)
-        printf("\t\tmember[%3d] %s\n",i,members[i]);
-    printf("\t ...\tmember[%3d] %s\n",num_OSTs-1,members[num_OSTs-1]);
-    printf("------------------------------------\n\n");
+    printf("%s at %d: file=%s dir=%s pool=%s fsname=%s full_pool_name=%s\n",
+           __func__,__LINE__, filename,dname,pool_name,fsname,full_pool_name);
 #endif
 
-    NCI_Free(buffer);
-    NCI_Free(members);
+    /* Allocate memory for the members and buffer */
+    members = (char **)NCI_Malloc(max_members * sizeof(char *));
+    buffer = (char *)NCI_Malloc(buffer_size);
 
-    return num_OSTs;
+    /* obtain pool's info */
+    num_members = llapi_get_poolmembers(full_pool_name, members, max_members,
+                                        buffer, buffer_size);
+#ifdef DEBUG
+    if (num_members > 0) {
+        int i, min_nmembers = MIN(num_members, 10);
+        printf("%s at %d: Found %d members for pool '%s':\n",
+               __func__,__LINE__,num_members, pool_name);
+        printf("\tFirst %d OSTs and last are\n",min_nmembers);
+        for (i=0; i<min_nmembers; i++)
+            printf("\t\tmember[%3d] %s\n",i,members[i]);
+        printf("\t ...\tmember[%3d] %s\n",num_members-1,members[num_members-1]);
+        printf("------------------------------------\n\n");
+    } else {
+        printf("%s at %d: EOVERFLOW=%d EINVAL=%d\n",__func__,__LINE__,EOVERFLOW,EINVAL);
+        printf("%s at %d: No members found for pool '%s' or an error occurred num_members=%d (%s).\n",
+               __func__,__LINE__,pool_name, num_members, strerror(errno));
+    }
+#endif
+
+err_out:
+    if (dd >= 0) close(dd);
+    if (layout != NULL) llapi_layout_free(layout);
+    if (dirc != NULL) NCI_Free(dirc);
+    if (buffer != NULL) NCI_Free(buffer);
+    if (members != NULL) NCI_Free(members);
+
+    return num_members;
 }
-#endif
 
 static
 int compare(const void *a, const void *b)
@@ -688,10 +759,10 @@ assert(mpi_io_mode & MPI_MODE_CREATE);
     start_iodev        = fd->hints->start_iodevice;
     overstriping_ratio = fd->hints->fs_hints.lustre.overstriping_ratio;
 
-#ifdef LUSTRE_QUERY_POOL_SIZE
-    int total_num_OSTs = get_total_avail_osts();
-    if (str_factor > total_num_OSTs) str_factor = total_num_OSTs;
-#endif
+    /* obtain the total number of OSTs available */
+    int total_num_OSTs = get_total_avail_osts(fd->filename);
+    if (total_num_OSTs > 0 && str_factor > total_num_OSTs)
+        str_factor = total_num_OSTs;
 
     uint64_t numOSTs=0;
     uint64_t pattern = LLAPI_LAYOUT_DEFAULT;
