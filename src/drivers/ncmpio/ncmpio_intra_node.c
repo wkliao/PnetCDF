@@ -2069,9 +2069,18 @@ int ina_get(NC         *ncp,
     int do_sort=0, indv_sorted=1, overlap=0;
     char *rd_buf = NULL;
     MPI_Aint npairs=0, max_npairs, *meta=NULL, *count=NULL;
-    MPI_Offset send_amnt=0, rd_amnt=0;
+    MPI_Offset send_amnt=0, rd_amnt=0, off_start;
     MPI_Request *req=NULL;
     PNCIO_View rd_buf_view;
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Count *off_ptr, *len_ptr, *orig_off_ptr, *orig_len_ptr;
+    MPI_Count bufLen, *orig_offsets=NULL, *orig_lengths=NULL;
+    MPI_Count *blks = NULL, *disps = NULL;
+#else
+    MPI_Offset *orig_offsets=NULL, *orig_off_ptr, *off_ptr;
+    int bufLen, *orig_lengths=NULL, *orig_len_ptr, *len_ptr, *blks = NULL;
+    MPI_Aint *disps = NULL;
+#endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double endT, startT = MPI_Wtime();
@@ -2080,13 +2089,6 @@ int ina_get(NC         *ncp,
     ncp->maxmem_get[0] = MAX(ncp->maxmem_get[0], mem_max);
 #endif
 
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count *off_ptr, *len_ptr, *orig_off_ptr, *orig_len_ptr;
-    MPI_Count bufLen, *orig_offsets=NULL, *orig_lengths=NULL;
-#else
-    MPI_Offset *orig_offsets=NULL, *orig_off_ptr, *off_ptr;
-    int bufLen, *orig_lengths=NULL, *orig_len_ptr, *len_ptr;
-#endif
     bufLen = buf_view.size;
 
     /* Firstly, aggregators collect metadata from non-aggregators.
@@ -2418,8 +2420,9 @@ int ina_get(NC         *ncp,
              *     the read buffer, rd_buf.
              */
             if (!is_incr) m = 0;
+            if (npairs-m == 1) assert(off_ptr[m] <= orig_off_ptr[j]);
             k = bin_search(orig_off_ptr[j], &off_ptr[m], npairs-m);
-            assert(k >= 0 && k < npairs);
+            assert(k < npairs);
             /* k returned from bin_search is relative to m */
             k += m;
 
@@ -2477,17 +2480,17 @@ int ina_get(NC         *ncp,
         max_npairs = MAX(meta[3*i], max_npairs);
 
 #ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Count *blks = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * max_npairs);
-    MPI_Count *disps = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * max_npairs);
+    blks = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * max_npairs);
+    disps = (MPI_Count*) NCI_Malloc(sizeof(MPI_Count) * max_npairs);
 #else
-    int *blks = (int*) NCI_Malloc(sizeof(int) * max_npairs);
-    MPI_Aint *disps = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * max_npairs);
+    blks = (int*) NCI_Malloc(sizeof(int) * max_npairs);
+    disps = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * max_npairs);
 #endif
 
     /* Now, send data to each non-aggregator */
     req = (MPI_Request*)NCI_Malloc(sizeof(MPI_Request) * ncp->num_nonaggrs);
     nreqs = 0;
-    MPI_Offset off_start = meta[0];
+    off_start = meta[0];
     for (i=1; i<ncp->num_nonaggrs; i++) {
         /* populate disps[] and blks[] */
         MPI_Aint remote_num_pairs = meta[3*i];
@@ -2514,8 +2517,9 @@ int ina_get(NC         *ncp,
              */
             if (!remote_is_incr) m = 0;
 
+            if (npairs-m == 1) assert(off_ptr[m] <= off[j]);
             k = bin_search(off[j], &off_ptr[m], npairs-m);
-            assert(k >= 0); /* k returned from bin_search is relative to m */
+            /* k returned from bin_search is relative to m */
             k += m;
             assert(off_ptr[k] <= off[j] && off[j] < off_ptr[k] + len_ptr[k]);
 
