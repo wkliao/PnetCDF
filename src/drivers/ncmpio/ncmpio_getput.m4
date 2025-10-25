@@ -120,6 +120,7 @@ put_varm(NC               *ncp,
     void *xbuf=NULL;
     int mpireturn, err=NC_NOERR, status=NC_NOERR, buftype_is_contig;
     int el_size, need_convert=0, need_swap=0, need_swap_back_buf=0;
+    int can_swap_in_place;
     MPI_Offset nelems=0, bnelems=0, nbytes=0;
     MPI_Datatype itype, imaptype;
 
@@ -184,7 +185,7 @@ put_varm(NC               *ncp,
     if (err != NC_NOERR) goto err_check;
 
     /* check if in-place byte swap can be enabled */
-    int can_swap_in_place = 1;
+    can_swap_in_place = 1;
     if (need_swap) {
         if (fIsSet(ncp->flags, NC_MODE_SWAP_OFF))
             /* in-place byte swap is disabled by user through PnetCDF hint
@@ -637,14 +638,17 @@ ncmpio_$1_var(void             *ncdp,
          * write, they still need to participate the communication part of the
          * intra-node aggregation operation.
          */
-#ifndef ALWAYS_USE_INA
+#ifdef ALWAYS_USE_INA
+        return $1_varm(ncp, NULL, NULL, NULL, NULL, imap, NULL, 0,
+                       buftype, reqMode);
+#else
         if (ncp->num_aggrs_per_node > 0)
-#endif
             return $1_varm(ncp, NULL, NULL, NULL, NULL, imap, NULL, 0,
                            buftype, reqMode);
 
         /* this collective API has a zero-length request */
         return ncmpio_getput_zero_req(ncp, reqMode);
+#endif
     }
 
     /* obtain NC_var object pointer, varp. Note sanity check for ncdp and
