@@ -778,6 +778,10 @@ PNCIO_Lustre_create(PNCIO_File *fd,
     char int_str[16];
     int err=NC_NOERR, rank, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
+#ifdef HAVE_LUSTRE
+    int total_num_OSTs;
+    uint64_t numOSTs, pattern, stripe_count, stripe_size, start_iodevice;
+#endif
 
 #ifdef WKL_DEBUG
 extern int first_ost_id;
@@ -825,17 +829,17 @@ assert(mpi_io_mode & MPI_MODE_CREATE);
     overstriping_ratio = fd->hints->fs_hints.lustre.overstriping_ratio;
 
     /* obtain the total number of OSTs available */
-    int total_num_OSTs = get_total_avail_osts(fd->filename);
+    total_num_OSTs = get_total_avail_osts(fd->filename);
     if (total_num_OSTs <= 0) /* failed to obtain number of available OSTs */
         total_num_OSTs = PNCIO_LUSTRE_MAX_OSTS;
     if (str_factor > total_num_OSTs)
         str_factor = total_num_OSTs;
 
-    uint64_t numOSTs=0;
-    uint64_t pattern = LLAPI_LAYOUT_DEFAULT;
-    uint64_t stripe_count = LLAPI_LAYOUT_DEFAULT;
-    uint64_t stripe_size = LLAPI_LAYOUT_DEFAULT;
-    uint64_t start_iodevice = LLAPI_LAYOUT_DEFAULT;
+    numOSTs=0;
+    pattern = LLAPI_LAYOUT_DEFAULT;
+    stripe_count = LLAPI_LAYOUT_DEFAULT;
+    stripe_size = LLAPI_LAYOUT_DEFAULT;
+    start_iodevice = LLAPI_LAYOUT_DEFAULT;
 
     fd->fd_sys = -1;
 
