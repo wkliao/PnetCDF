@@ -40,9 +40,9 @@ for i in ${check_PROGRAMS} ; do
         fi
     for mpiio_mode in 0 1 ; do
         if test "$mpiio_mode" = 1 ; then
-           USEMPIO_HINTS="nc_use_mpi_io=true"
+           USEMPIO_HINTS="nc_pncio=disable"
         else
-           USEMPIO_HINTS="nc_use_mpi_io=false"
+           USEMPIO_HINTS="nc_pncio=enable"
         fi
     for intra_aggr in 0 1 ; do
         if test "$intra_aggr" = 1 ; then
