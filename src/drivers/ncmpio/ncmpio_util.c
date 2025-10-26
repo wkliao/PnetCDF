@@ -222,10 +222,10 @@ void ncmpio_hint_extract(NC       *ncp,
     }
 
     /* If user explicitly want to use MPI-IO instead of PnetCDF's internal PNCIO
-     * driver, then set PnetCDF I/O hint "nc_use_mpi_io" to "true".
+     * driver, then set PnetCDF I/O hint "nc_pncio" to "disable".
      */
-    MPI_Info_get(info, "nc_use_mpi_io", MPI_MAX_INFO_VAL-1, value, &flag);
-    if (flag && strcasecmp(value, "true") == 0)
+    MPI_Info_get(info, "nc_pncio", MPI_MAX_INFO_VAL-1, value, &flag);
+    if (flag && strcasecmp(value, "disable") == 0)
         ncp->fstype = PNCIO_FSTYPE_MPIIO;
 }
 
@@ -305,9 +305,9 @@ void ncmpio_hint_set(NC       *ncp,
 
     /* Whether using MPI-IO instead of PnetCDF's internal PNCIO driver. */
     if (ncp->fstype == PNCIO_FSTYPE_MPIIO)
-        MPI_Info_set(info, "nc_use_mpi_io", "true");
+        MPI_Info_set(info, "nc_pncio", "disable");
     else
-        MPI_Info_set(info, "nc_use_mpi_io", "false");
+        MPI_Info_set(info, "nc_pncio", "enable");
 
     if (ncp->num_aggrs_per_node > 0) {
         /* Number of intra-node aggregators per compute node. */

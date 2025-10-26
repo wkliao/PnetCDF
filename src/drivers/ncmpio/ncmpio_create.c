@@ -85,8 +85,9 @@ ncmpio_create(MPI_Comm     comm,
 
     /* Extract hints from user_info. Two hints must be extracted now in order
      * to continue:
-     * nc_use_mpi_io: whether to user MPI-IO or PnetCDF's PNCIO driver.
-     * nc_num_aggrs_per_node: number of processes per node to be aggregators.
+     *     nc_pncio: whether to user MPI-IO or PnetCDF's PNCIO driver.
+     *     nc_num_aggrs_per_node: number of processes per node to be the INA
+     *     aggregators.
      *
      * ncp->fstype will be set in ncmpio_hint_extract().
      */
