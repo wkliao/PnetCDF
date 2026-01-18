@@ -180,7 +180,7 @@ int main(int argc, char **argv)
                 check_tolerance = 1;
                 free(str);
                 break;
-            case '?':
+            default:
                 usage(rank, argv[0]);
                 break;
         }
