@@ -236,6 +236,12 @@ int main(int argc, char **argv)
 
     MPI_Info_free(&info);
 
+    if (num_vars > 0) {
+        for (i=0; i<num_vars; i++)
+            free(var_names[i]);
+        free(var_names);
+    }
+
     MPI_Finalize();
 
     exit((numDIFF == 0) ? EXIT_SUCCESS : EXIT_FAILURE);

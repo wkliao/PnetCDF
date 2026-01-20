@@ -905,17 +905,18 @@ cmp_vars:
         free(dimids[0]);
         free(dimids[1]);
     }
-    free(name[0]);
-    free(name[1]);
 
+cmp_exit:
     /* free up the memory previously allocated */
-    if (num_vars) {
+    if (check_entire_file) {
         for (i=0; i<num_vars; i++)
             free(var_names[i]);
         free(var_names);
     }
 
-cmp_exit:
+    free(name[0]);
+    free(name[1]);
+
     for (i=0; i<2; i++) {
         /* close files */
         if (ncid[i] >= 0) {
