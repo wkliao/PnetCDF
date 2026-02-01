@@ -191,12 +191,15 @@ jobs:
         - name: make ptests
           run: |
             cd ${GITHUB_WORKSPACE}
-            if test "${{ matrix.mpi_vendor }}" = "OpenMPI" ; then
-                # OpenMPI hacks when running in parallel on MacOS
-                export OMPI_MCA_btl_tcp_if_include=lo0
+            if test "${{ matrix.mpi_vendor }}" = "OpenMPI" && test ${{ matrix.os }} == macos-latest ; then
+                # OpenMPI hacks when running programs in parallel on MacOS
+                # export OMPI_MCA_btl_tcp_if_include=lo0
                 export TMPDIR=${RUNNER_TEMP}
+                OMPI_OPTS="--oversubscribe -mca pml ^ucx -mca btl ^openib,uct,vader"
+                make -s LIBTOOLFLAGS=--silent V=1 ptests TESTMPIRUN="${GITHUB_WORKSPACE}/MPI/bin/mpirun -n NP ${OMPI_OPTS}"
+            else
+                make -s LIBTOOLFLAGS=--silent V=1 ptests
             fi
-            make -s LIBTOOLFLAGS=--silent V=1 ptests
 
         - name: make distcheck
           run: |
