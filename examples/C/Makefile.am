@@ -78,7 +78,8 @@ NC_FILES = $(check_PROGRAMS:%=$(TESTOUTDIR)/%.nc) \
 CLEANFILES = core core.* *.gcda *.gcno *.gcov gmon.out \
              $(TESTOUTDIR)/pthread.nc.* $(TESTOUTDIR)/*.nc
 
-EXTRA_DIST = run_c_examples.sh cdl_header.txt
+EXTRA_DIST = run_c_examples.sh cdl_header.txt \
+             parallel_run.sh chunk_compress_FLDS.c
 
 ptest ptest4: $(check_PROGRAMS)
 	@echo "==========================================================="
