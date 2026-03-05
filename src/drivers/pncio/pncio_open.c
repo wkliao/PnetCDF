@@ -86,7 +86,7 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
                 j++;
             }
         }
-        /* select jth rank of node k as an I/O aggregator */
+        /* select the jth rank of node k as an I/O aggregator */
         fd->hints->ranklist[i] = ranks_per_node[k++][j];
         if (rank == fd->hints->ranklist[i]) {
             fd->is_agg = 1;
@@ -177,7 +177,7 @@ err_out:
 
     /* construct cb_nodes rank list */
     GEN_set_cb_node_list(fd);
-    MPI_Info_set(fd->info, "romio_filesystem_type", "UFS:");
+    MPI_Info_set(fd->info, "file_system_type", "UFS:");
 
     return err;
 }
@@ -241,7 +241,7 @@ err_out:
 
     /* construct cb_nodes rank list */
     GEN_set_cb_node_list(fd);
-    MPI_Info_set(fd->info, "romio_filesystem_type", "UFS:");
+    MPI_Info_set(fd->info, "file_system_type", "UFS:");
 
     return err;
 }
@@ -253,7 +253,7 @@ int PNCIO_File_open(MPI_Comm    comm,
                     MPI_Info    info,
                     PNCIO_File *fd)
 {
-    /* Before reaching to this subroutine, PNCIO_FileSysType() should have been
+    /* Before arriving at this subroutine, PNCIO_FileSysType() should have been
      * called to check the file system type.
      */
     char value[MPI_MAX_INFO_VAL + 1], int_str[16];
@@ -292,9 +292,9 @@ int PNCIO_File_open(MPI_Comm    comm,
 
     assert(fd->file_system != PNCIO_FSTYPE_MPIIO);
 
-    /* TODO: When hint romio_no_indep_rw hint is set to true, only aggregators
-     * open the file. Note because fd->is_agg is set at the end of create/open
-     * call.
+    /* When hint romio_no_indep_rw hint is set to true, only aggregators open
+     * the file. Note fd->is_agg will be set at the end of create/open calls
+     * below.
      */
     if (fd->file_system == PNCIO_LUSTRE) {
         if (amode & MPI_MODE_CREATE)
