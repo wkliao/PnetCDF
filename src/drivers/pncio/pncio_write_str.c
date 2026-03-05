@@ -92,8 +92,8 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-        off = fd->disp + offset;
-assert(fd->disp == 0);
+/* In PnetCDF, when fileview is contiguous, offset may be > 0 */
+        off = offset;
         if (fd->flat_file.count > 0) off += fd->flat_file.off[0];
 
         start_off = off;
@@ -158,9 +158,10 @@ assert(fd->disp == 0);
     }
     else { /* noncontiguous in file */
         MPI_Offset size_in_filetype = offset;
+assert(offset == 0);
+/* In PnetCDF, when fileview is non-contiguous, offset is always 0 */
 
-        disp = fd->disp;
-assert(fd->disp == 0);
+        disp = 0;
 
         sum = 0;
         for (i = 0; i < fd->flat_file.count; i++) {

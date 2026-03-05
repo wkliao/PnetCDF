@@ -27,7 +27,6 @@
  *   Argument info is always MPI_INFO_NULL.
  */
 int PNCIO_File_set_view(PNCIO_File   *fd,
-                        MPI_Offset    disp,
                         MPI_Datatype  filetype,
                         MPI_Aint      npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -42,9 +41,7 @@ int PNCIO_File_set_view(PNCIO_File   *fd,
     MPI_Aint i;
 
 assert(filetype == MPI_BYTE);
-assert(disp == 0);
 fd->filetype = filetype;
-fd->disp = 0;
 
     fd->flat_file.count = npairs;
     fd->flat_file.off   = offsets;

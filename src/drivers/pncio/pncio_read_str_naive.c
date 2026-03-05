@@ -32,7 +32,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-        off = fd->disp + offset;
+        off = offset;
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -77,7 +77,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
          *
          */
 
-        disp = fd->disp;
+        disp = 0;
 
         sum = 0;
         for (f_index = 0; f_index < fd->flat_file.count; f_index++) {
