@@ -147,7 +147,9 @@ typedef struct {
 #endif
     MPI_Count    idx;       /* index of off-len pairs consumed so far */
     MPI_Aint     rem;       /* remaining amount in the pair to be consumed */
-    int          is_contig; /* whether view of file or buffer is contiguous */
+    int          is_contig; /* whether or not fileview/buffer is contiguous,
+                             * only when noncontiguous, off and len are malloc-ed
+                             */
 } PNCIO_View;
 
 typedef struct {
@@ -169,7 +171,6 @@ typedef struct {
 
     int skip_read;          /* whether to skip reads in read-modify-write */
 
-    MPI_Offset disp;        /* file displacement */
     MPI_Datatype filetype;  /* file type set in fileview */
                             /* etype in fileview is always MPI_BYTE in PnetCDF */
     PNCIO_View flat_file;   /* flattern filetype */
@@ -219,8 +220,7 @@ extern
 int PNCIO_File_close(PNCIO_File *fh);
 
 extern
-int PNCIO_File_set_view(PNCIO_File *fh, MPI_Offset disp, MPI_Datatype filetype,
-                MPI_Aint npairs,
+int PNCIO_File_set_view(PNCIO_File *fh, MPI_Datatype filetype, MPI_Aint npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count *offsets, MPI_Count *lengths
 #else
