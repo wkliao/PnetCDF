@@ -148,7 +148,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in write buffer, contiguous in file. */
 
-        off = fd->disp + offset;
+        off = offset;
         if (fd->flat_file.count > 0) off += fd->flat_file.off[0];
 
         start_off = off;
@@ -185,7 +185,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         total_w_len += w_len;
 
     } else { /* contiguous buffer and non-contiguous in file */
-        disp = fd->disp;
+        disp = 0;
 /* for non-contiguous in file, PnetCDF always uses disp == 0 */
 assert(disp == 0);
 
