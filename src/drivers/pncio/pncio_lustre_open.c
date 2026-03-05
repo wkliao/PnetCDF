@@ -847,9 +847,9 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
 #endif
 
 #if defined(HAVE_LUSTRE) || defined(MIMIC_LUSTRE)
-assert(mpi_io_mode & MPI_MODE_CREATE);
-
-/* Note ncmpi_create always creates a file with readable and writable permission. */
+    /* Note ncmpi_create() always creates a file with readable and writable
+     * permission.
+     */
     int amode = O_CREAT;
     if (mpi_io_mode & MPI_MODE_RDWR) amode |= O_RDWR;
 #endif
@@ -1089,7 +1089,7 @@ err_out:
     /* construct cb_nodes rank list */
     Lustre_set_cb_node_list(fd);
 
-    MPI_Info_set(fd->info, "romio_filesystem_type", "LUSTRE:");
+    MPI_Info_set(fd->info, "file_system_type", "LUSTRE:");
 
     snprintf(int_str, 16, "%d", fd->hints->lustre_num_osts);
     MPI_Info_set(fd->info, "lustre_num_osts", int_str);
@@ -1183,7 +1183,7 @@ err_out:
     /* construct cb_nodes rank list */
     Lustre_set_cb_node_list(fd);
 
-    MPI_Info_set(fd->info, "romio_filesystem_type", "LUSTRE:");
+    MPI_Info_set(fd->info, "file_system_type", "LUSTRE:");
 
     snprintf(int_str, 16, "%d", fd->hints->lustre_num_osts);
     MPI_Info_set(fd->info, "lustre_num_osts", int_str);
