@@ -134,17 +134,17 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
 
 
 /* PnetCDF always sets these 3 conditions */
-assert(fd->flat_file.size == buf_view.size);
+assert(fd->file_view.size == buf_view.size);
 
     bufsize = buf_view.size;
 
     /* get striping info */
     stripe_size = fd->hints->striping_unit;
 
-    if (!buf_view.is_contig && fd->flat_file.is_contig) {
+    if (!buf_view.is_contig && fd->file_view.is_contig) {
         /* noncontiguous in write buffer, contiguous in file. */
 
-        off = fd->flat_file.off[0];
+        off = fd->file_view.off[0];
 
         start_off = off;
         end_offset = start_off + bufsize - 1;
@@ -180,24 +180,24 @@ assert(fd->flat_file.size == buf_view.size);
         total_w_len += w_len;
 
     } else { /* contiguous buffer and non-contiguous in file */
-        /* find the starting index in fd->flat_file offset-length pairs */
+        /* find the starting index in fd->file_view offset-length pairs */
         MPI_Offset offset = 0;
         MPI_Offset sum = 0;
 
-        for (i = 0; i < fd->flat_file.count; i++) {
-            sum += fd->flat_file.len[i];
+        for (i = 0; i < fd->file_view.count; i++) {
+            sum += fd->file_view.len[i];
             if (sum > 0) {
                 st_index = i;
                 fwr_size = sum;
                 /* abs. offset in bytes in the file */
-                offset = fd->flat_file.off[i] - (sum - fd->flat_file.len[i]);
+                offset = fd->file_view.off[i] - (sum - fd->file_view.len[i]);
                 break;
             }
         }
 
         start_off = offset;
 
-        /* Write request is within single flat_file contig block. This could
+        /* Write request is within single file_view contig block. This could
          * happen, for example, with subarray types that are actually fairly
          * contiguous.
          */
@@ -236,9 +236,9 @@ assert(fd->flat_file.size == buf_view.size);
         end_offset = offset + fwr_size - 1;
         while (i_offset < bufsize) {
             j++;
-assert(j < fd->flat_file.count);
-            off = fd->flat_file.off[j];
-            fwr_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
+assert(j < fd->file_view.count);
+            off = fd->file_view.off[j];
+            fwr_size = MIN(fd->file_view.len[j], bufsize - i_offset);
             i_offset += fwr_size;
             end_offset = off + fwr_size - 1;
         }
@@ -253,7 +253,7 @@ assert(j < fd->flat_file.count);
         writebuf = (char *) NCI_Malloc(stripe_size);
         memset(writebuf, -1, stripe_size);
 
-        if (buf_view.is_contig && !fd->flat_file.is_contig) {
+        if (buf_view.is_contig && !fd->file_view.is_contig) {
             /* contiguous in memory, noncontiguous in file should be the most
              * common case.
              */
@@ -271,14 +271,14 @@ assert(j < fd->flat_file.count);
                 i_offset += fwr_size;
                 if (i_offset >= bufsize) break;
 
-                if (off + fwr_size < fd->flat_file.off[j] + fd->flat_file.len[j])
+                if (off + fwr_size < fd->file_view.off[j] + fd->file_view.len[j])
                     off += fwr_size;
                     /* no more I/O needed. off is incremented by fwr_size. */
                 else {
                     j++;
-assert(j < fd->flat_file.count);
-                    off = fd->flat_file.off[j];
-                    fwr_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
+assert(j < fd->file_view.count);
+                    off = fd->file_view.off[j];
+                    fwr_size = MIN(fd->file_view.len[j], bufsize - i_offset);
                 }
             }
         } else {
@@ -307,10 +307,10 @@ assert(j < fd->flat_file.count);
                 if (size == fwr_size) {
                     /* reached end of contiguous block in file */
                     j++;
-assert(j < fd->flat_file.count);
-                    off = fd->flat_file.off[j];
+assert(j < fd->file_view.count);
+                    off = fd->file_view.off[j];
 
-                    new_fwr_size = fd->flat_file.len[j];
+                    new_fwr_size = fd->file_view.len[j];
                     if (size != bwr_size) {
                         i_offset += size;
                         new_bwr_size -= size;

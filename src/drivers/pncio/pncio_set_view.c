@@ -41,22 +41,22 @@ int PNCIO_File_set_view(PNCIO_File   *fd,
 
 #ifdef PNETCDF_DEBUG
 if (npairs == 0) assert(offsets == NULL && lengths == NULL);
-fd->flat_file.is_contig = (npairs <= 1);
+fd->file_view.is_contig = (npairs <= 1);
 for (i=0; i<npairs; i++) assert(lengths[i] > 0);
 #endif
 
-    fd->flat_file.count = npairs;
-    fd->flat_file.off   = offsets;
-    fd->flat_file.len   = lengths;
-    fd->flat_file.idx   = 0;
-    fd->flat_file.rem   = (npairs > 0) ? lengths[0] : 0;
+    fd->file_view.count = npairs;
+    fd->file_view.off   = offsets;
+    fd->file_view.len   = lengths;
+    fd->file_view.idx   = 0;
+    fd->file_view.rem   = (npairs > 0) ? lengths[0] : 0;
 
     /* Size of fileview must be calculated here, as PnetCDF may coalesce the
      * offset-length pairs in order to make offsets sorted in a monotonically
      * non-decreasing order.
      */
-    fd->flat_file.size = 0;
-    for (i=0; i<npairs; i++) fd->flat_file.size += lengths[i];
+    fd->file_view.size = 0;
+    for (i=0; i<npairs; i++) fd->file_view.size += lengths[i];
 
     return NC_NOERR;
 }

@@ -266,20 +266,20 @@ void PNCIO_Calc_my_req(PNCIO_File         *fd,
     for (int i = 0; i < nprocs; i++)
         buf_idx[i] = -1;
 
-    /* fd->flat_file.count has been checked and adjusted to a possitive number
+    /* fd->file_view.count has been checked and adjusted to a possitive number
      * at the beginning of PNCIO_GEN_ReadStridedColl() and
      * PNCIO_GEN_WriteStridedColl().
      */
-    assert(fd->flat_file.count > 0);
+    assert(fd->file_view.count > 0);
 
     /* one pass just to calculate how much space to allocate for my_req */
-    for (MPI_Count i = 0; i < fd->flat_file.count; i++) {
+    for (MPI_Count i = 0; i < fd->file_view.count; i++) {
         /* short circuit offset/len processing if len == 0
          *      (zero-byte  read/write */
-        if (fd->flat_file.len[i] == 0)
+        if (fd->file_view.len[i] == 0)
             continue;
-        off = fd->flat_file.off[i];
-        fd_len = fd->flat_file.len[i];
+        off = fd->file_view.off[i];
+        fd_len = fd->file_view.len[i];
         /* note: we set fd_len to be the total size of the access.  then
          * PNCIO_Calc_aggregator() will modify the value to return the
          * amount that was available from the file domain that holds the
@@ -292,7 +292,7 @@ void PNCIO_Calc_my_req(PNCIO_File         *fd,
          * part of the file domain that had the starting byte); we'll take
          * care of this data (if there is any) in the while loop below.
          */
-        rem_len = fd->flat_file.len[i] - fd_len;
+        rem_len = fd->file_view.len[i] - fd_len;
 
         while (rem_len != 0) {
             off += fd_len;      /* point to first remaining byte */
@@ -345,13 +345,13 @@ void PNCIO_Calc_my_req(PNCIO_File         *fd,
 
 /* now fill in my_req */
     curr_idx = 0;
-    for (MPI_Count i = 0; i < fd->flat_file.count; i++) {
+    for (MPI_Count i = 0; i < fd->file_view.count; i++) {
         /* short circuit offset/len processing if len == 0
          *      (zero-byte  read/write */
-        if (fd->flat_file.len[i] == 0)
+        if (fd->file_view.len[i] == 0)
             continue;
-        off = fd->flat_file.off[i];
-        fd_len = fd->flat_file.len[i];
+        off = fd->file_view.off[i];
+        fd_len = fd->file_view.len[i];
         proc = PNCIO_Calc_aggregator(fd, off, min_st_offset, &fd_len, fd_size, fd_end);
 
         /* for each separate contiguous access from this process */
@@ -363,7 +363,7 @@ void PNCIO_Calc_my_req(PNCIO_File         *fd,
         l = my_req[proc].count;
         curr_idx += fd_len;
 
-        rem_len = fd->flat_file.len[i] - fd_len;
+        rem_len = fd->file_view.len[i] - fd_len;
 
         /* store the proc, offset, and len information in an array
          * of structures, my_req. Each structure contains the

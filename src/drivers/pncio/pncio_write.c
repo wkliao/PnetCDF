@@ -88,8 +88,8 @@ MPI_Offset file_write(PNCIO_File *fd,
     if (buf_view.size == 0) /* zero-sized request */
         return NC_NOERR;
 
-    if (buf_view.is_contig && fd->flat_file.is_contig)
-        w_len = PNCIO_WriteContig(fd, buf, buf_view.size, fd->flat_file.off[0]);
+    if (buf_view.is_contig && fd->file_view.is_contig)
+        w_len = PNCIO_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
     else if (fd->file_system == PNCIO_LUSTRE)
         w_len = PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view);
     else if (fd->file_system == PNCIO_UFS)
@@ -123,22 +123,22 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File *fh,
         return NC_EPERM;
 
 #ifdef PNETCDF_DEBUG
-if (offset > 0) assert(fh->flat_file.off == NULL && fh->flat_file.len == NULL && fh->flat_file.count == 0);
+if (offset > 0) assert(fh->file_view.off == NULL && fh->file_view.len == NULL && fh->file_view.count == 0);
 #endif
 
-    if (fh->flat_file.off == NULL)
+    if (fh->file_view.off == NULL)
         /* This is when calling this subroutione without set fileview first.
-         * We store offset into fh->flat_file.off.
+         * We store offset into fh->file_view.off.
          */
-        fh->flat_file.off = &offset;
+        fh->file_view.off = &offset;
 
     err = file_write(fh, buf, buf_view);
 
     /* reset fileview, as PnetCDF never reuses a fileview */
-    fh->flat_file.off = NULL;
-    fh->flat_file.len = NULL;
-    fh->flat_file.size = 0;
-    fh->flat_file.count = 0;
+    fh->file_view.off = NULL;
+    fh->file_view.len = NULL;
+    fh->file_view.size = 0;
+    fh->file_view.count = 0;
 
     return err;
 }
@@ -164,14 +164,14 @@ MPI_Offset PNCIO_File_write_at_all(PNCIO_File *fh,
         err = NC_EPERM;
 
 #ifdef PNETCDF_DEBUG
-if (offset > 0) assert(fh->flat_file.off == NULL && fh->flat_file.len == NULL && fh->flat_file.count == 0);
+if (offset > 0) assert(fh->file_view.off == NULL && fh->file_view.len == NULL && fh->file_view.count == 0);
 #endif
 
-    if (fh->flat_file.off == NULL)
+    if (fh->file_view.off == NULL)
         /* This is when calling this subroutione without set fileview first.
-         * We store offset into fh->flat_file.off.
+         * We store offset into fh->file_view.off.
          */
-        fh->flat_file.off = &offset;
+        fh->file_view.off = &offset;
 
     if (fh->file_system == PNCIO_LUSTRE)
         w_len = PNCIO_LUSTRE_WriteStridedColl(fh, buf, buf_view);
@@ -181,10 +181,10 @@ if (offset > 0) assert(fh->flat_file.off == NULL && fh->flat_file.len == NULL &&
         err = NC_EFSTYPE;
 
     /* reset fileview, as PnetCDF never reuses a fileview */
-    fh->flat_file.off = NULL;
-    fh->flat_file.len = NULL;
-    fh->flat_file.size = 0;
-    fh->flat_file.count = 0;
+    fh->file_view.off = NULL;
+    fh->file_view.len = NULL;
+    fh->file_view.size = 0;
+    fh->file_view.count = 0;
 
     return (err == NC_NOERR) ? w_len : err;
 }
