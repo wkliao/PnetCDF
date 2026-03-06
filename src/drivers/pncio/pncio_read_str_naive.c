@@ -19,17 +19,17 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
     MPI_Offset r_len, total_r_len=0;
     MPI_Count bufsize;
 
-    if (fd->flat_file.size == 0)
+    if (fd->file_view.size == 0)
         return 0;
 
     bufsize = buf_view.size;
 
     /* contiguous in buf_view and file_view is handled elsewhere */
 
-    if (!buf_view.is_contig && fd->flat_file.is_contig) {
+    if (!buf_view.is_contig && fd->file_view.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-        off = fd->flat_file.off[0];
+        off = fd->file_view.off[0];
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -57,7 +57,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
     }
     else {      /* noncontiguous in file */
-        MPI_Offset size_in_file_view = fd->flat_file.off[0];
+        MPI_Offset size_in_file_view = fd->file_view.off[0];
 
         int f_index, st_index = 0;
         MPI_Offset st_frd_size;
@@ -77,13 +77,13 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
         disp = 0;
 
         sum = 0;
-        for (f_index = 0; f_index < fd->flat_file.count; f_index++) {
-            sum += fd->flat_file.len[f_index];
+        for (f_index = 0; f_index < fd->file_view.count; f_index++) {
+            sum += fd->file_view.len[f_index];
             if (sum > size_in_file_view) {
                 st_index = f_index;
                 frd_size = sum - size_in_file_view;
-                abs_off_in_file_view = fd->flat_file.off[f_index] +
-                    size_in_file_view - (sum - fd->flat_file.len[f_index]);
+                abs_off_in_file_view = fd->file_view.off[f_index] +
+                    size_in_file_view - (sum - fd->file_view.len[f_index]);
                 break;
             }
         }
@@ -106,11 +106,11 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
         while (userbuf_off < bufsize) {
             f_index++;
 #ifdef PNETCDF_DEBUG
-assert(f_index < fd->flat_file.count);
+assert(f_index < fd->file_view.count);
 #endif
 
-            off = disp + fd->flat_file.off[f_index];
-            frd_size = MIN(fd->flat_file.len[f_index],
+            off = disp + fd->file_view.off[f_index];
+            frd_size = MIN(fd->file_view.len[f_index],
                                bufsize - userbuf_off);
             userbuf_off += frd_size;
             end_offset = off + frd_size - 1;
@@ -128,7 +128,7 @@ assert(f_index < fd->flat_file.count);
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
-        if (buf_view.is_contig && !fd->flat_file.is_contig) {
+        if (buf_view.is_contig && !fd->file_view.is_contig) {
             /* contiguous in memory, noncontiguous in file. should be the
              * most common case.
              */
@@ -154,8 +154,8 @@ assert(f_index < fd->flat_file.count);
                 userbuf_off += frd_size;
                 if (userbuf_off >= bufsize) break;
 
-                if (off + frd_size < disp + fd->flat_file.off[f_index] +
-                    fd->flat_file.len[f_index]) {
+                if (off + frd_size < disp + fd->file_view.off[f_index] +
+                    fd->file_view.len[f_index]) {
                     /* important that this value be correct, as it is
                      * used to set the offset in the fd near the end of
                      * this function.
@@ -168,10 +168,10 @@ assert(f_index < fd->flat_file.count);
                 else {
                     f_index++;
 #ifdef PNETCDF_DEBUG
-assert(f_index < fd->flat_file.count);
+assert(f_index < fd->file_view.count);
 #endif
-                    off = disp + fd->flat_file.off[f_index];
-                    frd_size = MIN(fd->flat_file.len[f_index],
+                    off = disp + fd->file_view.off[f_index];
+                    frd_size = MIN(fd->file_view.len[f_index],
                                        bufsize - userbuf_off);
                 }
             }
@@ -212,11 +212,11 @@ assert(f_index < fd->flat_file.count);
                     /* reached end of contiguous block in file */
                     f_index++;
 #ifdef PNETCDF_DEBUG
-assert(f_index < fd->flat_file.count);
+assert(f_index < fd->file_view.count);
 #endif
-                    off = disp + fd->flat_file.off[f_index];
+                    off = disp + fd->file_view.off[f_index];
 
-                    new_frd_size = fd->flat_file.len[f_index];
+                    new_frd_size = fd->file_view.len[f_index];
                     if (size != brd_size) {
                         i_offset += size;
                         new_brd_size -= size;

@@ -173,7 +173,7 @@ typedef struct {
 
     int skip_read;          /* whether to skip reads in read-modify-write */
 
-    PNCIO_View flat_file;   /* flattern offset-length pairs */
+    PNCIO_View file_view;   /* flattern offset-length pairs */
 
     int atomicity;          /* true=atomic, false=nonatomic */
     char *io_buf;           /* two-phase buffer allocated out of i/o path */

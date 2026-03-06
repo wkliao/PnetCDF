@@ -69,10 +69,10 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
     max_bufsize = atoi(value);
     NCI_Free(value);
 
-    if (!buf_view.is_contig && fd->flat_file.is_contig) {
+    if (!buf_view.is_contig && fd->file_view.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-        off = fd->flat_file.off[0];
+        off = fd->file_view.off[0];
 
         start_off = off;
         end_offset = start_off + bufsize - 1;
@@ -105,20 +105,20 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
         MPI_Offset offset=0;
         MPI_Offset sum=0;
 
-        for (i = 0; i < fd->flat_file.count; i++) {
-            sum += fd->flat_file.len[i];
+        for (i = 0; i < fd->file_view.count; i++) {
+            sum += fd->file_view.len[i];
             if (sum > 0) {
                 st_index = i;
                 frd_size = sum;
                 /* abs. offset in bytes in the file */
-                offset = fd->flat_file.off[i] - (sum - fd->flat_file.len[i]);
+                offset = fd->file_view.off[i] - (sum - fd->file_view.len[i]);
                 break;
             }
         }
 
         start_off = offset;
 
-        /* Wei-keng Liao: read request is within a single flat_file contig
+        /* Wei-keng Liao: read request is within a single file_view contig
          * block e.g. with subarray types that actually describe the whole
          * array */
         if (buf_view.is_contig && bufsize <= frd_size) {
@@ -143,8 +143,8 @@ assert(buf_view.size == r_len);
 
 if (i_offset >= bufsize) break;
             j++;
-            off = fd->flat_file.off[j];
-            frd_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
+            off = fd->file_view.off[j];
+            frd_size = MIN(fd->file_view.len[j], bufsize - i_offset);
         }
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
@@ -155,7 +155,7 @@ if (i_offset >= bufsize) break;
         readbuf_len = 0;
         readbuf = (char *) NCI_Malloc(max_bufsize);
 
-        if (buf_view.is_contig && !fd->flat_file.is_contig) {
+        if (buf_view.is_contig && !fd->file_view.is_contig) {
             /* contiguous in memory, noncontiguous in file should be the most
              * common case.
              */
@@ -174,13 +174,13 @@ if (i_offset >= bufsize) break;
                 i_offset += frd_size;
                 if (i_offset >= bufsize) break;
 
-                if (off + frd_size < fd->flat_file.off[j] + fd->flat_file.len[j])
+                if (off + frd_size < fd->file_view.off[j] + fd->file_view.len[j])
                     off += frd_size; /* off is incremented by frd_size */
                 else {
                     j++;
-assert(j < fd->flat_file.count);
-                    off = fd->flat_file.off[j];
-                    frd_size = MIN(fd->flat_file.len[j],
+assert(j < fd->file_view.count);
+                    off = fd->file_view.off[j];
+                    frd_size = MIN(fd->file_view.len[j],
                                        bufsize - i_offset);
                 }
             }
@@ -211,9 +211,9 @@ assert(j < fd->flat_file.count);
                 if (size == frd_size) {
                     /* reached end of contiguous block in file */
                     j++;
-assert(j < fd->flat_file.count);
-                    off = fd->flat_file.off[j];
-                    new_frd_size = fd->flat_file.len[j];
+assert(j < fd->file_view.count);
+                    off = fd->file_view.off[j];
+                    new_frd_size = fd->file_view.len[j];
                     if (size != brd_size) {
                         i_offset += size;
                         new_brd_size -= size;
