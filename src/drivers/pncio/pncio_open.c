@@ -262,7 +262,6 @@ int PNCIO_File_open(MPI_Comm    comm,
     fd->comm        = comm;
     fd->filename    = filename;  /* without file system type name prefix */
     fd->atomicity   = 0;
-    fd->filetype    = MPI_BYTE;
     fd->is_open     = 0;
     fd->access_mode = amode;
     fd->io_buf      = NULL; /* collective buffer used by aggregators only */
