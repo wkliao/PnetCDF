@@ -65,7 +65,7 @@ MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
      * call to PNCIO_WriteContig() earlier.
      */
 #ifdef PNETCDF_DEBUG
-    assert(!(buf_view.is_contig && fd->flat_file.is_contig));
+    assert(!(buf_view.is_contig && fd->file_view.is_contig));
 #endif
 
     if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE) {
@@ -76,7 +76,7 @@ MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
     }
 
 #ifdef PNETCDF_DEBUG
-assert(fd->flat_file.size == buf_view.size);
+assert(fd->file_view.size == buf_view.size);
 #endif
 
     bufsize = buf_view.size;
@@ -84,10 +84,10 @@ assert(fd->flat_file.size == buf_view.size);
     /* get max_bufsize from the info object. */
     max_bufsize = fd->hints->ind_wr_buffer_size;
 
-    if (!buf_view.is_contig && fd->flat_file.is_contig) {
+    if (!buf_view.is_contig && fd->file_view.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-        off = fd->flat_file.off[0];
+        off = fd->file_view.off[0];
 
         start_off = off;
         end_offset = start_off + bufsize - 1;
@@ -153,20 +153,20 @@ assert(fd->flat_file.size == buf_view.size);
         MPI_Offset offset=0;
         MPI_Offset sum=0;
 
-        for (i = 0; i < fd->flat_file.count; i++) {
-            sum += fd->flat_file.len[i];
+        for (i = 0; i < fd->file_view.count; i++) {
+            sum += fd->file_view.len[i];
             if (sum > 0) {
                 st_index = i;
                 fwr_size = sum;
                 /* abs. offset in bytes in the file */
-                offset = fd->flat_file.off[i] - (sum - fd->flat_file.len[i]);
+                offset = fd->file_view.off[i] - (sum - fd->file_view.len[i]);
                 break;
             }
         }
 
         start_off = offset;
 
-        /* Write request is within single flat_file contig block. This could
+        /* Write request is within single file_view contig block. This could
          * happen, for example, with subarray types that are actually fairly
          * contiguous.
          */
@@ -195,9 +195,9 @@ assert(fd->flat_file.size == buf_view.size);
         end_offset = offset + fwr_size - 1;
         while (i_offset < bufsize) {
             j++;
-            fwr_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
+            fwr_size = MIN(fd->file_view.len[j], bufsize - i_offset);
             i_offset += fwr_size;
-            end_offset = fd->flat_file.off[j] + fwr_size - 1;
+            end_offset = fd->file_view.off[j] + fwr_size - 1;
         }
 
         /* if atomicity is true or data sieving is not disable, lock the region
@@ -210,7 +210,7 @@ assert(fd->flat_file.size == buf_view.size);
         writebuf = (char *) NCI_Malloc(max_bufsize);
         memset(writebuf, -1, max_bufsize);
 
-        if (buf_view.is_contig && !fd->flat_file.is_contig) {
+        if (buf_view.is_contig && !fd->file_view.is_contig) {
             /* contiguous in memory, noncontiguous in file should be the most
              * common case.
              */
@@ -229,16 +229,16 @@ assert(fd->flat_file.size == buf_view.size);
                 i_offset += fwr_size;
                 if (i_offset >= bufsize) break;
 
-                if (off + fwr_size < fd->flat_file.off[j] +
-                                     fd->flat_file.len[j])
+                if (off + fwr_size < fd->file_view.off[j] +
+                                     fd->file_view.len[j])
                     off += fwr_size; /* off is incremented by fwr_size. */
                 else {
                     j++;
 #ifdef PNETCDF_DEBUG
-assert(j < fd->flat_file.count);
+assert(j < fd->file_view.count);
 #endif
-                    off = fd->flat_file.off[j];
-                    fwr_size = MIN(fd->flat_file.len[j],
+                    off = fd->file_view.off[j];
+                    fwr_size = MIN(fd->file_view.len[j],
                                        bufsize - i_offset);
                 }
             }
@@ -269,10 +269,10 @@ assert(j < fd->flat_file.count);
                 if (size == fwr_size) {
                     j++;
 #ifdef PNETCDF_DEBUG
-assert(j < fd->flat_file.count);
+assert(j < fd->file_view.count);
 #endif
-                    off = fd->flat_file.off[j];
-                    new_fwr_size = fd->flat_file.len[j];
+                    off = fd->file_view.off[j];
+                    new_fwr_size = fd->file_view.len[j];
                     if (size != bwr_size) {
                         i_offset += size;
                         new_bwr_size -= size;

@@ -129,11 +129,11 @@ int LUSTRE_Calc_aggregator(PNCIO_File *fd,
 /*----< LUSTRE_Calc_my_req() >-----------------------------------------------*/
 /* calculates what portions of the read/write requests of this process fall
  * into the file domains of all I/O aggregators.
- *   IN: fd->flat_file: this rank's flattened write requests
- *       fd->flat_file.count: number of noncontiguous offset-length file requests
- *       fd->flat_file.off[fd->flat_file.count] file offsets of individual
+ *   IN: fd->file_view: this rank's flattened write requests
+ *       fd->file_view.count: number of noncontiguous offset-length file requests
+ *       fd->file_view.off[fd->file_view.count] file offsets of individual
  *       noncontiguous requests.
- *       fd->flat_file.len[fd->flat_file.count] lengths of individual
+ *       fd->file_view.len[fd->file_view.count] lengths of individual
  *       noncontiguous requests.
  *   IN: buf_is_contig: whether the write buffer is contiguous or not
  *   OUT: my_req_ptr[cb_nodes] offset-length pairs of this process's requests
@@ -158,10 +158,10 @@ void LUSTRE_Calc_my_req(PNCIO_File    *fd,
     MPI_Offset curr_idx, off;
     PNCIO_Access *my_req;
 
-    /* fd->flat_file.count has been checked and adjusted to a possitive number
+    /* fd->file_view.count has been checked and adjusted to a possitive number
      * at the beginning of PNCIO_LUSTRE_WriteStridedColl().
      */
-    assert(fd->flat_file.count > 0);
+    assert(fd->file_view.count > 0);
 
     cb_nodes = fd->hints->cb_nodes;
 
@@ -176,22 +176,22 @@ void LUSTRE_Calc_my_req(PNCIO_File    *fd,
      */
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(int) + sizeof(MPI_Offset);
-    aggr_ranks = (int*) NCI_Malloc(alloc_sz * fd->flat_file.count);
-    avail_lens = (MPI_Offset*) (aggr_ranks + fd->flat_file.count);
+    aggr_ranks = (int*) NCI_Malloc(alloc_sz * fd->file_view.count);
+    avail_lens = (MPI_Offset*) (aggr_ranks + fd->file_view.count);
 #else
     alloc_sz = sizeof(int) * 2;
-    aggr_ranks = (int*) NCI_Malloc(alloc_sz * fd->flat_file.count);
-    avail_lens = aggr_ranks + fd->flat_file.count;
+    aggr_ranks = (int*) NCI_Malloc(alloc_sz * fd->file_view.count);
+    avail_lens = aggr_ranks + fd->file_view.count;
 #endif
 
     /* Note that MPI standard (MPI 3.1 Chapter 13.1.1 and MPI 4.0 Chapter
      * 14.1.1) requires that the typemap displacements of etype and
      * filetype are non-negative and monotonically non-decreasing. This
-     * makes fd->flat_file.off[] to be monotonically non-decreasing.
+     * makes fd->file_view.off[] to be monotonically non-decreasing.
      */
 
 /*
-Alternative: especially for when fd->flat_file.count is large
+Alternative: especially for when fd->file_view.count is large
 1 This rank's aggregate file access region is from start_offset to end_offset.
 2 start with the 1st aggregator ID and keep assign aggregator until next stripe.
   This can avoid too many calls to LUSTRE_Calc_aggregator()
@@ -199,18 +199,18 @@ Alternative: especially for when fd->flat_file.count is large
 
     /* nelems will be the number of offset-length pairs for my_req[] */
     nelems = 0;
-    for (i = 0; i < fd->flat_file.count; i++) {
+    for (i = 0; i < fd->file_view.count; i++) {
         /* short circuit offset/len processing if zero-byte read/write. */
-        if (fd->flat_file.len[i] == 0)
+        if (fd->file_view.len[i] == 0)
             continue;
 
-        off = fd->flat_file.off[i];
-        avail_len = fd->flat_file.len[i];
+        off = fd->file_view.off[i];
+        avail_len = fd->file_view.len[i];
         /* LUSTRE_Calc_aggregator() modifies the value of 'avail_len' to the
          * amount that is only covered by the aggr's file domain. The remaining
          * (tail) will continue to be processed to determine to whose file
          * domain it belongs. As LUSTRE_Calc_aggregator() can be expensive for
-         * large value of fd->flat_file.count, we keep a copy of the returned
+         * large value of fd->file_view.count, we keep a copy of the returned
          * values of 'aggr' and 'avail_len' in aggr_ranks[] and avail_lens[] to
          * be used in the next for loop (not next iteration).
          *
@@ -220,7 +220,7 @@ Alternative: especially for when fd->flat_file.count is large
          */
         aggr = LUSTRE_Calc_aggregator(fd, off, &avail_len);
         aggr_ranks[i] = aggr;          /* first aggregator ID of this request */
-        avail_lens[i] = avail_len;     /* length covered, may be < fd->flat_file.len[i] */
+        avail_lens[i] = avail_len;     /* length covered, may be < fd->file_view.len[i] */
         assert(aggr >= 0 && aggr <= cb_nodes);
         my_req[aggr].count++; /* increment for aggregator aggr */
         nelems++;             /* true number of noncontiguous requests
@@ -229,7 +229,7 @@ Alternative: especially for when fd->flat_file.count is large
         /* rem_len is the amount of ith offset-length pair that is not covered
          * by aggregator aggr's file domain.
          */
-        rem_len = fd->flat_file.len[i] - avail_len;
+        rem_len = fd->file_view.len[i] - avail_len;
         assert(rem_len >= 0);
 
         while (rem_len > 0) {
@@ -285,12 +285,12 @@ Alternative: especially for when fd->flat_file.count is large
 
     /* now fill in my_req */
     curr_idx = 0;
-    for (i = 0; i < fd->flat_file.count; i++) {
+    for (i = 0; i < fd->file_view.count; i++) {
         /* short circuit offset/len processing if zero-byte read/write. */
-        if (fd->flat_file.len[i] == 0)
+        if (fd->file_view.len[i] == 0)
             continue;
 
-        off = fd->flat_file.off[i];
+        off = fd->file_view.off[i];
         aggr = aggr_ranks[i];
         assert(aggr >= 0 && aggr <= cb_nodes);
         avail_len = avail_lens[i];
@@ -300,7 +300,7 @@ Alternative: especially for when fd->flat_file.count is large
             buf_idx[aggr][l] = curr_idx;
             curr_idx += avail_len;
         }
-        rem_len = fd->flat_file.len[i] - avail_len;
+        rem_len = fd->file_view.len[i] - avail_len;
 
         /* Each my_req[i] contains the number of this process's noncontiguous
          * requests that fall into aggregator aggr's file domain.
@@ -616,12 +616,12 @@ double curT = MPI_Wtime();
     MPI_Comm_rank(fd->comm, &myrank);
 
     /* PnetCDF never reuses a fileview across two or more PNCIO calls. As this
-     * subroutine may modify the contents of fd->flat_file, we save its
+     * subroutine may modify the contents of fd->file_view, we save its
      * contents and restore it before leaving this sibroutine.
      */
-    PNCIO_View saved_flat_file = fd->flat_file;
+    PNCIO_View saved_file_view = fd->file_view;
 
-    /* fd->flat_file contains a list of starting file offsets and lengths of
+    /* fd->file_view contains a list of starting file offsets and lengths of
      * write requests made by this rank. Similarly, buf_view contains a list of
      * offset-length pairs describing the write buffer layout.  Note as PnetCDF
      * never re-uses a fileview or buffer view.
@@ -629,7 +629,7 @@ double curT = MPI_Wtime();
      * Note that MPI standard (MPI 3.1 Chapter 13.1.1 and MPI 4.0 Chapter
      * 14.1.1) requires that the typemap displacements of etype and filetype
      * set by the user are non-negative and monotonically non-decreasing. This
-     * makes fd->flat_file.off[] to be monotonically non-decreasing.
+     * makes fd->file_view.off[] to be monotonically non-decreasing.
      *
      * This rank's aggregate file access region is from start_offset to
      * end_offset. Note: end_offset points to the last byte-offset to be
@@ -637,24 +637,24 @@ double curT = MPI_Wtime();
      * file access region is of size 100 bytes. If this rank has no data to
      * write, end_offset == (start_offset - 1)
      */
-    if (fd->flat_file.count == 0) { /* whole file is visible */
-        /* set flat_file as a single contiguous offset-length pair */
-        fd->flat_file.len       = &one_len;
-        fd->flat_file.size      = one_len;
-        fd->flat_file.count     = 1;
-        fd->flat_file.is_contig = 1;
-        start_offset = fd->flat_file.off[0];
+    if (fd->file_view.count == 0) { /* whole file is visible */
+        /* set file_view as a single contiguous offset-length pair */
+        fd->file_view.len       = &one_len;
+        fd->file_view.size      = one_len;
+        fd->file_view.count     = 1;
+        fd->file_view.is_contig = 1;
+        start_offset = fd->file_view.off[0];
         end_offset = start_offset + buf_view.size - 1;
     }
-    else { /* Note flat_file.off[] is always relative to beginning of file */
-        /* When flat_file is not contiguous, PnetCDF always calls this
+    else { /* Note file_view.off[] is always relative to beginning of file */
+        /* When file_view is not contiguous, PnetCDF always calls this
          * subroutine with offset == 0.
          */
-        start_offset = fd->flat_file.off[0];
-        end_offset   = fd->flat_file.off[fd->flat_file.count-1]
-                     + fd->flat_file.len[fd->flat_file.count-1] - 1;
+        start_offset = fd->file_view.off[0];
+        end_offset   = fd->file_view.off[fd->file_view.count-1]
+                     + fd->file_view.len[fd->file_view.count-1] - 1;
     }
-// if (myrank==0) printf("%s %d: fd->flat_file size=%lld count=%lld offset=%lld start_offset=%lld end_offset=%lld\n",__func__,__LINE__, fd->flat_file.size, fd->flat_file.count,fd->flat_file.off[0],start_offset,end_offset);
+// if (myrank==0) printf("%s %d: fd->file_view size=%lld count=%lld offset=%lld start_offset=%lld end_offset=%lld\n",__func__,__LINE__, fd->file_view.size, fd->file_view.count,fd->file_view.off[0],start_offset,end_offset);
 
     buf_view.idx  = 0;
     buf_view.rem = buf_view.size;
@@ -765,23 +765,23 @@ double curT = MPI_Wtime();
     if (!do_collect) {
 
         /* restore flattend file view before leaving this sibroutine */
-        fd->flat_file = saved_flat_file;
+        fd->file_view = saved_file_view;
 
         if (buf_view.size == 0) /* zero-sized request */
             return 0;
 
-        if (fd->flat_file.is_contig && buf_view.is_contig) {
+        if (fd->file_view.is_contig && buf_view.is_contig) {
             /* Both buffer and fileview are contiguous. Note when
-             * fd->flat_file.is_contig, it is still possible
-             * fd->flat_file.count > 0 and when this happens
-             * fd->flat_file.count should be 1, which comes from PnetCDF wait
+             * fd->file_view.is_contig, it is still possible
+             * fd->file_view.count > 0 and when this happens
+             * fd->file_view.count should be 1, which comes from PnetCDF wait
              * call and the number of nonblocking requests is 1.
              */
 #ifdef WKL_DEBUG
             printf("%s %d: SWITCH to PNCIO_WriteContig !!!\n",__func__,__LINE__);
 #endif
 
-            return PNCIO_WriteContig(fd, buf, buf_view.size, fd->flat_file.off[0]);
+            return PNCIO_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
         }
 
 #ifdef WKL_DEBUG
@@ -967,7 +967,7 @@ double curT = MPI_Wtime();
 #endif
 
     /* restore flattend file view before leaving this sibroutine */
-    fd->flat_file = saved_flat_file;
+    fd->file_view = saved_file_view;
 
     /* w_len may not be the same as buf_view.size, because data sieving may
      * write more than requested.
@@ -2277,23 +2277,23 @@ int num_memcpy=0;
                  - buf_view->rem;
                  /* in case data left to be copied from previous round */
 
-    /* fd->flat_file.count has been checked and adjusted to a possitive number
+    /* fd->file_view.count has been checked and adjusted to a possitive number
      * at the beginning of PNCIO_LUSTRE_WriteStridedColl().
      */
-    assert(fd->flat_file.count > 0);
+    assert(fd->file_view.count > 0);
 
-    /* fd->flat_file.count: the number of noncontiguous file segments this
-     *     rank writes to. Each segment i is described by fd->flat_file.offs[i]
-     *     and fd->flat_file.len[i].
-     * fd->flat_file.idx: the index to the fd->flat_file.offs[],
-     *     fd->flat_file.len[] that have been processed in the previous round.
+    /* fd->file_view.count: the number of noncontiguous file segments this
+     *     rank writes to. Each segment i is described by fd->file_view.offs[i]
+     *     and fd->file_view.len[i].
+     * fd->file_view.idx: the index to the fd->file_view.offs[],
+     *     fd->file_view.len[] that have been processed in the previous round.
      * The while loop below packs write data into send buffers, send_buf[],
      * based on this rank's off-len pairs in its file view,
      */
-    off     = fd->flat_file.off[fd->flat_file.idx]
-            + fd->flat_file.len[fd->flat_file.idx]
-            - fd->flat_file.rem;
-    rem_len = fd->flat_file.rem;
+    off     = fd->file_view.off[fd->file_view.idx]
+            + fd->file_view.len[fd->file_view.idx]
+            - fd->file_view.rem;
+    rem_len = fd->file_view.rem;
 
 // int rank; MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     while (send_total_size > 0) {
@@ -2414,23 +2414,23 @@ num_memcpy++;
             /* len is the amount of data copied */
             off += len;
             rem_len -= len;
-            fd->flat_file.rem -= len;
+            fd->file_view.rem -= len;
             send_total_size -= len;
             if (send_total_size == 0) break;
         }
         if (send_total_size == 0) break;
 
         /* done with this off-len pair, move on to the next */
-        if (fd->flat_file.rem == 0) {
-            fd->flat_file.idx++;
-            fd->flat_file.rem = fd->flat_file.len[fd->flat_file.idx];
+        if (fd->file_view.rem == 0) {
+            fd->file_view.idx++;
+            fd->file_view.rem = fd->file_view.len[fd->file_view.idx];
         }
-        off = fd->flat_file.off[fd->flat_file.idx];
-        rem_len = fd->flat_file.rem;
+        off = fd->file_view.off[fd->file_view.idx];
+        rem_len = fd->file_view.rem;
     }
 
 #ifdef WKL_DEBUG
-if (num_memcpy> 0) printf("---- fd->flat_file.count=%lld fd->flat_file.idx=%lld buf_view->count=%lld num_memcpy=%d\n",fd->flat_file.count,fd->flat_file.idx,buf_view->count,num_memcpy);
+if (num_memcpy> 0) printf("---- fd->file_view.count=%lld fd->file_view.idx=%lld buf_view->count=%lld num_memcpy=%d\n",fd->file_view.count,fd->file_view.idx,buf_view->count,num_memcpy);
 #endif
 }
 
