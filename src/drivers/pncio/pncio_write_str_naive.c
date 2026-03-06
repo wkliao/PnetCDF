@@ -11,33 +11,30 @@
 
 MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
                                         const void *buf,
-                                        PNCIO_View  buf_view,
-                                        MPI_Offset  offset)
+                                        PNCIO_View  buf_view)
 {
     int b_index;
     MPI_Count bufsize;
 
     /* bwr == buffer write; fwr == file write */
-    MPI_Offset bwr_size, fwr_size = 0, sum, size_in_filetype, size;
-    MPI_Offset abs_off_in_filetype = 0, req_len, userbuf_off;
-    MPI_Offset off, req_off, disp, end_offset = 0, start_off;
+    MPI_Offset bwr_size, fwr_size = 0, sum, size_in_file_view, size;
+    MPI_Offset abs_off_in_file_view = 0, req_len, userbuf_off;
+    MPI_Offset off, req_off, end_offset = 0, start_off;
     MPI_Offset w_len, total_w_len=0;
 
-/* PnetCDF always sets fd->filetype == MPI_BYTE */
-assert(fd->filetype == MPI_BYTE);
-
-    /* Contiguous both in buftype and filetype should have been handled in a
+    /* Contiguous both in buf_view and file_view should have been handled in a
      * call to PNCIO_WriteContig() earlier.
      */
+#ifdef PNETCDF_DEBUG
     assert(!(buf_view.is_contig && fd->flat_file.is_contig));
+#endif
 
     bufsize = buf_view.size;
 
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-/* In PnetCDF, when fileview is contiguous, offset may be > 0 */
-        off = offset;
+        off = fd->flat_file.off[0];
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -72,35 +69,28 @@ assert(fd->filetype == MPI_BYTE);
          * the noncontiguous in file cases:
          * start_off - starting byte position of data in file
          * end_offset - last byte offset to be accessed in the file
-         * st_index - index of block in first filetype that we will be
+         * st_index - index of block in first file_view that we will be
          *            starting in (?)
-         * st_fwr_size - size of the data in the first filetype block
+         * st_fwr_size - size of the data in the first file_view block
          *               that we will write (accounts for being part-way
-         *               into writing this block of the filetype
+         *               into writing this block of the file_view
          */
-
-        disp = 0;
-
-/* noncontiguous in fileview, disp and offset should be 0 for PnetCDF */
-assert(offset == 0);
-/* In PnetCDF, when fileview is non-contiguous, offset is always 0 */
-
-        size_in_filetype = offset;
+        size_in_file_view = fd->flat_file.off[0];
 
         sum = 0;
         for (f_index = 0; f_index < fd->flat_file.count; f_index++) {
             sum += fd->flat_file.len[f_index];
-            if (sum > size_in_filetype) {
+            if (sum > size_in_file_view) {
                 st_index = f_index;
-                fwr_size = sum - size_in_filetype;
-                abs_off_in_filetype = fd->flat_file.off[f_index] +
-                    size_in_filetype - (sum - fd->flat_file.len[f_index]);
+                fwr_size = sum - size_in_file_view;
+                abs_off_in_file_view = fd->flat_file.off[f_index] +
+                    size_in_file_view - (sum - fd->flat_file.len[f_index]);
                 break;
             }
         }
 
         /* abs. offset in bytes in the file */
-        start_off = disp + abs_off_in_filetype;
+        start_off = abs_off_in_file_view;
 
         st_fwr_size = fwr_size;
 
@@ -120,7 +110,7 @@ assert(offset == 0);
             fwr_size = MIN(fd->flat_file.len[f_index],
                                bufsize - userbuf_off);
             userbuf_off += fwr_size;
-            end_offset = disp + fd->flat_file.off[f_index] + fwr_size - 1;
+            end_offset = fd->flat_file.off[f_index] + fwr_size - 1;
         }
 
         /* End of calculations.  At this point the following values have
@@ -161,7 +151,7 @@ assert(offset == 0);
                 userbuf_off += fwr_size;
                 if (userbuf_off >= bufsize) break;
 
-                if (off + fwr_size < disp + fd->flat_file.off[f_index] +
+                if (off + fwr_size < fd->flat_file.off[f_index] +
                     fd->flat_file.len[f_index]) {
                     /* important that this value be correct, as it is
                      * used to set the offset in the fd near the end of
@@ -169,13 +159,15 @@ assert(offset == 0);
                      */
                     off += fwr_size;
                 }
-                /* did not reach end of contiguous block in filetype.
+                /* did not reach end of contiguous block in file_view.
                  * no more I/O needed. off is incremented by fwr_size.
                  */
                 else {
                     f_index++;
+#ifdef PNETCDF_DEBUG
 assert(f_index < fd->flat_file.count);
-                    off = disp + fd->flat_file.off[f_index];
+#endif
+                    off = fd->flat_file.off[f_index];
                     fwr_size = MIN(fd->flat_file.len[f_index],
                                        bufsize - userbuf_off);
                 }
@@ -215,8 +207,10 @@ assert(f_index < fd->flat_file.count);
 
                 if (size == fwr_size) {
                     f_index++;
+#ifdef PNETCDF_DEBUG
 assert(f_index < fd->flat_file.count);
-                    off = disp + fd->flat_file.off[f_index];
+#endif
+                    off = fd->flat_file.off[f_index];
                     new_fwr_size = fd->flat_file.len[f_index];
                     if (size != bwr_size) {
                         i_offset += size;
@@ -227,7 +221,9 @@ assert(f_index < fd->flat_file.count);
                 if (size == bwr_size) {
                     /* reached end of contiguous block in memory */
                     b_index++;
+#ifdef PNETCDF_DEBUG
 assert(b_index < buf_view.count);
+#endif
                     i_offset = buf_view.off[b_index];
                     new_bwr_size = buf_view.len[b_index];
                     if (size != fwr_size) {

@@ -50,39 +50,34 @@
 
 MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
                                   const void *buf,
-                                  PNCIO_View  buf_view,
-                                  MPI_Offset  offset)
+                                  PNCIO_View  buf_view)
 {
-
-/* offset is in units of etype relative to the filetype. */
-
     char *writebuf = NULL;
     int i, j, k, st_index = 0;
     MPI_Aint writebuf_len, max_bufsize, write_sz, bufsize;
-    MPI_Offset i_offset, sum, num, size, abs_off_in_filetype=0;
-    MPI_Offset userbuf_off, off, req_off, disp, end_offset=0;
+    MPI_Offset i_offset, num, size;
+    MPI_Offset userbuf_off, off, req_off, end_offset=0;
     MPI_Offset writebuf_off, start_off, new_bwr_size, new_fwr_size;
     MPI_Offset st_fwr_size, fwr_size = 0, bwr_size, req_len;
     MPI_Offset r_len, w_len, total_w_len=0;
 
-    /* Contiguous both in buftype and filetype should have been handled in a
+    /* Contiguous both in buf_view and file_view should have been handled in a
      * call to PNCIO_WriteContig() earlier.
      */
+#ifdef PNETCDF_DEBUG
     assert(!(buf_view.is_contig && fd->flat_file.is_contig));
+#endif
 
     if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE) {
         /* If user has disabled data sieving on reads, use naive approach
          * instead.
          */
-        return PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view, offset);
+        return PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view);
     }
 
-// printf("%s at %d: offset=%lld\n",__func__,__LINE__, offset);
-
-/* PnetCDF always set these 3 conditions */
-assert(fd->filetype == MPI_BYTE);
+#ifdef PNETCDF_DEBUG
 assert(fd->flat_file.size == buf_view.size);
-if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
+#endif
 
     bufsize = buf_view.size;
 
@@ -92,13 +87,11 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-/* In PnetCDF, when fileview is contiguous, offset may be > 0 */
-        off = offset;
-        if (fd->flat_file.count > 0) off += fd->flat_file.off[0];
+        off = fd->flat_file.off[0];
 
         start_off = off;
-        end_offset = off + bufsize - 1;
-        writebuf_off = off;
+        end_offset = start_off + bufsize - 1;
+        writebuf_off = start_off;
         writebuf = (char *) NCI_Malloc(max_bufsize);
         writebuf_len = MIN(max_bufsize, end_offset - writebuf_off + 1);
 
@@ -157,31 +150,21 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
             goto fn_exit;
     }
     else { /* noncontiguous in file */
-        MPI_Offset size_in_filetype = offset;
-assert(offset == 0);
-/* In PnetCDF, when fileview is non-contiguous, offset is always 0 */
+        MPI_Offset offset=0;
+        MPI_Offset sum=0;
 
-        disp = 0;
-
-        sum = 0;
         for (i = 0; i < fd->flat_file.count; i++) {
             sum += fd->flat_file.len[i];
-            if (sum > size_in_filetype) {
+            if (sum > 0) {
                 st_index = i;
-                fwr_size = sum - size_in_filetype;
-                abs_off_in_filetype = fd->flat_file.off[i] +
-                    size_in_filetype - (sum - fd->flat_file.len[i]);
+                fwr_size = sum;
+                /* abs. offset in bytes in the file */
+                offset = fd->flat_file.off[i] - (sum - fd->flat_file.len[i]);
                 break;
             }
         }
 
-        /* abs. offset in bytes in the file */
-        offset = disp + abs_off_in_filetype;
-
         start_off = offset;
-assert(offset == abs_off_in_filetype);
-
-// printf("%s at %d: start_off=%lld abs_off_in_filetype=%lld\n",__func__,__LINE__,start_off,abs_off_in_filetype);
 
         /* Write request is within single flat_file contig block. This could
          * happen, for example, with subarray types that are actually fairly
@@ -214,7 +197,7 @@ assert(offset == abs_off_in_filetype);
             j++;
             fwr_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
             i_offset += fwr_size;
-            end_offset = disp + fd->flat_file.off[j] + fwr_size - 1;
+            end_offset = fd->flat_file.off[j] + fwr_size - 1;
         }
 
         /* if atomicity is true or data sieving is not disable, lock the region
@@ -246,13 +229,15 @@ assert(offset == abs_off_in_filetype);
                 i_offset += fwr_size;
                 if (i_offset >= bufsize) break;
 
-                if (off + fwr_size < disp + fd->flat_file.off[j] +
-                                            fd->flat_file.len[j])
+                if (off + fwr_size < fd->flat_file.off[j] +
+                                     fd->flat_file.len[j])
                     off += fwr_size; /* off is incremented by fwr_size. */
                 else {
                     j++;
+#ifdef PNETCDF_DEBUG
 assert(j < fd->flat_file.count);
-                    off = disp + fd->flat_file.off[j];
+#endif
+                    off = fd->flat_file.off[j];
                     fwr_size = MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
                 }
@@ -283,8 +268,10 @@ assert(j < fd->flat_file.count);
 
                 if (size == fwr_size) {
                     j++;
+#ifdef PNETCDF_DEBUG
 assert(j < fd->flat_file.count);
-                    off = disp + fd->flat_file.off[j];
+#endif
+                    off = fd->flat_file.off[j];
                     new_fwr_size = fd->flat_file.len[j];
                     if (size != bwr_size) {
                         i_offset += size;
@@ -296,7 +283,9 @@ assert(j < fd->flat_file.count);
                     /* reached end of contiguous block in memory */
 
                     k++;
+#ifdef PNETCDF_DEBUG
 assert(k < buf_view.count);
+#endif
                     i_offset = buf_view.off[k];
                     new_bwr_size = buf_view.len[k];
                     if (size != fwr_size) {

@@ -27,7 +27,6 @@
  *   Argument info is always MPI_INFO_NULL.
  */
 int PNCIO_File_set_view(PNCIO_File   *fd,
-                        MPI_Datatype  filetype,
                         MPI_Aint      npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
                         MPI_Count    *offsets,
@@ -40,8 +39,11 @@ int PNCIO_File_set_view(PNCIO_File   *fd,
 {
     MPI_Aint i;
 
-assert(filetype == MPI_BYTE);
-fd->filetype = filetype;
+#ifdef PNETCDF_DEBUG
+if (npairs == 0) assert(offsets == NULL && lengths == NULL);
+fd->flat_file.is_contig = (npairs <= 1);
+for (i=0; i<npairs; i++) assert(lengths[i] > 0);
+#endif
 
     fd->flat_file.count = npairs;
     fd->flat_file.off   = offsets;
@@ -55,9 +57,6 @@ fd->filetype = filetype;
      */
     fd->flat_file.size = 0;
     for (i=0; i<npairs; i++) fd->flat_file.size += lengths[i];
-
-    /* is_contig is redundant to (count <= 1), but convenient */
-    fd->flat_file.is_contig = (npairs <= 1);
 
     return NC_NOERR;
 }

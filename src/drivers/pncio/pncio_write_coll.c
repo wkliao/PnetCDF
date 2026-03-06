@@ -43,8 +43,7 @@ static void Fill_send_buffer(PNCIO_File *fd, void *buf,
 
 MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
                                       const void *buf,
-                                      PNCIO_View  buf_view,
-                                      MPI_Offset  offset) /* relative to fileview */
+                                      PNCIO_View  buf_view)
 {
     /* Uses a generalized version of the extended two-phase method described in
      * "An Extended Two-Phase Method for Accessing Sections of Out-of-Core
@@ -75,7 +74,7 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
     int one_len = (int)buf_view.size;
 #endif
 
-// printf("%s at %d: offset=%lld buf_view.size=%lld flat_file.count %lld size %lld is_contig %d\n",__func__,__LINE__, offset,buf_view.size,fd->flat_file.count, fd->flat_file.size, fd->flat_file.is_contig);
+// printf("%s at %d: offset=%lld buf_view.size=%lld flat_file.count %lld size %lld is_contig %d\n",__func__,__LINE__, fd->flat_file.off[0],buf_view.size,fd->flat_file.count, fd->flat_file.size, fd->flat_file.is_contig);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 double curT = MPI_Wtime();
@@ -92,19 +91,12 @@ double curT = MPI_Wtime();
 
     if (fd->flat_file.count == 0) { /* whole file is visible */
         /* set flat_file as a single contiguous offset-length pair */
-        fd->flat_file.off       = &offset;
         fd->flat_file.len       = &one_len;
         fd->flat_file.size      = one_len;
         fd->flat_file.count     = 1;
         fd->flat_file.is_contig = 1;
-        start_offset = offset;
-        end_offset = offset + buf_view.size - 1;
-    }
-    else {
-        /* When flat_file is not contiguous, PnetCDF always calls this
-         * subroutine with offset == 0.
-         */
-        assert(offset == 0);
+        start_offset = fd->flat_file.off[0];
+        end_offset = start_offset + buf_view.size - 1;
     }
 
     /* the number of processes that actually perform I/O, nprocs_for_coll, is
@@ -161,17 +153,15 @@ double curT = MPI_Wtime();
         if (buf_view.size == 0) /* zero_sized request */
             return 0;
 
-        if (buf_view.is_contig && fd->flat_file.is_contig) {
+        if (buf_view.is_contig && fd->flat_file.is_contig)
             /* When fd->flat_file.is_contig, it is still possible
              * fd->flat_file.count > 0 and when this happens
              * fd->flat_file.count should be 1, which comes from PnetCDF wait
              * when the number of nonblocking requests is 1.
              */
-            if (fd->flat_file.count > 0) offset += fd->flat_file.off[0];
-            w_len = PNCIO_WriteContig(fd, buf, buf_view.size, offset);
-        }
+            w_len = PNCIO_WriteContig(fd, buf, buf_view.size, fd->flat_file.off[0]);
         else
-            w_len = PNCIO_GEN_WriteStrided(fd, buf, buf_view, offset);
+            w_len = PNCIO_GEN_WriteStrided(fd, buf, buf_view);
 
         return w_len;
     }
@@ -295,7 +285,6 @@ MPI_Offset Exch_and_write(PNCIO_File *fd, void *buf, PNCIO_View buf_view,
     MPI_Info_get(fd->info, "cb_buffer_size", MPI_MAX_INFO_VAL, value, &info_flag);
     coll_bufsize = atoi(value);
     NCI_Free(value);
-
 
     for (i = 0; i < nprocs; i++) {
         if (others_req[i].count) {

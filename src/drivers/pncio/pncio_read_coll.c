@@ -44,8 +44,7 @@ static void Fill_user_buffer(PNCIO_File *fd, void *buf,
 
 MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File *fd,
                                      void       *buf,
-                                     PNCIO_View  buf_view,
-                                     MPI_Offset  offset)
+                                     PNCIO_View  buf_view)
 {
 /* Uses a generalized version of the extended two-phase method described
    in "An Extended Two-Phase Method for Accessing Sections of
@@ -66,12 +65,12 @@ MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File *fd,
     MPI_Count *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
     MPI_Offset start_offset, end_offset, fd_size, min_st_offset;
-    MPI_Offset *st_offsets = NULL, *fd_start = NULL,
-        *fd_end = NULL, *end_offsets = NULL;
+    MPI_Offset *st_offsets=NULL, *end_offsets=NULL;
+    MPI_Offset *fd_start=NULL, *fd_end=NULL;
     MPI_Aint *buf_idx = NULL;
     MPI_Offset r_len, total_r_len=0;
 
-// printf("%s at %d: offset %lld buf_view size %lld flat_file.count %lld size %lld is_contig %d\n",__func__,__LINE__,offset,buf_view.size,fd->flat_file.count, fd->flat_file.size, fd->flat_file.is_contig);
+// printf("%s at %d: offset %lld buf_view size %lld flat_file.count %lld size %lld is_contig %d\n",__func__,__LINE__,fd->flat_file.off[0],buf_view.size,fd->flat_file.count, fd->flat_file.size, fd->flat_file.is_contig);
 
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Offset one_len = (MPI_Offset)buf_view.size;
@@ -94,19 +93,12 @@ double curT = MPI_Wtime();
 
     if (fd->flat_file.count == 0) { /* whole file is visible */
         /* set flat_file as a single contiguous offset-length pair */
-        fd->flat_file.off       = &offset;
         fd->flat_file.len       = &one_len;
         fd->flat_file.size      = one_len;
         fd->flat_file.count     = 1;
         fd->flat_file.is_contig = 1;
-        start_offset = offset;
-        end_offset = offset + buf_view.size - 1;
-    }
-    else {
-        /* When flat_file is not contiguous, PnetCDF always calls this
-         * subroutine with offset == 0.
-         */
-        assert(offset == 0);
+        start_offset = fd->flat_file.off[0];
+        end_offset = start_offset + buf_view.size - 1;
     }
 
     /* number of aggregators, cb_nodes, is stored in the hints */
@@ -163,11 +155,10 @@ double curT = MPI_Wtime();
              * fd->flat_file.count should be 1, which comes from PnetCDF wait
              * when the number of nonblocking requests is 1.
              */
-            if (fd->flat_file.count > 0) offset += fd->flat_file.off[0];
-            return PNCIO_ReadContig(fd, buf, buf_view.size, offset);
+            return PNCIO_ReadContig(fd, buf, buf_view.size, fd->flat_file.off[0]);
         }
         else
-            return PNCIO_GEN_ReadStrided(fd, buf, buf_view, offset);
+            return PNCIO_GEN_ReadStrided(fd, buf, buf_view);
     }
 
     /* We're going to perform aggregation of I/O.  Here we call
@@ -360,11 +351,10 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
 
         /* since MPI guarantees that displacements in filetypes are in
          * monotonically nondecreasing order, I can maintain a pointer
-         * (curr_offlen_ptr) to
-         * current off-len pair for each process in others_req and scan
-         * further only from there. There is still a problem of filetypes
-         * such as:  (1, 2, 3 are not process nos. They are just numbers for
-         * three chunks of data, specified by a filetype.)
+         * (curr_offlen_ptr) to current off-len pair for each process in
+         * others_req and scan further only from there. There is still a
+         * problem of filetypes such as:  (1, 2, 3 are not process nos. They
+         * are just numbers for three chunks of data, specified by a filetype.)
          *
          * 1  -------!--
          * 2    -----!----
@@ -372,24 +362,25 @@ MPI_Offset Read_and_exch(PNCIO_File *fd, void *buf,
          *
          * where ! indicates where the current read_size limitation cuts
          * through the filetype.  I resolve this by reading up to !, but
-         * filling the communication buffer only for 1. I copy the portion
-         * left over for 2 into a tmp_buf for use in the next
-         * iteration. i.e., 2 and 3 will be satisfied in the next
-         * iteration. This simplifies filling in the user's buf at the
-         * other end, as only one off-len pair with incomplete data
-         * will be sent. I also don't need to send the individual
-         * offsets and lens along with the data, as the data is being
-         * sent in a particular order. */
+         * filling the communication buffer only for 1. I copy the portion left
+         * over for 2 into a tmp_buf for use in the next iteration. i.e., 2 and
+         * 3 will be satisfied in the next iteration. This simplifies filling
+         * in the user's buf at the other end, as only one off-len pair with
+         * incomplete data will be sent. I also don't need to send the
+         * individual offsets and lens along with the data, as the data is
+         * being sent in a particular order.
+         */
 
-        /* off = start offset in the file for the data actually read in
-         * this iteration
+        /* off = start offset in the file for the data actually read in this
+         *       iteration
          * size = size of data read corresponding to off
          * real_off = off minus whatever data was retained in memory from
-         * previous iteration for cases like 2, 3 illustrated above
+         *            previous iteration for cases like 2, 3 illustrated above
          * real_size = size plus the extra corresponding to real_off
-         * req_off = off in file for a particular contiguous request
-         * minus what was satisfied in previous iteration
-         * req_size = size corresponding to req_off */
+         * req_off = off in file for a particular contiguous request minus
+         *           what was satisfied in previous iteration
+         * req_size = size corresponding to req_off
+         */
 
         size = MIN(coll_bufsize, end_loc - st_loc + 1 - done);
         bool flag = false;
