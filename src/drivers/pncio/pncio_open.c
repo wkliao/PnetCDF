@@ -266,11 +266,11 @@ int PNCIO_File_open(MPI_Comm    comm,
     fd->access_mode = amode;
     fd->io_buf      = NULL; /* collective buffer used by aggregators only */
 
-    fd->flat_file.count = 0; /* flattened fileview in offset-length pairs */
-    fd->flat_file.size = -1;
-    fd->flat_file.is_contig = 1;
-    fd->flat_file.off = NULL;
-    fd->flat_file.len = NULL;
+    fd->file_view.count = 0; /* flattened fileview in offset-length pairs */
+    fd->file_view.size = -1;
+    fd->file_view.is_contig = 1;
+    fd->file_view.off = NULL;
+    fd->file_view.len = NULL;
 
     /* create and initialize info object */
     fd->hints = (PNCIO_Hints*) NCI_Calloc(1, sizeof(PNCIO_Hints));

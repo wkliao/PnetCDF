@@ -72,8 +72,8 @@ MPI_Offset file_read(PNCIO_File *fd,
 {
     MPI_Offset r_len=0;
 
-    if (buf_view.is_contig && fd->flat_file.is_contig)
-        r_len = PNCIO_ReadContig(fd, buf, buf_view.size, fd->flat_file.off[0]);
+    if (buf_view.is_contig && fd->file_view.is_contig)
+        r_len = PNCIO_ReadContig(fd, buf, buf_view.size, fd->file_view.off[0]);
     else
         r_len = PNCIO_GEN_ReadStrided(fd, buf, buf_view);
 
@@ -97,19 +97,19 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
 
     if (buf_view.size < 0) return NC_ENEGATIVECNT;
 
-    if (fh->flat_file.off == NULL)
+    if (fh->file_view.off == NULL)
         /* This is when calling this subroutione without set fileview first.
-         * We store offset into fh->flat_file.off.
+         * We store offset into fh->file_view.off.
          */
-        fh->flat_file.off = &offset;
+        fh->file_view.off = &offset;
 
     err = file_read(fh, buf, buf_view);
 
     /* reset fileview, as PnetCDF never reuses a fileview */
-    fh->flat_file.off = NULL;
-    fh->flat_file.len = NULL;
-    fh->flat_file.size = 0;
-    fh->flat_file.count = 0;
+    fh->file_view.off = NULL;
+    fh->file_view.len = NULL;
+    fh->file_view.size = 0;
+    fh->file_view.count = 0;
 
     return err;
 }
@@ -128,23 +128,23 @@ MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh,
 
 #ifdef PNETCDF_DEBUG
 #endif
-if (offset > 0) assert(fh->flat_file.off == NULL && fh->flat_file.len == NULL && fh->flat_file.count == 0);
+if (offset > 0) assert(fh->file_view.off == NULL && fh->file_view.len == NULL && fh->file_view.count == 0);
 
     if (buf_view.size < 0) err = NC_ENEGATIVECNT;
 
-    if (fh->flat_file.off == NULL)
+    if (fh->file_view.off == NULL)
         /* This is when calling this subroutione without set fileview first.
-         * We store offset into fh->flat_file.off.
+         * We store offset into fh->file_view.off.
          */
-        fh->flat_file.off = &offset;
+        fh->file_view.off = &offset;
 
     r_len = PNCIO_GEN_ReadStridedColl(fh, buf, buf_view);
 
     /* reset fileview, as PnetCDF never reuses a fileview */
-    fh->flat_file.off = NULL;
-    fh->flat_file.len = NULL;
-    fh->flat_file.size = 0;
-    fh->flat_file.count = 0;
+    fh->file_view.off = NULL;
+    fh->file_view.len = NULL;
+    fh->file_view.size = 0;
+    fh->file_view.count = 0;
 
     return (err == NC_NOERR) ?  r_len :  err;
 }
