@@ -11,28 +11,25 @@
 
 MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
                                        void       *buf,
-                                       PNCIO_View  buf_view,
-                                       MPI_Offset  offset)
+                                       PNCIO_View  buf_view)
 {
     int b_index;
     MPI_Offset size, brd_size, frd_size=0, req_len, sum, off, req_off, disp;
-    MPI_Offset end_offset=0, start_off, abs_off_in_filetype=0, userbuf_off;
+    MPI_Offset end_offset=0, start_off, abs_off_in_file_view=0, userbuf_off;
     MPI_Offset r_len, total_r_len=0;
     MPI_Count bufsize;
-
-// printf("%s at %d:\n",__func__,__LINE__);
 
     if (fd->flat_file.size == 0)
         return 0;
 
     bufsize = buf_view.size;
 
-    /* contiguous in buftype and filetype is handled elsewhere */
+    /* contiguous in buf_view and file_view is handled elsewhere */
 
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-        off = offset;
+        off = fd->flat_file.off[0];
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -60,7 +57,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
     }
     else {      /* noncontiguous in file */
-        MPI_Offset size_in_filetype = offset;
+        MPI_Offset size_in_file_view = fd->flat_file.off[0];
 
         int f_index, st_index = 0;
         MPI_Offset st_frd_size;
@@ -82,17 +79,17 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
         sum = 0;
         for (f_index = 0; f_index < fd->flat_file.count; f_index++) {
             sum += fd->flat_file.len[f_index];
-            if (sum > size_in_filetype) {
+            if (sum > size_in_file_view) {
                 st_index = f_index;
-                frd_size = sum - size_in_filetype;
-                abs_off_in_filetype = fd->flat_file.off[f_index] +
-                    size_in_filetype - (sum - fd->flat_file.len[f_index]);
+                frd_size = sum - size_in_file_view;
+                abs_off_in_file_view = fd->flat_file.off[f_index] +
+                    size_in_file_view - (sum - fd->flat_file.len[f_index]);
                 break;
             }
         }
 
         /* abs. offset in bytes in the file */
-        start_off = disp + abs_off_in_filetype;
+        start_off = disp + abs_off_in_file_view;
 
         st_frd_size = frd_size;
 
@@ -108,7 +105,9 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
         end_offset = start_off + frd_size - 1;
         while (userbuf_off < bufsize) {
             f_index++;
+#ifdef PNETCDF_DEBUG
 assert(f_index < fd->flat_file.count);
+#endif
 
             off = disp + fd->flat_file.off[f_index];
             frd_size = MIN(fd->flat_file.len[f_index],
@@ -168,7 +167,9 @@ assert(f_index < fd->flat_file.count);
                  */
                 else {
                     f_index++;
+#ifdef PNETCDF_DEBUG
 assert(f_index < fd->flat_file.count);
+#endif
                     off = disp + fd->flat_file.off[f_index];
                     frd_size = MIN(fd->flat_file.len[f_index],
                                        bufsize - userbuf_off);
@@ -210,7 +211,9 @@ assert(f_index < fd->flat_file.count);
                 if (size == frd_size) {
                     /* reached end of contiguous block in file */
                     f_index++;
+#ifdef PNETCDF_DEBUG
 assert(f_index < fd->flat_file.count);
+#endif
                     off = disp + fd->flat_file.off[f_index];
 
                     new_frd_size = fd->flat_file.len[f_index];
@@ -223,7 +226,9 @@ assert(f_index < fd->flat_file.count);
                 if (size == brd_size) {
                     /* reached end of contiguous block in memory */
                     b_index++;
+#ifdef PNETCDF_DEBUG
 assert(b_index < buf_view.count);
+#endif
                     i_offset = buf_view.off[b_index];
                     new_brd_size = buf_view.len[b_index];
                     if (size != frd_size) {

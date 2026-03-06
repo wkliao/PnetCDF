@@ -586,8 +586,7 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fd,
 
 MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd,
                                          const void *buf,
-                                         PNCIO_View  buf_view,
-                                         MPI_Offset  offset)
+                                         PNCIO_View  buf_view)
 {
     /* Uses a generalized version of the extended two-phase method described in
      * "An Extended Two-Phase Method for Accessing Sections of Out-of-Core
@@ -608,7 +607,6 @@ MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd,
     int one_len = (int)buf_view.size;
 #endif
 
-// printf("%s %d: offset=%lld\n",__func__,__LINE__,offset);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 MPI_Barrier(fd->comm);
 double curT = MPI_Wtime();
@@ -641,24 +639,22 @@ double curT = MPI_Wtime();
      */
     if (fd->flat_file.count == 0) { /* whole file is visible */
         /* set flat_file as a single contiguous offset-length pair */
-        fd->flat_file.off       = &offset;
         fd->flat_file.len       = &one_len;
         fd->flat_file.size      = one_len;
         fd->flat_file.count     = 1;
         fd->flat_file.is_contig = 1;
-        start_offset = offset;
-        end_offset = offset + buf_view.size - 1;
+        start_offset = fd->flat_file.off[0];
+        end_offset = start_offset + buf_view.size - 1;
     }
     else { /* Note flat_file.off[] is always relative to beginning of file */
         /* When flat_file is not contiguous, PnetCDF always calls this
          * subroutine with offset == 0.
          */
-        assert(offset == 0);
         start_offset = fd->flat_file.off[0];
         end_offset   = fd->flat_file.off[fd->flat_file.count-1]
                      + fd->flat_file.len[fd->flat_file.count-1] - 1;
     }
-// if (myrank==0) printf("%s %d: fd->flat_file size=%lld count=%lld offset=%lld start_offset=%lld end_offset=%lld\n",__func__,__LINE__, fd->flat_file.size, fd->flat_file.count,offset,start_offset,end_offset);
+// if (myrank==0) printf("%s %d: fd->flat_file size=%lld count=%lld offset=%lld start_offset=%lld end_offset=%lld\n",__func__,__LINE__, fd->flat_file.size, fd->flat_file.count,fd->flat_file.off[0],start_offset,end_offset);
 
     buf_view.idx  = 0;
     buf_view.rem = buf_view.size;
@@ -680,7 +676,7 @@ double curT = MPI_Wtime();
          * ranks into st_end_all[]. Even indices of st_end_all[] are starting
          * offsets, and odd indices are ending offsets.
          */
-#if 0
+#ifdef TRY_ALLREDUCE
         st_end_all = (MPI_Offset *) NCI_Calloc(nprocs * 2, sizeof(MPI_Offset));
         st_end_all[myrank*2]  = start_offset;
         st_end_all[myrank*2+1] = end_offset;
@@ -781,12 +777,11 @@ double curT = MPI_Wtime();
              * fd->flat_file.count should be 1, which comes from PnetCDF wait
              * call and the number of nonblocking requests is 1.
              */
-            if (fd->flat_file.count > 0) offset += fd->flat_file.off[0];
 #ifdef WKL_DEBUG
             printf("%s %d: SWITCH to PNCIO_WriteContig !!!\n",__func__,__LINE__);
 #endif
 
-            return PNCIO_WriteContig(fd, buf, buf_view.size, offset);
+            return PNCIO_WriteContig(fd, buf, buf_view.size, fd->flat_file.off[0]);
         }
 
 #ifdef WKL_DEBUG
@@ -794,7 +789,7 @@ double curT = MPI_Wtime();
                    __func__,__LINE__);
 #endif
 
-        return PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view, offset);
+        return PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view);
     }
 
     /* Now we are using collective I/O (two-phase I/O strategy) */
