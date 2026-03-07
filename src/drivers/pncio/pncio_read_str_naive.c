@@ -14,8 +14,8 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
                                        PNCIO_View  buf_view)
 {
     int b_index;
-    MPI_Offset size, brd_size, frd_size=0, req_len, sum, off, req_off, disp;
-    MPI_Offset end_offset=0, start_off, abs_off_in_file_view=0, userbuf_off;
+    MPI_Offset size, brd_size, frd_size=0, req_len, off, req_off;
+    MPI_Offset end_offset=0, start_off, userbuf_off;
     MPI_Offset r_len, total_r_len=0;
     MPI_Count bufsize;
 
@@ -26,7 +26,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
 
     /* contiguous in buf_view and file_view is handled elsewhere */
 
-    if (!buf_view.is_contig && fd->file_view.is_contig) {
+    if (buf_view.count > 1 && fd->file_view.count <= 1) {
         /* noncontiguous in memory, contiguous in file. */
 
         off = fd->file_view.off[0];
@@ -56,8 +56,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
     }
-    else {      /* noncontiguous in file */
-        MPI_Offset size_in_file_view = fd->file_view.off[0];
+    else { /* noncontiguous in file */
 
         int f_index, st_index = 0;
         MPI_Offset st_frd_size;
@@ -73,10 +72,11 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
          *               into reading this block of the filetype
          *
          */
+#if 0
+        MPI_Offset size_in_file_view = fd->file_view.off[0];
+        MPI_Offset abs_off_in_file_view=0;
 
-        disp = 0;
-
-        sum = 0;
+        MPI_Offset sum = 0;
         for (f_index = 0; f_index < fd->file_view.count; f_index++) {
             sum += fd->file_view.len[f_index];
             if (sum > size_in_file_view) {
@@ -89,9 +89,12 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
         }
 
         /* abs. offset in bytes in the file */
-        start_off = disp + abs_off_in_file_view;
-
+        start_off = abs_off_in_file_view;
         st_frd_size = frd_size;
+#endif
+        st_index = 0;
+        start_off = fd->file_view.off[0];
+        st_frd_size = fd->file_view.len[0];
 
         /* start_off, st_index, and st_frd_size are
          * all calculated at this point
@@ -109,7 +112,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
 assert(f_index < fd->file_view.count);
 #endif
 
-            off = disp + fd->file_view.off[f_index];
+            off = fd->file_view.off[f_index];
             frd_size = MIN(fd->file_view.len[f_index],
                                bufsize - userbuf_off);
             userbuf_off += frd_size;
@@ -128,7 +131,7 @@ assert(f_index < fd->file_view.count);
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
-        if (buf_view.is_contig && !fd->file_view.is_contig) {
+        if (buf_view.count <= 1 && fd->file_view.count > 1) {
             /* contiguous in memory, noncontiguous in file. should be the
              * most common case.
              */
@@ -154,7 +157,7 @@ assert(f_index < fd->file_view.count);
                 userbuf_off += frd_size;
                 if (userbuf_off >= bufsize) break;
 
-                if (off + frd_size < disp + fd->file_view.off[f_index] +
+                if (off + frd_size < fd->file_view.off[f_index] +
                     fd->file_view.len[f_index]) {
                     /* important that this value be correct, as it is
                      * used to set the offset in the fd near the end of
@@ -170,7 +173,7 @@ assert(f_index < fd->file_view.count);
 #ifdef PNETCDF_DEBUG
 assert(f_index < fd->file_view.count);
 #endif
-                    off = disp + fd->file_view.off[f_index];
+                    off = fd->file_view.off[f_index];
                     frd_size = MIN(fd->file_view.len[f_index],
                                        bufsize - userbuf_off);
                 }
@@ -214,7 +217,7 @@ assert(f_index < fd->file_view.count);
 #ifdef PNETCDF_DEBUG
 assert(f_index < fd->file_view.count);
 #endif
-                    off = disp + fd->file_view.off[f_index];
+                    off = fd->file_view.off[f_index];
 
                     new_frd_size = fd->file_view.len[f_index];
                     if (size != brd_size) {

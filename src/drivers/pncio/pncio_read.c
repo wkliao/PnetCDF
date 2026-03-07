@@ -72,7 +72,7 @@ MPI_Offset file_read(PNCIO_File *fd,
 {
     MPI_Offset r_len=0;
 
-    if (buf_view.is_contig && fd->file_view.is_contig)
+    if (buf_view.count <= 1 && fd->file_view.count <= 1)
         r_len = PNCIO_ReadContig(fd, buf, buf_view.size, fd->file_view.off[0]);
     else
         r_len = PNCIO_GEN_ReadStrided(fd, buf, buf_view);

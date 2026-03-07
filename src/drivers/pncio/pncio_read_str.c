@@ -69,7 +69,7 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
     max_bufsize = atoi(value);
     NCI_Free(value);
 
-    if (!buf_view.is_contig && fd->file_view.is_contig) {
+    if (buf_view.count > 1 && fd->file_view.count <= 1) {
         /* noncontiguous in memory, contiguous in file. */
 
         off = fd->file_view.off[0];
@@ -121,7 +121,7 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
         /* Wei-keng Liao: read request is within a single file_view contig
          * block e.g. with subarray types that actually describe the whole
          * array */
-        if (buf_view.is_contig && bufsize <= frd_size) {
+        if (buf_view.count <= 1 && bufsize <= frd_size) {
             /* a count of bytes can overflow. operate on original type instead */
             r_len = PNCIO_ReadContig(fd, buf, buf_view.size, offset);
 
@@ -155,7 +155,7 @@ if (i_offset >= bufsize) break;
         readbuf_len = 0;
         readbuf = (char *) NCI_Malloc(max_bufsize);
 
-        if (buf_view.is_contig && !fd->file_view.is_contig) {
+        if (buf_view.count <= 1 && fd->file_view.count > 1) {
             /* contiguous in memory, noncontiguous in file should be the most
              * common case.
              */

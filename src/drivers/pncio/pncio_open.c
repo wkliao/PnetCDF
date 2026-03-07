@@ -268,7 +268,6 @@ int PNCIO_File_open(MPI_Comm    comm,
 
     fd->file_view.count = 0; /* flattened fileview in offset-length pairs */
     fd->file_view.size = -1;
-    fd->file_view.is_contig = 1;
     fd->file_view.off = NULL;
     fd->file_view.len = NULL;
 
