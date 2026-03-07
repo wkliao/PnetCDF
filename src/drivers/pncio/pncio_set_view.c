@@ -41,7 +41,6 @@ int PNCIO_File_set_view(PNCIO_File   *fd,
 
 #ifdef PNETCDF_DEBUG
 if (npairs == 0) assert(offsets == NULL && lengths == NULL);
-fd->file_view.is_contig = (npairs <= 1);
 for (i=0; i<npairs; i++) assert(lengths[i] > 0);
 #endif
 

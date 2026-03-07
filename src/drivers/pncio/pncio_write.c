@@ -88,7 +88,7 @@ MPI_Offset file_write(PNCIO_File *fd,
     if (buf_view.size == 0) /* zero-sized request */
         return NC_NOERR;
 
-    if (buf_view.is_contig && fd->file_view.is_contig)
+    if (buf_view.count <= 1 && fd->file_view.count <= 1)
         w_len = PNCIO_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
     else if (fd->file_system == PNCIO_LUSTRE)
         w_len = PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view);

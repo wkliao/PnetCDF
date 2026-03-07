@@ -642,7 +642,6 @@ double curT = MPI_Wtime();
         fd->file_view.len       = &one_len;
         fd->file_view.size      = one_len;
         fd->file_view.count     = 1;
-        fd->file_view.is_contig = 1;
         start_offset = fd->file_view.off[0];
         end_offset = start_offset + buf_view.size - 1;
     }
@@ -730,7 +729,6 @@ double curT = MPI_Wtime();
         }
         NCI_Free(st_end_all);
 
-// if (myrank==0) printf("%s %d: do_collect=%d is_interleaved=%d buf_view size=%lld count=%lld is_contig=%d start_offset=%lld end_offset=%lld\n",__func__,__LINE__, do_collect,is_interleaved,buf_view.size,buf_view.count,buf_view.is_contig, start_offset,end_offset);
         if (fd->hints->romio_cb_write == PNCIO_HINT_ENABLE) {
             /* explicitly enabled by user */
             do_collect = 1;
@@ -770,13 +768,8 @@ double curT = MPI_Wtime();
         if (buf_view.size == 0) /* zero-sized request */
             return 0;
 
-        if (fd->file_view.is_contig && buf_view.is_contig) {
-            /* Both buffer and fileview are contiguous. Note when
-             * fd->file_view.is_contig, it is still possible
-             * fd->file_view.count > 0 and when this happens
-             * fd->file_view.count should be 1, which comes from PnetCDF wait
-             * call and the number of nonblocking requests is 1.
-             */
+        if (fd->file_view.count <= 1 && buf_view.count <= 1) {
+            /* Both buffer and fileview are contiguous. */
 #ifdef WKL_DEBUG
             printf("%s %d: SWITCH to PNCIO_WriteContig !!!\n",__func__,__LINE__);
 #endif
@@ -839,7 +832,7 @@ double curT = MPI_Wtime();
     PNCIO_Access *others_req;
     MPI_Offset **buf_idx = NULL;
 
-    if (buf_view.is_contig)
+    if (buf_view.count <= 1)
         buf_idx = (MPI_Offset **) NCI_Malloc(fd->hints->cb_nodes *
                                                 sizeof(MPI_Offset*));
 
@@ -847,7 +840,7 @@ double curT = MPI_Wtime();
      * file domains of each I/O aggregator. No inter-process communication is
      * performed in LUSTRE_Calc_my_req().
      */
-    LUSTRE_Calc_my_req(fd, buf_view.is_contig, &my_req, buf_idx);
+    LUSTRE_Calc_my_req(fd, (buf_view.count <= 1), &my_req, buf_idx);
 
     if (fd->hints->romio_ds_write != PNCIO_HINT_DISABLE) {
         /* When data sieving is considered, below check the current file size
@@ -1449,7 +1442,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
      * rank's write data to aggregators, one for each aggregator. It is used
      * only when user buffer is contiguous.
      */
-    if (buf_view.is_contig)
+    if (buf_view.count <= 1)
         this_buf_idx = (MPI_Offset *) NCI_Malloc(sizeof(MPI_Offset) * cb_nodes);
 
     /* array of data sizes to be sent to each aggregator in a 2-phase round */
@@ -1504,7 +1497,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
             if (my_req[i].curr == my_req[i].count)
                 continue; /* done with aggregator i */
 
-            if (buf_view.is_contig)
+            if (buf_view.count <= 1)
                 /* buf_idx is used only when user buffer is contiguous.
                  * this_buf_idx[i] points to the starting offset of user
                  * buffer, buf, for amount of send_size[i] to be sent to
@@ -1750,7 +1743,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
     }
     NCI_Free(send_size);
     NCI_Free(off_list);
-    if (buf_view.is_contig)
+    if (buf_view.count <= 1)
         NCI_Free(this_buf_idx);
     if (send_buf != NULL)
         NCI_Free(send_buf);
@@ -2137,7 +2130,7 @@ int Exchange_data_recv(
                 CACHE_REQ(recv_list[i], recv_size[i],
                           write_buf + others_req[i].mem_ptrs[start_pos[i]])
             }
-        } else if (buf_view->is_contig && recv_count[i] > 0) {
+        } else if (buf_view->count <= 1 && recv_count[i] > 0) {
             /* send/recv to/from self uses memcpy(). The case when buftype is
              * not contiguous will be handled later in Exchange_data_send().
              */
@@ -2180,7 +2173,7 @@ void Exchange_data_send(
 
     cb_nodes = fd->hints->cb_nodes;
 // if (myrank==0) printf("%s at %d: cb_nodes=%d\n",__func__,__LINE__, cb_nodes);
-    if (buf_view->is_contig) {
+    if (buf_view->count <= 1) {
         /* If buftype is contiguous, data can be directly sent from user buf
          * at location given by buf_idx.
          */
@@ -2345,7 +2338,7 @@ int num_memcpy=0;
                 buf_view->rem -= size_in_buf;
 // if (rank == 0) printf("rank 0 %s at %d size=%lld size_in_buf=%lld copy_size=%lld rem=%ld\n",__func__,__LINE__, size, size_in_buf, copy_size,buf_view->rem);
                 if (buf_view->rem == 0) { /* move on to next off-len pair */
-                    if (! buf_view->is_contig) {
+                    if (buf_view->count > 1) {
                         /* user buffer type is not contiguous */
                         if (send_size_rem) {
                             /* after this copy send_buf[q] is still not full */
