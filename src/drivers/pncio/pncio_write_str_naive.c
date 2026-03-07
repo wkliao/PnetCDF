@@ -17,8 +17,8 @@ MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
     MPI_Count bufsize;
 
     /* bwr == buffer write; fwr == file write */
-    MPI_Offset bwr_size, fwr_size = 0, sum, size_in_file_view, size;
-    MPI_Offset abs_off_in_file_view = 0, req_len, userbuf_off;
+    MPI_Offset bwr_size, fwr_size = 0, size;
+    MPI_Offset req_len, userbuf_off;
     MPI_Offset off, req_off, end_offset = 0, start_off;
     MPI_Offset w_len, total_w_len=0;
 
@@ -26,12 +26,12 @@ MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
      * call to PNCIO_WriteContig() earlier.
      */
 #ifdef PNETCDF_DEBUG
-    assert(!(buf_view.is_contig && fd->file_view.is_contig));
+    assert(!(buf_view.count <= 1 && fd->file_view.count <= 1));
 #endif
 
     bufsize = buf_view.size;
 
-    if (!buf_view.is_contig && fd->file_view.is_contig) {
+    if (buf_view.count > 1 && fd->file_view.count <= 1) {
         /* noncontiguous in memory, contiguous in file. */
 
         off = fd->file_view.off[0];
@@ -75,9 +75,11 @@ MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
          *               that we will write (accounts for being part-way
          *               into writing this block of the file_view
          */
-        size_in_file_view = fd->file_view.off[0];
+#if 0
+        MPI_Offset size_in_file_view = fd->file_view.off[0];
+        MPI_Offset abs_off_in_file_view = 0;
 
-        sum = 0;
+        MPI_Offset sum = 0;
         for (f_index = 0; f_index < fd->file_view.count; f_index++) {
             sum += fd->file_view.len[f_index];
             if (sum > size_in_file_view) {
@@ -88,9 +90,12 @@ MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
                 break;
             }
         }
+#endif
+        st_index = 0;
+        fwr_size = fd->file_view.len[0];
 
         /* abs. offset in bytes in the file */
-        start_off = abs_off_in_file_view;
+        start_off = fd->file_view.off[0];
 
         st_fwr_size = fwr_size;
 
@@ -125,7 +130,7 @@ MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
         if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
-        if (buf_view.is_contig && !fd->file_view.is_contig) {
+        if (buf_view.count <= 1 && fd->file_view.count > 1) {
             /* contiguous in memory, noncontiguous in file. should be the
              * most common case.
              */

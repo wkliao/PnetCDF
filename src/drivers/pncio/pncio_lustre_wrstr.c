@@ -141,7 +141,7 @@ assert(fd->file_view.size == buf_view.size);
     /* get striping info */
     stripe_size = fd->hints->striping_unit;
 
-    if (!buf_view.is_contig && fd->file_view.is_contig) {
+    if (buf_view.count > 1 && fd->file_view.count <= 1) {
         /* noncontiguous in write buffer, contiguous in file. */
 
         off = fd->file_view.off[0];
@@ -201,7 +201,7 @@ assert(fd->file_view.size == buf_view.size);
          * happen, for example, with subarray types that are actually fairly
          * contiguous.
          */
-        if (buf_view.is_contig && bufsize <= fwr_size) {
+        if (buf_view.count <= 1 && bufsize <= fwr_size) {
             req_off = start_off;
             req_len = bufsize;
             end_offset = start_off + bufsize - 1;
@@ -253,7 +253,7 @@ assert(j < fd->file_view.count);
         writebuf = (char *) NCI_Malloc(stripe_size);
         memset(writebuf, -1, stripe_size);
 
-        if (buf_view.is_contig && !fd->file_view.is_contig) {
+        if (buf_view.count <= 1 && fd->file_view.count > 1) {
             /* contiguous in memory, noncontiguous in file should be the most
              * common case.
              */
