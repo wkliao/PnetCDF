@@ -9,243 +9,125 @@
 
 #include <pncio.h>
 
+/*----< PNCIO_GEN_WriteStrided_naive() >-------------------------------------*/
+/* This subroutine implements independent write when data sieving is disabled.
+ */
 MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd,
                                         const void *buf,
                                         PNCIO_View  buf_view)
 {
-    int b_index;
-    MPI_Count bufsize;
+    MPI_Count j, k;
+    MPI_Offset lock_off, lock_len, w_len, total_w_len=0;
 
-    /* bwr == buffer write; fwr == file write */
-    MPI_Offset bwr_size, fwr_size = 0, size;
-    MPI_Offset req_len, userbuf_off;
-    MPI_Offset off, req_off, end_offset = 0, start_off;
-    MPI_Offset w_len, total_w_len=0;
-
-    /* Contiguous both in buf_view and file_view should have been handled in a
-     * call to PNCIO_WriteContig() earlier.
-     */
 #ifdef PNETCDF_DEBUG
+    /* Contiguous both in buf_view and file_view should have already been
+     * handled earlier in a call to PNCIO_WriteContig().
+     */
     assert(!(buf_view.count <= 1 && fd->file_view.count <= 1));
+
+    /* In PnetCDF, fd->file_view.size always == buf_view.size, i.e.
+     * file_view and buf_view are never used for more than one round.
+     */
+    assert(fd->file_view.size == buf_view.size);
 #endif
 
-    bufsize = buf_view.size;
+    lock_off = fd->file_view.off[0];
+    lock_len = fd->file_view.size;
+    if (fd->file_view.count > 1)
+        lock_len = fd->file_view.off[fd->file_view.count-1]
+                 + fd->file_view.len[fd->file_view.count-1];
+
+    /* if atomicity is true, lock (exclusive) the region to be accessed */
+    if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
+        PNCIO_WRITE_LOCK(fd, lock_off, SEEK_SET, lock_len);
 
     if (buf_view.count > 1 && fd->file_view.count <= 1) {
-        /* noncontiguous in memory, contiguous in file. */
+        /* noncontiguous buffer view, contiguous file view */
 
-        off = fd->file_view.off[0];
-
-        start_off = off;
-        end_offset = off + bufsize - 1;
-
-        /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
-            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
-
-        /* for each region in the buffer, grab the data and put it in place */
-        for (b_index = 0; b_index < buf_view.count; b_index++) {
-            userbuf_off = buf_view.off[b_index];
-            req_off = off;
-            req_len = buf_view.len[b_index];
-
-            w_len = PNCIO_WriteContig(fd, (char *) buf + userbuf_off,
-                                      req_len, req_off);
+        MPI_Offset off = fd->file_view.off[0];
+        for (j=0; j<buf_view.count; j++) {
+            /* write one buf_view's offset-length pair at a time */
+            w_len = PNCIO_WriteContig(fd, (char*)buf + buf_view.off[j],
+                                      buf_view.len[j], off);
             if (w_len < 0) return w_len;
             total_w_len += w_len;
-
-            /* off is (potentially) used to save the final offset later */
-            off += buf_view.len[b_index];
+            off += buf_view.len[j];
         }
-
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
-            PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
     }
-    else {      /* noncontiguous in file */
-        int f_index, st_index = 0;
-        MPI_Offset st_fwr_size;
-
-        /* First we're going to calculate a set of values for use in all
-         * the noncontiguous in file cases:
-         * start_off - starting byte position of data in file
-         * end_offset - last byte offset to be accessed in the file
-         * st_index - index of block in first file_view that we will be
-         *            starting in (?)
-         * st_fwr_size - size of the data in the first file_view block
-         *               that we will write (accounts for being part-way
-         *               into writing this block of the file_view
-         */
-#if 0
-        MPI_Offset size_in_file_view = fd->file_view.off[0];
-        MPI_Offset abs_off_in_file_view = 0;
-
-        MPI_Offset sum = 0;
-        for (f_index = 0; f_index < fd->file_view.count; f_index++) {
-            sum += fd->file_view.len[f_index];
-            if (sum > size_in_file_view) {
-                st_index = f_index;
-                fwr_size = sum - size_in_file_view;
-                abs_off_in_file_view = fd->file_view.off[f_index] +
-                    size_in_file_view - (sum - fd->file_view.len[f_index]);
-                break;
-            }
-        }
-#endif
-        st_index = 0;
-        fwr_size = fd->file_view.len[0];
-
-        /* abs. offset in bytes in the file */
-        start_off = fd->file_view.off[0];
-
-        st_fwr_size = fwr_size;
-
-        /* start_off, st_index, and st_fwr_size are
-         * all calculated at this point
-         */
-
-        /* Calculate end_offset, the last byte-offset that will be accessed.
-         * e.g., if start_off=0 and 100 bytes to be written, end_offset=99
-         */
-        f_index = st_index;
-        fwr_size = MIN(st_fwr_size, bufsize);
-        userbuf_off = fwr_size;
-        end_offset = start_off + fwr_size - 1;
-        while (userbuf_off < bufsize) {
-            f_index++;
-            fwr_size = MIN(fd->file_view.len[f_index],
-                               bufsize - userbuf_off);
-            userbuf_off += fwr_size;
-            end_offset = fd->file_view.off[f_index] + fwr_size - 1;
-        }
-
-        /* End of calculations.  At this point the following values have
-         * been calculated and are ready for use:
-         * - start_off
-         * - end_offset
-         * - st_index
-         * - st_fwr_size
-         */
-
-        /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
-            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
+    else { /* noncontiguous file view */
+        char *ptr;
 
         if (buf_view.count <= 1 && fd->file_view.count > 1) {
-            /* contiguous in memory, noncontiguous in file. should be the
-             * most common case.
-             */
+            /* contiguous buffer view, noncontiguous file view */
 
-            userbuf_off = 0;
-            f_index = st_index;
-            off = start_off;
-            fwr_size = MIN(st_fwr_size, bufsize);
-
-            /* while there is still space in the buffer, write more data */
-            while (userbuf_off < bufsize) {
-                if (fwr_size) {
-                    /* TYPE_UB and TYPE_LB can result in
-                     * fwr_size = 0. save system call in such cases */
-                    req_off = off;
-                    req_len = fwr_size;
-
-                    w_len = PNCIO_WriteContig(fd, (char *) buf + userbuf_off,
-                                              req_len, req_off);
-                    if (w_len < 0) return w_len;
-                    total_w_len += w_len;
-                }
-                userbuf_off += fwr_size;
-                if (userbuf_off >= bufsize) break;
-
-                if (off + fwr_size < fd->file_view.off[f_index] +
-                    fd->file_view.len[f_index]) {
-                    /* important that this value be correct, as it is
-                     * used to set the offset in the fd near the end of
-                     * this function.
-                     */
-                    off += fwr_size;
-                }
-                /* did not reach end of contiguous block in file_view.
-                 * no more I/O needed. off is incremented by fwr_size.
-                 */
-                else {
-                    f_index++;
-#ifdef PNETCDF_DEBUG
-assert(f_index < fd->file_view.count);
-#endif
-                    off = fd->file_view.off[f_index];
-                    fwr_size = MIN(fd->file_view.len[f_index],
-                                       bufsize - userbuf_off);
-                }
-            }
-        } else {
-            MPI_Offset i_offset, tmp_bufsize = 0;
-            /* noncontiguous in memory as well as in file */
-
-            b_index = 0;
-            i_offset = buf_view.off[0];
-            f_index = st_index;
-            off = start_off;
-            fwr_size = st_fwr_size;
-            bwr_size = buf_view.len[0];
-
-            /* while we haven't read size * count bytes, keep going */
-            while (tmp_bufsize < bufsize) {
-                MPI_Offset new_bwr_size = bwr_size, new_fwr_size = fwr_size;
-
-                size = MIN(fwr_size, bwr_size);
-                /* keep max of a single read amount <= INT_MAX */
-                size = MIN(size, INT_MAX);
-
-                if (size) {
-                    req_off = off;
-                    req_len = size;
-                    userbuf_off = i_offset;
-
-                    w_len = PNCIO_WriteContig(fd, (char *) buf + userbuf_off,
-                                              req_len, req_off);
-                    if (w_len < 0) return w_len;
-                    total_w_len += w_len;
-                }
-
-                tmp_bufsize += size;
-                if (tmp_bufsize >= bufsize) break;
-
-                if (size == fwr_size) {
-                    f_index++;
-#ifdef PNETCDF_DEBUG
-assert(f_index < fd->file_view.count);
-#endif
-                    off = fd->file_view.off[f_index];
-                    new_fwr_size = fd->file_view.len[f_index];
-                    if (size != bwr_size) {
-                        i_offset += size;
-                        new_bwr_size -= size;
-                    }
-                }
-
-                if (size == bwr_size) {
-                    /* reached end of contiguous block in memory */
-                    b_index++;
-#ifdef PNETCDF_DEBUG
-assert(b_index < buf_view.count);
-#endif
-                    i_offset = buf_view.off[b_index];
-                    new_bwr_size = buf_view.len[b_index];
-                    if (size != fwr_size) {
-                        off += size;
-                        new_fwr_size -= size;
-                    }
-                }
-                fwr_size = new_fwr_size;
-                bwr_size = new_bwr_size;
+            ptr = (char*)buf;
+            for (j=0; j<fd->file_view.count; j++) {
+                /* write one file_view's offset-length pair at a time */
+                w_len = PNCIO_WriteContig(fd, ptr, fd->file_view.len[j],
+                                          fd->file_view.off[j]);
+                if (w_len < 0) return w_len;
+                total_w_len += w_len;
+                ptr += fd->file_view.len[j];
             }
         }
+        else {
+            /* Both buffer view and file view are noncontiguous. */
+#ifdef HAVE_MPI_LARGE_COUNT
+            MPI_Offset file_off, buf_off;
+            MPI_Offset file_rem, buf_rem;
+#else
+            MPI_Offset file_off, buf_off;
+            int        file_rem, buf_rem;
+#endif
 
-        /* unlock the file region if we locked it */
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
-            PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
+            file_off = fd->file_view.off[0];
+            file_rem = fd->file_view.len[0];
+            buf_off  = buf_view.off[0];
+            buf_rem  = buf_view.len[0];
+            ptr = (char*)buf + buf_off;
 
-    }   /* end of (else noncontiguous in file) */
+            j = 0;
+            k = 0;
+            while (j < fd->file_view.count) {
+
+                while (k < buf_view.count) {
+
+                    /* whichever is shorter */
+                    MPI_Offset req_len = MIN(file_rem, buf_rem);
+
+                    /* write from offset file_off for length of req_len */
+                    w_len = PNCIO_WriteContig(fd, ptr, req_len, file_off);
+                    if (w_len < 0) return w_len;
+                    total_w_len += w_len;
+
+                    if (req_len == file_rem) { /* done with pair j */
+                        j++;
+                        file_off = fd->file_view.off[j];
+                        file_rem = fd->file_view.len[j];
+                    }
+                    else { /* req_len < file_rem, remains in pair j */
+                        file_off += req_len;
+                        file_rem -= req_len;
+                    }
+
+                    if (req_len == buf_rem) { /* done with pair k */
+                        k++;
+                        buf_off = buf_view.off[k];
+                        buf_rem = buf_view.len[k];
+                        ptr = (char*)buf + buf_off;
+                    }
+                    else { /* req_len < buf_rem, remains in pair k */
+                        buf_off += req_len;
+                        buf_rem -= req_len;
+                        ptr += req_len;
+                    }
+                } /* while loop k */
+            } /* while loop j */
+        }
+    }
+
+    if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
+        PNCIO_UNLOCK(fd, lock_off, SEEK_SET, lock_len);
 
     return total_w_len;
 }
