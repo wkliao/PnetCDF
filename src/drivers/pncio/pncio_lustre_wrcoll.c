@@ -782,7 +782,11 @@ double curT = MPI_Wtime();
                    __func__,__LINE__);
 #endif
 
-        return PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view);
+        if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)
+            /* data seiving for writes has been disabled */
+            return PNCIO_GEN_WriteStrided_nods(fd, buf, buf_view);
+        else
+            return PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view);
     }
 
     /* Now we are using collective I/O (two-phase I/O strategy) */

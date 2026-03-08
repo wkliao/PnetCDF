@@ -9,14 +9,14 @@
 
 #include <pncio.h>
 
-/*----< PNCIO_GEN_ReadStrided_naive() >--------------------------------------*/
+/*----< PNCIO_GEN_ReadStrided_nods() >---------------------------------------*/
 /* This subroutine implements independent read when data sieving is disabled.
  * Note in PnetCDF, the file_view and buf_view are never used for more than
  * one round, which greatly simplifies the implementation.
  */
-MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd,
-                                       void       *buf,
-                                       PNCIO_View  buf_view)
+MPI_Offset PNCIO_GEN_ReadStrided_nods(PNCIO_File *fd,
+                                      void       *buf,
+                                      PNCIO_View  buf_view)
 {
     char *ptr;
     MPI_Count j, k;
