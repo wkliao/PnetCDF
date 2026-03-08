@@ -47,10 +47,13 @@
     }                                                                         \
 }
 
-
-MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
-                                  const void *buf,
-                                  PNCIO_View  buf_view)
+/*----< PNCIO_GEN_ReadStrided_ds() >-----------------------------------------*/
+/* This subroutine implements independent write when data sieving is NOT
+ * disabled.
+ */
+MPI_Offset PNCIO_GEN_WriteStrided_ds(PNCIO_File *fd,
+                                     const void *buf,
+                                     PNCIO_View  buf_view)
 {
     char *writebuf = NULL;
     int i, j, k, st_index = 0;
@@ -61,19 +64,16 @@ MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
     MPI_Offset st_fwr_size, fwr_size = 0, bwr_size, req_len;
     MPI_Offset r_len, w_len, total_w_len=0;
 
-    /* Contiguous both in buf_view and file_view should have been handled in a
-     * call to PNCIO_WriteContig() earlier.
-     */
 #ifdef PNETCDF_DEBUG
+    /* When both file_view and buf_view are contiguous, file_write() calls
+     * PNCIO_WriteContig().
+     */
     assert(!(buf_view.count <= 1 && fd->file_view.count <= 1));
-#endif
 
-    if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE) {
-        /* If user has disabled data sieving on reads, use naive approach
-         * instead.
-         */
-        return PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view);
-    }
+    /* When data sieving write is disabled, file_write() calls
+     * PNCIO_GEN_WriteStrided_nods() */
+    assert(fd->hints->romio_ds_write != PNCIO_HINT_DISABLE);
+#endif
 
 #ifdef PNETCDF_DEBUG
 assert(fd->file_view.size == buf_view.size);

@@ -318,11 +318,11 @@ int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
 
 extern
-MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_GEN_WriteStrided_ds(PNCIO_File *fd, const void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_GEN_ReadStrided_naive(PNCIO_File *fd, void *buf,
+MPI_Offset PNCIO_GEN_ReadStrided_nods(PNCIO_File *fd, void *buf,
                 PNCIO_View buf_view);
 
 extern
@@ -330,11 +330,11 @@ MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_GEN_WriteStrided_naive(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_GEN_WriteStrided_nods(PNCIO_File *fd, const void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd, void *buf,
+MPI_Offset PNCIO_GEN_ReadStrided_ds(PNCIO_File *fd, void *buf,
                 PNCIO_View buf_view);
 
 extern
