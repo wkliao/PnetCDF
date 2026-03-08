@@ -74,8 +74,11 @@ MPI_Offset file_read(PNCIO_File *fd,
 
     if (buf_view.count <= 1 && fd->file_view.count <= 1)
         r_len = PNCIO_ReadContig(fd, buf, buf_view.size, fd->file_view.off[0]);
+    else if (fd->hints->romio_ds_read == PNCIO_HINT_DISABLE)
+        /* User has disabled data sieving on reads. */
+        r_len = PNCIO_GEN_ReadStrided_nods(fd, buf, buf_view);
     else
-        r_len = PNCIO_GEN_ReadStrided(fd, buf, buf_view);
+        r_len = PNCIO_GEN_ReadStrided_ds(fd, buf, buf_view);
 
     /* When r_len < 0, it is an NC error code */
     return r_len;

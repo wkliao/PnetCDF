@@ -38,9 +38,13 @@
 }
 
 
-MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
-                                 void       *buf,
-                                 PNCIO_View  buf_view)
+/*----< PNCIO_GEN_ReadStrided_ds() >-----------------------------------------*/
+/* This subroutine implements independent read when data sieving is NOT
+ * disabled.
+ */
+MPI_Offset PNCIO_GEN_ReadStrided_ds(PNCIO_File *fd,
+                                    void       *buf,
+                                    PNCIO_View  buf_view)
 {
     char *readbuf, *tmp_buf, *value;
     int i, j, k, st_index=0, info_flag;
@@ -52,14 +56,16 @@ MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
     MPI_Offset r_len, total_r_len=0;
     MPI_Count num, bufsize, partial_read;
 
-    /* This subroutine is entered with file_view being non-contiguous only */
+#ifdef PNETCDF_DEBUG
+    /* When both file_view and buf_view are contiguous, file_read() calls
+     * PNCIO_ReadContig().
+     */
+    assert(!(buf_view.count <= 1 && fd->file_view.count <= 1));
 
-    if (fd->hints->romio_ds_read == PNCIO_HINT_DISABLE) {
-        /* if user has disabled data sieving on reads, use naive
-         * approach instead.
-         */
-        return PNCIO_GEN_ReadStrided_naive(fd, buf, buf_view);
-    }
+    /* When data sieving read is disabled, file_read() calls
+     * PNCIO_GEN_ReadStrided_nods() */
+    assert(fd->hints->romio_ds_read != PNCIO_HINT_DISABLE);
+#endif
 
     bufsize = buf_view.size;
 
