@@ -126,12 +126,12 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
 // printf("%s at %d:\n",__func__,__LINE__);
 
 #ifdef PNETCDF_DEBUG
-    /* When data sieveing is disabled, PNCIO_GEN_WriteStrided_nods() */
+    /* When data sieveing is disabled, PNCIO_GEN_Write_indep() should be called
+     * instead. */
     assert(fd->hints->romio_ds_write != PNCIO_HINT_DISABLE);
-#endif
 
-/* PnetCDF always sets these 3 conditions */
-assert(fd->file_view.size == buf_view.size);
+    assert(fd->file_view.size == buf_view.size);
+#endif
 
     bufsize = buf_view.size;
 

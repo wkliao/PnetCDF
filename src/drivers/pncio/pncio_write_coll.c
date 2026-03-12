@@ -153,10 +153,8 @@ double curT = MPI_Wtime();
         if (buf_view.count <= 1 && fd->file_view.count <= 1)
             /* Both buf_view and file_view are contiguous */
             w_len = PNCIO_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
-        else if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)
-            w_len = PNCIO_GEN_WriteStrided_nods(fd, buf, buf_view);
         else
-            w_len = PNCIO_GEN_WriteStrided_ds(fd, buf, buf_view);
+            w_len = PNCIO_GEN_Write_indep(fd, buf, buf_view);
 
         return w_len;
     }
