@@ -784,7 +784,7 @@ double curT = MPI_Wtime();
 
         if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)
             /* data seiving for writes has been disabled */
-            return PNCIO_GEN_WriteStrided_nods(fd, buf, buf_view);
+            return PNCIO_GEN_Write_indep(fd, buf, buf_view);
         else
             return PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view);
     }

@@ -90,17 +90,13 @@ MPI_Offset file_write(PNCIO_File *fd,
 
     if (buf_view.count <= 1 && fd->file_view.count <= 1)
         w_len = PNCIO_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
+    else if (fd->file_system == PNCIO_UFS)
+        w_len = PNCIO_GEN_Write_indep(fd, buf, buf_view);
     else if (fd->file_system == PNCIO_LUSTRE) {
         if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)
-            w_len = PNCIO_GEN_WriteStrided_nods(fd, buf, buf_view);
+            w_len = PNCIO_GEN_Write_indep(fd, buf, buf_view);
         else
             w_len = PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view);
-    }
-    else if (fd->file_system == PNCIO_UFS) {
-        if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)
-            w_len = PNCIO_GEN_WriteStrided_nods(fd, buf, buf_view);
-        else
-            w_len = PNCIO_GEN_WriteStrided_ds(fd, buf, buf_view);
     }
     else
         return NC_EFSTYPE;
