@@ -30,7 +30,6 @@ C_SRCS = pncio_read.c \
          pncio_read_str_nods.c \
          pncio_write_coll.c \
          pncio_write_str_ds.c \
-         pncio_write_str_nods.c \
          pncio_utils.c \
          pncio_lustre_open.c \
          pncio_lustre_wrcoll.c \
