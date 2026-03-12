@@ -87,7 +87,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_ds(PNCIO_File *fd,
         readbuf_len = MIN(max_bufsize, end_offset - readbuf_off + 1);
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
+        if (fd->atomicity)
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
         r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off);
@@ -101,7 +101,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_ds(PNCIO_File *fd,
             off += buf_view.len[i];
         }
 
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
+        if (fd->atomicity)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         NCI_Free(readbuf);
@@ -154,7 +154,7 @@ if (i_offset >= bufsize) break;
         }
 
         /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
+        if (fd->atomicity)
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
         readbuf_off = 0;
@@ -242,7 +242,7 @@ assert(k < buf_view.count);
             }
         }
 
-        if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
+        if (fd->atomicity)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
 
         NCI_Free(readbuf);    /* malloced in the buffered_read macro */
