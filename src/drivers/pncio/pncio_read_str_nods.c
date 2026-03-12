@@ -73,7 +73,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_nods(PNCIO_File *fd,
         lock_len = fd->file_view.size;
 
     /* if atomicity is true, lock (exclusive) the region to be accessed */
-    if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
+    if (fd->atomicity)
         PNCIO_WRITE_LOCK(fd, lock_off, SEEK_SET, lock_len);
 
     file_off = fd->file_view.off[0];
@@ -115,7 +115,7 @@ MPI_Offset PNCIO_GEN_ReadStrided_nods(PNCIO_File *fd,
         }
     }
 
-    if ((fd->atomicity) && PNCIO_Feature(fd, PNCIO_LOCKS))
+    if (fd->atomicity)
         PNCIO_UNLOCK(fd, lock_off, SEEK_SET, lock_len);
 
     return total_len;
