@@ -32,9 +32,6 @@
 #define NMEASURES 8
 #endif
 
-#define PNCIO_LOCKS  300    /* file system supports fcntl()-style locking */
-#define PNCIO_Feature(a, b) ((b == PNCIO_LOCKS) ? 1 : 0)
-
 #if defined(F_SETLKW64)
 #define PNCIO_UNLOCK(fd, offset, whence, len) \
         PNCIO_GEN_SetLock64(fd, F_SETLK, F_UNLCK, offset, whence, len)
