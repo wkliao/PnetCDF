@@ -107,7 +107,7 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File *fh,
                                const void *buf,
                                PNCIO_View  buf_view)
 {
-    int err=NC_NOERR;
+    MPI_Offset w_len;
 
 #ifdef PNETCDF_DEBUG
     assert(fh != NULL);
@@ -132,7 +132,8 @@ if (offset > 0) assert(fh->file_view.off == NULL && fh->file_view.len == NULL &&
          */
         fh->file_view.off = &offset;
 
-    err = file_write(fh, buf, buf_view);
+    w_len = file_write(fh, buf, buf_view);
+    /* when w_len < 0, it is an NetCDF error code */
 
     /* reset fileview, as PnetCDF never reuses a fileview */
     fh->file_view.off = NULL;
@@ -140,7 +141,7 @@ if (offset > 0) assert(fh->file_view.off == NULL && fh->file_view.len == NULL &&
     fh->file_view.size = 0;
     fh->file_view.count = 0;
 
-    return err;
+    return w_len;
 }
 
 /*----< PNCIO_File_write_at_all() >-------------------------------------------*/

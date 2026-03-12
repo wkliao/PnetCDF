@@ -77,6 +77,7 @@ MPI_Offset file_read(PNCIO_File *fd,
     else
         r_len = PNCIO_GEN_ReadStrided(fd, buf, buf_view);
 
+    /* When r_len < 0, it is an NC error code */
     return r_len;
 }
 
@@ -87,7 +88,7 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
                               void       *buf,
                               PNCIO_View  buf_view)
 {
-    int err=NC_NOERR;
+    MPI_Offset r_len;
 
 #ifdef PNETCDF_DEBUG
 #endif
@@ -103,7 +104,9 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
          */
         fh->file_view.off = &offset;
 
-    err = file_read(fh, buf, buf_view);
+    r_len = file_read(fh, buf, buf_view);
+
+    /* When r_len < 0, it is an NC error code */
 
     /* reset fileview, as PnetCDF never reuses a fileview */
     fh->file_view.off = NULL;
@@ -111,7 +114,7 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
     fh->file_view.size = 0;
     fh->file_view.count = 0;
 
-    return err;
+    return r_len;
 }
 
 /*----< PNCIO_File_read_at_all() >--------------------------------------------*/
