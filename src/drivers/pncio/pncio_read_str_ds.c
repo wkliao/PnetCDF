@@ -76,37 +76,13 @@ MPI_Offset PNCIO_GEN_ReadStrided_ds(PNCIO_File *fd,
     NCI_Free(value);
 
     if (buf_view.count > 1 && fd->file_view.count <= 1) {
-        /* noncontiguous in memory, contiguous in file. */
-
-        off = fd->file_view.off[0];
-
-        start_off = off;
-        end_offset = start_off + bufsize - 1;
-        readbuf_off = start_off;
-        readbuf = (char *) NCI_Malloc(max_bufsize);
-        readbuf_len = MIN(max_bufsize, end_offset - readbuf_off + 1);
-
-        /* if atomicity is true, lock (exclusive) the region to be accessed */
-        if (fd->atomicity)
-            PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
-
-        r_len = PNCIO_ReadContig(fd, readbuf, readbuf_len, readbuf_off);
-        if (r_len < 0) return r_len;
-
-        for (i = 0; i < buf_view.count; i++) {
-            userbuf_off = buf_view.off[i];
-            req_off = off;
-            req_len = buf_view.len[i];
-            BUFFERED_READ
-            off += buf_view.len[i];
-        }
-
-        if (fd->atomicity)
-            PNCIO_UNLOCK(fd, start_off, SEEK_SET, end_offset - start_off + 1);
-
-        NCI_Free(readbuf);
+        /* buf_view is noncontiguous and file_view is contiguous.
+         * Because file_view is contiguous, data sieving in not necessary.
+         * No matter the value of data sieving hint, this should call the
+         * subroutine implements no-data-sieving read.
+         */
+        total_r_len = PNCIO_GEN_ReadStrided_nods(fd, buf, buf_view);
     }
-
     else { /* noncontiguous in file */
         MPI_Offset offset=0;
         MPI_Offset sum=0;
