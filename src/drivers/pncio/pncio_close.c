@@ -9,9 +9,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>   /* strdup() */
 #include <assert.h>
-#include <sys/errno.h>
 
 #include <mpi.h>
 
@@ -72,3 +70,4 @@ int PNCIO_File_close(PNCIO_File *fh)
 
     return err;
 }
+
