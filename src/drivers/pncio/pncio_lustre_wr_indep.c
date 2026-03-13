@@ -9,41 +9,39 @@
 
 #include <pncio.h>
 
-
 #define BUFFERED_WRITE {                                                      \
-    if (req_off >= writebuf_off + writebuf_len) {                             \
-        if (writebuf_len) {                                                   \
-            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len,             \
-                                      writebuf_off);                          \
-            if (!fd->atomicity && fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)  \
-                PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);       \
+    if (req_off >= wbuf_off + wbuf_len) {                                     \
+        if (wbuf_len) {                                                       \
+            w_len = PNCIO_UFS_WriteContig(fd, writebuf, wbuf_len, wbuf_off);  \
+            if (!fd->atomicity && fd->hints->romio_ds_write == PNCIO_HINT_DISABLE) \
+                PNCIO_UNLOCK(fd, wbuf_off, SEEK_SET, wbuf_len);               \
             if (w_len < 0) {                                                  \
                 NCI_Free(writebuf);                                           \
                 return w_len;                                                 \
             }                                                                 \
             total_w_len += w_len;                                             \
-            writebuf_off = req_off;                                           \
+            wbuf_off = req_off;                                               \
         }                                                                     \
-        writebuf_off = req_off;                                               \
+        wbuf_off = req_off;                                                   \
         /* stripe_size alignment */                                           \
-        writebuf_len = MIN(end_offset - writebuf_off + 1,                     \
-                           (writebuf_off / stripe_size + 1) * stripe_size     \
-                           - writebuf_off);                                   \
-        if (!fd->atomicity && fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)      \
-            PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);       \
-        r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len, writebuf_off);   \
+        wbuf_len = MIN(end_offset - wbuf_off + 1,                             \
+                           (wbuf_off / stripe_size + 1) * stripe_size         \
+                           - wbuf_off);                                       \
+        if (!fd->atomicity && fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)\
+            PNCIO_WRITE_LOCK(fd, wbuf_off, SEEK_SET, wbuf_len);               \
+        r_len = PNCIO_UFS_ReadContig(fd, writebuf, wbuf_len, wbuf_off);       \
         if (r_len < 0) {                                                      \
             NCI_Free(writebuf);                                               \
             return r_len;                                                     \
         }                                                                     \
     }                                                                         \
-    write_sz = (MIN(req_len, writebuf_off + writebuf_len - req_off));         \
-    memcpy(writebuf + req_off - writebuf_off, (char *)buf + userbuf_off,      \
+    write_sz = (MIN(req_len, wbuf_off + wbuf_len - req_off));                 \
+    memcpy(writebuf + req_off - wbuf_off, (char *)buf + userbuf_off,          \
            write_sz);                                                         \
     while (write_sz != req_len) {                                             \
-        w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);  \
-        if (!fd->atomicity && fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)      \
-            PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);           \
+        w_len = PNCIO_UFS_WriteContig(fd, writebuf, wbuf_len, wbuf_off);      \
+        if (!fd->atomicity && fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)\
+            PNCIO_UNLOCK(fd, wbuf_off, SEEK_SET, wbuf_len);                   \
         if (w_len < 0) {                                                      \
             NCI_Free(writebuf);                                               \
             return w_len;                                                     \
@@ -51,19 +49,19 @@
         total_w_len += w_len;                                                 \
         req_len -= write_sz;                                                  \
         userbuf_off += write_sz;                                              \
-        writebuf_off += writebuf_len;                                         \
+        wbuf_off += wbuf_len;                                                 \
         /* stripe_size alignment */                                           \
-        writebuf_len = MIN(end_offset - writebuf_off + 1,                     \
-                           (writebuf_off / stripe_size + 1) * stripe_size     \
-                           - writebuf_off);                                   \
-        if (!fd->atomicity && fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)      \
-            PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);       \
-        r_len = PNCIO_ReadContig(fd, writebuf, writebuf_len, writebuf_off);   \
+        wbuf_len = MIN(end_offset - wbuf_off + 1,                             \
+                           (wbuf_off / stripe_size + 1) * stripe_size         \
+                           - wbuf_off);                                       \
+        if (!fd->atomicity && fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)\
+            PNCIO_WRITE_LOCK(fd, wbuf_off, SEEK_SET, wbuf_len);               \
+        r_len = PNCIO_UFS_ReadContig(fd, writebuf, wbuf_len, wbuf_off);       \
         if (r_len < 0) {                                                      \
             NCI_Free(writebuf);                                               \
             return r_len;                                                     \
         }                                                                     \
-        write_sz = MIN(req_len, writebuf_len);                                \
+        write_sz = MIN(req_len, wbuf_len);                                    \
         memcpy(writebuf, (char *)buf + userbuf_off, write_sz);                \
     }                                                                         \
 }
@@ -72,24 +70,24 @@
  * contiguous. It does not do a read-modify-write and does not lock.
  */
 #define BUFFERED_WRITE_WITHOUT_READ {                                         \
-    if (req_off >= writebuf_off + writebuf_len) {                             \
-        w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);  \
+    if (req_off >= wbuf_off + wbuf_len) {                                     \
+        w_len = PNCIO_UFS_WriteContig(fd, writebuf, wbuf_len, wbuf_off);      \
         if (w_len < 0) {                                                      \
             NCI_Free(writebuf);                                               \
             return w_len;                                                     \
         }                                                                     \
         total_w_len += w_len;                                                 \
-        writebuf_off = req_off;                                               \
+        wbuf_off = req_off;                                                   \
         /* stripe_size alignment */                                           \
-        writebuf_len = MIN(end_offset - writebuf_off + 1,                     \
-                           (writebuf_off / stripe_size + 1) * stripe_size     \
-                           - writebuf_off);                                   \
+        wbuf_len = MIN(end_offset - wbuf_off + 1,                             \
+                           (wbuf_off / stripe_size + 1) * stripe_size         \
+                           - wbuf_off);                                       \
     }                                                                         \
-    write_sz = MIN(req_len, writebuf_off + writebuf_len - req_off);           \
-    memcpy(writebuf + req_off - writebuf_off,                                 \
+    write_sz = MIN(req_len, wbuf_off + wbuf_len - req_off);                   \
+    memcpy(writebuf + req_off - wbuf_off,                                     \
            (char *)buf + userbuf_off, write_sz);                              \
     while (write_sz != req_len) {                                             \
-        w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);  \
+        w_len = PNCIO_UFS_WriteContig(fd, writebuf, wbuf_len, wbuf_off);      \
         if (w_len < 0) {                                                      \
             NCI_Free(writebuf);                                               \
             return w_len;                                                     \
@@ -97,12 +95,12 @@
         total_w_len += w_len;                                                 \
         req_len -= write_sz;                                                  \
         userbuf_off += write_sz;                                              \
-        writebuf_off += writebuf_len;                                         \
+        wbuf_off += wbuf_len;                                                 \
         /* stripe_size alignment */                                           \
-        writebuf_len = MIN(end_offset - writebuf_off + 1,                     \
-                           (writebuf_off / stripe_size + 1) * stripe_size     \
-                           - writebuf_off);                                   \
-        write_sz = MIN(req_len, writebuf_len);                                \
+        wbuf_len = MIN(end_offset - wbuf_off + 1,                             \
+                           (wbuf_off / stripe_size + 1) * stripe_size         \
+                           - wbuf_off);                                       \
+        write_sz = MIN(req_len, wbuf_len);                                    \
         memcpy(writebuf, (char *)buf + userbuf_off, write_sz);                \
     }                                                                         \
 }
@@ -114,19 +112,19 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
     char *writebuf;
     int i, j, k, st_index=0, stripe_size;
     MPI_Offset i_offset, num, size, off;
-    MPI_Offset userbuf_off, req_off, end_offset=0, writebuf_off, start_off;
+    MPI_Offset userbuf_off, req_off, end_offset=0, wbuf_off, start_off;
     MPI_Offset new_bwr_size, new_fwr_size, st_fwr_size, fwr_size=0, bwr_size;
     MPI_Offset req_len, r_len, w_len, total_w_len=0;
-    MPI_Count bufsize, writebuf_len, write_sz;
+    MPI_Count bufsize, wbuf_len, write_sz;
 
     /* The case of both buf_view and file_view being contiguous has gone to
-     * PNCIO_WriteContig().
+     * PNCIO_UFS_WriteContig().
      */
 
 // printf("%s at %d:\n",__func__,__LINE__);
 
 #ifdef PNETCDF_DEBUG
-    /* When data sieveing is disabled, PNCIO_GEN_Write_indep() should be called
+    /* When data sieveing is disabled, PNCIO_UFS_Write_indep() should be called
      * instead. */
     assert(fd->hints->romio_ds_write != PNCIO_HINT_DISABLE);
 
@@ -148,8 +146,8 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
 
         /* write stripe size buffer each time */
         writebuf = (char *) NCI_Malloc(MIN(bufsize, stripe_size));
-        writebuf_off = 0;
-        writebuf_len = 0;
+        wbuf_off = 0;
+        wbuf_len = 0;
 
         /* if atomicity is true or data sieving is not disable, lock the region
          * to be accessed
@@ -166,7 +164,7 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
         }
 
         /* write the buffer out the last round */
-        w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);
+        w_len = PNCIO_UFS_WriteContig(fd, writebuf, wbuf_len, wbuf_off);
 
         if (fd->atomicity || fd->hints->romio_ds_write != PNCIO_HINT_DISABLE)
             PNCIO_UNLOCK(fd, start_off, SEEK_SET, bufsize);
@@ -204,20 +202,20 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
             end_offset = start_off + bufsize - 1;
             writebuf = (char *) NCI_Malloc(MIN(bufsize, stripe_size));
             memset(writebuf, -1, (size_t)MIN(bufsize, stripe_size));
-            writebuf_off = 0;
-            writebuf_len = 0;
+            wbuf_off = 0;
+            wbuf_len = 0;
             userbuf_off = 0;
             BUFFERED_WRITE_WITHOUT_READ;
 
             /* write the buffer out the last round */
             if (fd->hints->romio_ds_write != PNCIO_HINT_DISABLE)
-                PNCIO_WRITE_LOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
+                PNCIO_WRITE_LOCK(fd, wbuf_off, SEEK_SET, wbuf_len);
 
-            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);
+            w_len = PNCIO_UFS_WriteContig(fd, writebuf, wbuf_len, wbuf_off);
             if (w_len > 0) total_w_len += w_len;
 
             if (fd->hints->romio_ds_write != PNCIO_HINT_DISABLE)
-                PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
+                PNCIO_UNLOCK(fd, wbuf_off, SEEK_SET, wbuf_len);
 
             NCI_Free(writebuf);
 
@@ -245,8 +243,8 @@ assert(j < fd->file_view.count);
         if (fd->atomicity || fd->hints->romio_ds_write != PNCIO_HINT_DISABLE)
             PNCIO_WRITE_LOCK(fd, start_off, SEEK_SET, end_offset-start_off+1);
 
-        writebuf_off = 0;
-        writebuf_len = 0;
+        wbuf_off = 0;
+        wbuf_len = 0;
         writebuf = (char *) NCI_Malloc(stripe_size);
         memset(writebuf, -1, stripe_size);
 
@@ -331,10 +329,10 @@ assert(k < buf_view.count);
         }
 
         /* write the buffer out the last round */
-        if (writebuf_len) {
-            w_len = PNCIO_WriteContig(fd, writebuf, writebuf_len, writebuf_off);
+        if (wbuf_len) {
+            w_len = PNCIO_UFS_WriteContig(fd, writebuf, wbuf_len, wbuf_off);
             if (!fd->atomicity && fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)
-                PNCIO_UNLOCK(fd, writebuf_off, SEEK_SET, writebuf_len);
+                PNCIO_UNLOCK(fd, wbuf_off, SEEK_SET, wbuf_len);
             if (w_len < 0) return w_len;
             total_w_len += w_len;
         }
