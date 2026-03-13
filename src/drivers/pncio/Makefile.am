@@ -19,9 +19,7 @@ noinst_LTLIBRARIES = libpncio.la
 
 H_SRCS = pncio.h
 
-C_SRCS = pncio_read.c \
-         pncio_write.c \
-         pncio_open.c \
+C_SRCS = pncio_open.c \
          pncio_close.c \
          pncio_fstype.c \
          pncio_aggregate.c \
@@ -29,16 +27,20 @@ C_SRCS = pncio_read.c \
          pncio_read_indep.c \
          pncio_write_coll.c \
          pncio_write_indep.c \
-         pncio_utils.c \
+		 pncio_ufs_rd_indep.c \
+		 pncio_ufs_rd_coll.c \
+		 pncio_ufs_wr_indep.c \
+		 pncio_ufs_wr_coll.c \
          pncio_lustre_open.c \
-         pncio_lustre_wrcoll.c \
-         pncio_lustre_wrstr.c \
+         pncio_lustre_wr_coll.c \
+         pncio_lustre_wr_indep.c \
          pncio_lock.c \
          pncio_set_size.c \
          pncio_sync.c \
          pncio_delete.c \
          pncio_set_view.c \
-         pncio_hints.c
+         pncio_hints.c \
+         pncio_utils.c
 
 
 libpncio_la_SOURCES = $(C_SRCS) $(H_SRCS)
