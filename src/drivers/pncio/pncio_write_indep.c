@@ -175,7 +175,7 @@ MPI_Offset PNCIO_GEN_Write_indep(PNCIO_File *fd,
         tmp_buf = (char*) NCI_Malloc(tmp_buf_size);
 
         /* lock_rem is the amount remained to be locked for the entire
-         * read-modify-write
+         * read-modify-write region.
          */
         lock_rem = lock_len;
 
@@ -217,8 +217,8 @@ MPI_Offset PNCIO_GEN_Write_indep(PNCIO_File *fd,
             if (disp >= tmp_buf_size) {
                 /* This displacement at the beginning of read-modify-write
                  * region of this round i is too large, containing no data to
-                 * be copied from the write buffer. This allows to skip a few
-                 * rounds.
+                 * be copied from the user write buffer. This allows to skip a
+                 * few rounds.
                  */
                 MPI_Offset skip = disp / tmp_buf_size;
                 i        += skip - 1;
