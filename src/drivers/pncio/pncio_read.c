@@ -17,18 +17,16 @@
 
 #include "pncio.h"
 
-/*----< PNCIO_ReadContig() >--------------------------------------------------*/
+/*----< PNCIO_ReadContig() >-------------------------------------------------*/
 MPI_Offset PNCIO_ReadContig(PNCIO_File *fd,
                             void       *buf,
                             MPI_Offset  r_size,
                             MPI_Offset  offset)
 {
+    char *p;
     ssize_t err = 0;
     size_t r_count;
     MPI_Offset bytes_xfered = 0;
-    char *p;
-
-// printf("%s at %d: %s pread offset=%lld r_size=%lld\n",__func__,__LINE__,fd->filename,offset,r_size);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double timing = MPI_Wtime();
@@ -38,7 +36,7 @@ MPI_Offset PNCIO_ReadContig(PNCIO_File *fd,
         r_count = r_size - bytes_xfered;
         err = pread(fd->fd_sys, p, r_count, offset + bytes_xfered);
         if (err == -1)
-            goto ioerr;
+            goto err_out;
         if (err == 0)
             break;
         bytes_xfered += err;
@@ -48,43 +46,14 @@ MPI_Offset PNCIO_ReadContig(PNCIO_File *fd,
     fd->read_timing[2] += MPI_Wtime() - timing;
 #endif
 
-ioerr:
+err_out:
     if (err == -1)
         bytes_xfered = ncmpii_error_posix2nc("pread");
-
-/*
-if (offset > 0) {unsigned long long wkl[4];
-    memcpy(wkl, buf, sizeof(unsigned long long) * 4);
-    ncmpii_in_swapn(wkl, 4, 8);
-    printf("%s at %d: %s pread offset=%lld r_size=%lld wkl=%llu %lld %lld %lld\n",__func__,__LINE__,fd->filename,offset,r_size,wkl[0],wkl[1],wkl[2],wkl[3]);
-}
-*/
 
     return bytes_xfered;
 }
 
-/*----< file_read() >--------------------------------------------------------*/
-/* This is an independent call. */
-static
-MPI_Offset file_read(PNCIO_File *fd,
-                     void       *buf,
-                     PNCIO_View  buf_view)
-{
-    MPI_Offset r_len=0;
-
-    if (buf_view.count <= 1 && fd->file_view.count <= 1)
-        r_len = PNCIO_ReadContig(fd, buf, buf_view.size, fd->file_view.off[0]);
-    else if (fd->hints->romio_ds_read == PNCIO_HINT_DISABLE)
-        /* User has disabled data sieving on reads. */
-        r_len = PNCIO_GEN_ReadStrided_nods(fd, buf, buf_view);
-    else
-        r_len = PNCIO_GEN_ReadStrided_ds(fd, buf, buf_view);
-
-    /* When r_len < 0, it is an NC error code */
-    return r_len;
-}
-
-/*----< PNCIO_File_read_at() >------------------------------------------------*/
+/*----< PNCIO_File_read_at() >-----------------------------------------------*/
 /* This is an independent call. */
 MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
                               MPI_Offset  offset,
@@ -94,8 +63,8 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
     MPI_Offset r_len;
 
 #ifdef PNETCDF_DEBUG
-#endif
     assert(fh != NULL);
+#endif
 
     if (buf_view.size == 0) return NC_NOERR;
 
@@ -107,9 +76,10 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
          */
         fh->file_view.off = &offset;
 
-    r_len = file_read(fh, buf, buf_view);
-
-    /* When r_len < 0, it is an NC error code */
+    if (buf_view.count <= 1 && fh->file_view.count <= 1)
+        r_len = PNCIO_ReadContig(fh, buf, buf_view.size, fh->file_view.off[0]);
+    else
+        r_len = PNCIO_GEN_Read_indep(fh, buf, buf_view);
 
     /* reset fileview, as PnetCDF never reuses a fileview */
     fh->file_view.off = NULL;
@@ -117,10 +87,10 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
     fh->file_view.size = 0;
     fh->file_view.count = 0;
 
-    return r_len;
+    return r_len; /* When r_len < 0, it is an NC error code */
 }
 
-/*----< PNCIO_File_read_at_all() >--------------------------------------------*/
+/*----< PNCIO_File_read_at_all() >-------------------------------------------*/
 /* This is a collective call. */
 MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh,
                                   MPI_Offset  offset,
@@ -130,11 +100,14 @@ MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh,
     int err=NC_NOERR;
     MPI_Offset r_len;
 
+#ifdef PNETCDF_DEBUG
     assert(fh != NULL);
 
-#ifdef PNETCDF_DEBUG
+    if (offset > 0)
+        assert(fh->file_view.off == NULL &&
+               fh->file_view.len == NULL &&
+               fh->file_view.count == 0);
 #endif
-if (offset > 0) assert(fh->file_view.off == NULL && fh->file_view.len == NULL && fh->file_view.count == 0);
 
     if (buf_view.size < 0) err = NC_ENEGATIVECNT;
 
@@ -152,6 +125,6 @@ if (offset > 0) assert(fh->file_view.off == NULL && fh->file_view.len == NULL &&
     fh->file_view.size = 0;
     fh->file_view.count = 0;
 
-    return (err == NC_NOERR) ?  r_len :  err;
+    return (err == NC_NOERR) ? r_len : err;
 }
 
