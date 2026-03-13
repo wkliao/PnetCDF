@@ -25,8 +25,8 @@ C_SRCS = pncio_read.c \
          pncio_close.c \
          pncio_fstype.c \
          pncio_aggregate.c \
-         pncio_read_str_ds.c \
          pncio_read_coll.c \
+         pncio_read_indep.c \
          pncio_write_coll.c \
          pncio_write_indep.c \
          pncio_utils.c \
