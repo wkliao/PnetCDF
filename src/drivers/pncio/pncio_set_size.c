@@ -9,7 +9,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>   /* strdup() */
 #include <assert.h>
 #include <sys/errno.h>
 #ifdef HAVE_UNISTD_H
