@@ -24,7 +24,7 @@
 
 #include "pncio.h"
 
-/*----< GEN_set_cb_node_list() >---------------------------------------------*/
+/*----< UFS_set_cb_node_list() >---------------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
  *   fd->hints->ranklist[].
  *   fd->hints->cb_nodes and set file info for hint cb_nodes.
@@ -32,7 +32,7 @@
  *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
  */
 static
-int GEN_set_cb_node_list(PNCIO_File *fd)
+int UFS_set_cb_node_list(PNCIO_File *fd)
 {
     int i, j, k, nprocs, rank, *nprocs_per_node, **ranks_per_node;
 
@@ -104,7 +104,7 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
     return 0;
 }
 
-/*----< GEN_create() >-------------------------------------------------------*/
+/*----< UFS_create() >-------------------------------------------------------*/
 /*   1. root creates the file
  *   2. root sets and obtains striping info
  *   3. root broadcasts striping info
@@ -112,7 +112,7 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
  *   5. non-root processes opens the file
  */
 static int
-GEN_create(PNCIO_File *fd,
+UFS_create(PNCIO_File *fd,
            int         mpi_io_mode)
 {
     int err=NC_NOERR, rank, amode, perm, old_mask;
@@ -176,18 +176,18 @@ err_out:
     }
 
     /* construct cb_nodes rank list */
-    GEN_set_cb_node_list(fd);
+    UFS_set_cb_node_list(fd);
     MPI_Info_set(fd->info, "file_system_type", "UFS:");
 
     return err;
 }
 
-/*----< GEN_open() >---------------------------------------------------------*/
+/*----< UFS_open() >---------------------------------------------------------*/
 /*   1. all processes open the file.
  *   2. root obtains striping info and broadcasts to all others
  */
 static int
-GEN_open(PNCIO_File *fd)
+UFS_open(PNCIO_File *fd)
 {
     int err=NC_NOERR, rank, perm, old_mask, omode;
     int stripin_info[4] = {1048576, -1, -1, -1};
@@ -240,7 +240,7 @@ err_out:
     fd->hints->start_iodevice  = stripin_info[2];
 
     /* construct cb_nodes rank list */
-    GEN_set_cb_node_list(fd);
+    UFS_set_cb_node_list(fd);
     MPI_Info_set(fd->info, "file_system_type", "UFS:");
 
     return err;
@@ -302,9 +302,9 @@ int PNCIO_File_open(MPI_Comm    comm,
     }
     else {
         if (amode & MPI_MODE_CREATE)
-            err = GEN_create(fd, amode);
+            err = UFS_create(fd, amode);
         else
-            err = GEN_open(fd);
+            err = UFS_open(fd);
     }
     if (err != NC_NOERR) { /* fatal error */
         status = err;

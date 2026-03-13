@@ -258,11 +258,11 @@ MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh, MPI_Offset offset, void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_WriteContig(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_UFS_WriteContig(PNCIO_File *fd, const void *buf,
                 MPI_Offset w_size, MPI_Offset offset);
 
 extern
-MPI_Offset PNCIO_ReadContig(PNCIO_File *fd, void *buf, MPI_Offset r_size,
+MPI_Offset PNCIO_UFS_ReadContig(PNCIO_File *fd, void *buf, MPI_Offset r_size,
                 MPI_Offset offset);
 
 /* utility APIs */
@@ -315,23 +315,19 @@ int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
 
 extern
-MPI_Offset PNCIO_GEN_Write_indep(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_UFS_Write_indep(PNCIO_File *fd, const void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_GEN_ReadStrided_nods(PNCIO_File *fd, void *buf,
+MPI_Offset PNCIO_UFS_Write_coll(PNCIO_File *fd, const void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf,
+MPI_Offset PNCIO_UFS_Read_indep(PNCIO_File *fd, void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_GEN_Read_indep(PNCIO_File *fd, void *buf,
-                PNCIO_View buf_view);
-
-extern
-MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_UFS_Read_coll(PNCIO_File *fd, void *buf,
                 PNCIO_View buf_view);
 
 /* Lustre */

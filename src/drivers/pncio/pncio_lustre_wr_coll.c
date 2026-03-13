@@ -771,10 +771,10 @@ double curT = MPI_Wtime();
         if (fd->file_view.count <= 1 && buf_view.count <= 1) {
             /* Both buffer and fileview are contiguous. */
 #ifdef WKL_DEBUG
-            printf("%s %d: SWITCH to PNCIO_WriteContig !!!\n",__func__,__LINE__);
+            printf("%s %d: SWITCH to PNCIO_UFS_WriteContig !!!\n",__func__,__LINE__);
 #endif
 
-            return PNCIO_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
+            return PNCIO_UFS_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
         }
 
 #ifdef WKL_DEBUG
@@ -784,7 +784,7 @@ double curT = MPI_Wtime();
 
         if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)
             /* data seiving for writes has been disabled */
-            return PNCIO_GEN_Write_indep(fd, buf, buf_view);
+            return PNCIO_UFS_Write_indep(fd, buf, buf_view);
         else
             return PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view);
     }
@@ -1714,8 +1714,8 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
                     assert(srt_off_len[j].off[i] < range_off + range_size &&
                            srt_off_len[j].off[i] >= range_off);
 
-// printf("%s at %d: PNCIO_WriteContig num=%d [%d] off=%lld len=%lld\n",__func__,__LINE__, srt_off_len[j].num,i,srt_off_len[j].off[i],srt_off_len[j].len[i]);
-                    w_len = PNCIO_WriteContig(fd,
+// printf("%s at %d: PNCIO_UFS_WriteContig num=%d [%d] off=%lld len=%lld\n",__func__,__LINE__, srt_off_len[j].num,i,srt_off_len[j].off[i],srt_off_len[j].len[i]);
+                    w_len = PNCIO_UFS_WriteContig(fd,
                                      write_buf[j] + (srt_off_len[j].off[i] - range_off),
                                      srt_off_len[j].len[i],
                                      srt_off_len[j].off[i]);
@@ -2074,7 +2074,7 @@ int Exchange_data_recv(
             memset(write_buf, 0, range_size);
         else {
             MPI_Offset r_len;
-            r_len = PNCIO_ReadContig(fd, write_buf, range_size, range_off);
+            r_len = PNCIO_UFS_ReadContig(fd, write_buf, range_size, range_off);
             if (r_len < 0) return (int)r_len;
         }
 
