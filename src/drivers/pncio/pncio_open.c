@@ -48,7 +48,7 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
         /* cb_nodes must be <= nprocs */
         fd->hints->cb_nodes = nprocs;
 
-    fd->hints->ranklist = (int *) NCI_Malloc(sizeof(int) * fd->hints->cb_nodes);
+    fd->hints->ranklist = (int*) NCI_Malloc(sizeof(int) * fd->hints->cb_nodes);
     if (fd->hints->ranklist == NULL)
         return NC_ENOMEM;
 
@@ -59,7 +59,7 @@ int GEN_set_cb_node_list(PNCIO_File *fd)
 
     /* construct rank IDs of MPI processes running on each node */
     ranks_per_node = (int**) NCI_Malloc(sizeof(int*) * fd->comm_attr.num_nodes);
-    ranks_per_node[0] = (int *) NCI_Malloc(sizeof(int) * nprocs);
+    ranks_per_node[0] = (int*) NCI_Malloc(sizeof(int) * nprocs);
     for (i=1; i<fd->comm_attr.num_nodes; i++)
         ranks_per_node[i] = ranks_per_node[i - 1] + nprocs_per_node[i - 1];
 

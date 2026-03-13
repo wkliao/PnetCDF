@@ -10,12 +10,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>   /* readlink() */
-#include <string.h>   /* strdup() */
+#include <string.h>   /* strrchr(), strncpy(), strncmp() */
+#include <strings.h>  /* strncasecmp() */
 #include <assert.h>
 #include <sys/errno.h>
 #include <fcntl.h>      /* open(), O_CREAT */
 #include <sys/types.h>  /* open() */
-#include <libgen.h>     /* basename() */
 
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
