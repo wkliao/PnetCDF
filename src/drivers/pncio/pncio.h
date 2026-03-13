@@ -259,7 +259,7 @@ MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh, MPI_Offset offset, void *buf,
 
 extern
 MPI_Offset PNCIO_UFS_WriteContig(PNCIO_File *fd, const void *buf,
-                MPI_Offset w_size, MPI_Offset offset);
+                MPI_Offset w_size, MPI_Offset offset, int is_coll);
 
 extern
 MPI_Offset PNCIO_UFS_ReadContig(PNCIO_File *fd, void *buf, MPI_Offset r_size,
