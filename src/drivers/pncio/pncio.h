@@ -327,7 +327,7 @@ MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File *fd, void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_GEN_ReadStrided_ds(PNCIO_File *fd, void *buf,
+MPI_Offset PNCIO_GEN_Read_indep(PNCIO_File *fd, void *buf,
                 PNCIO_View buf_view);
 
 extern
