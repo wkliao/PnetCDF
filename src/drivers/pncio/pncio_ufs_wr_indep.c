@@ -17,15 +17,13 @@
 
 #include "pncio.h"
 
-#ifdef PNETCDF_DEBUG
-static MPI_Offset first_ost_id;
-#endif
 
 /*----< PNCIO_UFS_WriteContig() >--------------------------------------------*/
 MPI_Offset PNCIO_UFS_WriteContig(PNCIO_File *fd,
                                  const void *buf,
                                  MPI_Offset  w_size,
-                                 MPI_Offset  offset)
+                                 MPI_Offset  offset,
+                                 int         is_coll)
 {
     char *p;
     ssize_t err = 0;
@@ -34,16 +32,35 @@ MPI_Offset PNCIO_UFS_WriteContig(PNCIO_File *fd,
 
     if (w_size == 0) return NC_NOERR;
 
-#ifdef PNETCDF_DEBUG
-    int rank;
-    MPI_Offset ost_id;
+#if defined(PNETCDF_DEBUG) && (defined(HAVE_LUSTRE) || defined(MIMIC_LUSTRE))
+    if (is_coll) { /* This call arrived from a collective write call */
+        int rank, ost_blk;
+        static int striping_factor=-1, cb_nodes=-1;
+        static MPI_Offset first_ost_id = -1;
+        MPI_Offset ost_id;
 
-    MPI_Comm_rank(MPI_COMM_WORLD,&rank);
-    ost_id = (offset / fd->hints->striping_unit) % fd->hints->striping_factor;
-    if (first_ost_id == -1)
-        first_ost_id = ost_id;
-    else if (ost_id != first_ost_id)
-        printf("Warning in %s at rank %d:pwrite offset=%lld w_size=%lld ost_id=%lld not same 1st ost %lld\n",__func__,rank,offset,w_size,ost_id,first_ost_id);
+        MPI_Comm_rank(fd->comm, &rank);
+
+        /* reset first_ost_id when striping_factor or cb_nodes changes */
+        if (striping_factor != fd->hints->striping_factor ||
+            cb_nodes != fd->hints->cb_nodes)
+            first_ost_id = -1;
+
+        if (fd->hints->striping_factor > fd->hints->cb_nodes)
+            ost_blk = fd->hints->striping_factor / fd->hints->cb_nodes;
+        else
+            ost_blk = 1;
+
+        ost_id = (offset / fd->hints->striping_unit) % fd->hints->cb_nodes;
+        ost_id /= ost_blk;
+
+        if (first_ost_id == -1)
+            first_ost_id = ost_id;
+        else if (ost_id != first_ost_id) {
+            printf("Warning in %s rank %d: pwrite offset=%lld w_size=%lld ost_id=%lld != 1st ost %lld\n",__func__,rank,offset,w_size,ost_id,first_ost_id);
+            first_ost_id = ost_id;
+        }
+    }
 #endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -205,7 +222,7 @@ MPI_Offset PNCIO_UFS_Write_indep(PNCIO_File *fd,
             while (j < fd->file_view.count) {
                 req_len = MIN(tmp_buf_rem, file_rem);
                 /* write from offset file_off of length req_len */
-                len = PNCIO_UFS_WriteContig(fd, ptr, req_len, file_off);
+                len = PNCIO_UFS_WriteContig(fd, ptr, req_len, file_off, 0);
                 if (len < 0) return len;
                 total_len += len;
 
@@ -375,7 +392,7 @@ MPI_Offset PNCIO_UFS_Write_indep(PNCIO_File *fd,
             }
 
             /* write the modified chunk to the file */
-            len = PNCIO_UFS_WriteContig(fd, tmp_buf, req_len, file_off);
+            len = PNCIO_UFS_WriteContig(fd, tmp_buf, req_len, file_off, 0);
             if (len < 0) return len;
 
             if (!fd->atomicity) /* unlock the read-modify-write region */

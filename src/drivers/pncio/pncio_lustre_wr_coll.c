@@ -774,7 +774,7 @@ double curT = MPI_Wtime();
             printf("%s %d: SWITCH to PNCIO_UFS_WriteContig !!!\n",__func__,__LINE__);
 #endif
 
-            return PNCIO_UFS_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
+            return PNCIO_UFS_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0], 0);
         }
 
 #ifdef WKL_DEBUG
@@ -1718,7 +1718,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
                     w_len = PNCIO_UFS_WriteContig(fd,
                                      write_buf[j] + (srt_off_len[j].off[i] - range_off),
                                      srt_off_len[j].len[i],
-                                     srt_off_len[j].off[i]);
+                                     srt_off_len[j].off[i], 1);
                     if (w_len < 0) goto over;
                     total_w_len += w_len;
                 }
