@@ -677,7 +677,7 @@ MPI_Offset Exch_and_write(PNCIO_File   *fd,
                 flag = 1;
 
         if (flag) {
-            w_len = PNCIO_UFS_WriteContig(fd, write_buf, size, off);
+            w_len = PNCIO_UFS_WriteContig(fd, write_buf, size, off, 1);
             if (w_len < 0)
                 return w_len;
             else
@@ -820,7 +820,7 @@ double curT = MPI_Wtime();
 
         if (buf_view.count <= 1 && fd->file_view.count <= 1)
             /* Both buf_view and file_view are contiguous */
-            w_len = PNCIO_UFS_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
+            w_len = PNCIO_UFS_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0], 0);
         else
             w_len = PNCIO_UFS_Write_indep(fd, buf, buf_view);
 
