@@ -9,9 +9,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>   /* strdup() */
 #include <assert.h>
-#include <sys/errno.h>
 
 #include <mpi.h>
 
@@ -19,13 +17,8 @@
 #include <common.h>
 #include "pncio.h"
 
-/*----< PNCIO_File_set_view() >-----------------------------------------------*/
-/* For PnetCDF, this subroutine is an independent call, because PnetCDF only
- * use the followings.
- *   Argument etype is always MPI_BYTE.
- *   Argument datarep is always "native".
- *   Argument info is always MPI_INFO_NULL.
- */
+/*----< PNCIO_File_set_view() >----------------------------------------------*/
+/* This subroutine is an independent call.  */
 int PNCIO_File_set_view(PNCIO_File   *fd,
                         MPI_Aint      npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -40,8 +33,8 @@ int PNCIO_File_set_view(PNCIO_File   *fd,
     MPI_Aint i;
 
 #ifdef PNETCDF_DEBUG
-if (npairs == 0) assert(offsets == NULL && lengths == NULL);
-for (i=0; i<npairs; i++) assert(lengths[i] > 0);
+    if (npairs == 0) assert(offsets == NULL && lengths == NULL);
+    for (i=0; i<npairs; i++) assert(lengths[i] > 0);
 #endif
 
     fd->file_view.count = npairs;
@@ -50,12 +43,12 @@ for (i=0; i<npairs; i++) assert(lengths[i] > 0);
     fd->file_view.idx   = 0;
     fd->file_view.rem   = (npairs > 0) ? lengths[0] : 0;
 
-    /* Size of fileview must be calculated here, as PnetCDF may coalesce the
-     * offset-length pairs in order to make offsets sorted in a monotonically
-     * non-decreasing order.
+    /* Calculate size of fileview. Note PnetCDF has already sorted the
+     * offset-length pairs into a monotonically non-decreasing order.
      */
     fd->file_view.size = 0;
-    for (i=0; i<npairs; i++) fd->file_view.size += lengths[i];
+    for (i=0; i<npairs; i++)
+        fd->file_view.size += lengths[i];
 
     return NC_NOERR;
 }

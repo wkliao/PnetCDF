@@ -7,13 +7,9 @@
 # include <config.h>
 #endif
 
-#include <limits.h>
-#include <stdarg.h> /* va_start(), va_end() */
-
 #include <pncio.h>
 
-/* some systems do not have pread/pwrite, or requrie XOPEN_SOURCE set higher
- * than we would like.  see #1973 */
+/* For systems that do not have pread()/pwrite() */
 #if (HAVE_DECL_PWRITE == 0)
 
 #include <sys/types.h>
@@ -63,9 +59,14 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
 }
 #endif
 
-void PNCIO_Heap_merge(PNCIO_Access * others_req, MPI_Count * count,
-                      MPI_Offset * srt_off, MPI_Count * srt_len, MPI_Count * start_pos,
-                      int nprocs, int nprocs_recv, MPI_Count total_elements)
+void PNCIO_Heap_merge(PNCIO_Access *others_req,
+                      MPI_Count    *count,
+                      MPI_Offset   *srt_off,
+                      MPI_Count    *srt_len,
+                      MPI_Count    *start_pos,
+                      int           nprocs,
+                      int           nprocs_recv,
+                      MPI_Count     total_elements)
 {
     typedef struct {
         MPI_Offset *off_list;
