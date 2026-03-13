@@ -149,10 +149,8 @@ double curT = MPI_Wtime();
         if (buf_view.count <= 1 && fd->file_view.count <= 1)
             /* Both buf_view and file_view are contiguous. */
             return PNCIO_ReadContig(fd, buf, buf_view.size, fd->file_view.off[0]);
-        else if (fd->hints->romio_ds_read == PNCIO_HINT_DISABLE)
-            return PNCIO_GEN_ReadStrided_nods(fd, buf, buf_view);
         else
-            return PNCIO_GEN_ReadStrided_ds(fd, buf, buf_view);
+            return PNCIO_GEN_Read_indep(fd, buf, buf_view);
     }
 
     /* We're going to perform aggregation of I/O.  Here we call
