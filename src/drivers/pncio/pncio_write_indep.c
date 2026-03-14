@@ -56,12 +56,8 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File *fh,
         w_len = PNCIO_UFS_WriteContig(fh, buf, buf_view.size, fh->file_view.off[0], 0);
     else if (fh->file_system == PNCIO_UFS)
         w_len = PNCIO_UFS_Write_indep(fh, buf, buf_view);
-    else if (fh->file_system == PNCIO_LUSTRE) {
-        if (fh->hints->romio_ds_write == PNCIO_HINT_DISABLE)
-            w_len = PNCIO_UFS_Write_indep(fh, buf, buf_view);
-        else
-            w_len = PNCIO_LUSTRE_WriteStrided(fh, buf, buf_view);
-    }
+    else if (fh->file_system == PNCIO_LUSTRE)
+        w_len = PNCIO_UFS_Write_indep(fh, buf, buf_view);
     else
         w_len = NC_EFSTYPE;
 
