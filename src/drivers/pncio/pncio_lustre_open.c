@@ -868,7 +868,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
      * in fd->hints->ranklist, no matter its is open or create mode.
      */
 
-// printf("fd->hints->pnc_striping %s\n", (fd->hints->pnc_striping == PNCIO_STRIPING_AUTO)?"AUTO":"INHERIT");
+// printf("fd->hints->nc_striping %s\n", (fd->hints->nc_striping == PNCIO_STRIPING_AUTO)?"AUTO":"INHERIT");
 
 #ifdef HAVE_LUSTRE
     int overstriping_ratio, str_factor, str_unit, start_iodev;
@@ -918,7 +918,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
      * Codes below try to set the striping for the new file. Precedences are:
      * 1. When hints striping_factor and striping_unit are explicitly set, they
      *    are used as the top precedence.
-     * 2. When hint pnc_striping is set to "inherit", the striping will inherit
+     * 2. When hint nc_striping is set to "inherit", the striping will inherit
      *    from the parent folder. If the parent folder's striping count is not
      *    set, then this hint is ignored.
      * 3. When no hint are set, set the new file's striping count to be equal
@@ -926,7 +926,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
      *    size to 1 MiB.
      */
     if (fd->hints->striping_factor == 0 &&
-        fd->hints->pnc_striping == PNCIO_STRIPING_INHERIT) {
+        fd->hints->nc_striping == PNCIO_STRIPING_INHERIT) {
         /* Inherit the file striping settings from the parent folder. */
         int dd;
         char *dirc, *dname;
