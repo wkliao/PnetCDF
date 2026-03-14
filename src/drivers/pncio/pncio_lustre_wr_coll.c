@@ -773,20 +773,14 @@ double curT = MPI_Wtime();
 #ifdef WKL_DEBUG
             printf("%s %d: SWITCH to PNCIO_UFS_WriteContig !!!\n",__func__,__LINE__);
 #endif
-
             return PNCIO_UFS_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0], 0);
         }
 
 #ifdef WKL_DEBUG
-        printf("%s %d: SWITCH to PNCIO_LUSTRE_WriteStrided !!!\n",
+        printf("%s %d: SWITCH to PNCIO_UFS_Write_indep !!!\n",
                    __func__,__LINE__);
 #endif
-
-        if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE)
-            /* data seiving for writes has been disabled */
-            return PNCIO_UFS_Write_indep(fd, buf, buf_view);
-        else
-            return PNCIO_LUSTRE_WriteStrided(fd, buf, buf_view);
+        return PNCIO_UFS_Write_indep(fd, buf, buf_view);
     }
 
     /* Now we are using collective I/O (two-phase I/O strategy) */
