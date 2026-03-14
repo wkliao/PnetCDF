@@ -103,7 +103,7 @@
 #define PNCIO_STRIPING_INHERIT 0
 
 typedef struct {
-    int pnc_striping;
+    int file_striping;
     int striping_factor;
     int striping_unit;
     int start_iodevice;
