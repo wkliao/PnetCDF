@@ -338,10 +338,6 @@ extern
 int PNCIO_Lustre_open(PNCIO_File *fd);
 
 extern
-MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd, const void *buf,
-                PNCIO_View buf_view);
-
-extern
 MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd, const void *buf,
                 PNCIO_View buf_view);
 
