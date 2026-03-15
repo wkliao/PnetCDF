@@ -161,22 +161,21 @@ typedef struct {
     int file_system;        /* type of file system */
 
     int fd_sys;             /* system file descriptor */
-    int access_mode;        /* Access mode (sequential, append, etc.),
-                             * possibly modified to deal with
-                             * data sieving or deferred open */
+    int amode;              /* O_CREAT|O_RDWR, O_RDWR, or O_RDONLY */
 
     int is_open;            /* no_indep_rw, 0: not open yet 1: is open */
 
     int skip_read;          /* whether to skip reads in read-modify-write */
 
-    PNCIO_View file_view;   /* flattern offset-length pairs */
+    PNCIO_View file_view;   /* file voew's flatterned offset-length pairs */
 
-    int atomicity;          /* true=atomic, false=nonatomic */
-    char *io_buf;           /* two-phase buffer allocated out of i/o path */
-    int is_agg;             /* bool: if I am an aggregator */
+    int atomicity;          /* true or false */
+    char *io_buf;           /* internal buffer allocated for two-phase I/O */
+    int is_agg;             /* whether this process is an aggregator */
     int my_cb_nodes_index;  /* my index into fd->hints->ranklist[]. -1 if N/A */
-    PNCIO_Hints *hints;     /* structure containing fs-indep. info values */
-    MPI_Info info;
+
+    PNCIO_Hints *hints;     /* hints used by PnetCDF */
+    MPI_Info info;          /* contains all MPI-IO and PnetCDF hints */
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double write_timing[NMEASURES];
@@ -306,7 +305,7 @@ int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
 
 /* UFS driver APIs */
 extern
-int PNCIO_UFS_create(PNCIO_File *fd, int access_mode);
+int PNCIO_UFS_create(PNCIO_File *fd);
 
 extern
 int PNCIO_UFS_open(PNCIO_File *fd);
@@ -337,7 +336,7 @@ MPI_Offset PNCIO_UFS_read_contig(PNCIO_File *fd, void *buf,
 
 /* Lustre driver APIs */
 extern
-int PNCIO_Lustre_create(PNCIO_File *fd, int access_mode);
+int PNCIO_Lustre_create(PNCIO_File *fd);
 
 extern
 int PNCIO_Lustre_open(PNCIO_File *fd);

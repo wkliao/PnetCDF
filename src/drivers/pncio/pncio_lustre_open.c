@@ -823,8 +823,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
  *   5. non-root processes opens the file
  */
 int
-PNCIO_Lustre_create(PNCIO_File *fd,
-                    int         mpi_io_mode)
+PNCIO_Lustre_create(PNCIO_File *fd)
 {
     char int_str[16];
     int err=NC_NOERR, rank, perm, old_mask;
@@ -846,14 +845,9 @@ int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fd->filename); wkl++; fflush(stdout);}
 #endif
 
-#if defined(HAVE_LUSTRE) || defined(MIMIC_LUSTRE)
     /* Note ncmpi_create() always creates a file with readable and writable
      * permission.
      */
-    int amode = O_CREAT;
-    if (mpi_io_mode & MPI_MODE_RDWR) amode |= O_RDWR;
-#endif
-
     old_mask = umask(022);
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
@@ -1018,7 +1012,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
         /* If explicitly setting file striping failed, inherit the striping
          * from the folder by simply creating the file.
          */
-        fd->fd_sys = open(fd->filename, amode, perm);
+        fd->fd_sys = open(fd->filename, fd->amode, perm);
 
     if (fd->fd_sys < 0) {
         fprintf(stderr,"Error at %s (%d) fails to create file %s (%s)\n",
@@ -1040,7 +1034,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
     stripin_info[3] = numOSTs;
 
 #elif defined(MIMIC_LUSTRE)
-    fd->fd_sys = open(fd->filename, amode, perm);
+    fd->fd_sys = open(fd->filename, fd->amode, perm);
     if (fd->fd_sys == -1) {
         printf("%s line %d: rank %d fails to create file %s (%s)\n",
                __FILE__,__LINE__, rank, fd->filename, strerror(errno));
@@ -1076,7 +1070,7 @@ err_out:
         fd->hints->lustre_overstriping_ratio = stripin_info[1] / stripin_info[3];
     }
 
-    if (rank > 0) { /* non-root processes */
+    if (rank > 0) { /* non-root processes open the file */
         fd->fd_sys = open(fd->filename, O_RDWR, perm);
         if (fd->fd_sys == -1) {
             fprintf(stderr,"%s line %d: rank %d failure to open file %s (%s)\n",
@@ -1127,10 +1121,8 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
 
-    int omode = (fd->access_mode & MPI_MODE_RDWR) ? O_RDWR : O_RDONLY;
-
     /* All processes open the file. */
-    fd->fd_sys = open(fd->filename, omode, perm);
+    fd->fd_sys = open(fd->filename, fd->amode, perm);
     if (fd->fd_sys == -1) {
         fprintf(stderr,"%s line %d: rank %d fails to open file %s (%s)\n",
                 __FILE__,__LINE__, rank, fd->filename, strerror(errno));
