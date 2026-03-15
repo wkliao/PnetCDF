@@ -295,7 +295,7 @@ void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,
                 MPI_Offset *srt_off, MPI_Count *srt_len, MPI_Count *start_pos,
                 int nprocs, int nprocs_recv, MPI_Count total_elements);
 
-/* Generic APIs */
+/* File lock APIs */
 extern
 int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
@@ -303,6 +303,13 @@ int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
 extern
 int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
+
+/* UFS driver APIs */
+extern
+int PNCIO_UFS_create(PNCIO_File *fd, int access_mode);
+
+extern
+int PNCIO_UFS_open(PNCIO_File *fd);
 
 extern
 MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fd, const void *buf,
