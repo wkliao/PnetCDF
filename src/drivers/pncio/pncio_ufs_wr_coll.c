@@ -307,7 +307,7 @@ double curT = MPI_Wtime();
     if (nprocs_recv) {
         if (*hole) {
             MPI_Offset r_len;
-            r_len = PNCIO_UFS_ReadContig(fd, write_buf, size, off);
+            r_len = PNCIO_UFS_read_contig(fd, write_buf, size, off);
             if (r_len < 0) return r_len;
         }
     }
@@ -677,7 +677,7 @@ MPI_Offset Exch_and_write(PNCIO_File   *fd,
                 flag = 1;
 
         if (flag) {
-            w_len = PNCIO_UFS_WriteContig(fd, write_buf, size, off, 1);
+            w_len = PNCIO_UFS_write_contig(fd, write_buf, size, off, 1);
             if (w_len < 0)
                 return w_len;
             else
@@ -709,7 +709,7 @@ MPI_Offset Exch_and_write(PNCIO_File   *fd,
     return total_w_len;
 }
 
-MPI_Offset PNCIO_UFS_Write_coll(PNCIO_File *fd,
+MPI_Offset PNCIO_UFS_write_coll(PNCIO_File *fd,
                                 const void *buf,
                                 PNCIO_View  buf_view)
 {
@@ -820,9 +820,9 @@ double curT = MPI_Wtime();
 
         if (buf_view.count <= 1 && fd->file_view.count <= 1)
             /* Both buf_view and file_view are contiguous */
-            w_len = PNCIO_UFS_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0], 0);
+            w_len = PNCIO_UFS_write_contig(fd, buf, buf_view.size, fd->file_view.off[0], 0);
         else
-            w_len = PNCIO_UFS_Write_indep(fd, buf, buf_view);
+            w_len = PNCIO_UFS_write_indep(fd, buf, buf_view);
 
         return w_len;
     }

@@ -873,7 +873,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
 #ifdef HAVE_LUSTRE
     int overstriping_ratio, str_factor, str_unit, start_iodev;
 
-    /* In a call to PNCIO_File_SetInfo() earlier, hints have been validated to
+    /* In a call to PNCIO_File_set_info() earlier, hints have been validated to
      * be consistent among all processes.
      */
 
