@@ -27,7 +27,7 @@
 /*----< PNCIO_File_open() >--------------------------------------------------*/
 int PNCIO_File_open(MPI_Comm    comm,
                     const char *filename,
-                    int         amode,
+                    int         amode, /* O_CREAT|O_RDWR, O_RDWR, or O_RDONLY */
                     MPI_Info    info,
                     PNCIO_File *fd)
 {
@@ -37,12 +37,12 @@ int PNCIO_File_open(MPI_Comm    comm,
     char value[MPI_MAX_INFO_VAL + 1], int_str[16];
     int i, err, min_err, status=NC_NOERR;
 
-    fd->comm        = comm;
-    fd->filename    = filename;  /* without file system type name prefix */
-    fd->atomicity   = 0;
-    fd->is_open     = 0;
-    fd->access_mode = amode;
-    fd->io_buf      = NULL; /* collective buffer used by aggregators only */
+    fd->comm      = comm;
+    fd->filename  = filename;  /* without file system type name prefix */
+    fd->atomicity = 0;
+    fd->is_open   = 0;
+    fd->amode     = amode;
+    fd->io_buf    = NULL; /* collective buffer used by aggregators only */
 
     fd->file_view.count = 0; /* flattened fileview in offset-length pairs */
     fd->file_view.size = -1;
@@ -73,14 +73,14 @@ int PNCIO_File_open(MPI_Comm    comm,
      * below.
      */
     if (fd->file_system == PNCIO_LUSTRE) {
-        if (amode & MPI_MODE_CREATE)
-            err = PNCIO_Lustre_create(fd, amode);
+        if (amode & O_CREAT)
+            err = PNCIO_Lustre_create(fd);
         else
             err = PNCIO_Lustre_open(fd);
     }
     else {
-        if (amode & MPI_MODE_CREATE)
-            err = PNCIO_UFS_create(fd, amode);
+        if (amode & O_CREAT)
+            err = PNCIO_UFS_create(fd);
         else
             err = PNCIO_UFS_open(fd);
     }
