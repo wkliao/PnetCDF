@@ -28,6 +28,11 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File *fh,
 
 #ifdef PNETCDF_DEBUG
     assert(fh != NULL);
+
+    if (offset > 0)
+        assert(fh->file_view.off == NULL &&
+               fh->file_view.len == NULL &&
+               fh->file_view.count == 0);
 #endif
 
     if (buf_view.size == 0) /* zero-sized request */
@@ -36,16 +41,6 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File *fh,
     if (buf_view.size < 0)
         return NC_ENEGATIVECNT;
 
-    if (fh->access_mode & MPI_MODE_RDONLY)
-        return NC_EPERM;
-
-#ifdef PNETCDF_DEBUG
-    if (offset > 0)
-        assert(fh->file_view.off == NULL &&
-               fh->file_view.len == NULL &&
-               fh->file_view.count == 0);
-#endif
-
     if (fh->file_view.off == NULL)
         /* This is when calling this subroutione without set fileview first.
          * We store offset into fh->file_view.off.
@@ -53,11 +48,11 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File *fh,
         fh->file_view.off = &offset;
 
     if (buf_view.count <= 1 && fh->file_view.count <= 1)
-        w_len = PNCIO_UFS_WriteContig(fh, buf, buf_view.size, fh->file_view.off[0], 0);
+        w_len = PNCIO_UFS_write_contig(fh, buf, buf_view.size, fh->file_view.off[0], 0);
     else if (fh->file_system == PNCIO_UFS)
-        w_len = PNCIO_UFS_Write_indep(fh, buf, buf_view);
+        w_len = PNCIO_UFS_write_indep(fh, buf, buf_view);
     else if (fh->file_system == PNCIO_LUSTRE)
-        w_len = PNCIO_UFS_Write_indep(fh, buf, buf_view);
+        w_len = PNCIO_UFS_write_indep(fh, buf, buf_view);
     else
         w_len = NC_EFSTYPE;
 

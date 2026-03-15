@@ -21,20 +21,15 @@ MPI_Offset PNCIO_File_write_at_all(PNCIO_File *fh,
 
 #ifdef PNETCDF_DEBUG
     assert(fh != NULL);
-#endif
 
-    if (buf_view.size < 0)
-        err = NC_ENEGATIVECNT;
-
-    if (fh->access_mode & MPI_MODE_RDONLY && err == NC_NOERR)
-        err = NC_EPERM;
-
-#ifdef PNETCDF_DEBUG
     if (offset > 0)
         assert(fh->file_view.off == NULL &&
                fh->file_view.len == NULL &&
                fh->file_view.count == 0);
 #endif
+
+    if (buf_view.size < 0)
+        err = NC_ENEGATIVECNT;
 
     if (fh->file_view.off == NULL)
         /* This is when calling this subroutione without set fileview first.
@@ -43,9 +38,9 @@ MPI_Offset PNCIO_File_write_at_all(PNCIO_File *fh,
         fh->file_view.off = &offset;
 
     if (fh->file_system == PNCIO_LUSTRE)
-        w_len = PNCIO_LUSTRE_WriteStridedColl(fh, buf, buf_view);
+        w_len = PNCIO_Lustre_write_coll(fh, buf, buf_view);
     else if (fh->file_system == PNCIO_UFS)
-        w_len = PNCIO_UFS_Write_coll(fh, buf, buf_view);
+        w_len = PNCIO_UFS_write_coll(fh, buf, buf_view);
     else
         err = NC_EFSTYPE;
 
