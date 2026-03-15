@@ -117,7 +117,7 @@ int hint_consistency_check(PNCIO_File *fd)
     return err;
 }
 
-/*----< PNCIO_File_SetInfo() >------------------------------------------------*/
+/*----< PNCIO_File_set_info() >----------------------------------------------*/
 /* For PnetCDF, a file info object can only be passed to PnetCDF at file create
  * or open call, i.e. I/O hints cannot be changed after file create/open.
  *
@@ -125,8 +125,8 @@ int hint_consistency_check(PNCIO_File *fd)
  * hints among all processes.
  */
 int
-PNCIO_File_SetInfo(PNCIO_File *fd,
-                   MPI_Info    users_info)
+PNCIO_File_set_info(PNCIO_File *fd,
+                    MPI_Info    users_info)
 {
     int err=NC_NOERR, flag, nprocs;
     char value[MPI_MAX_INFO_VAL + 1];

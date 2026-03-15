@@ -18,12 +18,12 @@
 #include "pncio.h"
 
 
-/*----< PNCIO_UFS_WriteContig() >--------------------------------------------*/
-MPI_Offset PNCIO_UFS_WriteContig(PNCIO_File *fd,
-                                 const void *buf,
-                                 MPI_Offset  w_size,
-                                 MPI_Offset  offset,
-                                 int         is_coll)
+/*----< PNCIO_UFS_write_contig() >-------------------------------------------*/
+MPI_Offset PNCIO_UFS_write_contig(PNCIO_File *fd,
+                                  const void *buf,
+                                  MPI_Offset  w_size,
+                                  MPI_Offset  offset,
+                                  int         is_coll)
 {
     char *p;
     ssize_t err = 0;
@@ -88,7 +88,7 @@ err_out:
     return bytes_xfered;
 }
 
-/*----< PNCIO_UFS_Write_indep() >--------------------------------------------*/
+/*----< PNCIO_UFS_write_indep() >--------------------------------------------*/
 /* This subroutine implements independent write. It consists of two major code
  * segments. The first one is for when data sieving is disabled and the second
  * one enabled.
@@ -96,7 +96,7 @@ err_out:
  * Note in PnetCDF, the file_view and buf_view are never used for more than
  * one round, which greatly simplifies the implementation of this subroutine.
  */
-MPI_Offset PNCIO_UFS_Write_indep(PNCIO_File *fd,
+MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fd,
                                  const void *buf,
                                  PNCIO_View  buf_view)
 {
@@ -113,7 +113,7 @@ MPI_Offset PNCIO_UFS_Write_indep(PNCIO_File *fd,
 
 #ifdef PNETCDF_DEBUG
     /* When both file_view and buf_view are contiguous, file_write() calls
-     * PNCIO_UFS_WriteContig().
+     * PNCIO_UFS_write_contig().
      */
     assert(!(buf_view.count <= 1 && fd->file_view.count <= 1));
 
@@ -222,7 +222,7 @@ MPI_Offset PNCIO_UFS_Write_indep(PNCIO_File *fd,
             while (j < fd->file_view.count) {
                 req_len = MIN(tmp_buf_rem, file_rem);
                 /* write from offset file_off of length req_len */
-                len = PNCIO_UFS_WriteContig(fd, ptr, req_len, file_off, 0);
+                len = PNCIO_UFS_write_contig(fd, ptr, req_len, file_off, 0);
                 if (len < 0) return len;
                 total_len += len;
 
@@ -313,7 +313,7 @@ MPI_Offset PNCIO_UFS_Write_indep(PNCIO_File *fd,
             if (!fd->atomicity) /* lock the read-modify-write region */
                 PNCIO_WRITE_LOCK(fd, file_off, SEEK_SET, req_len);
 
-            len = PNCIO_UFS_ReadContig(fd, tmp_buf, req_len, file_off);
+            len = PNCIO_UFS_read_contig(fd, tmp_buf, req_len, file_off);
             if (len < 0) return len;
 
             /* Copy data from buf to tmp_buf. Skip 'disp' bytes at the front
@@ -392,7 +392,7 @@ MPI_Offset PNCIO_UFS_Write_indep(PNCIO_File *fd,
             }
 
             /* write the modified chunk to the file */
-            len = PNCIO_UFS_WriteContig(fd, tmp_buf, req_len, file_off, 0);
+            len = PNCIO_UFS_write_contig(fd, tmp_buf, req_len, file_off, 0);
             if (len < 0) return len;
 
             if (!fd->atomicity) /* unlock the read-modify-write region */

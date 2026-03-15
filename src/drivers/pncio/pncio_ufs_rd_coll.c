@@ -500,7 +500,7 @@ MPI_Offset Read_and_exch(PNCIO_File   *fd,
         }
         if (flag) {
             /* This should be only reached by I/O aggregators only */
-            r_len = PNCIO_UFS_ReadContig(fd, read_buf + for_curr_iter, size, off);
+            r_len = PNCIO_UFS_read_contig(fd, read_buf + for_curr_iter, size, off);
             if (r_len < 0) return r_len;
             size = r_len;
         }
@@ -606,7 +606,7 @@ MPI_Offset Read_and_exch(PNCIO_File   *fd,
 }
 
 
-MPI_Offset PNCIO_UFS_Read_coll(PNCIO_File *fd,
+MPI_Offset PNCIO_UFS_read_coll(PNCIO_File *fd,
                                void       *buf,
                                PNCIO_View  buf_view)
 {
@@ -712,9 +712,9 @@ double curT = MPI_Wtime();
 
         if (buf_view.count <= 1 && fd->file_view.count <= 1)
             /* Both buf_view and file_view are contiguous. */
-            return PNCIO_UFS_ReadContig(fd, buf, buf_view.size, fd->file_view.off[0]);
+            return PNCIO_UFS_read_contig(fd, buf, buf_view.size, fd->file_view.off[0]);
         else
-            return PNCIO_UFS_Read_indep(fd, buf, buf_view);
+            return PNCIO_UFS_read_indep(fd, buf, buf_view);
     }
 
     /* We're going to perform aggregation of I/O.  Here we call

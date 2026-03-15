@@ -38,7 +38,7 @@ MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh,
          */
         fh->file_view.off = &offset;
 
-    r_len = PNCIO_UFS_Read_coll(fh, buf, buf_view);
+    r_len = PNCIO_UFS_read_coll(fh, buf, buf_view);
 
     /* reset fileview, as PnetCDF never reuses a fileview */
     fh->file_view.off = NULL;
