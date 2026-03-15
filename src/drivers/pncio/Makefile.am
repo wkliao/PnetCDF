@@ -27,6 +27,7 @@ C_SRCS = pncio_open.c \
          pncio_read_indep.c \
          pncio_write_coll.c \
          pncio_write_indep.c \
+         pncio_ufs_open.c \
          pncio_ufs_rd_indep.c \
          pncio_ufs_rd_coll.c \
          pncio_ufs_wr_indep.c \
