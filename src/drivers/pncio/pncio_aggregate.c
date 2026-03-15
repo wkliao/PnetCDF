@@ -267,7 +267,7 @@ void PNCIO_Calc_my_req(PNCIO_File         *fd,
         buf_idx[i] = -1;
 
     /* fd->file_view.count has been checked and adjusted to a possitive number
-     * at the beginning of PNCIO_UFS_Read_coll() and PNCIO_UFS_Write_coll().
+     * at the beginning of PNCIO_UFS_read_coll() and PNCIO_UFS_write_coll().
      */
     assert(fd->file_view.count > 0);
 

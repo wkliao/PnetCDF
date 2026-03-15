@@ -159,7 +159,7 @@ void LUSTRE_Calc_my_req(PNCIO_File    *fd,
     PNCIO_Access *my_req;
 
     /* fd->file_view.count has been checked and adjusted to a possitive number
-     * at the beginning of PNCIO_LUSTRE_WriteStridedColl().
+     * at the beginning of PNCIO_Lustre_write_coll().
      */
     assert(fd->file_view.count > 0);
 
@@ -584,9 +584,9 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fd,
     }
 }
 
-MPI_Offset PNCIO_LUSTRE_WriteStridedColl(PNCIO_File *fd,
-                                         const void *buf,
-                                         PNCIO_View  buf_view)
+MPI_Offset PNCIO_Lustre_write_coll(PNCIO_File *fd,
+                                   const void *buf,
+                                   PNCIO_View  buf_view)
 {
     /* Uses a generalized version of the extended two-phase method described in
      * "An Extended Two-Phase Method for Accessing Sections of Out-of-Core
@@ -771,16 +771,16 @@ double curT = MPI_Wtime();
         if (fd->file_view.count <= 1 && buf_view.count <= 1) {
             /* Both buffer and fileview are contiguous. */
 #ifdef WKL_DEBUG
-            printf("%s %d: SWITCH to PNCIO_UFS_WriteContig !!!\n",__func__,__LINE__);
+            printf("%s %d: SWITCH to PNCIO_UFS_write_contig !!!\n",__func__,__LINE__);
 #endif
-            return PNCIO_UFS_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0], 0);
+            return PNCIO_UFS_write_contig(fd, buf, buf_view.size, fd->file_view.off[0], 0);
         }
 
 #ifdef WKL_DEBUG
-        printf("%s %d: SWITCH to PNCIO_UFS_Write_indep !!!\n",
+        printf("%s %d: SWITCH to PNCIO_UFS_write_indep !!!\n",
                    __func__,__LINE__);
 #endif
-        return PNCIO_UFS_Write_indep(fd, buf, buf_view);
+        return PNCIO_UFS_write_indep(fd, buf, buf_view);
     }
 
     /* Now we are using collective I/O (two-phase I/O strategy) */
@@ -1307,7 +1307,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
      * open/create time when fd->io_buf is allocated.
      *
      * Note cb_buffer_size and striping_unit may also be adjusted earlier in
-     * PNCIO_LUSTRE_WriteStridedColl().
+     * PNCIO_Lustre_write_coll().
      */
     nbufs = fd->hints->cb_buffer_size / striping_unit;
     assert(nbufs > 0); /* must at least 1 */
@@ -1708,8 +1708,8 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fd,
                     assert(srt_off_len[j].off[i] < range_off + range_size &&
                            srt_off_len[j].off[i] >= range_off);
 
-// printf("%s at %d: PNCIO_UFS_WriteContig num=%d [%d] off=%lld len=%lld\n",__func__,__LINE__, srt_off_len[j].num,i,srt_off_len[j].off[i],srt_off_len[j].len[i]);
-                    w_len = PNCIO_UFS_WriteContig(fd,
+// printf("%s at %d: PNCIO_UFS_write_contig num=%d [%d] off=%lld len=%lld\n",__func__,__LINE__, srt_off_len[j].num,i,srt_off_len[j].off[i],srt_off_len[j].len[i]);
+                    w_len = PNCIO_UFS_write_contig(fd,
                                      write_buf[j] + (srt_off_len[j].off[i] - range_off),
                                      srt_off_len[j].len[i],
                                      srt_off_len[j].off[i], 1);
@@ -2068,7 +2068,7 @@ int Exchange_data_recv(
             memset(write_buf, 0, range_size);
         else {
             MPI_Offset r_len;
-            r_len = PNCIO_UFS_ReadContig(fd, write_buf, range_size, range_off);
+            r_len = PNCIO_UFS_read_contig(fd, write_buf, range_size, range_off);
             if (r_len < 0) return (int)r_len;
         }
 
@@ -2269,7 +2269,7 @@ int num_memcpy=0;
                  /* in case data left to be copied from previous round */
 
     /* fd->file_view.count has been checked and adjusted to a possitive number
-     * at the beginning of PNCIO_LUSTRE_WriteStridedColl().
+     * at the beginning of PNCIO_Lustre_write_coll().
      */
     assert(fd->file_view.count > 0);
 
