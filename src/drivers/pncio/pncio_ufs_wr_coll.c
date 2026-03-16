@@ -45,7 +45,7 @@
 }
 
 static
-void Fill_send_buffer(PNCIO_File   *fd,
+void Fill_send_buffer(PNCIO_File   *fh,
                       void         *buf,
                       PNCIO_View    buf_view,
                       char        **send_buf,
@@ -54,7 +54,7 @@ void Fill_send_buffer(PNCIO_File   *fd,
                       MPI_Count    *sent_to_proc,
                       int           nprocs,
                       int           myrank,
-                      MPI_Offset    min_st_offset,
+                      MPI_Offset    min_st_off,
                       MPI_Offset    fd_size,
                       MPI_Offset   *fd_start,
                       MPI_Offset   *fd_end,
@@ -90,9 +90,9 @@ void Fill_send_buffer(PNCIO_File   *fd,
      * flat_buf_sz = size of current contiguous component in
      * flattened buf */
 
-    for (MPI_Count i = 0; i < fd->file_view.count; i++) {
-        off = fd->file_view.off[i];
-        rem_len = fd->file_view.len[i];
+    for (MPI_Count i = 0; i < fh->file_view.count; i++) {
+        off = fh->file_view.off[i];
+        rem_len = fh->file_view.len[i];
 
         /*this request may span the file domains of more than one process */
         while (rem_len != 0) {
@@ -101,7 +101,7 @@ void Fill_send_buffer(PNCIO_File   *fd,
              * longer than the single region that processor "p" is responsible
              * for.
              */
-            p = PNCIO_Calc_aggregator(fd, off, min_st_offset, &len, fd_size, fd_end);
+            p = PNCIO_Calc_aggregator(fh, off, min_st_off, &len, fd_size, fd_end);
 
             if (send_buf_idx[p] < send_size[p]) {
                 if (curr_to_proc[p] + len > done_to_proc[p]) {
@@ -123,10 +123,10 @@ void Fill_send_buffer(PNCIO_File   *fd,
                     if (send_buf_idx[p] == send_size[p] && p != myrank) {
 #if MPI_VERSION >= 4
                         MPI_Isend_c(send_buf[p], send_size[p], MPI_BYTE, p,
-                                    0, fd->comm, &requests[jj++]);
+                                    0, fh->comm, &requests[jj++]);
 #else
                         MPI_Isend(send_buf[p], send_size[p], MPI_BYTE, p,
-                                    0, fd->comm, &requests[jj++]);
+                                    0, fh->comm, &requests[jj++]);
 #endif
                     }
                 } else {
@@ -153,7 +153,7 @@ void Fill_send_buffer(PNCIO_File   *fd,
  * in the case of error.
  */
 static
-MPI_Offset W_Exchange_data(PNCIO_File   *fd,
+MPI_Offset W_Exchange_data(PNCIO_File   *fh,
                            void         *buf,
                            char         *write_buf,
                            PNCIO_View    buf_view,
@@ -167,7 +167,7 @@ MPI_Offset W_Exchange_data(PNCIO_File   *fd,
                            MPI_Count    *sent_to_proc,
                            int           nprocs,
                            int           myrank,
-                           MPI_Offset    min_st_offset,
+                           MPI_Offset    min_st_off,
                            MPI_Offset    fd_size,
                            MPI_Offset   *fd_start,
                            MPI_Offset   *fd_end,
@@ -196,7 +196,7 @@ double curT = MPI_Wtime();
 /* exchange recv_size info so that each process knows how much to
    send to whom. */
 
-    MPI_Alltoall(recv_size, 1, MPI_COUNT, send_size, 1, MPI_COUNT, fd->comm);
+    MPI_Alltoall(recv_size, 1, MPI_COUNT, send_size, 1, MPI_COUNT, fh->comm);
 
     /* create derived datatypes for recv */
 
@@ -264,7 +264,7 @@ double curT = MPI_Wtime();
         PNCIO_Heap_merge(others_req, count, srt_off, srt_len, start_pos,
                          nprocs, nprocs_recv, sum);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        if (fd->is_agg) fd->write_timing[5] += MPI_Wtime() - timing;
+        if (fh->is_agg) fh->write_timing[5] += MPI_Wtime() - timing;
 #endif
     }
 
@@ -307,12 +307,12 @@ double curT = MPI_Wtime();
     if (nprocs_recv) {
         if (*hole) {
             MPI_Offset r_len;
-            r_len = PNCIO_UFS_read_contig(fd, write_buf, size, off);
+            r_len = PNCIO_UFS_read_contig(fh, write_buf, size, off);
             if (r_len < 0) return r_len;
         }
     }
 
-    if (fd->atomicity) {
+    if (fh->atomicity) {
         /* nreqs is the number of Isend and Irecv to be posted */
         nreqs = (send_size[myrank]) ? (nprocs_send - 1) : nprocs_send;
         requests = (MPI_Request *) NCI_Malloc((nreqs + 1) * sizeof(MPI_Request));
@@ -331,7 +331,7 @@ double curT = MPI_Wtime();
                 continue;
             if (i != myrank) {
                 MPI_Irecv(MPI_BOTTOM, 1, recv_types[j], i, 0,
-                          fd->comm, requests + j);
+                          fh->comm, requests + j);
                 j++;
             } else if (buf_view.count <= 1) {
                 /* sen/recv to/from self uses MPI_Unpack() */
@@ -363,10 +363,10 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
                 assert(buf_idx[i] != -1);
 #if MPI_VERSION >= 4
                 MPI_Isend_c((char *) buf + buf_idx[i], send_size[i],
-                            MPI_BYTE, i, 0, fd->comm, send_req + j);
+                            MPI_BYTE, i, 0, fh->comm, send_req + j);
 #else
                 MPI_Isend((char *) buf + buf_idx[i], send_size[i],
-                            MPI_BYTE, i, 0, fd->comm, send_req + j);
+                            MPI_BYTE, i, 0, fh->comm, send_req + j);
 #endif
                 j++;
                 buf_idx[i] += send_size[i];
@@ -381,15 +381,15 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
         for (i = 1; i < nprocs; i++)
             send_buf[i] = send_buf[i - 1] + send_size[i - 1];
 
-        Fill_send_buffer(fd, buf, buf_view, send_buf, send_size, send_req,
-                         sent_to_proc, nprocs, myrank, min_st_offset, fd_size,
+        Fill_send_buffer(fh, buf, buf_view, send_buf, send_size, send_req,
+                         sent_to_proc, nprocs, myrank, min_st_off, fd_size,
                          fd_start, fd_end, send_buf_idx, curr_to_proc,
                          done_to_proc, iter);
 
         /* the send is done in Fill_send_buffer */
     }
 
-    if (fd->atomicity) {
+    if (fh->atomicity) {
         /* In atomic mode, we must use blocking receives to receive data in the
          * same increasing order of MPI process rank IDs,
          */
@@ -399,7 +399,7 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
                 continue;
             if (i != myrank) {
                 MPI_Recv(MPI_BOTTOM, 1, recv_types[j++], i, 0,
-                         fd->comm, &status);
+                         fh->comm, &status);
             } else {
                 /* sen/recv to/from self uses MPI_Unpack() */
                 char *ptr = (buf_view.count <= 1) ? (char*)buf + buf_idx[i] : send_buf[i];
@@ -445,12 +445,12 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
 #endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->write_timing[4] += MPI_Wtime() - curT;
+    if (fh->is_agg) fh->write_timing[4] += MPI_Wtime() - curT;
     curT = MPI_Wtime();
 #endif
     MPI_Waitall(nreqs, requests, statuses);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->write_timing[3] += MPI_Wtime() - curT;
+    if (fh->is_agg) fh->write_timing[3] += MPI_Wtime() - curT;
 #endif
 
 #ifndef HAVE_MPI_STATUSES_IGNORE
@@ -469,13 +469,11 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
  * (negative value) is returned.
  */
 static
-MPI_Offset Exch_and_write(PNCIO_File   *fd,
+MPI_Offset Exch_and_write(PNCIO_File   *fh,
                           void         *buf,
                           PNCIO_View    buf_view,
-                          int           nprocs,
-                          int           myrank,
                           PNCIO_Access *others_req,
-                          MPI_Offset    min_st_offset,
+                          MPI_Offset    min_st_off,
                           MPI_Offset    fd_size,
                           MPI_Offset   *fd_start,
                           MPI_Offset   *fd_end,
@@ -491,26 +489,27 @@ MPI_Offset Exch_and_write(PNCIO_File   *fd,
    at least another 8Mbytes of temp space is unacceptable. */
 
     /* Not convinced end_loc-st_loc couldn't be > int, so make these offsets */
+
+    char *value, *write_buf = NULL;
+    int i, m, ntimes, max_ntimes, nprocs, myrank, hole, flag, info_flag;
     MPI_Offset size=0, w_len, total_w_len=0;
-    int hole, i, m, ntimes, max_ntimes;
     MPI_Offset st_loc = -1, end_loc = -1, off, done, req_off;
-    char *write_buf = NULL;
     MPI_Count *curr_offlen_ptr, *send_size, *count, req_len, *recv_size;
     MPI_Count *partial_recv, *sent_to_proc, *start_pos;
-    int flag;
     MPI_Count *send_buf_idx, *curr_to_proc, *done_to_proc;
-    int info_flag;
     MPI_Aint coll_bufsize;
-    char *value;
 
     /* only I/O errors are currently reported */
+
+    MPI_Comm_size(fh->comm, &nprocs);
+    MPI_Comm_rank(fh->comm, &myrank);
 
 /* calculate the number of writes of size coll_bufsize
    to be done by each process and the max among all processes.
    That gives the no. of communication phases as well. */
 
     value = (char *) NCI_Malloc((MPI_MAX_INFO_VAL + 1) * sizeof(char));
-    MPI_Info_get(fd->info, "cb_buffer_size", MPI_MAX_INFO_VAL, value, &info_flag);
+    MPI_Info_get(fh->info, "cb_buffer_size", MPI_MAX_INFO_VAL, value, &info_flag);
     coll_bufsize = atoi(value);
     NCI_Free(value);
 
@@ -537,13 +536,13 @@ MPI_Offset Exch_and_write(PNCIO_File   *fd,
         ntimes = 0;     /* this process does no writing. */
     }
 
-    MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fd->comm);
+    MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fh->comm);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->write_counter[0] = MAX(fd->write_counter[0], max_ntimes);
+    fh->write_counter[0] = MAX(fh->write_counter[0], max_ntimes);
 #endif
 
-    write_buf = fd->io_buf;
+    write_buf = fh->io_buf;
 
     curr_offlen_ptr = NCI_Calloc(nprocs * 10, sizeof(*curr_offlen_ptr));
     /* its use is explained below. calloc initializes to 0. */
@@ -659,10 +658,10 @@ MPI_Offset Exch_and_write(PNCIO_File   *fd,
             }
         }
 
-        w_len = W_Exchange_data(fd, buf, write_buf, buf_view, send_size,
+        w_len = W_Exchange_data(fh, buf, write_buf, buf_view, send_size,
                                 recv_size, off, size, count, start_pos,
                                 partial_recv, sent_to_proc, nprocs, myrank,
-                                min_st_offset, fd_size, fd_start, fd_end,
+                                min_st_off, fd_size, fd_start, fd_end,
                                 others_req, send_buf_idx, curr_to_proc,
                                 done_to_proc, &hole, m, buf_idx);
 
@@ -677,7 +676,7 @@ MPI_Offset Exch_and_write(PNCIO_File   *fd,
                 flag = 1;
 
         if (flag) {
-            w_len = PNCIO_UFS_write_contig(fd, write_buf, size, off, 1);
+            w_len = PNCIO_UFS_write_contig(fh, write_buf, size, off, 1);
             if (w_len < 0)
                 return w_len;
             else
@@ -692,10 +691,10 @@ MPI_Offset Exch_and_write(PNCIO_File   *fd,
         count[i] = recv_size[i] = 0;
     for (m = ntimes; m < max_ntimes; m++) {
         /* nothing to recv, but check for send. */
-        w_len = W_Exchange_data(fd, buf, write_buf, buf_view, send_size,
+        w_len = W_Exchange_data(fh, buf, write_buf, buf_view, send_size,
                                 recv_size, off, size, count, start_pos,
                                 partial_recv, sent_to_proc, nprocs, myrank,
-                                min_st_offset, fd_size, fd_start, fd_end,
+                                min_st_off, fd_size, fd_start, fd_end,
                                 others_req, send_buf_idx, curr_to_proc,
                                 done_to_proc, &hole, m, buf_idx);
         if (w_len < 0)
@@ -709,7 +708,8 @@ MPI_Offset Exch_and_write(PNCIO_File   *fd,
     return total_w_len;
 }
 
-MPI_Offset PNCIO_UFS_write_coll(PNCIO_File *fd,
+/*----< PNCIO_UFS_write_coll() >---------------------------------------------*/
+MPI_Offset PNCIO_UFS_write_coll(PNCIO_File *fh,
                                 const void *buf,
                                 PNCIO_View  buf_view)
 {
@@ -720,180 +720,182 @@ MPI_Offset PNCIO_UFS_write_coll(PNCIO_File *fd,
      * http://www.mcs.anl.gov/home/thakur/ext2ph.ps
      */
 
+    /* my_req contains access structures of this rank, describing the request
+     * offset-length pairs that fall into each aggregator's file domain.
+     */
     PNCIO_Access *my_req;
-    /* array of nprocs access structures, one for each other process in
-     * whose file domain this process's request lies */
 
+    /* others_req contains access structures of all processes whose requests
+     * fall into this aggregator's file domain. It is only relevant of this
+     * rank is an I/O aggregator.
+     */
     PNCIO_Access *others_req;
-    /* array of nprocs access structures, one for each other process
-     * whose request lies in this process's file domain. */
 
-    int i, nprocs, nprocs_for_coll, myrank, interleave_count=0;
+    int i, nprocs, myrank, interleave_count=0;
     MPI_Aint *buf_idx = NULL;
     MPI_Count *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
-    MPI_Offset start_offset, end_offset, fd_size, min_st_offset;
-    MPI_Offset *st_offsets=NULL, *fd_start=NULL;
-    MPI_Offset *fd_end=NULL, *end_offsets=NULL, w_len=0;
-
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Offset one_len = (MPI_Offset)buf_view.size;
-#else
-    int one_len = (int)buf_view.size;
-#endif
+    MPI_Offset fd_size, min_st_off, max_end_off;
+    MPI_Offset *fd_start=NULL, *fd_end=NULL, w_len=0;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 double curT = MPI_Wtime();
 #endif
 
-    MPI_Comm_size(fd->comm, &nprocs);
-    MPI_Comm_rank(fd->comm, &myrank);
+    MPI_Comm_size(fh->comm, &nprocs);
+    MPI_Comm_rank(fh->comm, &myrank);
 
-    /* PnetCDF never reuses a fileview across two or more PNCIO calls. As this
-     * subroutine may modify the contents of fd->file_view, we save its
-     * contents and restore it before leaving this sibroutine.
+    /* PnetCDF never reuses a fileview across two or more PNCIO calls. As
+     * fh->file_view will be reset right after this subroutine returns, it
+     * can be modify within this subroutine.
      */
-    PNCIO_View saved_file_view = fd->file_view;
 
-    if (fd->file_view.count == 0) { /* whole file is visible */
-        /* set file_view as a single contiguous offset-length pair */
-        fd->file_view.len       = &one_len;
-        fd->file_view.size      = one_len;
-        fd->file_view.count     = 1;
-        start_offset = fd->file_view.off[0];
-        end_offset = start_offset + buf_view.size - 1;
-    }
-
-    /* the number of processes that actually perform I/O, nprocs_for_coll, is
-     * stored in the hints off the PNCIO_File structure
-     */
-    nprocs_for_coll = fd->hints->cb_nodes;
+#ifdef PNETCDF_DEBUG
+    assert(fh->file_view.count > 0);
+    assert(fh->file_view.len != NULL);
+#endif
 
     /* only check for interleaving if romio_cb_write isn't disabled */
-    if (fd->hints->romio_cb_write != PNCIO_HINT_DISABLE) {
-        /* For this process's request, calculate the file start and end
-         * offsets. Note: end_offset points to the last byte-offset that will
-         * be accessed, e.g., if start_offset=0 and 100 bytes to be read,
-         * end_offset=99.
+    if (fh->hints->romio_cb_write != PNCIO_HINT_DISABLE) {
+        MPI_Offset *aar_range;
+
+        /* For this process's request, calculate its aggregate access region,
+         * representing a range from start_offset till end_offset. Note:
+         * end_offset points to the last byte-offset that will be accessed,
+         * e.g., if start_offset=0 and 100 bytes to be read, end_offset=99.
          *
          * Note file_view.off[] is always relative to beginning of file.
+         *
+         * All processes gather the aggregate access regions of all other
+         * processes in order to tell whether there is an interleaving access
+         * among all.
          */
-        start_offset = fd->file_view.off[0];
-        end_offset   = fd->file_view.off[fd->file_view.count-1]
-                     + fd->file_view.len[fd->file_view.count-1] - 1;
+        aar_range = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * 2 * nprocs);
+        aar_range[2*myrank]   = fh->file_view.off[0];
+        aar_range[2*myrank+1] = fh->file_view.off[fh->file_view.count-1]
+                              + fh->file_view.len[fh->file_view.count-1] - 1;
 
-        /* Each process communicates its start and end offsets to other
-         * processes. The result is an array each of start and end offsets
-         * stored in order of process rank.
-         */
-
-        st_offsets = (MPI_Offset *) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
-        end_offsets = st_offsets + nprocs;
-
-        MPI_Allgather(&start_offset, 1, MPI_OFFSET, st_offsets, 1, MPI_OFFSET,
-                      fd->comm);
-        MPI_Allgather(&end_offset, 1, MPI_OFFSET, end_offsets, 1, MPI_OFFSET,
-                      fd->comm);
+        MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, aar_range, 2,
+                      MPI_OFFSET, fh->comm);
 
         /* Are the accesses of different processes interleaved? Below is a
          * rudimentary check for interleaving, but should suffice for the
          * moment.
          */
-        for (i = 1; i < nprocs; i++)
-            if (st_offsets[i] < end_offsets[i - 1] &&
-                st_offsets[i] <= end_offsets[i])
+        min_st_off  = aar_range[0];
+        max_end_off = aar_range[1];
+        for (i=2; i<2*nprocs; i+=2) {
+            if (aar_range[i] <  aar_range[i-1] &&
+                aar_range[i] <= aar_range[i+1])
                 interleave_count++;
+            min_st_off  = MIN(min_st_off,  aar_range[i]);
+            max_end_off = MAX(max_end_off, aar_range[i+1]);
+        }
+        NCI_Free(aar_range);
     }
 
-    if (fd->hints->romio_cb_write == PNCIO_HINT_DISABLE ||
-        (!interleave_count && (fd->hints->romio_cb_write == PNCIO_HINT_AUTO))) {
-
-        /* use independent accesses */
-        if (fd->hints->romio_cb_write != PNCIO_HINT_DISABLE)
-            NCI_Free(st_offsets);
-
-        /* restore flattend file view before leaving this sibroutine */
-        fd->file_view = saved_file_view;
+    if (fh->hints->romio_cb_write == PNCIO_HINT_DISABLE ||
+        (!interleave_count && fh->hints->romio_cb_write == PNCIO_HINT_AUTO)) {
+        /* switch to perform independent write */
 
         if (buf_view.size == 0) /* zero_sized request */
             return 0;
 
-        if (buf_view.count <= 1 && fd->file_view.count <= 1)
+        if (buf_view.count <= 1 && fh->file_view.count <= 1)
             /* Both buf_view and file_view are contiguous */
-            w_len = PNCIO_UFS_write_contig(fd, buf, buf_view.size, fd->file_view.off[0], 0);
+            w_len = PNCIO_UFS_write_contig(fh, buf, buf_view.size, fh->file_view.off[0], 0);
         else
-            w_len = PNCIO_UFS_write_indep(fd, buf, buf_view);
+            w_len = PNCIO_UFS_write_indep(fh, buf, buf_view);
 
         return w_len;
     }
 
-    /* Divide the I/O workload among "nprocs_for_coll" processes. This is done
-     * by (logically) dividing the file into file domains (FDs); each process
-     * may directly access only its own file domain.
+    /* We now proceed to perform two-phase I/O. At first, a call to
+     * PNCIO_Calc_file_domains() to calculate the file domains assigned to each
+     * I/O aggregator. fh->hints->cb_nodes is the number of aggregators.
+     * The aggregate access region of this collective write call is divided
+     * among all aggregators into a set of disjoined file domains. A file
+     * domain (denoted as 'fd') is the set of file regions an aggregator is
+     * responsible for their file access. Thus, a file domain is only relevant
+     * to I/O aggregators.
+     *
+     * PNCIO_Calc_file_domains() set the following 3 variables:
+     * fd_start   - holds the starting byte location for each file domain.
+     * fd_end     - holds the ending byte location.
+     * min_st_off - holds the minimum byte location that will be accessed.
+     *
+     * Both fd_start[] and fd_end[] are indexed by an aggregator number; this
+     * needs to be mapped to an actual rank in the communicator later.
      */
-    PNCIO_Calc_file_domains(st_offsets, end_offsets, nprocs, nprocs_for_coll,
-                            &min_st_offset, &fd_start, &fd_end, &fd_size,
-                            fd->hints->striping_unit);
+    PNCIO_Calc_file_domains(min_st_off, max_end_off, fh->hints->cb_nodes,
+                            &fd_start, &fd_end, &fd_size,
+                            fh->hints->striping_unit);
 
-    /* calculate what portions of the access requests of this process are
-     * located in what file domains
+    /* PNCIO_Calc_my_req() calculates where the portions of this rank's
+     * requests fall into aggregator's file domains. When returned, it set the
+     * following variables:
+     * count_my_req_procs - number of aggregators for which this rank has
+     *      requests fall into their file domains
+     * count_my_req_per_proc - count of requests for each aggregator, indexed
+     *      by rank of the process
+     * my_req[] - array of data structures describing the requests to be
+     *      performed by each aggregator.
+     * buf_idx[] - array of locations into which data in the user buffer that
+     *      can be directly used to perform write; this is only valid when the
+     *      user buffer is contiguous.
      */
-    PNCIO_Calc_my_req(fd, min_st_offset, fd_end, fd_size, nprocs,
-                      &count_my_req_procs, &count_my_req_per_proc, &my_req,
-                      &buf_idx);
+    PNCIO_Calc_my_req(fh, min_st_off, fd_end, fd_size, &count_my_req_procs,
+                      &count_my_req_per_proc, &my_req, &buf_idx);
 
-/* based on everyone's my_req, calculate what requests of other
-   processes lie in this process's file domain.
-   count_others_req_procs = number of processes whose requests lie in
-   this process's file domain (including this process itself)
-   count_others_req_per_proc[i] indicates how many separate contiguous
-   requests of proc. i lie in this process's file domain. */
-
-    PNCIO_Calc_others_req(fd, count_my_req_procs, count_my_req_per_proc,
-                          my_req, nprocs, myrank, &count_others_req_procs,
+    /* PNCIO_Calc_others_req() is only relevant to the I/O aggregators. Based
+     * on everyone's my_req, PNCIO_Calc_others_req() calculates what requests
+     * of all processes fall into this aggregator's file domain. This
+     * subroutine sets the following variables:
+     * count_others_req_procs - number of processes whose requests fall into
+     *      this aggregator's file domain (including this rank itself)
+     * count_others_req_per_proc[i] - how many non-contiguous requests of rank
+     *      i fall into this aggregator's file domain.
+     */
+    PNCIO_Calc_others_req(fh, count_my_req_procs, count_my_req_per_proc,
+                          my_req, &count_others_req_procs,
                           &count_others_req_per_proc, &others_req);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->write_timing[1] += MPI_Wtime() - curT;
+    if (fh->is_agg) fh->write_timing[1] += MPI_Wtime() - curT;
 #endif
 
-/* exchange data and write in sizes of no more than coll_bufsize. */
+    /* exchange data and write in sizes of no more than coll_bufsize. */
     /* Cast away const'ness for the below function */
-    w_len = Exch_and_write(fd, (char *) buf, buf_view, nprocs, myrank,
-                           others_req, min_st_offset, fd_size, fd_start,
-                           fd_end, buf_idx);
+    w_len = Exch_and_write(fh, (char*) buf, buf_view, others_req, min_st_off,
+                           fd_size, fd_start, fd_end, buf_idx);
 
-    /* If this collective write is followed by an independent write,
-     * it's possible to have those subsequent writes on other processes
-     * race ahead and sneak in before the read-modify-write completes.
-     * We carry out a collective communication at the end here so no one
-     * can start independent i/o before collective I/O completes.
+    /* If this collective write is followed by an independent write, it is
+     * possible to have those subsequent writes on other processes race ahead
+     * and sneak in before the read-modify-write completes. Below, we carry out
+     * a collective communication at the end of this subroutine, so no one can
+     * start independent I/O before collective I/O completes.
      *
      * need to do some gymnastics with the error codes so that if something
      * went wrong, all processes report error, but if a process has a more
      * specific error code, we can still have that process report the
      * additional information */
 
-    /* optimization: if only one process performing i/o, we can perform
-     * a less-expensive Bcast
-     */
-    if (fd->hints->cb_nodes == 1)
-        MPI_Bcast(&w_len, 1, MPI_OFFSET, fd->hints->ranklist[0], fd->comm);
+    if (fh->hints->cb_nodes == 1)
+        /* If there is only one aggregator, we can perform a less-expensive
+         * Bcast().
+         */
+        MPI_Bcast(&w_len, 1, MPI_OFFSET, fh->hints->ranklist[0], fh->comm);
     else
-        MPI_Allreduce(MPI_IN_PLACE, &w_len, 1, MPI_OFFSET, MPI_MIN, fd->comm);
+        MPI_Allreduce(MPI_IN_PLACE, &w_len, 1, MPI_OFFSET, MPI_MIN, fh->comm);
 
     /* free all memory allocated for collective I/O */
     PNCIO_Free_my_req(count_my_req_per_proc, my_req, buf_idx);
     PNCIO_Free_others_req(count_others_req_per_proc, others_req);
 
-    NCI_Free(st_offsets);
     NCI_Free(fd_start);
 
-    /* restore flattend file view before leaving this sibroutine */
-    fd->file_view = saved_file_view;
-
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fd->is_agg) fd->write_timing[0] += MPI_Wtime() - curT;
+    if (fh->is_agg) fh->write_timing[0] += MPI_Wtime() - curT;
 #endif
 
     /* w_len may not be the same as buf_view.size, because data sieving may
@@ -901,5 +903,4 @@ double curT = MPI_Wtime();
      */
     return buf_view.size;
 }
-
 

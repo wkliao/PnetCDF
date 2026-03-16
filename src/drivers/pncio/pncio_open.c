@@ -29,7 +29,7 @@ int PNCIO_File_open(MPI_Comm    comm,
                     const char *filename,
                     int         amode, /* O_CREAT|O_RDWR, O_RDWR, or O_RDONLY */
                     MPI_Info    info,
-                    PNCIO_File *fd)
+                    PNCIO_File *fh)
 {
     /* Before arriving at this subroutine, PNCIO_FileSysType() should have been
      * called to check the file system type.
@@ -37,21 +37,21 @@ int PNCIO_File_open(MPI_Comm    comm,
     char value[MPI_MAX_INFO_VAL + 1], int_str[16];
     int i, err, min_err, status=NC_NOERR;
 
-    fd->comm      = comm;
-    fd->filename  = filename;  /* without file system type name prefix */
-    fd->atomicity = 0;
-    fd->is_open   = 0;
-    fd->amode     = amode;
-    fd->io_buf    = NULL; /* collective buffer used by aggregators only */
+    fh->comm      = comm;
+    fh->filename  = filename;  /* without file system type name prefix */
+    fh->atomicity = 0;
+    fh->is_open   = 0;
+    fh->amode     = amode;
+    fh->io_buf    = NULL; /* collective buffer used by aggregators only */
 
-    fd->file_view.count = 0; /* flattened fileview in offset-length pairs */
-    fd->file_view.size = -1;
-    fd->file_view.off = NULL;
-    fd->file_view.len = NULL;
+    fh->file_view.count = 0; /* flattened fileview in offset-length pairs */
+    fh->file_view.size = -1;
+    fh->file_view.off = NULL;
+    fh->file_view.len = NULL;
 
     /* create and initialize info object */
-    fd->hints = (PNCIO_Hints*) NCI_Calloc(1, sizeof(PNCIO_Hints));
-    status = PNCIO_File_set_info(fd, info);
+    fh->hints = (PNCIO_Hints*) NCI_Calloc(1, sizeof(PNCIO_Hints));
+    status = PNCIO_File_set_info(fh, info);
     if (status != NC_NOERR && status != NC_EMULTIDEFINE_HINTS) {
         /* Inconsistent I/O hints is not a fatal error.
          * In PNCIO_File_set_info(), root's hints overwrite local's.
@@ -61,28 +61,28 @@ int PNCIO_File_open(MPI_Comm    comm,
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     for (i=0; i<NMEASURES; i++) {
-        fd->write_timing[i]  = fd->read_timing[i]  = 0;
-        fd->write_counter[i] = fd->read_counter[i] = 0;
+        fh->write_timing[i]  = fh->read_timing[i]  = 0;
+        fh->write_counter[i] = fh->read_counter[i] = 0;
     }
 #endif
 
-    assert(fd->file_system != PNCIO_FSTYPE_MPIIO);
+    assert(fh->file_system != PNCIO_FSTYPE_MPIIO);
 
     /* When hint romio_no_indep_rw hint is set to true, only aggregators open
-     * the file. Note fd->is_agg will be set at the end of create/open calls
+     * the file. Note fh->is_agg will be set at the end of create/open calls
      * below.
      */
-    if (fd->file_system == PNCIO_LUSTRE) {
+    if (fh->file_system == PNCIO_LUSTRE) {
         if (amode & O_CREAT)
-            err = PNCIO_Lustre_create(fd);
+            err = PNCIO_Lustre_create(fh);
         else
-            err = PNCIO_Lustre_open(fd);
+            err = PNCIO_Lustre_open(fh);
     }
     else {
         if (amode & O_CREAT)
-            err = PNCIO_UFS_create(fd);
+            err = PNCIO_UFS_create(fh);
         else
-            err = PNCIO_UFS_open(fd);
+            err = PNCIO_UFS_open(fh);
     }
     if (err != NC_NOERR) { /* fatal error */
         status = err;
@@ -90,42 +90,42 @@ int PNCIO_File_open(MPI_Comm    comm,
     }
 
     /* set file striping hints */
-    snprintf(int_str, 16, "%d", fd->hints->striping_unit);
-    MPI_Info_set(fd->info, "striping_unit", int_str);
+    snprintf(int_str, 16, "%d", fh->hints->striping_unit);
+    MPI_Info_set(fh->info, "striping_unit", int_str);
 
-    snprintf(int_str, 16, "%d", fd->hints->striping_factor);
-    MPI_Info_set(fd->info, "striping_factor", int_str);
+    snprintf(int_str, 16, "%d", fh->hints->striping_factor);
+    MPI_Info_set(fh->info, "striping_factor", int_str);
 
-    snprintf(int_str, 16, "%d", fd->hints->start_iodevice);
-    MPI_Info_set(fd->info, "start_iodevice", int_str);
+    snprintf(int_str, 16, "%d", fh->hints->start_iodevice);
+    MPI_Info_set(fh->info, "start_iodevice", int_str);
 
     /* set file striping hints */
-    snprintf(int_str, 16, "%d", fd->hints->cb_nodes);
-    MPI_Info_set(fd->info, "cb_nodes", int_str);
+    snprintf(int_str, 16, "%d", fh->hints->cb_nodes);
+    MPI_Info_set(fh->info, "cb_nodes", int_str);
 
     /* add hint "cb_node_list", list of aggregators' rank IDs */
-    snprintf(value, 16, "%d", fd->hints->ranklist[0]);
-    for (i=1; i<fd->hints->cb_nodes; i++) {
-        snprintf(int_str, 16, " %d", fd->hints->ranklist[i]);
+    snprintf(value, 16, "%d", fh->hints->ranklist[0]);
+    for (i=1; i<fh->hints->cb_nodes; i++) {
+        snprintf(int_str, 16, " %d", fh->hints->ranklist[i]);
         if (strlen(value) + strlen(int_str) >= MPI_MAX_INFO_VAL-5) {
             strcat(value, " ...");
             break;
         }
         strcat(value, int_str);
     }
-    MPI_Info_set(fd->info, "cb_node_list", value);
+    MPI_Info_set(fh->info, "cb_node_list", value);
 
     /* collective buffer size must be at least file striping size */
-    if (fd->hints->cb_buffer_size < fd->hints->striping_unit) {
-        fd->hints->cb_buffer_size = fd->hints->striping_unit;
-        snprintf(int_str, 16, " %d", fd->hints->cb_buffer_size);
-        MPI_Info_set(fd->info, "cb_buffer_size", int_str);
+    if (fh->hints->cb_buffer_size < fh->hints->striping_unit) {
+        fh->hints->cb_buffer_size = fh->hints->striping_unit;
+        snprintf(int_str, 16, " %d", fh->hints->cb_buffer_size);
+        MPI_Info_set(fh->info, "cb_buffer_size", int_str);
     }
 
     /* collective buffer is used only by I/O aggregators only */
-    if (fd->is_agg) {
-        fd->io_buf = NCI_Calloc(1, fd->hints->cb_buffer_size);
-        if (fd->io_buf == NULL) /* fatal error */
+    if (fh->is_agg) {
+        fh->io_buf = NCI_Calloc(1, fh->hints->cb_buffer_size);
+        if (fh->io_buf == NULL) /* fatal error */
             status = NC_ENOMEM;
     }
 
@@ -134,14 +134,14 @@ err_out:
     /* All NC errors are < 0 */
 
     if (min_err != NC_NOERR) {
-        if (status == NC_NOERR && fd->is_open)
+        if (status == NC_NOERR && fh->is_open)
             /* close file if opened successfully */
-            close(fd->fd_sys);
-        NCI_Free(fd->hints);
-        if (fd->info != MPI_INFO_NULL)
-            MPI_Info_free(&(fd->info));
-        if (fd->io_buf != NULL)
-            NCI_Free(fd->io_buf);
+            close(fh->fd_sys);
+        NCI_Free(fh->hints);
+        if (fh->info != MPI_INFO_NULL)
+            MPI_Info_free(&(fh->info));
+        if (fh->io_buf != NULL)
+            NCI_Free(fh->io_buf);
     }
     return status;
 }
