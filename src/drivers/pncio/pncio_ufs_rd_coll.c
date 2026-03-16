@@ -164,6 +164,7 @@ void R_Exchange_data(PNCIO_File *fh,
     int i, nprocs_recv, nprocs_send;
     char **recv_buf = NULL;
     size_t memLen;
+    MPI_Count j;
     MPI_Request *requests;
     MPI_Datatype send_type;
     MPI_Status *statuses;
@@ -196,7 +197,7 @@ void R_Exchange_data(PNCIO_File *fh,
      * into user buf at location given by buf_idx. Otherwise, use recv_buf to
      * receive.
      */
-    MPI_Count j = 0; // think of this as a counter of non-zero sends/recs
+    j = 0; // think of this as a counter of non-zero sends/recs
     if (buf_view.count <= 1) {
         for (i = 0; i < nprocs; i++) {
             if (recv_size[i]) {
@@ -354,12 +355,11 @@ MPI_Offset Read_and_exch(PNCIO_File   *fh,
     char *read_buf = NULL, *tmp_buf;
     int i, m, ntimes, max_ntimes, nprocs, myrank;
     MPI_Offset st_loc = -1, end_loc = -1, off, done, real_off;
-    MPI_Count *curr_offlen_ptr, *count, *send_size, *recv_size;
+    MPI_Count j, *curr_offlen_ptr, *count, *send_size, *recv_size;
     MPI_Count *partial_send, *recd_from_proc, *start_pos;
     /* Not convinced end_loc-st_loc couldn't be > int, so make these offsets */
     MPI_Offset real_size, size, for_curr_iter, for_next_iter;
-    MPI_Aint coll_bufsize;
-    MPI_Aint actual_recved_bytes = 0;
+    MPI_Aint coll_bufsize, actual_recved_bytes = 0;
     MPI_Offset r_len;
 
     MPI_Comm_size(fh->comm, &nprocs);
@@ -373,21 +373,21 @@ MPI_Offset Read_and_exch(PNCIO_File   *fh,
     coll_bufsize = fh->hints->cb_buffer_size;
 
     /* grab some initial values for st_loc and end_loc */
-    for (i = 0; i < nprocs; i++) {
+    for (i=0; i<nprocs; i++) {
+        /* Some processes may not have data for this aggregator */
         if (others_req[i].count) {
             st_loc = others_req[i].offsets[0];
             end_loc = others_req[i].offsets[0];
             break;
         }
     }
-
-    /* now find the real values */
-    for (i = 0; i < nprocs; i++)
-        for (MPI_Count j = 0; j < others_req[i].count; j++) {
+    for (; i<nprocs; i++) {
+        for (j=0; j<others_req[i].count; j++) {
             st_loc = MIN(st_loc, others_req[i].offsets[j]);
             end_loc = MAX(end_loc, (others_req[i].offsets[j]
                                   + others_req[i].lens[j] - 1));
         }
+    }
 
     /* calculate ntimes, the number of times this process must perform I/O
      * operations in order to complete all the requests it has received.
@@ -408,7 +408,7 @@ MPI_Offset Read_and_exch(PNCIO_File   *fh,
     fh->read_counter[0] = MAX(fh->read_counter[0], max_ntimes);
 #endif
 
-    read_buf = fh->io_buf;      /* Allocated at open time */
+    read_buf = fh->io_buf; /* has been allocated at open time */
 
     curr_offlen_ptr = NCI_Calloc(nprocs * 7, sizeof(*curr_offlen_ptr));
     /* its use is explained below. calloc initializes to 0. */
@@ -483,7 +483,7 @@ MPI_Offset Read_and_exch(PNCIO_File   *fh,
         bool flag = false;
         for (i = 0; i < nprocs; i++) {
             if (others_req[i].count) {
-                for (MPI_Count j = curr_offlen_ptr[i]; j < others_req[i].count; j++) {
+                for (j=curr_offlen_ptr[i]; j<others_req[i].count; j++) {
                     MPI_Offset req_off;
                     if (partial_send[i]) {
                         req_off = others_req[i].offsets[j] + partial_send[i];
@@ -498,7 +498,8 @@ MPI_Offset Read_and_exch(PNCIO_File   *fh,
         }
         if (flag) {
             /* This should be only reached by I/O aggregators only */
-            r_len = PNCIO_UFS_read_contig(fh, read_buf + for_curr_iter, size, off);
+            r_len = PNCIO_UFS_read_contig(fh, read_buf + for_curr_iter, size,
+                                          off);
             if (r_len < 0) return r_len;
             size = r_len;
         }
@@ -513,7 +514,6 @@ MPI_Offset Read_and_exch(PNCIO_File   *fh,
         for (i = 0; i < nprocs; i++) {
             if (others_req[i].count) {
                 start_pos[i] = curr_offlen_ptr[i];
-                MPI_Count j = 0;
                 for (j = curr_offlen_ptr[i]; j < others_req[i].count; j++) {
                     MPI_Offset req_off;
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -602,7 +602,6 @@ MPI_Offset Read_and_exch(PNCIO_File   *fh,
 
     return actual_recved_bytes;
 }
-
 
 /*----< PNCIO_UFS_read_coll() >----------------------------------------------*/
 MPI_Offset PNCIO_UFS_read_coll(PNCIO_File *fh,
