@@ -57,7 +57,7 @@ const char *GEN_flock_type_to_string(int type)
     }
 }
 
-int PNCIO_GEN_SetLock(PNCIO_File *fd,
+int PNCIO_GEN_SetLock(PNCIO_File *fh,
                       int         cmd,
                       int         type,
                       MPI_Offset  offset,
@@ -66,7 +66,7 @@ int PNCIO_GEN_SetLock(PNCIO_File *fd,
 {
     int err, err_count = 0, sav_errno;
     struct flock lock;
-    FDTYPE fd_sys = fd->fd_sys;
+    FDTYPE fd_sys = fh->fd_sys;
 
     if (len == 0)
         return MPI_SUCCESS;
@@ -104,7 +104,7 @@ int PNCIO_GEN_SetLock(PNCIO_File *fd,
 
     if (err && errno != EBADF) {
         fprintf(stderr,
-                "File locking failedin %s(fd %X, cmd %s/%X, type %s/%X, whence %X) with return value %X and errno %X.\n"
+                "File locking failedin %s(fd_sys %X, cmd %s/%X, type %s/%X, whence %X) with return value %X and errno %X.\n"
                 "- If the file system is NFS, you need to use NFS version 3, ensure that the lockd daemon is running on all the machines, and mount the directory with the 'noac' option (no attribute caching).\n"
                 "- If the file system is LUSTRE, ensure that the directory is mounted with the 'flock' option.\n",
                 __func__, fd_sys, GEN_flock_cmd_to_string(cmd), cmd,
@@ -124,7 +124,7 @@ int PNCIO_GEN_SetLock(PNCIO_File *fd,
     return (err == 0) ? MPI_SUCCESS : MPI_ERR_UNKNOWN;
 }
 
-int PNCIO_GEN_SetLock64(PNCIO_File *fd,
+int PNCIO_GEN_SetLock64(PNCIO_File *fh,
                         int         cmd,
                         int         type,
                         MPI_Offset  offset,
@@ -137,7 +137,7 @@ int PNCIO_GEN_SetLock64(PNCIO_File *fd,
 #else
     struct flock lock;
 #endif
-    FDTYPE fd_sys = fd->fd_sys;
+    FDTYPE fd_sys = fh->fd_sys;
 
     if (len == 0)
         return MPI_SUCCESS;
@@ -153,7 +153,7 @@ int PNCIO_GEN_SetLock64(PNCIO_File *fd,
 
     if (err && errno != EBADF) {
         fprintf(stderr,
-                "File locking failed in %s(fd %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
+                "File locking failed in %s(fd_sys %X,cmd %s/%X,type %s/%X,whence %X) with return value %X and errno %X.\n"
                 "If the file system is NFS, you need to use NFS version 3, ensure that the lockd daemon is running on all the machines, and mount the directory with the 'noac' option (no attribute caching).\n",
                 __func__, fd_sys, GEN_flock_cmd_to_string(cmd), cmd,
                 GEN_flock_type_to_string(type), type, whence, err, errno);

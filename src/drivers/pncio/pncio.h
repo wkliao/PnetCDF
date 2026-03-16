@@ -33,15 +33,15 @@
 #endif
 
 #if defined(F_SETLKW64)
-#define PNCIO_UNLOCK(fd, offset, whence, len) \
-        PNCIO_GEN_SetLock64(fd, F_SETLK, F_UNLCK, offset, whence, len)
-#define PNCIO_WRITE_LOCK(fd, offset, whence, len) \
-        PNCIO_GEN_SetLock64(fd, F_SETLKW, F_WRLCK, offset, whence, len)
+#define PNCIO_UNLOCK(fh, offset, whence, len) \
+        PNCIO_GEN_SetLock64(fh, F_SETLK, F_UNLCK, offset, whence, len)
+#define PNCIO_WRITE_LOCK(fh, offset, whence, len) \
+        PNCIO_GEN_SetLock64(fh, F_SETLKW, F_WRLCK, offset, whence, len)
 #else
-#define PNCIO_UNLOCK(fd, offset, whence, len) \
-        PNCIO_GEN_SetLock(fd, F_SETLK, F_UNLCK, offset, whence, len)
-#define PNCIO_WRITE_LOCK(fd, offset, whence, len) \
-        PNCIO_GEN_SetLock(fd, F_SETLKW, F_WRLCK, offset, whence, len)
+#define PNCIO_UNLOCK(fh, offset, whence, len) \
+        PNCIO_GEN_SetLock(fh, F_SETLK, F_UNLCK, offset, whence, len)
+#define PNCIO_WRITE_LOCK(fh, offset, whence, len) \
+        PNCIO_GEN_SetLock(fh, F_SETLKW, F_WRLCK, offset, whence, len)
 #endif
 
 
@@ -128,8 +128,9 @@ typedef struct {
 } PNCIO_Hints;
 
 typedef struct {
-    MPI_Datatype type;      /* MPI derived datatype, only buf_view's is used in
-                             * PNCIO driver, but not file_view's */
+    MPI_Datatype type;      /* MPI derived datatype, it is used only by
+                             * buf_view within ncmpio driver, but not in pncio
+                             */
     MPI_Offset   size;      /* total size in bytes, i.e. sum of len[*],
                              * 0 means zero-sized request
                              */
@@ -172,7 +173,7 @@ typedef struct {
     int atomicity;          /* true or false */
     char *io_buf;           /* internal buffer allocated for two-phase I/O */
     int is_agg;             /* whether this process is an aggregator */
-    int my_cb_nodes_index;  /* my index into fd->hints->ranklist[]. -1 if N/A */
+    int my_cb_nodes_index;  /* my index into fh->hints->ranklist[]. -1 if N/A */
 
     PNCIO_Hints *hints;     /* hints used by PnetCDF */
     MPI_Info info;          /* contains all MPI-IO and PnetCDF hints */
@@ -257,23 +258,21 @@ extern
 int PNCIO_FileSysType(const char *filename);
 
 extern
-void PNCIO_Calc_file_domains(MPI_Offset * st_offsets,
-                MPI_Offset *end_offsets, int nprocs, int nprocs_for_coll,
-                MPI_Offset *min_st_offset_ptr, MPI_Offset **fd_start_ptr,
-                MPI_Offset **fd_end_ptr, MPI_Offset *fd_size_ptr,
-                int striping_unit);
+void PNCIO_Calc_file_domains(MPI_Offset min_st_off, MPI_Offset max_end_off,
+                int cb_nodes, MPI_Offset **fd_start, MPI_Offset **fd_end,
+                MPI_Offset *fd_size, int striping_unit);
 
 extern
-void PNCIO_Calc_my_req(PNCIO_File *fd, MPI_Offset min_st_offset,
+void PNCIO_Calc_my_req(PNCIO_File *fh, MPI_Offset min_st_offset,
                 const MPI_Offset *fd_end, MPI_Offset fd_size,
-                int nprocs, MPI_Count *count_my_req_procs_ptr,
+                MPI_Count *count_my_req_procs_ptr,
                 MPI_Count **count_my_req_per_proc_ptr,
                 PNCIO_Access **my_req_ptr, MPI_Aint **buf_idx_ptr);
 
 extern
-void PNCIO_Calc_others_req(PNCIO_File *fd, MPI_Count count_my_req_procs,
+void PNCIO_Calc_others_req(PNCIO_File *fh, MPI_Count count_my_req_procs,
                 MPI_Count *count_my_req_per_proc, PNCIO_Access *my_req,
-                int nprocs, int myrank, MPI_Count *count_others_req_procs_ptr,
+                MPI_Count *count_others_req_procs_ptr,
                 MPI_Count **count_others_req_per_proc_ptr,
                 PNCIO_Access **others_req_ptr);
 
@@ -286,8 +285,9 @@ void PNCIO_Free_others_req(MPI_Count *count_others_req_per_proc,
                 PNCIO_Access *others_req);
 
 extern
-int PNCIO_Calc_aggregator(const PNCIO_File *fd, MPI_Offset off, MPI_Offset min_off,
-                MPI_Offset *len, MPI_Offset fd_size, const MPI_Offset *fd_end);
+int PNCIO_Calc_aggregator(const PNCIO_File *fh, MPI_Offset off,
+                MPI_Offset min_off, MPI_Offset *len, MPI_Offset fd_size,
+                const MPI_Offset *fd_end);
 
 extern
 void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,
@@ -296,53 +296,53 @@ void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,
 
 /* File lock APIs */
 extern
-int PNCIO_GEN_SetLock(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
+int PNCIO_GEN_SetLock(PNCIO_File *fh, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
 
 extern
-int PNCIO_GEN_SetLock64(PNCIO_File *fd, int cmd, int type, MPI_Offset offset,
+int PNCIO_GEN_SetLock64(PNCIO_File *fh, int cmd, int type, MPI_Offset offset,
                 int whence, MPI_Offset len);
 
 /* UFS driver APIs */
 extern
-int PNCIO_UFS_create(PNCIO_File *fd);
+int PNCIO_UFS_create(PNCIO_File *fh);
 
 extern
-int PNCIO_UFS_open(PNCIO_File *fd);
+int PNCIO_UFS_open(PNCIO_File *fh);
 
 extern
-MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fh, const void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_UFS_write_coll(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_UFS_write_coll(PNCIO_File *fh, const void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd, void *buf,
+MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fh, void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_UFS_read_coll(PNCIO_File *fd, void *buf,
+MPI_Offset PNCIO_UFS_read_coll(PNCIO_File *fh, void *buf,
                 PNCIO_View buf_view);
 
 extern
-MPI_Offset PNCIO_UFS_write_contig(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_UFS_write_contig(PNCIO_File *fh, const void *buf,
                 MPI_Offset w_size, MPI_Offset offset, int is_coll);
 
 extern
-MPI_Offset PNCIO_UFS_read_contig(PNCIO_File *fd, void *buf,
+MPI_Offset PNCIO_UFS_read_contig(PNCIO_File *fh, void *buf,
                 MPI_Offset r_size, MPI_Offset offset);
 
 /* Lustre driver APIs */
 extern
-int PNCIO_Lustre_create(PNCIO_File *fd);
+int PNCIO_Lustre_create(PNCIO_File *fh);
 
 extern
-int PNCIO_Lustre_open(PNCIO_File *fd);
+int PNCIO_Lustre_open(PNCIO_File *fh);
 
 extern
-MPI_Offset PNCIO_Lustre_write_coll(PNCIO_File *fd, const void *buf,
+MPI_Offset PNCIO_Lustre_write_coll(PNCIO_File *fh, const void *buf,
                 PNCIO_View buf_view);
 
 #endif

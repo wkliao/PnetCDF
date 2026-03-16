@@ -22,12 +22,12 @@
 #include "pncio.h"
 
 /*----< PNCIO_File_sync() >---------------------------------------------------*/
-int PNCIO_File_sync(PNCIO_File *fd)
+int PNCIO_File_sync(PNCIO_File *fh)
 {
     int err = NC_NOERR;
 
-    if (fd->is_open > 0) {
-        err = fsync(fd->fd_sys);
+    if (fh->is_open > 0) {
+        err = fsync(fh->fd_sys);
         if (err != 0)
             err = ncmpii_error_posix2nc("fsync");
     }
