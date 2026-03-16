@@ -18,7 +18,7 @@
 #include "pncio.h"
 
 /*----< PNCIO_UFS_read_contig() >--------------------------------------------*/
-MPI_Offset PNCIO_UFS_read_contig(PNCIO_File *fd,
+MPI_Offset PNCIO_UFS_read_contig(PNCIO_File *fh,
                                  void       *buf,
                                  MPI_Offset  r_size,
                                  MPI_Offset  offset)
@@ -34,7 +34,7 @@ MPI_Offset PNCIO_UFS_read_contig(PNCIO_File *fd,
     p = (char *) buf;
     while (bytes_xfered < r_size) {
         r_count = r_size - bytes_xfered;
-        err = pread(fd->fd_sys, p, r_count, offset + bytes_xfered);
+        err = pread(fh->fd_sys, p, r_count, offset + bytes_xfered);
         if (err == -1)
             goto err_out;
         if (err == 0)
@@ -43,7 +43,7 @@ MPI_Offset PNCIO_UFS_read_contig(PNCIO_File *fd,
         p += err;
     }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fd->read_timing[2] += MPI_Wtime() - timing;
+    fh->read_timing[2] += MPI_Wtime() - timing;
 #endif
 
 err_out:
@@ -61,7 +61,7 @@ err_out:
  * Note in PnetCDF, the file_view and buf_view are never used for more than
  * one round, which greatly simplifies the implementation of this subroutine.
  */
-MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
+MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fh,
                                 void       *buf,
                                 PNCIO_View  buf_view)
 {
@@ -80,37 +80,37 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
     /* When both file_view and buf_view are contiguous, file_read() calls
      * PNCIO_UFS_read_contig().
      */
-    assert(!(buf_view.count <= 1 && fd->file_view.count <= 1));
+    assert(!(buf_view.count <= 1 && fh->file_view.count <= 1));
 
-    /* fd->file_view.off and fd->file_view.len should not be NULL */
-    assert(fd->file_view.count > 0);
-    assert(fd->file_view.off != NULL);
-    assert(fd->file_view.len != NULL);
+    /* fh->file_view.off and fh->file_view.len should not be NULL */
+    assert(fh->file_view.count > 0);
+    assert(fh->file_view.off != NULL);
+    assert(fh->file_view.len != NULL);
 
-    if (fd->file_view.count == 1)
-        assert(fd->file_view.size == fd->file_view.len[0]);
+    if (fh->file_view.count == 1)
+        assert(fh->file_view.size == fh->file_view.len[0]);
 
     if (buf_view.count == 1)
         assert(buf_view.size == buf_view.len[0]);
 
-    /* In PnetCDF, fd->file_view.size always == buf_view.size. */
-    assert(fd->file_view.size == buf_view.size);
+    /* In PnetCDF, fh->file_view.size always == buf_view.size. */
+    assert(fh->file_view.size == buf_view.size);
 #endif
 
-    if (fd->file_view.size == 0) /* zero-sized request */
+    if (fh->file_view.size == 0) /* zero-sized request */
         return 0; /* independent I/O can return now */
 
-    lock_off = fd->file_view.off[0];
-    if (fd->file_view.count > 1)
-        lock_len = fd->file_view.off[fd->file_view.count-1]
-                 + fd->file_view.len[fd->file_view.count-1]
+    lock_off = fh->file_view.off[0];
+    if (fh->file_view.count > 1)
+        lock_len = fh->file_view.off[fh->file_view.count-1]
+                 + fh->file_view.len[fh->file_view.count-1]
                  - lock_off;
     else
-        lock_len = fd->file_view.size;
+        lock_len = fh->file_view.size;
 
     /* if atomicity is true, lock (exclusive) the whole region */
-    if (fd->atomicity)
-        PNCIO_WRITE_LOCK(fd, lock_off, SEEK_SET, lock_len);
+    if (fh->atomicity)
+        PNCIO_WRITE_LOCK(fh, lock_off, SEEK_SET, lock_len);
 
     if (buf_view.count == 0) {
         /* In this case, the buffer view is contiguous, adjust buf_view.count,
@@ -130,8 +130,8 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
      * buffer is non-contiguous and file_view is contiguous, i.e. by reducing
      * the number of file reads.
      */
-    if (fd->hints->romio_ds_read == PNCIO_HINT_DISABLE ||
-        fd->file_view.count <= 1) {
+    if (fh->hints->romio_ds_read == PNCIO_HINT_DISABLE ||
+        fh->file_view.count <= 1) {
 
         if (buf_view.count <= 1) { /* directly read to buf */
             tmp_buf = (char*)buf;
@@ -140,7 +140,7 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
             tmp_buf_size = buf_view.size;
         }
         else { /* buf is noncontiguous */
-            tmp_buf_size = MIN(buf_view.size, fd->hints->ind_rd_buffer_size);
+            tmp_buf_size = MIN(buf_view.size, fh->hints->ind_rd_buffer_size);
             tmp_buf = (char*) NCI_Malloc(tmp_buf_size);
             buf_rem = buf_view.len[0];
             ntimes = buf_view.size / tmp_buf_size;
@@ -148,8 +148,8 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
                 ntimes++;
         }
 
-        file_off = fd->file_view.off[0];
-        file_rem = fd->file_view.len[0];
+        file_off = fh->file_view.off[0];
+        file_rem = fh->file_view.len[0];
 
         /* pointer to buf, starting location to copy from tmp_buf */
         cpy_ptr = (char*)buf;
@@ -162,10 +162,10 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
             /* using tmp_buf to read from the file */
             tmp_buf_rem = tmp_buf_size;
             ptr = tmp_buf;
-            while (j < fd->file_view.count) {
+            while (j < fh->file_view.count) {
                 req_len = MIN(tmp_buf_rem, file_rem);
                 /* read from offset file_off of length req_len */
-                len = PNCIO_UFS_read_contig(fd, ptr, req_len, file_off);
+                len = PNCIO_UFS_read_contig(fh, ptr, req_len, file_off);
                 if (len < 0) return len;
                 total_len += len;
 
@@ -175,8 +175,8 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
 
                 if (file_rem == req_len) { /* done with pair j */
                     j++;
-                    file_off = fd->file_view.off[j];
-                    file_rem = fd->file_view.len[j];
+                    file_off = fh->file_view.off[j];
+                    file_rem = fh->file_view.len[j];
                 }
                 else { /* there is still data remained in pair j */
                     file_off += req_len;
@@ -215,7 +215,7 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
         MPI_Offset lock_rem, disp, cpy_len;
 
         /* allocate read-copy buffer */
-        tmp_buf_size = MIN(lock_len, fd->hints->ind_rd_buffer_size);
+        tmp_buf_size = MIN(lock_len, fh->hints->ind_rd_buffer_size);
         tmp_buf = (char*) NCI_Malloc(tmp_buf_size);
 
         /* lock_rem is the amount remained to be locked for the entire
@@ -231,22 +231,22 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
 #ifdef PNETCDF_DEBUG
         /* file_view's offsets should have already sorted into a monotonically
          * non-decreasing order without overlaps. In addition, earlier checks
-         * have ensured all fd->file_view.len[] > 0.
+         * have ensured all fh->file_view.len[] > 0.
          */
-        assert(fd->file_view.len[0] > 0);
-        for (i=1; i<fd->file_view.count; i++) {
-            assert(fd->file_view.off[i-1] < fd->file_view.off[i]);
-            assert(fd->file_view.off[i-1] + fd->file_view.len[i-1] <
-                   fd->file_view.off[i]);
-            assert(fd->file_view.len[i] > 0);
+        assert(fh->file_view.len[0] > 0);
+        for (i=1; i<fh->file_view.count; i++) {
+            assert(fh->file_view.off[i-1] < fh->file_view.off[i]);
+            assert(fh->file_view.off[i-1] + fh->file_view.len[i-1] <
+                   fh->file_view.off[i]);
+            assert(fh->file_view.len[i] > 0);
         }
 #endif
 
         /* initialize loop local variables with the 1st pair of file_view and
          * buf_view
          */
-        file_off = fd->file_view.off[0];
-        file_rem = fd->file_view.len[0];
+        file_off = fh->file_view.off[0];
+        file_rem = fh->file_view.len[0];
         buf_rem  = buf_view.len[0];
 
         /* pointer to buf, starting location to copy from tmp_buf */
@@ -275,10 +275,10 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
             /* read a chunk from the file into tmp_buf */
             req_len = MIN(tmp_buf_size, lock_rem);
 
-            if (!fd->atomicity) /* lock the read-copy region */
-                PNCIO_WRITE_LOCK(fd, file_off, SEEK_SET, req_len);
+            if (!fh->atomicity) /* lock the read-copy region */
+                PNCIO_WRITE_LOCK(fh, file_off, SEEK_SET, req_len);
 
-            len = PNCIO_UFS_read_contig(fd, tmp_buf, req_len, file_off);
+            len = PNCIO_UFS_read_contig(fh, tmp_buf, req_len, file_off);
             if (len < 0) return len;
 
             /* Copy data from tmp_buf to buf. Skip 'disp' bytes at the front
@@ -330,18 +330,18 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
                      */
 
                     j++;
-                    assert(j < fd->file_view.count);
-                    /* Note j should never become fd->file_view.count, as the
+                    assert(j < fh->file_view.count);
+                    /* Note j should never become fh->file_view.count, as the
                      * above check of if (k == buf_view.count) should
                      * short-circuit the while loop. This is because PnetCDF
                      * ensures file_view.size == buf_view.size.
                      */
 
-                    file_rem = fd->file_view.len[j];
+                    file_rem = fh->file_view.len[j];
 
                     /* calculate the empty size between pairs j-1 and j */
-                    gap = fd->file_view.off[j]
-                        - (fd->file_view.off[j-1] + fd->file_view.len[j-1]);
+                    gap = fh->file_view.off[j]
+                        - (fh->file_view.off[j-1] + fh->file_view.len[j-1]);
 
                     if (tmp_buf_rem <= gap) {
                         /* j-1 is last pair of this round */
@@ -356,8 +356,8 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
                 }
             }
 
-            if (!fd->atomicity) /* unlock the read-copy region */
-                PNCIO_UNLOCK(fd, file_off, SEEK_SET, req_len);
+            if (!fh->atomicity) /* unlock the read-copy region */
+                PNCIO_UNLOCK(fh, file_off, SEEK_SET, req_len);
 
             /* reduce remaining size to be locked */
             lock_rem -= req_len;
@@ -371,8 +371,8 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fd,
     }
 
     /* if atomicity is true, unlock (exclusive) the whole region */
-    if (fd->atomicity)
-        PNCIO_UNLOCK(fd, lock_off, SEEK_SET, lock_len);
+    if (fh->atomicity)
+        PNCIO_UNLOCK(fh, lock_off, SEEK_SET, lock_len);
 
 #ifdef PNETCDF_DEBUG
     assert(total_len >= buf_view.size);

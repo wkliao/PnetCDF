@@ -279,7 +279,7 @@ int sort_ost_ids(struct llapi_layout *layout,
 
 /*----< get_striping() >-----------------------------------------------------*/
 static
-uint64_t get_striping(int         fd,
+uint64_t get_striping(int         fh,
                       const char *path,
                       uint64_t   *pattern,
                       uint64_t   *stripe_count,
@@ -298,7 +298,7 @@ uint64_t get_striping(int         fd,
     *stripe_size = LLAPI_LAYOUT_DEFAULT;
     *start_iodevice = LLAPI_LAYOUT_DEFAULT;
 
-    layout = llapi_layout_get_by_fd(fd, LLAPI_LAYOUT_GET_COPY);
+    layout = llapi_layout_get_by_fd(fh, LLAPI_LAYOUT_GET_COPY);
     if (layout == NULL) {
 #ifdef PNETCDF_LUSTRE_DEBUG
         printf("Error at %s (%d) llapi_layout_get_by_fd() fails\n",
@@ -358,7 +358,7 @@ uint64_t get_striping(int         fd,
     if (llapi_layout_ost_index_get(layout, 0, &osts[0]) != 0) {
         /* check if is a folder */
         struct stat path_stat;
-        fstat(fd, &path_stat);
+        fstat(fh, &path_stat);
 #ifdef PNETCDF_LUSTRE_DEBUG_VERBOSE
         if (S_ISREG(path_stat.st_mode)) /* not a regular file */
             printf("%s at %d: %s is a regular file\n",__func__,__LINE__,path);
@@ -501,38 +501,38 @@ err_out:
 
 /*----< Lustre_set_cb_node_list() >------------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
- *   fd->hints->cb_nodes and set file info for hint cb_nodes.
- *   fd->hints->ranklist[], an int array of size fd->hints->cb_nodes.
- *   fd->is_agg: indicating whether this rank is an I/O aggregator
- *   fd->my_cb_nodes_index: index into fd->hints->ranklist[]. -1 if N/A
+ *   fh->hints->cb_nodes and set file info for hint cb_nodes.
+ *   fh->hints->ranklist[], an int array of size fh->hints->cb_nodes.
+ *   fh->is_agg: indicating whether this rank is an I/O aggregator
+ *   fh->my_cb_nodes_index: index into fh->hints->ranklist[]. -1 if N/A
  */
 static
-int Lustre_set_cb_node_list(PNCIO_File *fd)
+int Lustre_set_cb_node_list(PNCIO_File *fh)
 {
     int i, j, k, rank, nprocs, num_aggr, striping_factor;
     int *nprocs_per_node, **ranks_per_node;
 
-    MPI_Comm_size(fd->comm, &nprocs);
-    MPI_Comm_rank(fd->comm, &rank);
+    MPI_Comm_size(fh->comm, &nprocs);
+    MPI_Comm_rank(fh->comm, &rank);
 
     /* number of MPI processes running on each node */
-    nprocs_per_node = (int*) NCI_Calloc(fd->comm_attr.num_nodes, sizeof(int));
+    nprocs_per_node = (int*) NCI_Calloc(fh->comm_attr.num_nodes, sizeof(int));
 
-    for (i=0; i<nprocs; i++) nprocs_per_node[fd->comm_attr.ids[i]]++;
+    for (i=0; i<nprocs; i++) nprocs_per_node[fh->comm_attr.ids[i]]++;
 
     /* construct rank IDs of MPI processes running on each node */
-    ranks_per_node = (int**) NCI_Malloc(sizeof(int*) * fd->comm_attr.num_nodes);
+    ranks_per_node = (int**) NCI_Malloc(sizeof(int*) * fh->comm_attr.num_nodes);
     ranks_per_node[0] = (int *) NCI_Malloc(sizeof(int) * nprocs);
-    for (i=1; i<fd->comm_attr.num_nodes; i++)
+    for (i=1; i<fh->comm_attr.num_nodes; i++)
         ranks_per_node[i] = ranks_per_node[i - 1] + nprocs_per_node[i - 1];
 
-    for (i=0; i<fd->comm_attr.num_nodes; i++) nprocs_per_node[i] = 0;
+    for (i=0; i<fh->comm_attr.num_nodes; i++) nprocs_per_node[i] = 0;
 
     /* Populate ranks_per_node[], list of MPI ranks running on each node.
      * Populate nprocs_per_node[], number of MPI processes on each node.
      */
     for (i=0; i<nprocs; i++) {
-        k = fd->comm_attr.ids[i];
+        k = fh->comm_attr.ids[i];
         ranks_per_node[k][nprocs_per_node[k]] = i;
         nprocs_per_node[k]++;
     }
@@ -541,11 +541,11 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
      * calculate num_aggr, the number of aggregators (later becomes cb_nodes).
      *
      * The calculation is based on the number of compute nodes,
-     * fd->comm_attr.num_nodes, and processes per node, nprocs_per_node. At
+     * fh->comm_attr.num_nodes, and processes per node, nprocs_per_node. At
      * this moment, all processes should have obtained the Lustre file striping
      * settings.
      */
-    striping_factor = fd->hints->striping_factor;
+    striping_factor = fh->hints->striping_factor;
 
     if (striping_factor > nprocs) {
         /* When number of MPI processes is less than striping_factor, set
@@ -580,21 +580,21 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
          * also applies to collective reads to allow more/less aggregators. In
          * most cases, more aggregators yields better read performance.
          */
-        if (fd->hints->cb_nodes == 0) {
+        if (fh->hints->cb_nodes == 0) {
             /* User did not set hint "cb_nodes" */
             if (nprocs >= striping_factor * 8 &&
-                nprocs/fd->comm_attr.num_nodes >= 8)
+                nprocs/fh->comm_attr.num_nodes >= 8)
                 num_aggr = striping_factor * 8;
             else if (nprocs >= striping_factor * 4 &&
-                     nprocs/fd->comm_attr.num_nodes >= 4)
+                     nprocs/fh->comm_attr.num_nodes >= 4)
                 num_aggr = striping_factor * 4;
             else if (nprocs >= striping_factor * 2 &&
-                     nprocs/fd->comm_attr.num_nodes >= 2)
+                     nprocs/fh->comm_attr.num_nodes >= 2)
                 num_aggr = striping_factor * 2;
             else
                 num_aggr = striping_factor;
         }
-        else if (fd->hints->cb_nodes <= striping_factor) {
+        else if (fh->hints->cb_nodes <= striping_factor) {
             /* User has set hint cb_nodes and cb_nodes <= striping_factor.
              * Ignore user's hint and try to set cb_nodes to be at least
              * striping_factor.
@@ -603,10 +603,10 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
         }
         else {
             /* User has set hint cb_nodes and cb_nodes > striping_factor */
-            if (nprocs < fd->hints->cb_nodes)
+            if (nprocs < fh->hints->cb_nodes)
                 num_aggr = nprocs; /* BAD cb_nodes set by users */
             else
-                num_aggr = fd->hints->cb_nodes;
+                num_aggr = fh->hints->cb_nodes;
         }
 
         /* Number of processes per node may not be enough to be picked as
@@ -650,10 +650,10 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
          *   Aggregator   3,     running on node 0, access OST 7.
          */
         int max_nprocs_node = 0;
-        for (i=0; i<fd->comm_attr.num_nodes; i++)
+        for (i=0; i<fh->comm_attr.num_nodes; i++)
             max_nprocs_node = MAX(max_nprocs_node, nprocs_per_node[i]);
-        int max_naggr_node = striping_factor / fd->comm_attr.num_nodes;
-        if (striping_factor % fd->comm_attr.num_nodes) max_naggr_node++;
+        int max_naggr_node = striping_factor / fh->comm_attr.num_nodes;
+        if (striping_factor % fh->comm_attr.num_nodes) max_naggr_node++;
         /* max_naggr_node is the max number of processes per node to be picked
          * as aggregator in each round.
          */
@@ -669,11 +669,11 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
      */
 
     /* Next step is to determine the MPI rank IDs of I/O aggregators and add
-     * them into ranklist[]. Note fd->hints->ranklist will be freed in
+     * them into ranklist[]. Note fh->hints->ranklist will be freed in
      * PNCIO_File_close().
      */
-    fd->hints->ranklist = (int *) NCI_Malloc(num_aggr * sizeof(int));
-    if (fd->hints->ranklist == NULL)
+    fh->hints->ranklist = (int *) NCI_Malloc(num_aggr * sizeof(int));
+    if (fh->hints->ranklist == NULL)
         return NC_ENOMEM;
 
     int block_assignment=0;
@@ -688,7 +688,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
     }
 #endif
 
-    if (striping_factor <= fd->comm_attr.num_nodes) {
+    if (striping_factor <= fh->comm_attr.num_nodes) {
         /* When number of OSTs is less than number of compute nodes, first
          * select number of nodes equal to the number of OSTs by spread the
          * selection evenly across all compute nodes (i.e. with a stride
@@ -704,9 +704,9 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
         if (block_assignment) {
             int n=0;
             int remain = num_aggr % striping_factor;
-            int node_stride = fd->comm_attr.num_nodes / striping_factor;
+            int node_stride = fh->comm_attr.num_nodes / striping_factor;
             /* walk through each node and pick aggregators */
-            for (j=0; j<fd->comm_attr.num_nodes; j+=node_stride) {
+            for (j=0; j<fh->comm_attr.num_nodes; j+=node_stride) {
                 /* Selecting node IDs with a stride. j is the node ID */
                 int nranks_per_node = num_aggr / striping_factor;
                 /* front nodes may have 1 more to pick */
@@ -714,9 +714,9 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
                 int rank_stride = nprocs_per_node[j] / nranks_per_node;
                 for (k=0; k<nranks_per_node; k++) {
                     /* Selecting rank IDs within node j with a stride */
-                    fd->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
+                    fh->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
                     if (++n == num_aggr) {
-                        j = fd->comm_attr.num_nodes; /* break loop j */
+                        j = fh->comm_attr.num_nodes; /* break loop j */
                         break; /* loop k */
                     }
                 }
@@ -724,7 +724,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
         }
         else {
             int avg = num_aggr / striping_factor;
-            int stride = fd->comm_attr.num_nodes / striping_factor;
+            int stride = fh->comm_attr.num_nodes / striping_factor;
             if (num_aggr % striping_factor) avg++;
             for (i = 0; i < num_aggr; i++) {
                 /* j is the selected node ID. This selection is round-robin
@@ -733,27 +733,27 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
                 j = (i % striping_factor) * stride;
                 k = (i / striping_factor) * (nprocs_per_node[j] / avg);
                 assert(k < nprocs_per_node[j]);
-                fd->hints->ranklist[i] = ranks_per_node[j][k];
+                fh->hints->ranklist[i] = ranks_per_node[j][k];
             }
         }
     }
-    else { /* striping_factor > fd->comm_attr.num_nodes */
+    else { /* striping_factor > fh->comm_attr.num_nodes */
         /* When number of OSTs is more than number of compute nodes, I/O
          * aggregators are selected from all nodes. Within each node,
          * aggregators are spread evenly instead of the first few ranks.
          */
         int *naggr_per_node, *idx_per_node, avg;
-        idx_per_node = (int*) NCI_Calloc(fd->comm_attr.num_nodes, sizeof(int));
-        naggr_per_node = (int*) NCI_Malloc(fd->comm_attr.num_nodes * sizeof(int));
-        for (i = 0; i < striping_factor % fd->comm_attr.num_nodes; i++)
-            naggr_per_node[i] = striping_factor / fd->comm_attr.num_nodes + 1;
-        for (; i < fd->comm_attr.num_nodes; i++)
-            naggr_per_node[i] = striping_factor / fd->comm_attr.num_nodes;
+        idx_per_node = (int*) NCI_Calloc(fh->comm_attr.num_nodes, sizeof(int));
+        naggr_per_node = (int*) NCI_Malloc(fh->comm_attr.num_nodes * sizeof(int));
+        for (i = 0; i < striping_factor % fh->comm_attr.num_nodes; i++)
+            naggr_per_node[i] = striping_factor / fh->comm_attr.num_nodes + 1;
+        for (; i < fh->comm_attr.num_nodes; i++)
+            naggr_per_node[i] = striping_factor / fh->comm_attr.num_nodes;
         avg = num_aggr / striping_factor;
         if (avg > 0)
-            for (i = 0; i < fd->comm_attr.num_nodes; i++)
+            for (i = 0; i < fh->comm_attr.num_nodes; i++)
                 naggr_per_node[i] *= avg;
-        for (i = 0; i < fd->comm_attr.num_nodes; i++)
+        for (i = 0; i < fh->comm_attr.num_nodes; i++)
             naggr_per_node[i] = MIN(naggr_per_node[i], nprocs_per_node[i]);
         /* naggr_per_node[] is the number of aggregators that can be
          * selected as I/O aggregators
@@ -761,14 +761,14 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
 
         if (block_assignment) {
             int n = 0;
-            for (j=0; j<fd->comm_attr.num_nodes; j++) {
+            for (j=0; j<fh->comm_attr.num_nodes; j++) {
                 /* j is the node ID */
                 int rank_stride = nprocs_per_node[j] / naggr_per_node[j];
                 /* try stride==1 seems no effect, rank_stride = 1; */
                 for (k=0; k<naggr_per_node[j]; k++) {
-                    fd->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
+                    fh->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
                     if (++n == num_aggr) {
-                        j = fd->comm_attr.num_nodes; /* break loop j */
+                        j = fh->comm_attr.num_nodes; /* break loop j */
                         break; /* loop k */
                     }
                 }
@@ -777,13 +777,13 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
         else {
             for (i = 0; i < num_aggr; i++) {
                 int stripe_i = i % striping_factor;
-                j = stripe_i % fd->comm_attr.num_nodes; /* select from node j */
+                j = stripe_i % fh->comm_attr.num_nodes; /* select from node j */
                 k = nprocs_per_node[j] / naggr_per_node[j];
                 k *= idx_per_node[j];
                 /* try stride==1 seems no effect, k = idx_per_node[j]; */
                 idx_per_node[j]++;
                 assert(k < nprocs_per_node[j]);
-                fd->hints->ranklist[i] = ranks_per_node[j][k];
+                fh->hints->ranklist[i] = ranks_per_node[j][k];
             }
         }
         NCI_Free(naggr_per_node);
@@ -791,7 +791,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
     }
 
     /* TODO: we can keep these two arrays in case for dynamic construction
-     * of fd->hints->ranklist[], such as in group-cyclic file domain
+     * of fh->hints->ranklist[], such as in group-cyclic file domain
      * assignment method, used in each collective write call.
      */
     NCI_Free(nprocs_per_node);
@@ -799,15 +799,15 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
     NCI_Free(ranks_per_node);
 
     /* set file striping hints */
-    fd->hints->cb_nodes = num_aggr;
+    fh->hints->cb_nodes = num_aggr;
 
     /* check whether this process is selected as an I/O aggregator */
-    fd->is_agg = 0;
-    fd->my_cb_nodes_index = -1;
+    fh->is_agg = 0;
+    fh->my_cb_nodes_index = -1;
     for (i = 0; i < num_aggr; i++) {
-        if (rank == fd->hints->ranklist[i]) {
-            fd->is_agg = 1;
-            fd->my_cb_nodes_index = i;
+        if (rank == fh->hints->ranklist[i]) {
+            fh->is_agg = 1;
+            fh->my_cb_nodes_index = i;
             break;
         }
     }
@@ -823,7 +823,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fd)
  *   5. non-root processes opens the file
  */
 int
-PNCIO_Lustre_create(PNCIO_File *fd)
+PNCIO_Lustre_create(PNCIO_File *fh)
 {
     char int_str[16];
     int err=NC_NOERR, rank, perm, old_mask;
@@ -838,11 +838,11 @@ extern int first_ost_id;
 first_ost_id = -1;
 #endif
 
-    MPI_Comm_rank(fd->comm, &rank);
+    MPI_Comm_rank(fh->comm, &rank);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fd->filename); wkl++; fflush(stdout);}
+static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fh->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fh->filename); wkl++; fflush(stdout);}
 #endif
 
     /* Note ncmpi_create() always creates a file with readable and writable
@@ -859,10 +859,10 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
 
     /* For Lustre, we need to obtain file striping info (striping_factor,
      * striping_unit, and num_osts) in order to select the I/O aggregators
-     * in fd->hints->ranklist, no matter its is open or create mode.
+     * in fh->hints->ranklist, no matter its is open or create mode.
      */
 
-// printf("fd->hints->nc_striping %s\n", (fd->hints->nc_striping == PNCIO_STRIPING_AUTO)?"AUTO":"INHERIT");
+// printf("fh->hints->nc_striping %s\n", (fh->hints->nc_striping == PNCIO_STRIPING_AUTO)?"AUTO":"INHERIT");
 
 #ifdef HAVE_LUSTRE
     int overstriping_ratio, str_factor, str_unit, start_iodev;
@@ -871,16 +871,16 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
      * be consistent among all processes.
      */
 
-    str_unit           = fd->hints->striping_unit;
-    str_factor         = fd->hints->striping_factor;
-    start_iodev        = fd->hints->start_iodevice;
-    overstriping_ratio = fd->hints->lustre_overstriping_ratio;
+    str_unit           = fh->hints->striping_unit;
+    str_factor         = fh->hints->striping_factor;
+    start_iodev        = fh->hints->start_iodevice;
+    overstriping_ratio = fh->hints->lustre_overstriping_ratio;
 
     if (overstriping_ratio <= 0) /* hint not set of disabled */
         overstriping_ratio = 1;
 
     /* obtain the total number of OSTs available */
-    total_num_OSTs = get_total_avail_osts(fd->filename);
+    total_num_OSTs = get_total_avail_osts(fh->filename);
     if (total_num_OSTs <= 0) /* failed to obtain number of available OSTs */
         total_num_OSTs = PNCIO_LUSTRE_MAX_OSTS;
 
@@ -894,13 +894,13 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
     stripe_size = LLAPI_LAYOUT_DEFAULT;
     start_iodevice = LLAPI_LAYOUT_DEFAULT;
 
-    fd->fd_sys = -1;
+    fh->fd_sys = -1;
 
     /* When no file striping hint is set, their default values are:
-     * fd->hints->striping_factor = 0;
-     * fd->hints->striping_unit = 0;
-     * fd->hints->start_iodevice = -1;
-     * fd->hints->lustre_overstriping_ratio = 1;
+     * fh->hints->striping_factor = 0;
+     * fh->hints->striping_unit = 0;
+     * fh->hints->start_iodevice = -1;
+     * fh->hints->lustre_overstriping_ratio = 1;
      */
 
     /* Now select file striping configuration for the new file. In many cases,
@@ -916,16 +916,16 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
      *    from the parent folder. If the parent folder's striping count is not
      *    set, then this hint is ignored.
      * 3. When no hint are set, set the new file's striping count to be equal
-     *    to the number of compute nodes allocated to fd->comm and the striping
+     *    to the number of compute nodes allocated to fh->comm and the striping
      *    size to 1 MiB.
      */
-    if (fd->hints->striping_factor == 0 &&
-        fd->hints->nc_striping == PNCIO_STRIPING_INHERIT) {
+    if (fh->hints->striping_factor == 0 &&
+        fh->hints->nc_striping == PNCIO_STRIPING_INHERIT) {
         /* Inherit the file striping settings from the parent folder. */
         int dd;
         char *dirc, *dname;
 
-        dirc = NCI_Strdup(fd->filename);
+        dirc = NCI_Strdup(fh->filename);
         dname = dirname(dirc); /* folder name */
 
         dd = open(dname, O_RDONLY, PNCIO_PERM);
@@ -954,7 +954,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
      */
     if (str_factor == 0 && (stripe_count == LLAPI_LAYOUT_DEFAULT ||
                             stripe_count == LLAPI_LAYOUT_WIDE)) {
-        stripe_count = MIN(fd->comm_attr.num_nodes, total_num_OSTs);
+        stripe_count = MIN(fh->comm_attr.num_nodes, total_num_OSTs);
         if (overstriping_ratio > 1) stripe_count *= overstriping_ratio;
     }
     else if (str_factor > 0)
@@ -1002,28 +1002,28 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
 #endif
 
     /* create a new file and set striping */
-    fd->fd_sys = set_striping(fd->filename, pattern,
+    fh->fd_sys = set_striping(fh->filename, pattern,
                                             numOSTs,
                                             stripe_count,
                                             stripe_size,
                                             start_iodevice);
 
-    if (fd->fd_sys < 0)
+    if (fh->fd_sys < 0)
         /* If explicitly setting file striping failed, inherit the striping
          * from the folder by simply creating the file.
          */
-        fd->fd_sys = open(fd->filename, fd->amode, perm);
+        fh->fd_sys = open(fh->filename, fh->amode, perm);
 
-    if (fd->fd_sys < 0) {
+    if (fh->fd_sys < 0) {
         fprintf(stderr,"Error at %s (%d) fails to create file %s (%s)\n",
-                __FILE__,__LINE__, fd->filename, strerror(errno));
+                __FILE__,__LINE__, fh->filename, strerror(errno));
         err = ncmpii_error_posix2nc("Lustre set striping");
         goto err_out;
     }
-    fd->is_open = 1;
+    fh->is_open = 1;
 
     /* Obtain Lustre file striping parameters actually set. */
-    numOSTs = get_striping(fd->fd_sys, fd->filename, &pattern,
+    numOSTs = get_striping(fh->fd_sys, fh->filename, &pattern,
                                        &stripe_count,
                                        &stripe_size,
                                        &start_iodevice);
@@ -1034,14 +1034,14 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
     stripin_info[3] = numOSTs;
 
 #elif defined(MIMIC_LUSTRE)
-    fd->fd_sys = open(fd->filename, fd->amode, perm);
-    if (fd->fd_sys == -1) {
+    fh->fd_sys = open(fh->filename, fh->amode, perm);
+    if (fh->fd_sys == -1) {
         printf("%s line %d: rank %d fails to create file %s (%s)\n",
-               __FILE__,__LINE__, rank, fd->filename, strerror(errno));
+               __FILE__,__LINE__, rank, fh->filename, strerror(errno));
         err = ncmpii_error_posix2nc("open");
         goto err_out;
     }
-    fd->is_open = 1;
+    fh->is_open = 1;
 
     char *env_str = getenv("MIMIC_STRIPE_SIZE");
     if (env_str != NULL)
@@ -1054,42 +1054,42 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
 #endif
 
 err_out:
-    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
-    if (fd->file_system == PNCIO_LUSTRE &&
+    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fh->comm);
+    if (fh->file_system == PNCIO_LUSTRE &&
         (stripin_info[0] == -1 || stripin_info[3] == 0)) {
         fprintf(stderr, "%s line %d: failed to create Lustre file %s\n",
-                __FILE__, __LINE__, fd->filename);
+                __FILE__, __LINE__, fh->filename);
         return err;
     }
 
-    fd->hints->striping_unit   = stripin_info[0];
-    fd->hints->striping_factor = stripin_info[1];
-    fd->hints->start_iodevice  = stripin_info[2];
-    if (fd->file_system == PNCIO_LUSTRE) {
-        fd->hints->lustre_num_osts = stripin_info[3];
-        fd->hints->lustre_overstriping_ratio = stripin_info[1] / stripin_info[3];
+    fh->hints->striping_unit   = stripin_info[0];
+    fh->hints->striping_factor = stripin_info[1];
+    fh->hints->start_iodevice  = stripin_info[2];
+    if (fh->file_system == PNCIO_LUSTRE) {
+        fh->hints->lustre_num_osts = stripin_info[3];
+        fh->hints->lustre_overstriping_ratio = stripin_info[1] / stripin_info[3];
     }
 
     if (rank > 0) { /* non-root processes open the file */
-        fd->fd_sys = open(fd->filename, O_RDWR, perm);
-        if (fd->fd_sys == -1) {
+        fh->fd_sys = open(fh->filename, O_RDWR, perm);
+        if (fh->fd_sys == -1) {
             fprintf(stderr,"%s line %d: rank %d failure to open file %s (%s)\n",
-                    __FILE__,__LINE__, rank, fd->filename, strerror(errno));
+                    __FILE__,__LINE__, rank, fh->filename, strerror(errno));
             return ncmpii_error_posix2nc("ioctl");
         }
-        fd->is_open = 1;
+        fh->is_open = 1;
     }
 
     /* construct cb_nodes rank list */
-    Lustre_set_cb_node_list(fd);
+    Lustre_set_cb_node_list(fh);
 
-    MPI_Info_set(fd->info, "file_system_type", "LUSTRE:");
+    MPI_Info_set(fh->info, "file_system_type", "LUSTRE:");
 
-    snprintf(int_str, 16, "%d", fd->hints->lustre_num_osts);
-    MPI_Info_set(fd->info, "lustre_num_osts", int_str);
+    snprintf(int_str, 16, "%d", fh->hints->lustre_num_osts);
+    MPI_Info_set(fh->info, "lustre_num_osts", int_str);
 
-    snprintf(int_str, 16, "%d", fd->hints->lustre_overstriping_ratio);
-    MPI_Info_set(fd->info, "lustre_overstriping_ratio", int_str);
+    snprintf(int_str, 16, "%d", fh->hints->lustre_overstriping_ratio);
+    MPI_Info_set(fh->info, "lustre_overstriping_ratio", int_str);
 
     return err;
 }
@@ -1099,7 +1099,7 @@ err_out:
  *   2. root obtains striping info and broadcasts to all others
  */
 int
-PNCIO_Lustre_open(PNCIO_File *fd)
+PNCIO_Lustre_open(PNCIO_File *fh)
 {
     char int_str[16];
     int err=NC_NOERR, rank, perm, old_mask;
@@ -1110,11 +1110,11 @@ extern int first_ost_id;
 first_ost_id = -1;
 #endif
 
-    MPI_Comm_rank(fd->comm, &rank);
+    MPI_Comm_rank(fh->comm, &rank);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fd->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fd->filename); wkl++; fflush(stdout);}
+static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fh->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fh->filename); wkl++; fflush(stdout);}
 #endif
 
     old_mask = umask(022);
@@ -1122,14 +1122,14 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
     perm = old_mask ^ PNCIO_PERM;
 
     /* All processes open the file. */
-    fd->fd_sys = open(fd->filename, fd->amode, perm);
-    if (fd->fd_sys == -1) {
+    fh->fd_sys = open(fh->filename, fh->amode, perm);
+    if (fh->fd_sys == -1) {
         fprintf(stderr,"%s line %d: rank %d fails to open file %s (%s)\n",
-                __FILE__,__LINE__, rank, fd->filename, strerror(errno));
+                __FILE__,__LINE__, rank, fh->filename, strerror(errno));
         err = ncmpii_error_posix2nc("open");
         goto err_out;
     }
-    fd->is_open = 1;
+    fh->is_open = 1;
 
     /* Only root obtains the striping information and bcast to all other
      * processes.
@@ -1142,7 +1142,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
         uint64_t stripe_size = LLAPI_LAYOUT_DEFAULT;
         uint64_t start_iodevice = LLAPI_LAYOUT_DEFAULT;
 
-        numOSTs = get_striping(fd->fd_sys, fd->filename, &pattern,
+        numOSTs = get_striping(fh->fd_sys, fh->filename, &pattern,
                                            &stripe_count,
                                            &stripe_size,
                                            &start_iodevice);
@@ -1165,23 +1165,23 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
     }
 
 err_out:
-    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fd->comm);
-    fd->hints->striping_unit   = stripin_info[0];
-    fd->hints->striping_factor = stripin_info[1];
-    fd->hints->start_iodevice  = stripin_info[2];
-    fd->hints->lustre_num_osts = stripin_info[3];
-    fd->hints->lustre_overstriping_ratio = stripin_info[1] / stripin_info[3];
+    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fh->comm);
+    fh->hints->striping_unit   = stripin_info[0];
+    fh->hints->striping_factor = stripin_info[1];
+    fh->hints->start_iodevice  = stripin_info[2];
+    fh->hints->lustre_num_osts = stripin_info[3];
+    fh->hints->lustre_overstriping_ratio = stripin_info[1] / stripin_info[3];
 
     /* construct cb_nodes rank list */
-    Lustre_set_cb_node_list(fd);
+    Lustre_set_cb_node_list(fh);
 
-    MPI_Info_set(fd->info, "file_system_type", "LUSTRE:");
+    MPI_Info_set(fh->info, "file_system_type", "LUSTRE:");
 
-    snprintf(int_str, 16, "%d", fd->hints->lustre_num_osts);
-    MPI_Info_set(fd->info, "lustre_num_osts", int_str);
+    snprintf(int_str, 16, "%d", fh->hints->lustre_num_osts);
+    MPI_Info_set(fh->info, "lustre_num_osts", int_str);
 
-    snprintf(int_str, 16, "%d", fd->hints->lustre_overstriping_ratio);
-    MPI_Info_set(fd->info, "lustre_overstriping_ratio", int_str);
+    snprintf(int_str, 16, "%d", fh->hints->lustre_overstriping_ratio);
+    MPI_Info_set(fh->info, "lustre_overstriping_ratio", int_str);
 
     return err;
 }

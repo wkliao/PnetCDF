@@ -21,6 +21,12 @@ MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh,
     int err=NC_NOERR;
     MPI_Offset r_len;
 
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Offset one_len = (MPI_Offset)buf_view.size;
+#else
+    int one_len = (int)buf_view.size;
+#endif
+
 #ifdef PNETCDF_DEBUG
     assert(fh != NULL);
 
@@ -32,11 +38,15 @@ MPI_Offset PNCIO_File_read_at_all(PNCIO_File *fh,
 
     if (buf_view.size < 0) err = NC_ENEGATIVECNT;
 
-    if (fh->file_view.off == NULL)
+    if (fh->file_view.off == NULL) {
         /* This is when calling this subroutione without set fileview first.
          * We store offset into fh->file_view.off.
          */
-        fh->file_view.off = &offset;
+        fh->file_view.off   = &offset;
+        fh->file_view.count = 1;
+        fh->file_view.size  = buf_view.size;
+        fh->file_view.len   = &one_len;
+    }
 
     r_len = PNCIO_UFS_read_coll(fh, buf, buf_view);
 

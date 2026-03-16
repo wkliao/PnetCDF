@@ -19,7 +19,7 @@
 
 /*----< PNCIO_File_set_view() >----------------------------------------------*/
 /* This subroutine is an independent call.  */
-int PNCIO_File_set_view(PNCIO_File   *fd,
+int PNCIO_File_set_view(PNCIO_File   *fh,
                         MPI_Aint      npairs,
 #ifdef HAVE_MPI_LARGE_COUNT
                         MPI_Count    *offsets,
@@ -37,18 +37,18 @@ int PNCIO_File_set_view(PNCIO_File   *fd,
     for (i=0; i<npairs; i++) assert(lengths[i] > 0);
 #endif
 
-    fd->file_view.count = npairs;
-    fd->file_view.off   = offsets;
-    fd->file_view.len   = lengths;
-    fd->file_view.idx   = 0;
-    fd->file_view.rem   = (npairs > 0) ? lengths[0] : 0;
+    fh->file_view.count = npairs;
+    fh->file_view.off   = offsets;
+    fh->file_view.len   = lengths;
+    fh->file_view.idx   = 0;
+    fh->file_view.rem   = (npairs > 0) ? lengths[0] : 0;
 
     /* Calculate size of fileview. Note PnetCDF has already sorted the
      * offset-length pairs into a monotonically non-decreasing order.
      */
-    fd->file_view.size = 0;
+    fh->file_view.size = 0;
     for (i=0; i<npairs; i++)
-        fd->file_view.size += lengths[i];
+        fh->file_view.size += lengths[i];
 
     return NC_NOERR;
 }
