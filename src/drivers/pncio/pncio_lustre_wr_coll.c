@@ -63,8 +63,8 @@ static MPI_Offset LUSTRE_Exch_and_write(PNCIO_File *fh,
                                         PNCIO_View  buf_view,
                                         PNCIO_Access *others_req,
                                         PNCIO_Access *my_req,
-                                        MPI_Offset min_st_loc,
-                                        MPI_Offset max_end_loc,
+                                        MPI_Offset min_st_off,
+                                        MPI_Offset max_end_off,
                                         MPI_Offset **buf_idx);
 
 static void LUSTRE_Fill_send_buffer(PNCIO_File *fh, const void *buf,
@@ -158,11 +158,6 @@ void LUSTRE_Calc_my_req(PNCIO_File    *fh,
     MPI_Offset curr_idx, off;
     PNCIO_Access *my_req;
 
-    /* fh->file_view.count has been checked and adjusted to a possitive number
-     * at the beginning of PNCIO_Lustre_write_coll().
-     */
-    assert(fh->file_view.count > 0);
-
     cb_nodes = fh->hints->cb_nodes;
 
     /* my_req[i].count gives the number of contiguous requests of this process
@@ -170,6 +165,16 @@ void LUSTRE_Calc_my_req(PNCIO_File    *fh,
      */
     my_req = (PNCIO_Access *) NCI_Calloc(cb_nodes, sizeof(PNCIO_Access));
     *my_req_ptr = my_req;
+    if (buf_is_contig) buf_idx[0] = NULL;
+
+    if (fh->file_view.size == 0) /* zero-sized request */
+        return;
+
+    /* For non-zero sized requests, fh->file_view.count has been checked and
+     * adjusted to a possitive number at the beginning of
+     * PNCIO_Lustre_write_coll().
+     */
+    assert(fh->file_view.count > 0);
 
     /* First pass is just to calculate how much space is needed to allocate
      * my_req.
@@ -192,7 +197,7 @@ void LUSTRE_Calc_my_req(PNCIO_File    *fh,
 
 /*
 Alternative: especially for when fh->file_view.count is large
-1 This rank's aggregate file access region is from start_offset to end_offset.
+1 This rank's aggregate file access region is from st_off to end_off.
 2 start with the 1st aggregator ID and keep assign aggregator until next stripe.
   This can avoid too many calls to LUSTRE_Calc_aggregator()
 */
@@ -595,17 +600,11 @@ MPI_Offset PNCIO_Lustre_write_coll(PNCIO_File *fh,
      * http://www.mcs.anl.gov/home/thakur/ext2ph.ps
      */
 
-    int i, j, nprocs, myrank;
+    int i, nprocs, myrank;
     int do_collect = 1, do_ex_wr;
-    MPI_Offset start_offset, end_offset;
-    MPI_Offset min_st_loc = -1, max_end_loc = -1;
+    MPI_Offset st_off, end_off;
+    MPI_Offset min_st_off = -1, max_end_off = -1;
     MPI_Offset w_len=0;
-
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Offset one_len = (MPI_Offset)buf_view.size;
-#else
-    int one_len = (int)buf_view.size;
-#endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 MPI_Barrier(fh->comm);
@@ -623,7 +622,7 @@ double curT = MPI_Wtime();
 
     /* fh->file_view contains a list of starting file offsets and lengths of
      * write requests made by this rank. Similarly, buf_view contains a list of
-     * offset-length pairs describing the write buffer layout.  Note as PnetCDF
+     * offset-length pairs describing the write buffer layout. Note PnetCDF
      * never re-uses a fileview or buffer view.
      *
      * Note that MPI standard (MPI 3.1 Chapter 13.1.1 and MPI 4.0 Chapter
@@ -631,31 +630,23 @@ double curT = MPI_Wtime();
      * set by the user are non-negative and monotonically non-decreasing. This
      * makes fh->file_view.off[] to be monotonically non-decreasing.
      *
-     * This rank's aggregate file access region is from start_offset to
-     * end_offset. Note: end_offset points to the last byte-offset to be
-     * accessed. E.g., if start_offset=0 and end_offset=99, then the aggregate
-     * file access region is of size 100 bytes. If this rank has no data to
-     * write, end_offset == (start_offset - 1)
+     * This rank's aggregate file access region is from st_off to end_off.
+     * Note end_off points to the last byte-offset to be accessed. E.g., if
+     * st_off=0 and end_off=99, then the aggregate file access region is of
+     * size 100 bytes. If this rank has no data to write, set both st_off and
+     * end_off to -1.
      */
-    if (fh->file_view.count == 0) { /* whole file is visible */
-        /* set file_view as a single contiguous offset-length pair */
-        fh->file_view.len       = &one_len;
-        fh->file_view.size      = one_len;
-        fh->file_view.count     = 1;
-        start_offset = fh->file_view.off[0];
-        end_offset = start_offset + buf_view.size - 1;
+    if (fh->file_view.size == 0) /* zero-sized request */
+        st_off = end_off = -1;
+    else {
+        /* Note file_view.off[] is always relative to beginning of file */
+        st_off  = fh->file_view.off[0];
+        end_off = fh->file_view.off[fh->file_view.count-1]
+                + fh->file_view.len[fh->file_view.count-1] - 1;
     }
-    else { /* Note file_view.off[] is always relative to beginning of file */
-        /* When file_view is not contiguous, PnetCDF always calls this
-         * subroutine with offset == 0.
-         */
-        start_offset = fh->file_view.off[0];
-        end_offset   = fh->file_view.off[fh->file_view.count-1]
-                     + fh->file_view.len[fh->file_view.count-1] - 1;
-    }
-// if (myrank==0) printf("%s %d: fh->file_view size=%lld count=%lld offset=%lld start_offset=%lld end_offset=%lld\n",__func__,__LINE__, fh->file_view.size, fh->file_view.count,fh->file_view.off[0],start_offset,end_offset);
+// if (myrank==0) printf("%s %d: fh->file_view size=%lld count=%lld offset=%lld st_off=%lld end_off=%lld\n",__func__,__LINE__, fh->file_view.size, fh->file_view.count,fh->file_view.off[0],st_off,end_off);
 
-    buf_view.idx  = 0;
+    buf_view.idx = 0;
     buf_view.rem = buf_view.size;
     if (buf_view.size > 0 && buf_view.count > 1)
         buf_view.rem = buf_view.len[0];
@@ -676,15 +667,15 @@ double curT = MPI_Wtime();
          * offsets, and odd indices are ending offsets.
          */
 #ifdef TRY_ALLREDUCE
-        st_end_all = (MPI_Offset *) NCI_Calloc(nprocs * 2, sizeof(MPI_Offset));
-        st_end_all[myrank*2]  = start_offset;
-        st_end_all[myrank*2+1] = end_offset;
+        st_end_all = (MPI_Offset*) NCI_Calloc(nprocs * 2, sizeof(MPI_Offset));
+        st_end_all[myrank*2]  = st_off;
+        st_end_all[myrank*2+1] = end_off;
         MPI_Allreduce(MPI_IN_PLACE, st_end_all, nprocs*2, MPI_OFFSET, MPI_MAX, fh->comm);
 #else
         MPI_Offset st_end[2];
-        st_end[0] = start_offset;
-        st_end[1] = end_offset;
-        st_end_all = (MPI_Offset *) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
+        st_end[0] = st_off;
+        st_end[1] = end_off;
+        st_end_all = (MPI_Offset*) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
         MPI_Allgather(st_end, 2, MPI_OFFSET, st_end_all, 2, MPI_OFFSET, fh->comm);
 #endif
 
@@ -697,13 +688,36 @@ double curT = MPI_Wtime();
          */
         striping_range = fh->hints->striping_unit * fh->hints->striping_factor;
         is_interleaved = 0;
+
+        for (i=0; i<2*nprocs; i+=2) { /* find the 1st non-zero sized */
+            if (st_end_all[i] >= 0) {
+                min_st_off  = st_end_all[i];
+                max_end_off = st_end_all[i+1];
+                if (st_end_all[i+1] - st_end_all[i] < striping_range)
+                    large_indv_req = 0;
+                break;
+            }
+        }
+        for (i+=2; i<2*nprocs; i+=2) {
+            if (st_end_all[i] == -1) /* zero-sized request */
+                continue;
+            if (st_end_all[i] <  st_end_all[i-1] &&
+                st_end_all[i] <= st_end_all[i+1])
+                is_interleaved = 1;
+            min_st_off  = MIN(min_st_off,  st_end_all[i]);
+            max_end_off = MAX(max_end_off, st_end_all[i+1]);
+            if (st_end_all[i+1] - st_end_all[i] < striping_range)
+                large_indv_req = 0;
+        }
+
+#if 0
         for (i = 0; i < nprocs * 2; i += 2) {
             if (st_end_all[i] > st_end_all[i + 1]) {
                 /* process rank (i/2) has no data to write */
                 continue;
             }
-            min_st_loc = st_end_all[i];
-            max_end_loc = st_end_all[i + 1];
+            min_st_off = st_end_all[i];
+            max_end_off = st_end_all[i + 1];
             if (st_end_all[i+1] - st_end_all[i] < striping_range)
                 large_indv_req = 0;
             j = i; /* j is the rank of making first non-zero request */
@@ -721,12 +735,13 @@ double curT = MPI_Wtime();
                  */
                 is_interleaved = 1;
             }
-            min_st_loc = MIN(st_end_all[i], min_st_loc);
-            max_end_loc = MAX(st_end_all[i + 1], max_end_loc);
+            min_st_off = MIN(st_end_all[i], min_st_off);
+            max_end_off = MAX(st_end_all[i + 1], max_end_off);
             if (st_end_all[i+1] - st_end_all[i] < striping_range)
                 large_indv_req = 0;
             j = i;
         }
+#endif
         NCI_Free(st_end_all);
 
         if (fh->hints->romio_cb_write == PNCIO_HINT_ENABLE) {
@@ -862,7 +877,7 @@ double curT = MPI_Wtime();
                 fprintf(stderr, "%s at %d: lseek SEEK_END failed on file %s (%s)\n",
                         __func__,__LINE__, fh->filename, strerror(errno));
 #endif
-            fh->skip_read = (fsize >=0 && min_st_loc >= fsize);
+            fh->skip_read = (fsize >=0 && min_st_off >= fsize);
 
             /* restore file pointer */
             lseek(fh->fd_sys, cur_off, SEEK_SET);
@@ -871,7 +886,7 @@ double curT = MPI_Wtime();
     else
         fh->skip_read = 1;
 
-// if (fh->is_agg && !fh->skip_read) { MPI_Offset fsize = lseek(fh->fd_sys, 0, SEEK_END); printf("%d: %s at %d: skip_read=%d min_st_loc=%lld fsize=%lld\n",myrank,__func__,__LINE__,fh->skip_read,min_st_loc,fsize); }
+// if (fh->is_agg && !fh->skip_read) { MPI_Offset fsize = lseek(fh->fd_sys, 0, SEEK_END); printf("%d: %s at %d: skip_read=%d min_st_off=%lld fsize=%lld\n",myrank,__func__,__LINE__,fh->skip_read,min_st_off,fsize); }
 
     /* For aggregators, calculate the portions of all other ranks' requests
      * fall into this aggregator's file domain (note only I/O aggregators are
@@ -917,7 +932,7 @@ double curT = MPI_Wtime();
          * data to write or is an I/O aggregator
          */
         w_len = LUSTRE_Exch_and_write(fh, buf, buf_view, others_req, my_req,
-                                      min_st_loc, max_end_loc, buf_idx);
+                                      min_st_off, max_end_off, buf_idx);
 
     /* free all memory allocated */
     NCI_Free(others_req[0].offsets);
@@ -1248,8 +1263,8 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
                                  PNCIO_View     buf_view,
                                  PNCIO_Access  *others_req,
                                  PNCIO_Access  *my_req,
-                                 MPI_Offset     min_st_loc,
-                                 MPI_Offset     max_end_loc,
+                                 MPI_Offset     min_st_off,
+                                 MPI_Offset     max_end_off,
                                  MPI_Offset   **buf_idx)
 {
     char **write_buf = NULL, **recv_buf = NULL, **send_buf = NULL;
@@ -1271,7 +1286,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
     striping_unit = fh->hints->striping_unit;
 
     /* The aggregate access region (across all processes) of this collective
-     * write starts from min_st_loc and ends at max_end_loc. The collective
+     * write starts from min_st_off and ends at max_end_off. The collective
      * write is carried out in 'ntimes' rounds of two-phase I/O. Each round
      * covers an aggregate file region of size 'step_size' written only by
      * cb_nodes number of I/O aggregators. Note non-aggregators must also
@@ -1284,12 +1299,12 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
      */
     step_size = (MPI_Offset)cb_nodes * striping_unit;
 
-    /* align min_st_loc downward to the nearest file stripe boundary */
-    min_st_loc -= min_st_loc % (MPI_Offset) striping_unit;
+    /* align min_st_off downward to the nearest file stripe boundary */
+    min_st_off -= min_st_off % (MPI_Offset) striping_unit;
 
     /* ntimes is the number of rounds of two-phase I/O */
-    ntimes = (max_end_loc - min_st_loc + 1) / step_size;
-    if ((max_end_loc - min_st_loc + 1) % step_size)
+    ntimes = (max_end_off - min_st_off + 1) / step_size;
+    if ((max_end_off - min_st_off + 1) % step_size)
         ntimes++;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -1323,12 +1338,12 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
     off_list = (MPI_Offset *) NCI_Malloc(ntimes * sizeof(MPI_Offset));
     end_loc = -1;
     for (m = 0; m < ntimes; m++)
-        off_list[m] = max_end_loc;
+        off_list[m] = max_end_off;
     for (i = 0; i < nprocs; i++) {
 // if (myrank == 0) printf("%s at %d: others_req[%d] count=%lld\n",__func__,__LINE__, i,others_req[i].count);
         for (j = 0; j < others_req[i].count; j++) {
             req_off = others_req[i].offsets[j];
-            m = (int) ((req_off - min_st_loc) / step_size);
+            m = (int) ((req_off - min_st_off) / step_size);
             off_list[m] = MIN(off_list[m], req_off);
             end_loc = MAX(end_loc, (others_req[i].offsets[j] + others_req[i].lens[j] - 1));
         }
@@ -1446,13 +1461,13 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
     /* array of data sizes to be sent to each aggregator in a 2-phase round */
     send_size = (MPI_Count *) NCI_Calloc(cb_nodes, sizeof(MPI_Count));
 
-    /* min_st_loc is the beginning file offsets of the aggregate access region
+    /* min_st_off is the beginning file offsets of the aggregate access region
      *     of this collective write, and it has been downward aligned to the
      *     nearest file stripe boundary
      * iter_end_off is the ending file offset of aggregate write region of
      *     iteration m, upward aligned to the file stripe boundary.
      */
-    iter_end_off = min_st_loc + step_size;
+    iter_end_off = min_st_off + step_size;
 
     ibuf = 0;
     for (m = 0; m < ntimes; m++) {
