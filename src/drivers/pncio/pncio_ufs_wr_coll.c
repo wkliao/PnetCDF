@@ -50,7 +50,7 @@ void Fill_send_buffer(PNCIO_File   *fh,
                       PNCIO_View    buf_view,
                       char        **send_buf,
                       MPI_Count    *send_size,
-                      MPI_Request  *requests,
+                      MPI_Request  *reqs,
                       MPI_Count    *sent_to_proc,
                       int           nprocs,
                       int           myrank,
@@ -123,10 +123,10 @@ void Fill_send_buffer(PNCIO_File   *fh,
                     if (send_buf_idx[p] == send_size[p] && p != myrank) {
 #if MPI_VERSION >= 4
                         MPI_Isend_c(send_buf[p], send_size[p], MPI_BYTE, p,
-                                    0, fh->comm, &requests[jj++]);
+                                    0, fh->comm, &reqs[jj++]);
 #else
                         MPI_Isend(send_buf[p], send_size[p], MPI_BYTE, p,
-                                    0, fh->comm, &requests[jj++]);
+                                    0, fh->comm, &reqs[jj++]);
 #endif
                     }
                 } else {
@@ -182,9 +182,9 @@ MPI_Offset W_Exchange_data(PNCIO_File   *fh,
     int i, j, nprocs_recv, nprocs_send, err=NC_NOERR;
     MPI_Count *tmp_len;
     char **send_buf = NULL;
-    MPI_Request *requests, *send_req;
+    MPI_Request *reqs, *send_req;
     MPI_Datatype *recv_types, self_recv_type = MPI_DATATYPE_NULL;
-    MPI_Status *statuses, status;
+    MPI_Status *sts;
     MPI_Count sum, *srt_len = NULL;
     int num_rtypes, nreqs;
     MPI_Offset *srt_off = NULL;
@@ -211,10 +211,9 @@ double curT = MPI_Wtime();
             nprocs_send++;
     }
 
-    recv_types = (MPI_Datatype *) NCI_Malloc((nprocs_recv + 1) * sizeof(MPI_Datatype));
-    /* +1 to avoid a 0-size malloc */
+    recv_types = (MPI_Datatype*) NCI_Malloc(sizeof(MPI_Datatype) * nprocs_recv);
 
-    tmp_len = NCI_Malloc(nprocs * sizeof(*tmp_len));
+    tmp_len = NCI_Malloc(sizeof(MPI_Count) * nprocs);
     j = 0;
     for (i = 0; i < nprocs; i++) {
         if (recv_size[i]) {
@@ -258,8 +257,8 @@ double curT = MPI_Wtime();
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         double timing = MPI_Wtime();
 #endif
-        srt_off = (MPI_Offset *) NCI_Malloc(sum * sizeof(MPI_Offset));
-        srt_len = NCI_Malloc(sum * sizeof(*srt_len));
+        srt_off = (MPI_Offset *) NCI_Malloc(sizeof(MPI_Offset) * sum);
+        srt_len = NCI_Malloc(sizeof(MPI_Count) * sum);
 
         PNCIO_Heap_merge(others_req, count, srt_off, srt_len, start_pos,
                          nprocs, nprocs_recv, sum);
@@ -315,13 +314,13 @@ double curT = MPI_Wtime();
     if (fh->atomicity) {
         /* nreqs is the number of Isend and Irecv to be posted */
         nreqs = (send_size[myrank]) ? (nprocs_send - 1) : nprocs_send;
-        requests = (MPI_Request *) NCI_Malloc((nreqs + 1) * sizeof(MPI_Request));
-        send_req = requests;
+        reqs = (MPI_Request*) NCI_Malloc(sizeof(MPI_Request) * nreqs);
+        send_req = reqs;
     } else {
         nreqs = nprocs_send + nprocs_recv;
         if (send_size[myrank])  /* NO send to and recv from self */
             nreqs -= 2;
-        requests = (MPI_Request *) NCI_Malloc((nreqs + 1) * sizeof(MPI_Request));
+        reqs = (MPI_Request*) NCI_Malloc(sizeof(MPI_Request) * nreqs);
         /* +1 to avoid a 0-size malloc */
 
         /* post receives */
@@ -331,7 +330,7 @@ double curT = MPI_Wtime();
                 continue;
             if (i != myrank) {
                 MPI_Irecv(MPI_BOTTOM, 1, recv_types[j], i, 0,
-                          fh->comm, requests + j);
+                          fh->comm, reqs + j);
                 j++;
             } else if (buf_view.count <= 1) {
                 /* sen/recv to/from self uses MPI_Unpack() */
@@ -349,7 +348,7 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
                 buf_idx[i] += recv_size[i];
             }
         }
-        send_req = requests + j;
+        send_req = reqs + j;
     }
 
     /* Post sends. If buf_view is contiguous, data can be directly sent from
@@ -376,8 +375,8 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
         size_t msgLen = 0;
         for (i = 0; i < nprocs; i++)
             msgLen += send_size[i];
-        send_buf = (char **) NCI_Malloc(nprocs * sizeof(char *));
-        send_buf[0] = (char *) NCI_Malloc(msgLen * sizeof(char));
+        send_buf = (char **) NCI_Malloc(sizeof(char*) * nprocs);
+        send_buf[0] = (char *) NCI_Malloc(msgLen);
         for (i = 1; i < nprocs; i++)
             send_buf[i] = send_buf[i - 1] + send_size[i - 1];
 
@@ -398,12 +397,15 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
             if (recv_size[i] == 0)
                 continue;
             if (i != myrank) {
+                MPI_Status status;
                 MPI_Recv(MPI_BOTTOM, 1, recv_types[j++], i, 0,
                          fh->comm, &status);
             } else {
                 /* sen/recv to/from self uses MPI_Unpack() */
-                char *ptr = (buf_view.count <= 1) ? (char*)buf + buf_idx[i] : send_buf[i];
+                char *ptr = (buf_view.count <= 1) ? (char*)buf + buf_idx[i]
+                                                  : send_buf[i];
 assert(self_recv_type != MPI_DATATYPE_NULL);
+
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count position=0;
                 MPI_Unpack_c(ptr, recv_size[i], &position, write_buf, 1, self_recv_type,
@@ -418,7 +420,9 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
             }
         }
     } else if (buf_view.count > 1 && recv_size[myrank]) {
+
 assert(self_recv_type != MPI_DATATYPE_NULL);
+
 #ifdef HAVE_MPI_LARGE_COUNT
         MPI_Count position=0;
         MPI_Unpack_c(send_buf[myrank], recv_size[myrank], &position, write_buf, 1, self_recv_type,
@@ -439,24 +443,24 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
         MPI_Type_free(&self_recv_type);
 
 #ifdef HAVE_MPI_STATUSES_IGNORE
-    statuses = MPI_STATUSES_IGNORE;
+    sts = MPI_STATUSES_IGNORE;
 #else
-    statuses = (MPI_Status *) NCI_Malloc(nreqs * sizeof(MPI_Status));
+    sts = (MPI_Status*) NCI_Malloc(sizeof(MPI_Status) * nreqs);
 #endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     if (fh->is_agg) fh->write_timing[4] += MPI_Wtime() - curT;
     curT = MPI_Wtime();
 #endif
-    MPI_Waitall(nreqs, requests, statuses);
+    MPI_Waitall(nreqs, reqs, sts);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     if (fh->is_agg) fh->write_timing[3] += MPI_Wtime() - curT;
 #endif
 
 #ifndef HAVE_MPI_STATUSES_IGNORE
-    NCI_Free(statuses);
+    NCI_Free(sts);
 #endif
-    NCI_Free(requests);
+    NCI_Free(reqs);
     if (buf_view.count > 1 && nprocs_send) {
         NCI_Free(send_buf[0]);
         NCI_Free(send_buf);
@@ -508,7 +512,7 @@ MPI_Offset Exch_and_write(PNCIO_File   *fh,
    to be done by each process and the max among all processes.
    That gives the no. of communication phases as well. */
 
-    value = (char *) NCI_Malloc((MPI_MAX_INFO_VAL + 1) * sizeof(char));
+    value = (char *) NCI_Malloc(MPI_MAX_INFO_VAL + 1);
     MPI_Info_get(fh->info, "cb_buffer_size", MPI_MAX_INFO_VAL, value, &info_flag);
     coll_bufsize = atoi(value);
     NCI_Free(value);
@@ -544,7 +548,7 @@ MPI_Offset Exch_and_write(PNCIO_File   *fh,
 
     write_buf = fh->io_buf;
 
-    curr_offlen_ptr = NCI_Calloc(nprocs * 10, sizeof(*curr_offlen_ptr));
+    curr_offlen_ptr = NCI_Calloc(nprocs * 10, sizeof(MPI_Count));
     /* its use is explained below. calloc initializes to 0. */
 
     count = curr_offlen_ptr + nprocs;
