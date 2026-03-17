@@ -34,7 +34,7 @@ int PNCIO_Calc_aggregator(const PNCIO_File *fh,
     int rank_index, rank;
     MPI_Offset avail_bytes;
 
-    /* get an index into our array of aggregators */
+    /* get an index into array of aggregators */
     rank_index = (int) ((off - min_off + fd_size) / fd_size - 1);
 
     if (fh->hints->striping_unit > 0) {
@@ -189,15 +189,6 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
     int *len_ptr;
 #endif
 
-#if 0
-    if (fh->file_view.size == 0) { /* zero-sized request */
-        *count_my_req_procs = 0;
-        *count_my_req_per_proc = NULL;
-        *my_req = NULL;
-        *buf_idx = NULL;
-        return;
-    }
-#endif
     MPI_Comm_size(fh->comm, &nprocs);
 
     *count_my_req_procs = 0;
@@ -274,11 +265,11 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
 
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(MPI_Offset) * 2;
-    (*my_req)[0].offsets = (MPI_Offset *) NCI_Malloc(memLen * alloc_sz);
+    (*my_req)[0].offsets = (MPI_Offset *) NCI_Malloc(alloc_sz * memLen);
     (*my_req)[0].lens = (*my_req)[0].offsets + memLen;
 #else
     alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-    (*my_req)[0].offsets = (MPI_Offset *) NCI_Malloc(memLen * alloc_sz);
+    (*my_req)[0].offsets = (MPI_Offset *) NCI_Malloc(alloc_sz * memLen);
     (*my_req)[0].lens = (int*) ((*my_req)[0].offsets + memLen);
 #endif
 
@@ -371,7 +362,7 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
 {
     size_t alloc_sz, memLen;
     int i, j, nprocs, myrank;
-    MPI_Request *requests;
+    MPI_Request *reqs;
     MPI_Offset *off_ptr;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Offset *len_ptr;
@@ -385,7 +376,7 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
     MPI_Comm_rank(fh->comm, &myrank);
 
     /* first find out how much to send/recv and from/to whom */
-    *count_others_req_per_proc = NCI_Malloc(nprocs * sizeof(MPI_Count));
+    *count_others_req_per_proc = NCI_Malloc(sizeof(MPI_Count) * nprocs);
 
     MPI_Alltoall(count_my_req_per_proc, 1, MPI_COUNT,
                  *count_others_req_per_proc, 1, MPI_COUNT, fh->comm);
@@ -398,12 +389,12 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
 
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(MPI_Offset) * 2 + sizeof(MPI_Count);
-    (*others_req)[0].offsets = (MPI_Offset *) NCI_Malloc(memLen * alloc_sz);
+    (*others_req)[0].offsets = (MPI_Offset *) NCI_Malloc(alloc_sz * memLen);
     (*others_req)[0].lens = (*others_req)[0].offsets + memLen;
     (*others_req)[0].mem_ptrs = (MPI_Count*) ((*others_req)[0].lens + memLen);
 #else
     alloc_sz = sizeof(MPI_Offset) + sizeof(int) + sizeof(MPI_Aint);
-    (*others_req)[0].offsets = (MPI_Offset *) NCI_Malloc(memLen * alloc_sz);
+    (*others_req)[0].offsets = (MPI_Offset *) NCI_Malloc(alloc_sz * memLen);
     (*others_req)[0].lens = (int *) ((*others_req)[0].offsets + memLen);
     (*others_req)[0].mem_ptrs = (MPI_Aint*) ((*others_req)[0].lens + memLen);
 #endif
@@ -427,8 +418,8 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
     }
 
     /* now send the calculated offsets and lengths to respective processes */
-    requests = (MPI_Request*) NCI_Malloc(sizeof(MPI_Request) *
-               (count_my_req_procs + *count_others_req_procs) * 2);
+    reqs = (MPI_Request*) NCI_Malloc(sizeof(MPI_Request) *
+           (count_my_req_procs + *count_others_req_procs) * 2);
 
     j = 0;
     for (i = 0; i < nprocs; i++) {
@@ -451,17 +442,17 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
         else {
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Irecv_c((*others_req)[i].offsets, (*others_req)[i].count,
-                        MPI_OFFSET, i, i + myrank, fh->comm, &requests[j++]);
+                        MPI_OFFSET, i, i + myrank, fh->comm, &reqs[j++]);
             MPI_Irecv_c((*others_req)[i].lens, (*others_req)[i].count,
-                        MPI_OFFSET, i, i + myrank, fh->comm, &requests[j++]);
+                        MPI_OFFSET, i, i + myrank, fh->comm, &reqs[j++]);
 #else
             /* check overflow 4-byte int */
             assert((*others_req)[i].count <= 2147483647);
 
             MPI_Irecv((*others_req)[i].offsets, (int)(*others_req)[i].count,
-                      MPI_OFFSET, i, i + myrank, fh->comm, &requests[j++]);
+                      MPI_OFFSET, i, i + myrank, fh->comm, &reqs[j++]);
             MPI_Irecv((*others_req)[i].lens, (int)(*others_req)[i].count,
-                      MPI_INT, i, i + myrank, fh->comm, &requests[j++]);
+                      MPI_INT, i, i + myrank, fh->comm, &reqs[j++]);
 #endif
         }
     }
@@ -470,30 +461,30 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
         if (my_req[i].count && i != myrank) {
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Isend_c(my_req[i].offsets, my_req[i].count,
-                        MPI_OFFSET, i, i + myrank, fh->comm, &requests[j++]);
+                        MPI_OFFSET, i, i + myrank, fh->comm, &reqs[j++]);
             MPI_Isend_c(my_req[i].lens, my_req[i].count,
-                        MPI_OFFSET, i, i + myrank, fh->comm, &requests[j++]);
+                        MPI_OFFSET, i, i + myrank, fh->comm, &reqs[j++]);
 #else
             assert(my_req[i].count <= 2147483647); /* overflow 4-byte int */
             MPI_Isend(my_req[i].offsets, (int)my_req[i].count,
-                      MPI_OFFSET, i, i + myrank, fh->comm, &requests[j++]);
+                      MPI_OFFSET, i, i + myrank, fh->comm, &reqs[j++]);
             MPI_Isend(my_req[i].lens, (int)my_req[i].count,
-                      MPI_INT, i, i + myrank, fh->comm, &requests[j++]);
+                      MPI_INT, i, i + myrank, fh->comm, &reqs[j++]);
 #endif
         }
     }
 
     if (j) {
 #ifdef HAVE_MPI_STATUSES_IGNORE
-        MPI_Waitall(j, requests, MPI_STATUSES_IGNORE);
+        MPI_Waitall(j, reqs, MPI_STATUSES_IGNORE);
 #else
-        MPI_Status *statuses = (MPI_Status *) NCI_Malloc(j * sizeof(MPI_Status));
-        MPI_Waitall(j, requests, statuses);
-        NCI_Free(statuses);
+        MPI_Status *sts = (MPI_Status*) NCI_Malloc(sizeof(MPI_Status) * j);
+        MPI_Waitall(j, reqs, sts);
+        NCI_Free(sts);
 #endif
     }
 
-    NCI_Free(requests);
+    NCI_Free(reqs);
 }
 
 void PNCIO_Free_others_req(MPI_Count    *count_others_req_per_proc,
