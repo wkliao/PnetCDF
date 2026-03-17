@@ -253,7 +253,7 @@ Alternative: especially for when fh->file_view.count is large
      * This allows sends to be done without extra buffer.
      */
     if (buf_idx != NULL && buf_is_contig) {
-        buf_idx[0] = (MPI_Offset *) NCI_Malloc(nelems * sizeof(MPI_Offset));
+        buf_idx[0] = (MPI_Offset *) NCI_Malloc(sizeof(MPI_Offset) * nelems);
         for (i = 1; i < cb_nodes; i++)
             buf_idx[i] = buf_idx[i - 1] + my_req[i - 1].count;
     }
@@ -354,14 +354,14 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
     MPI_Count *count_my_req_per_proc, *count_others_req_per_proc;
     PNCIO_Access *others_req;
     size_t npairs, alloc_sz, pair_sz;
-    MPI_Request *requests;
+    MPI_Request *reqs;
 
     /* first find out how much to send/recv and from/to whom */
 
     MPI_Comm_size(fh->comm, &nprocs);
     MPI_Comm_rank(fh->comm, &myrank);
 
-    others_req = (PNCIO_Access *) NCI_Malloc(nprocs * sizeof(PNCIO_Access));
+    others_req = (PNCIO_Access *) NCI_Malloc(sizeof(PNCIO_Access) * nprocs);
     *others_req_ptr = others_req;
 
     /* Use my_req[i].count (the number of noncontiguous requests fall in
@@ -378,27 +378,27 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
         count_my_req_per_proc[fh->hints->ranklist[i]] = my_req[i].count;
 
 #if 1
-    requests = NCI_Malloc(sizeof(MPI_Request) * (nprocs + fh->hints->cb_nodes));
+    reqs = NCI_Malloc(sizeof(MPI_Request) * (nprocs + fh->hints->cb_nodes));
     nreqs = 0;
     if (fh->is_agg) {
         for (i=0; i<nprocs; i++)
-            MPI_Irecv(count_others_req_per_proc+i, 1, MPI_COUNT, i, 0, fh->comm, &requests[nreqs++]);
+            MPI_Irecv(count_others_req_per_proc+i, 1, MPI_COUNT, i, 0, fh->comm, &reqs[nreqs++]);
     }
     for (i=0; i<fh->hints->cb_nodes; i++) {
         int dest = fh->hints->ranklist[i];
-        MPI_Issend(&my_req[i].count, 1, MPI_COUNT, dest, 0, fh->comm, &requests[nreqs++]);
+        MPI_Issend(&my_req[i].count, 1, MPI_COUNT, dest, 0, fh->comm, &reqs[nreqs++]);
     }
     if (nreqs) {
 #ifdef HAVE_MPI_STATUSES_IGNORE
-        MPI_Waitall(nreqs, requests, MPI_STATUSES_IGNORE);
+        MPI_Waitall(nreqs, reqs, MPI_STATUSES_IGNORE);
 #else
-        MPI_Status *statuses = (MPI_Status *)
-                               NCI_Malloc(nreqs * sizeof(MPI_Status));
-        MPI_Waitall(nreqs, requests, statuses);
-        NCI_Free(statuses);
+        MPI_Status *sts;
+        sts = (MPI_Status*) NCI_Malloc(sizeof(MPI_Status) * nreqs);
+        MPI_Waitall(nreqs, reqs, sts);
+        NCI_Free(sts);
 #endif
     }
-    NCI_Free(requests);
+    NCI_Free(reqs);
 #else
     MPI_Alltoall(count_my_req_per_proc, 1, MPI_COUNT,
                  count_others_req_per_proc, 1, MPI_COUNT, fh->comm);
@@ -423,7 +423,7 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
 #ifdef HAVE_MPI_LARGE_COUNT
     pair_sz = sizeof(MPI_Offset) * 2;
     alloc_sz = pair_sz + sizeof(MPI_Count);
-    others_req[0].offsets  = (MPI_Offset*) NCI_Malloc(npairs * alloc_sz);
+    others_req[0].offsets  = (MPI_Offset*) NCI_Malloc(alloc_sz * npairs);
     others_req[0].lens     = others_req[0].offsets + others_req[0].count;
     others_req[0].mem_ptrs = (MPI_Count*) (others_req[0].offsets + npairs * 2);
     for (i=1; i<nprocs; i++) {
@@ -434,7 +434,7 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
 #else
     pair_sz = sizeof(MPI_Offset) + sizeof(int);
     alloc_sz = pair_sz + sizeof(MPI_Aint);
-    others_req[0].offsets  = (MPI_Offset*) NCI_Malloc(npairs * alloc_sz);
+    others_req[0].offsets  = (MPI_Offset*) NCI_Malloc(alloc_sz * npairs);
     others_req[0].lens     = (int*) (others_req[0].offsets + others_req[0].count);
     char *ptr = (char*) others_req[0].offsets + pair_sz * npairs;
     others_req[0].mem_ptrs = (MPI_Aint*)ptr;
@@ -515,7 +515,7 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
         NCI_Free(sendCounts);
     }
     else { /* instead of using alltoall, use MPI_Issend and MPI_Irecv */
-        requests = (MPI_Request *)
+        reqs = (MPI_Request *)
             NCI_Malloc(sizeof(MPI_Request) * (nprocs + fh->hints->cb_nodes));
 
         nreqs = 0;
@@ -538,10 +538,10 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
             else {
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Irecv_c(others_req[i].offsets, others_req[i].count*pair_sz,
-                          MPI_BYTE, i, 0, fh->comm, &requests[nreqs++]);
+                          MPI_BYTE, i, 0, fh->comm, &reqs[nreqs++]);
 #else
                 MPI_Irecv(others_req[i].offsets, others_req[i].count*pair_sz,
-                          MPI_BYTE, i, 0, fh->comm, &requests[nreqs++]);
+                          MPI_BYTE, i, 0, fh->comm, &reqs[nreqs++]);
 #endif
             }
         }
@@ -568,24 +568,24 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
              */
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Issend_c(my_req[i].offsets, my_req[i].count * pair_sz, MPI_BYTE,
-                       fh->hints->ranklist[i], 0, fh->comm, &requests[nreqs++]);
+                       fh->hints->ranklist[i], 0, fh->comm, &reqs[nreqs++]);
 #else
             MPI_Issend(my_req[i].offsets, my_req[i].count * pair_sz, MPI_BYTE,
-                       fh->hints->ranklist[i], 0, fh->comm, &requests[nreqs++]);
+                       fh->hints->ranklist[i], 0, fh->comm, &reqs[nreqs++]);
 #endif
         }
 
         if (nreqs) {
 #ifdef HAVE_MPI_STATUSES_IGNORE
-            MPI_Waitall(nreqs, requests, MPI_STATUSES_IGNORE);
+            MPI_Waitall(nreqs, reqs, MPI_STATUSES_IGNORE);
 #else
-            MPI_Status *statuses = (MPI_Status *)
-                                   NCI_Malloc(nreqs * sizeof(MPI_Status));
-            MPI_Waitall(nreqs, requests, statuses);
-            NCI_Free(statuses);
+            MPI_Status *sts;
+            sts = (MPI_Status*) NCI_Malloc(sizeof(MPI_Status) * nreqs);
+            MPI_Waitall(nreqs, reqs, sts);
+            NCI_Free(sts);
 #endif
         }
-        NCI_Free(requests);
+        NCI_Free(reqs);
     }
 }
 
@@ -675,7 +675,7 @@ double curT = MPI_Wtime();
         MPI_Offset st_end[2];
         st_end[0] = st_off;
         st_end[1] = end_off;
-        st_end_all = (MPI_Offset*) NCI_Malloc(nprocs * 2 * sizeof(MPI_Offset));
+        st_end_all = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * nprocs * 2);
         MPI_Allgather(st_end, 2, MPI_OFFSET, st_end_all, 2, MPI_OFFSET, fh->comm);
 #endif
 
@@ -709,39 +709,6 @@ double curT = MPI_Wtime();
             if (st_end_all[i+1] - st_end_all[i] < striping_range)
                 large_indv_req = 0;
         }
-
-#if 0
-        for (i = 0; i < nprocs * 2; i += 2) {
-            if (st_end_all[i] > st_end_all[i + 1]) {
-                /* process rank (i/2) has no data to write */
-                continue;
-            }
-            min_st_off = st_end_all[i];
-            max_end_off = st_end_all[i + 1];
-            if (st_end_all[i+1] - st_end_all[i] < striping_range)
-                large_indv_req = 0;
-            j = i; /* j is the rank of making first non-zero request */
-            i += 2;
-            break;
-        }
-        for (; i < nprocs * 2; i += 2) {
-            if (st_end_all[i] > st_end_all[i + 1]) {
-                /* process rank (i/2) has no data to write */
-                continue;
-            }
-            if (st_end_all[i] < st_end_all[j+1]) {
-                /* start offset of process rank (i/2) is less than the end
-                 * offset of process rank (i/2-1)
-                 */
-                is_interleaved = 1;
-            }
-            min_st_off = MIN(st_end_all[i], min_st_off);
-            max_end_off = MAX(st_end_all[i + 1], max_end_off);
-            if (st_end_all[i+1] - st_end_all[i] < striping_range)
-                large_indv_req = 0;
-            j = i;
-        }
-#endif
         NCI_Free(st_end_all);
 
         if (fh->hints->romio_cb_write == PNCIO_HINT_ENABLE) {
@@ -846,8 +813,8 @@ double curT = MPI_Wtime();
     MPI_Offset **buf_idx = NULL;
 
     if (buf_view.count <= 1)
-        buf_idx = (MPI_Offset **) NCI_Malloc(fh->hints->cb_nodes *
-                                                sizeof(MPI_Offset*));
+        buf_idx = (MPI_Offset**) NCI_Malloc(sizeof(MPI_Offset*) *
+                                            fh->hints->cb_nodes);
 
     /* Calculate the portions of this rank's write requests that fall into the
      * file domains of each I/O aggregator. No inter-process communication is
@@ -1021,7 +988,7 @@ void comm_phase_alltoallw(PNCIO_File    *fh,
     rdispls = sdispls + nprocs;
 
     /* allocate send/recv derived type arrays */
-    sendTypes = (MPI_Datatype*)NCI_Malloc(sizeof(MPI_Datatype) * nprocs * 2);
+    sendTypes = (MPI_Datatype*) NCI_Malloc(sizeof(MPI_Datatype) * nprocs * 2);
     recvTypes = sendTypes + nprocs;
 
     for (i=0; i<nprocs; i++)
@@ -1124,7 +1091,7 @@ void commit_comm_phase(PNCIO_File    *fh,
 
     nreqs = fh->hints->cb_nodes;
     nreqs += (fh->is_agg) ? nprocs : 0;
-    reqs = (MPI_Request *)NCI_Malloc(sizeof(MPI_Request) * nreqs);
+    reqs = (MPI_Request *) NCI_Malloc(sizeof(MPI_Request) * nreqs);
     nreqs = 0;
 
     /* receiving part */
@@ -1223,10 +1190,10 @@ void commit_comm_phase(PNCIO_File    *fh,
 #ifdef HAVE_MPI_STATUSES_IGNORE
         MPI_Waitall(nreqs, reqs, MPI_STATUSES_IGNORE);
 #else
-        MPI_Status *statuses = (MPI_Status *)
-                               NCI_Malloc(nreqs * sizeof(MPI_Status));
-        MPI_Waitall(nreqs, reqs, statuses);
-        NCI_Free(statuses);
+        MPI_Status *sts;
+        sts = (MPI_Status*) NCI_Malloc(nreqs * sizeof(MPI_Status));
+        MPI_Waitall(nreqs, reqs, sts);
+        NCI_Free(sts);
 #endif
     }
 
@@ -1335,7 +1302,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
      *     may not be aligned with file stripe boundaries.
      * end_loc is the ending file offset of this aggregator's file domain.
      */
-    off_list = (MPI_Offset *) NCI_Malloc(ntimes * sizeof(MPI_Offset));
+    off_list = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * ntimes);
     end_loc = -1;
     for (m = 0; m < ntimes; m++)
         off_list[m] = max_end_off;
@@ -1407,18 +1374,18 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
         assert(fh->io_buf != NULL);
 
         /* divide collective buffer into nbufs sub-buffers */
-        write_buf = (char **) NCI_Malloc(nbufs * sizeof(char*));
+        write_buf = (char **) NCI_Malloc(sizeof(char*) * nbufs);
         write_buf[0] = fh->io_buf;
 
         /* Similarly, receive buffer consists of nbufs sub-buffers */
-        recv_buf = (char **) NCI_Malloc(nbufs * sizeof(char*));
+        recv_buf = (char **) NCI_Malloc(sizeof(char*) * nbufs);
         recv_buf[0] = (char *) NCI_Malloc(striping_unit);
 
         /* recv_count[j][i] is the number of off-len pairs to be received from
          * each proc i in round j
          */
-        recv_count    = (MPI_Count**) NCI_Malloc(3 * nbufs * sizeof(MPI_Count*));
-        recv_count[0] = (MPI_Count*)  NCI_Malloc(3 * nbufs * nprocs * sizeof(MPI_Count));
+        recv_count    = (MPI_Count**) NCI_Malloc(sizeof(MPI_Count*) * 3*nbufs);
+        recv_count[0] = (MPI_Count*)  NCI_Malloc(sizeof(MPI_Count) * 3*nbufs * nprocs);
 
         /* recv_size[j][i] is the receive size from proc i in round j */
         recv_size = recv_count + nbufs;
@@ -1433,7 +1400,7 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
         for (j = 1; j < nbufs; j++) {
             write_buf[j] = write_buf[j-1] + striping_unit;
             /* recv_buf[j] may be realloc in LUSTRE_W_Exchange_data() */
-            recv_buf[j]       = (char *) NCI_Malloc(striping_unit);
+            recv_buf[j]       = (char*) NCI_Malloc(striping_unit);
             recv_count[j]     = recv_count[j-1]     + nprocs;
             recv_size[j]      = recv_size[j-1]      + nprocs;
             recv_start_pos[j] = recv_start_pos[j-1] + nprocs;
@@ -1443,13 +1410,13 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
          * monotonically non-decreasing order (required by MPI-IO standard)
          * which is used when writing to the file
          */
-        srt_off_len = (off_len_list*) NCI_Malloc(nbufs * sizeof(off_len_list));
+        srt_off_len = (off_len_list*) NCI_Malloc(sizeof(off_len_list) * nbufs);
     }
 
     /* send_buf[] will be allocated in LUSTRE_W_Exchange_data(), when the use
      * buffer is not contiguous.
      */
-    send_buf = (char **) NCI_Malloc(nbufs * sizeof(char*));
+    send_buf = (char **) NCI_Malloc(sizeof(char*) * nbufs);
 
     /* this_buf_idx contains indices to the user write buffer for sending this
      * rank's write data to aggregators, one for each aggregator. It is used
@@ -1819,7 +1786,7 @@ void heap_merge(const PNCIO_Access *others_req,
     heap_struct *a, tmp;
     int i, j, heapsize, l, r, k, smallest;
 
-    a = (heap_struct *) NCI_Malloc((nprocs_recv + 1) * sizeof(heap_struct));
+    a = (heap_struct *) NCI_Malloc(sizeof(heap_struct) * (nprocs_recv + 1));
 
     j = 0;
     for (i = 0; i < nprocs; i++) {
@@ -2209,7 +2176,7 @@ void Exchange_data_send(
          * allocate send_buf[], a contiguous space, copy data to send_buf,
          * including ones to be sent to self, and then use send_buf to send.
          */
-        send_buf = (char **) NCI_Malloc(cb_nodes * sizeof(char *));
+        send_buf = (char **) NCI_Malloc(sizeof(char*) * cb_nodes);
         send_buf[0] = (char *) NCI_Malloc(send_total_size);
         for (i = 1; i < cb_nodes; i++)
             send_buf[i] = send_buf[i - 1] + send_size[i - 1];
