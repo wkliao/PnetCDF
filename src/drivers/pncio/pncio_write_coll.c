@@ -49,9 +49,9 @@ MPI_Offset PNCIO_File_write_at_all(PNCIO_File *fh,
         fh->file_view.len   = &one_len;
     }
 
-    if (fh->file_system == PNCIO_LUSTRE)
+    if (fh->fstype == PNCIO_FS_LUSTRE)
         w_len = PNCIO_Lustre_write_coll(fh, buf, buf_view);
-    else if (fh->file_system == PNCIO_UFS)
+    else if (fh->fstype == PNCIO_FS_UFS)
         w_len = PNCIO_UFS_write_coll(fh, buf, buf_view);
     else
         err = NC_EFSTYPE;
