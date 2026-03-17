@@ -157,13 +157,13 @@ void PNCIO_Calc_file_domains(MPI_Offset   min_st_off,
 }
 
 /*----< PNCIO_Calc_my_req() >------------------------------------------------*/
-/* PNCIO_Calc_my_req() calculates where the portions of this rank's
- * requests fall into aggregator's file domains. When returned, it set the
- * following variables:
- * count_my_req_procs - number of aggregators for which this rank has
- *      requests fall into their file domains
- * count_my_req_per_proc - count of requests for each aggregator, indexed
- *      by rank of the process
+/* PNCIO_Calc_my_req() calculates every portions of this rank's requests fall
+ * into each aggregator's file domain. When returned, it set the following
+ * variables:
+ * count_my_req_procs - number of aggregators for which this rank has requests
+ *      fall into their file domains
+ * count_my_req_per_proc - count of requests for each aggregator, indexed by
+ *      rank of the process
  * my_req[nprocs] - array of data structures describing the requests to be
  *      performed by each aggregator.
  * buf_idx[nprocs] - array of locations into which data in the user buffer that
@@ -180,8 +180,8 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
                        MPI_Aint          **buf_idx)               /* OUT: */
 {
     size_t memLen, alloc_sz;
-    int nprocs, aggr;
-    MPI_Count i, l;
+    int i, nprocs, aggr;
+    MPI_Count j, l;
     MPI_Offset fd_len, rem_len, curr_idx, off, *off_ptr;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Offset *len_ptr;
@@ -189,11 +189,24 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
     int *len_ptr;
 #endif
 
+#if 0
+    if (fh->file_view.size == 0) { /* zero-sized request */
+        *count_my_req_procs = 0;
+        *count_my_req_per_proc = NULL;
+        *my_req = NULL;
+        *buf_idx = NULL;
+        return;
+    }
+#endif
     MPI_Comm_size(fh->comm, &nprocs);
+
+    *count_my_req_procs = 0;
 
     *count_my_req_per_proc = NCI_Calloc(nprocs, sizeof(MPI_Count));
 
-    *buf_idx = (MPI_Aint *) NCI_Malloc(nprocs * sizeof(MPI_Aint));
+    *my_req = (PNCIO_Access*) NCI_Calloc(nprocs, sizeof(PNCIO_Access));
+
+    *buf_idx = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nprocs);
     /* buf_idx is relevant only if the user buffer is contiguous. buf_idx[i]
      * gives the index into user_buf where data received from rank i should be
      * placed. This allows receives to be done without extra buffer. This can't
@@ -204,17 +217,21 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
     for (i=0; i<nprocs; i++)
         (*buf_idx)[i] = -1;
 
+    if (fh->file_view.size == 0) /* zero-sized request */
+        return;
+
 #ifdef PNETCDF_DEBUG
-    /* fh->file_view.count has been checked and adjusted to a positive number
-     * at the beginning of PNCIO_UFS_read_coll() and PNCIO_UFS_write_coll().
+    /* For non-zero sized requests, fh->file_view.count has been checked and
+     * adjusted to a positive number at the beginning of PNCIO_UFS_read_coll()
+     * and PNCIO_UFS_write_coll().
      */
     assert(fh->file_view.count > 0);
 
     /* fh->file_view's offset-length pairs has been coalesced in ncmpio's
      * ina_put() and ina_get().
      */
-    for (i=0; i<fh->file_view.count; i++)
-        assert(fh->file_view.len[i] > 0);
+    for (j=0; j<fh->file_view.count; j++)
+        assert(fh->file_view.len[j] > 0);
 #endif
 
     /* one pass just to calculate how much space to allocate for my_req */
@@ -247,15 +264,12 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
         }
     }
 
-    /* now allocate space for my_req, offset, and len */
-    *my_req = (PNCIO_Access*) NCI_Malloc(sizeof(PNCIO_Access) * nprocs);
-
     /* combine offsets and lens into a single regions so we can make one
      * exchange instead of two later on. Over-allocate the 'offsets' array and
      * make 'lens' point to the over-allocated part
      */
     memLen = 0;
-    for (int i = 0; i < nprocs; i++)
+    for (i=0; i<nprocs; i++)
         memLen += (*count_my_req_per_proc)[i];
 
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -270,8 +284,7 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
 
     off_ptr = (*my_req)[0].offsets;
     len_ptr = (*my_req)[0].lens;
-    *count_my_req_procs = 0;
-    for (int i = 0; i < nprocs; i++) {
+    for (i=0; i<nprocs; i++) {
         if ((*count_my_req_per_proc)[i]) {
             (*my_req)[i].offsets = off_ptr;
             off_ptr += (*count_my_req_per_proc)[i];
@@ -284,9 +297,9 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
 
     /* now fill in my_req */
     curr_idx = 0;
-    for (i=0; i<fh->file_view.count; i++) {
-        off = fh->file_view.off[i];
-        fd_len = fh->file_view.len[i];
+    for (j=0; j<fh->file_view.count; j++) {
+        off = fh->file_view.off[j];
+        fd_len = fh->file_view.len[j];
 
         aggr = PNCIO_Calc_aggregator(fh, off, min_st_off, &fd_len, fd_size,
                                      fd_end);
@@ -298,7 +311,7 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
         l = (*my_req)[aggr].count;
         curr_idx += fd_len;
 
-        rem_len = fh->file_view.len[i] - fd_len;
+        rem_len = fh->file_view.len[j] - fd_len;
 
         /* store aggr, offset, and len in an array of structures, my_req. Each
          * structure contains the offsets and lengths located in that process's
