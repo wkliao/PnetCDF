@@ -842,7 +842,7 @@ first_ost_id = -1;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fh->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fh->filename); wkl++; fflush(stdout);}
+static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fh->fstype == PNCIO_FS_LUSTRE)?"PNCIO_FS_LUSTRE":"PNCIO_FS_UFS",fh->filename); wkl++; fflush(stdout);}
 #endif
 
     /* Note ncmpi_create() always creates a file with readable and writable
@@ -1055,7 +1055,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
 
 err_out:
     MPI_Bcast(stripin_info, 4, MPI_INT, 0, fh->comm);
-    if (fh->file_system == PNCIO_LUSTRE &&
+    if (fh->fstype == PNCIO_FS_LUSTRE &&
         (stripin_info[0] == -1 || stripin_info[3] == 0)) {
         fprintf(stderr, "%s line %d: failed to create Lustre file %s\n",
                 __FILE__, __LINE__, fh->filename);
@@ -1065,7 +1065,7 @@ err_out:
     fh->hints->striping_unit   = stripin_info[0];
     fh->hints->striping_factor = stripin_info[1];
     fh->hints->start_iodevice  = stripin_info[2];
-    if (fh->file_system == PNCIO_LUSTRE) {
+    if (fh->fstype == PNCIO_FS_LUSTRE) {
         fh->hints->lustre_num_osts = stripin_info[3];
         fh->hints->lustre_overstriping_ratio = stripin_info[1] / stripin_info[3];
     }
@@ -1114,7 +1114,7 @@ first_ost_id = -1;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fh->file_system == PNCIO_LUSTRE)?"PNCIO_LUSTRE":"PNCIO_UFS",fh->filename); wkl++; fflush(stdout);}
+static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fh->fstype == PNCIO_FS_LUSTRE)?"PNCIO_FS_LUSTRE":"PNCIO_FS_UFS",fh->filename); wkl++; fflush(stdout);}
 #endif
 
     old_mask = umask(022);

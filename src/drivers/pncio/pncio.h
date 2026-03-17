@@ -47,10 +47,10 @@
 
 #define PNCIO_PERM          0666   /* file creation permission mask */
 
-#define PNCIO_UFS           152    /* Unix file system */
-#define PNCIO_LUSTRE        163    /* Lustre */
-#define PNCIO_FSTYPE_MPIIO  -1     /* Use MPI-IO */
-#define PNCIO_FSTYPE_CHECK  0      /* Use PnetCDF PNCIO drivers */
+#define PNCIO_FS_UFS        152    /* Unix file system */
+#define PNCIO_FS_LUSTRE     163    /* Lustre file system */
+#define PNC_DRIVER_MPIIO    -1     /* Use MPI-IO */
+#define PNC_DRIVER_PNCIO    0      /* Use PnetCDF PNCIO drivers */
 
 #define PNCIO_LUSTRE_MAX_OSTS 256  /* Maximum number of Lustre OSTs if hint
                                     * striping_factor is not set by user.
@@ -159,7 +159,9 @@ typedef struct {
                              * metadata */
 
     const char *filename;
-    int file_system;        /* type of file system */
+
+    int fstype;             /* type of file system: PNCIO_FS_LUSTRE,
+                             * PNCIO_FS_UFS */
 
     int fd_sys;             /* system file descriptor */
     int amode;              /* O_CREAT|O_RDWR, O_RDWR, or O_RDONLY */
