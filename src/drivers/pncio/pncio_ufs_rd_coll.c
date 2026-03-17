@@ -162,9 +162,9 @@ void R_Exchange_data(PNCIO_File   *fh,
     char **recv_buf = NULL;
     size_t memLen;
     MPI_Count j;
-    MPI_Request *requests;
+    MPI_Request *reqs;
     MPI_Datatype send_type;
-    MPI_Status *statuses;
+    MPI_Status *sts;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double curT = MPI_Wtime();
@@ -189,9 +189,8 @@ void R_Exchange_data(PNCIO_File   *fh,
             nprocs_send++;
     }
 
-    requests = (MPI_Request *)
-        NCI_Malloc((nprocs_send + nprocs_recv + 1) * sizeof(MPI_Request));
-/* +1 to avoid a 0-size malloc */
+    reqs = (MPI_Request*) NCI_Malloc(sizeof(MPI_Request) *
+                                     (nprocs_send + nprocs_recv));
 
     /* Post recvs. If buf_view is contiguous, data can be directly received
      * into user buf at location given by buf_idx. Otherwise, use recv_buf to
@@ -203,10 +202,10 @@ void R_Exchange_data(PNCIO_File   *fh,
             if (recv_size[i]) {
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Irecv_c(((char *) buf) + buf_idx[i], recv_size[i],
-                            MPI_BYTE, i, 0, fh->comm, requests + j);
+                            MPI_BYTE, i, 0, fh->comm, reqs + j);
 #else
                 MPI_Irecv(((char *) buf) + buf_idx[i], recv_size[i],
-                            MPI_BYTE, i, 0, fh->comm, requests + j);
+                            MPI_BYTE, i, 0, fh->comm, reqs + j);
 #endif
                 j++;
                 buf_idx[i] += recv_size[i];
@@ -214,7 +213,7 @@ void R_Exchange_data(PNCIO_File   *fh,
         }
     } else {
         /* allocate memory for recv_buf and post receives */
-        recv_buf = (char **) NCI_Malloc(nprocs * sizeof(char *));
+        recv_buf = (char **) NCI_Malloc(sizeof(char*) * nprocs);
         recv_buf[0] = (char *) NCI_Malloc(memLen);
         for (i=1; i<nprocs; i++)
             recv_buf[i] = recv_buf[i - 1] + recv_size[i - 1];
@@ -224,10 +223,10 @@ void R_Exchange_data(PNCIO_File   *fh,
             if (recv_size[i]) {
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Irecv_c(recv_buf[i], recv_size[i], MPI_BYTE, i,
-                            0, fh->comm, requests + j);
+                            0, fh->comm, reqs + j);
 #else
                 MPI_Irecv(recv_buf[i], recv_size[i], MPI_BYTE, i,
-                            0, fh->comm, requests + j);
+                            0, fh->comm, reqs + j);
 #endif
                 j++;
             }
@@ -261,7 +260,7 @@ void R_Exchange_data(PNCIO_File   *fh,
             /* absolute displacement; use MPI_BOTTOM in send */
             MPI_Type_commit(&send_type);
             MPI_Isend(MPI_BOTTOM, 1, send_type, i, 0,
-                      fh->comm, requests + nprocs_recv + j);
+                      fh->comm, reqs + nprocs_recv + j);
             MPI_Type_free(&send_type);
             if (partial_send[i])
                 others_req[i].lens[k] = tmp;
@@ -272,16 +271,15 @@ void R_Exchange_data(PNCIO_File   *fh,
     if (fh->is_agg) fh->read_timing[4] += MPI_Wtime() - curT;
 #endif
 
-
-    /* +1 to avoid a 0-size malloc */
-    statuses = (MPI_Status *) NCI_Malloc((nprocs_send + nprocs_recv + 1) * sizeof(MPI_Status));
+    sts = (MPI_Status*) NCI_Malloc(sizeof(MPI_Status) *
+                                   (nprocs_send + nprocs_recv));
 
     /* wait on the receives */
     if (nprocs_recv) {
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         curT = MPI_Wtime();
 #endif
-        MPI_Waitall(nprocs_recv, requests, statuses);
+        MPI_Waitall(nprocs_recv, reqs, sts);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         if (fh->is_agg) fh->read_timing[3] += MPI_Wtime() - curT;
 #endif
@@ -292,10 +290,10 @@ void R_Exchange_data(PNCIO_File   *fh,
             if (recv_size[i]) {
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count count_recved;
-                MPI_Get_count_c(&statuses[j], MPI_BYTE, &count_recved);
+                MPI_Get_count_c(&sts[j], MPI_BYTE, &count_recved);
 #else
                 int count_recved;
-                MPI_Get_count(&statuses[j], MPI_BYTE, &count_recved);
+                MPI_Get_count(&sts[j], MPI_BYTE, &count_recved);
 #endif
                 *recved_bytes += count_recved;
                 j++;
@@ -314,16 +312,16 @@ void R_Exchange_data(PNCIO_File   *fh,
     curT = MPI_Wtime();
 #endif
 #ifdef HAVE_MPI_STATUSES_IGNORE
-    MPI_Waitall(nprocs_send, requests + nprocs_recv, MPI_STATUSES_IGNORE);
+    MPI_Waitall(nprocs_send, reqs + nprocs_recv, MPI_STATUSES_IGNORE);
 #else
-    MPI_Waitall(nprocs_send, requests + nprocs_recv, statuses + nprocs_recv);
+    MPI_Waitall(nprocs_send, reqs + nprocs_recv, sts + nprocs_recv);
 #endif
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     if (fh->is_agg) fh->read_timing[3] += MPI_Wtime() - curT;
 #endif
 
-    NCI_Free(statuses);
-    NCI_Free(requests);
+    NCI_Free(sts);
+    NCI_Free(reqs);
 
     if (buf_view.count > 1) {
         NCI_Free(recv_buf[0]);

@@ -206,7 +206,7 @@ int get_total_avail_osts(const char *filename)
 #endif
 
     /* Allocate memory for the members and buffer */
-    members = (char **)NCI_Malloc(max_members * sizeof(char *));
+    members = (char **)NCI_Malloc(sizeof(char*) * max_members);
     buffer = (char *)NCI_Malloc(buffer_size);
 
     /* obtain pool's info */
@@ -672,7 +672,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
      * them into ranklist[]. Note fh->hints->ranklist will be freed in
      * PNCIO_File_close().
      */
-    fh->hints->ranklist = (int *) NCI_Malloc(num_aggr * sizeof(int));
+    fh->hints->ranklist = (int *) NCI_Malloc(sizeof(int) * num_aggr);
     if (fh->hints->ranklist == NULL)
         return NC_ENOMEM;
 
@@ -744,7 +744,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
          */
         int *naggr_per_node, *idx_per_node, avg;
         idx_per_node = (int*) NCI_Calloc(fh->comm_attr.num_nodes, sizeof(int));
-        naggr_per_node = (int*) NCI_Malloc(fh->comm_attr.num_nodes * sizeof(int));
+        naggr_per_node = (int*) NCI_Malloc(sizeof(int)*fh->comm_attr.num_nodes);
         for (i = 0; i < striping_factor % fh->comm_attr.num_nodes; i++)
             naggr_per_node[i] = striping_factor / fh->comm_attr.num_nodes + 1;
         for (; i < fh->comm_attr.num_nodes; i++)
