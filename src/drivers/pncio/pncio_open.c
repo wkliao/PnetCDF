@@ -66,24 +66,25 @@ int PNCIO_File_open(MPI_Comm    comm,
     }
 #endif
 
-    assert(fh->file_system != PNCIO_FSTYPE_MPIIO);
-
     /* When hint romio_no_indep_rw hint is set to true, only aggregators open
      * the file. Note fh->is_agg will be set at the end of create/open calls
      * below.
      */
-    if (fh->file_system == PNCIO_LUSTRE) {
+    if (fh->fstype == PNCIO_FS_LUSTRE) {
         if (amode & O_CREAT)
             err = PNCIO_Lustre_create(fh);
         else
             err = PNCIO_Lustre_open(fh);
     }
-    else {
+    else if (fh->fstype == PNCIO_FS_UFS) {
         if (amode & O_CREAT)
             err = PNCIO_UFS_create(fh);
         else
             err = PNCIO_UFS_open(fh);
     }
+    else
+        err = NC_EFSTYPE;
+
     if (err != NC_NOERR) { /* fatal error */
         status = err;
         goto err_out;
