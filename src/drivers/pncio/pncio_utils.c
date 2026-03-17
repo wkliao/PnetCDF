@@ -81,7 +81,7 @@ void PNCIO_Heap_merge(PNCIO_Access *others_req,
     heap_struct *a, tmp;
     int i, j, heapsize, l, r, k, smallest;
 
-    a = (heap_struct *) NCI_Malloc((nprocs_recv + 1) * sizeof(heap_struct));
+    a = (heap_struct*) NCI_Malloc(sizeof(heap_struct) * (nprocs_recv + 1));
 
     j = 0;
     for (i = 0; i < nprocs; i++)
