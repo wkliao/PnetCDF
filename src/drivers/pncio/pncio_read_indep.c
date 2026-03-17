@@ -26,6 +26,12 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
 {
     MPI_Offset r_len;
 
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Offset one_len = (MPI_Offset)buf_view.size;
+#else
+    int one_len = (int)buf_view.size;
+#endif
+
 #ifdef PNETCDF_DEBUG
     assert(fh != NULL);
 
@@ -43,7 +49,11 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
         /* This is when calling this subroutione without set fileview first.
          * We store offset into fh->file_view.off.
          */
-        fh->file_view.off = &offset;
+        fh->file_view.off   = &offset;
+        fh->file_view.count = 1;
+        fh->file_view.size  = buf_view.size;
+        fh->file_view.len   = &one_len;
+    }
 
     if (buf_view.count <= 1 && fh->file_view.count <= 1)
         r_len = PNCIO_UFS_read_contig(fh, buf, buf_view.size, fh->file_view.off[0]);
@@ -51,10 +61,10 @@ MPI_Offset PNCIO_File_read_at(PNCIO_File *fh,
         r_len = PNCIO_UFS_read_indep(fh, buf, buf_view);
 
     /* reset fileview, as PnetCDF never reuses a fileview */
-    fh->file_view.off = NULL;
-    fh->file_view.len = NULL;
-    fh->file_view.size = 0;
+    fh->file_view.size  = 0;
     fh->file_view.count = 0;
+    fh->file_view.off   = NULL;
+    fh->file_view.len   = NULL;
 
     return r_len; /* When r_len < 0, it is an NC error code */
 }
