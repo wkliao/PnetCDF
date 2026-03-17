@@ -731,7 +731,7 @@ MPI_Offset PNCIO_UFS_write_coll(PNCIO_File *fh,
      */
     PNCIO_Access *others_req;
 
-    int i, nprocs, myrank, interleave_count=0;
+    int i, nprocs, rank, interleave_count=0;
     MPI_Aint *buf_idx = NULL;
     MPI_Count *count_my_req_per_proc, count_my_req_procs;
     MPI_Count *count_others_req_per_proc, count_others_req_procs;
@@ -743,7 +743,7 @@ double curT = MPI_Wtime();
 #endif
 
     MPI_Comm_size(fh->comm, &nprocs);
-    MPI_Comm_rank(fh->comm, &myrank);
+    MPI_Comm_rank(fh->comm, &rank);
 
     /* PnetCDF never reuses a fileview across two or more PNCIO calls. As
      * fh->file_view will be reset right after this subroutine returns, it
@@ -751,18 +751,21 @@ double curT = MPI_Wtime();
      */
 
 #ifdef PNETCDF_DEBUG
-    assert(fh->file_view.count > 0);
-    assert(fh->file_view.len != NULL);
+    if (fh->file_view.size > 0) {
+        assert(fh->file_view.count > 0);
+        assert(fh->file_view.len != NULL);
+    }
+    assert(fh->file_view.size == buf_view.size);
 #endif
 
     /* only check for interleaving if romio_cb_write isn't disabled */
     if (fh->hints->romio_cb_write != PNCIO_HINT_DISABLE) {
-        MPI_Offset *aar_range;
+        MPI_Offset *st_end_all;
 
         /* For this process's request, calculate its aggregate access region,
-         * representing a range from start_offset till end_offset. Note:
-         * end_offset points to the last byte-offset that will be accessed,
-         * e.g., if start_offset=0 and 100 bytes to be read, end_offset=99.
+         * representing a range from starting offset till end offset. Note:
+         * end offset points to the last byte-offset that will be accessed,
+         * e.g., if starting offset=0 and 100 bytes to be read, end_offset=99.
          *
          * Note file_view.off[] is always relative to beginning of file.
          *
@@ -770,28 +773,39 @@ double curT = MPI_Wtime();
          * processes in order to tell whether there is an interleaving access
          * among all.
          */
-        aar_range = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * 2 * nprocs);
-        aar_range[2*myrank]   = fh->file_view.off[0];
-        aar_range[2*myrank+1] = fh->file_view.off[fh->file_view.count-1]
-                              + fh->file_view.len[fh->file_view.count-1] - 1;
+        st_end_all = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * 2 * nprocs);
+        if (fh->file_view.size == 0) /* -1 to indicate zero-sized request */
+            st_end_all[2*rank] = st_end_all[2*rank+1] = -1;
+        else {
+            st_end_all[2*rank]   = fh->file_view.off[0];
+            st_end_all[2*rank+1] = fh->file_view.off[fh->file_view.count-1]
+                                 + fh->file_view.len[fh->file_view.count-1] - 1;
+        }
 
-        MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, aar_range, 2,
+        MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, st_end_all, 2,
                       MPI_OFFSET, fh->comm);
 
         /* Are the accesses of different processes interleaved? Below is a
          * rudimentary check for interleaving, but should suffice for the
          * moment.
          */
-        min_st_off  = aar_range[0];
-        max_end_off = aar_range[1];
-        for (i=2; i<2*nprocs; i+=2) {
-            if (aar_range[i] <  aar_range[i-1] &&
-                aar_range[i] <= aar_range[i+1])
-                interleave_count++;
-            min_st_off  = MIN(min_st_off,  aar_range[i]);
-            max_end_off = MAX(max_end_off, aar_range[i+1]);
+        for (i=0; i<2*nprocs; i+=2) { /* find the 1st non-zero sized */
+            if (st_end_all[i] >= 0) {
+                min_st_off  = st_end_all[i];
+                max_end_off = st_end_all[i+1];
+                break;
+            }
         }
-        NCI_Free(aar_range);
+        for (i+=2; i<2*nprocs; i+=2) {
+            if (st_end_all[i] == -1) /* zero-sized request */
+                continue;
+            if (st_end_all[i] <  st_end_all[i-1] &&
+                st_end_all[i] <= st_end_all[i+1])
+                interleave_count++;
+            min_st_off  = MIN(min_st_off,  st_end_all[i]);
+            max_end_off = MAX(max_end_off, st_end_all[i+1]);
+        }
+        NCI_Free(st_end_all);
     }
 
     if (fh->hints->romio_cb_write == PNCIO_HINT_DISABLE ||
