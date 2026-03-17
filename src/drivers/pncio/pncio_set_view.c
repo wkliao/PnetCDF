@@ -45,6 +45,11 @@ int PNCIO_File_set_view(PNCIO_File   *fh,
 
     /* Calculate size of fileview. Note PnetCDF has already sorted the
      * offset-length pairs into a monotonically non-decreasing order.
+     *
+     * fh->file_view.size is initialized to -1 and should be reset to -1 at the
+     * end of PNCIO_File_read/write(). This allows PNCIO to tell whether a call
+     * to PNCIO_File_set_view() is made prior to PNCIO_File_read/write(). If
+     * PNCIO_File_set_view() is called, fh->file_view.size is always >= 0.
      */
     fh->file_view.size = 0;
     for (i=0; i<npairs; i++)

@@ -648,6 +648,7 @@ double curT = MPI_Wtime();
 #ifdef PNETCDF_DEBUG
     if (fh->file_view.size > 0) {
         assert(fh->file_view.count > 0);
+        assert(fh->file_view.off != NULL);
         assert(fh->file_view.len != NULL);
     }
     assert(fh->file_view.size == buf_view.size);
@@ -669,7 +670,8 @@ double curT = MPI_Wtime();
          * among all.
          */
         st_end_all = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * 2 * nprocs);
-        if (fh->file_view.size == 0) /* -1 to indicate zero-sized request */
+        if (fh->file_view.size == 0)
+            /* set to -1 to indicate zero-sized request */
             st_end_all[2*rank] = st_end_all[2*rank+1] = -1;
         else {
             st_end_all[2*rank]   = fh->file_view.off[0];
@@ -712,7 +714,8 @@ double curT = MPI_Wtime();
 
         if (buf_view.count <= 1 && fh->file_view.count <= 1)
             /* Both buf_view and file_view are contiguous. */
-            return PNCIO_UFS_read_contig(fh, buf, buf_view.size, fh->file_view.off[0]);
+            return PNCIO_UFS_read_contig(fh, buf, buf_view.size,
+                                         fh->file_view.off[0]);
         else
             return PNCIO_UFS_read_indep(fh, buf, buf_view);
     }
@@ -774,8 +777,8 @@ double curT = MPI_Wtime();
     /* read data in sizes of no more than collective buffer size, communicate
      * to exchange read data, and fill user buf.
      */
-    r_len = Read_and_exch(fh, buf, buf_view, others_req, min_st_off,
-                          fd_size, fd_start, fd_end, buf_idx);
+    r_len = Read_and_exch(fh, buf, buf_view, others_req, min_st_off, fd_size,
+                          fd_start, fd_end, buf_idx);
     if (r_len > 0) total_r_len += r_len;
 
     /* free all memory allocated for collective I/O */

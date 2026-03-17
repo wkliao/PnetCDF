@@ -117,6 +117,9 @@ MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fh,
      */
     assert(!(buf_view.count <= 1 && fh->file_view.count <= 1));
 
+    /* zero-sized request should have already returned in PNCIO_write_indep() */
+    assert(fh->file_view.size > 0);
+
     /* fh->file_view.off and fh->file_view.len should not be NULL */
     assert(fh->file_view.count > 0);
     assert(fh->file_view.off != NULL);
@@ -131,9 +134,6 @@ MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fh,
     /* In PnetCDF, fh->file_view.size always == buf_view.size. */
     assert(fh->file_view.size == buf_view.size);
 #endif
-
-    if (fh->file_view.size == 0) /* zero-sized request */
-        return 0; /* independent I/O can return now */
 
     lock_off = fh->file_view.off[0];
     if (fh->file_view.count > 1)
