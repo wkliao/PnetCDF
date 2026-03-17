@@ -46,7 +46,7 @@
 
 static
 void Fill_send_buffer(PNCIO_File   *fh,
-                      void         *buf,
+                      const void   *buf,
                       PNCIO_View    buf_view,
                       char        **send_buf,
                       MPI_Count    *send_size,
@@ -154,7 +154,7 @@ void Fill_send_buffer(PNCIO_File   *fh,
  */
 static
 MPI_Offset W_Exchange_data(PNCIO_File   *fh,
-                           void         *buf,
+                           const void   *buf,
                            char         *write_buf,
                            PNCIO_View    buf_view,
                            MPI_Count    *send_size,
@@ -470,7 +470,7 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
  */
 static
 MPI_Offset Exch_and_write(PNCIO_File   *fh,
-                          void         *buf,
+                          const void   *buf,
                           PNCIO_View    buf_view,
                           PNCIO_Access *others_req,
                           MPI_Offset    min_st_off,
@@ -753,6 +753,7 @@ double curT = MPI_Wtime();
 #ifdef PNETCDF_DEBUG
     if (fh->file_view.size > 0) {
         assert(fh->file_view.count > 0);
+        assert(fh->file_view.off != NULL);
         assert(fh->file_view.len != NULL);
     }
     assert(fh->file_view.size == buf_view.size);
@@ -817,7 +818,8 @@ double curT = MPI_Wtime();
 
         if (buf_view.count <= 1 && fh->file_view.count <= 1)
             /* Both buf_view and file_view are contiguous */
-            w_len = PNCIO_UFS_write_contig(fh, buf, buf_view.size, fh->file_view.off[0], 0);
+            w_len = PNCIO_UFS_write_contig(fh, buf, buf_view.size,
+                                           fh->file_view.off[0], 0);
         else
             w_len = PNCIO_UFS_write_indep(fh, buf, buf_view);
 
@@ -879,9 +881,8 @@ double curT = MPI_Wtime();
 #endif
 
     /* exchange data and write in sizes of no more than coll_bufsize. */
-    /* Cast away const'ness for the below function */
-    w_len = Exch_and_write(fh, (char*) buf, buf_view, others_req, min_st_off,
-                           fd_size, fd_start, fd_end, buf_idx);
+    w_len = Exch_and_write(fh, buf, buf_view, others_req, min_st_off, fd_size,
+                           fd_start, fd_end, buf_idx);
 
     /* If this collective write is followed by an independent write, it is
      * possible to have those subsequent writes on other processes race ahead
