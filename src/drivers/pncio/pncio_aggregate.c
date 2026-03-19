@@ -11,15 +11,6 @@
 
 #include <pncio.h>
 
-/* This file contains four functions:
- *
- * PNCIO_Calc_aggregator()
- * PNCIO_Calc_file_domains()
- * PNCIO_Calc_my_req()
- * PNCIO_Free_my_req()
- * PNCIO_Calc_others_req()
- * PNCIO_Free_others_req()
- */
 
 /*----< PNCIO_Calc_aggregator() >--------------------------------------------*/
 /* This subroutine returns the rank ID of aggregator who is responsible for the
@@ -83,7 +74,9 @@ int PNCIO_Calc_aggregator(int               striping_unit,
  * responsible for carrying out the file I/O for other processes whose requests
  * fall into its file domain.
  *
- * fd_end[cb_nodes]   - end location of file domains, inclusive offsets.
+ * fd_end[cb_nodes] - end location of file domains, inclusive offsets.
+ *      The values are indexed by an aggregator number; they needs to be
+ *      mapped to actual rank IDs in the communicator later.
  * fd_size - average size (ceiling) of file domain among cb_nodes.
  */
 void PNCIO_Calc_file_domains(int          cb_nodes,
@@ -144,27 +137,27 @@ void PNCIO_Calc_file_domains(int          cb_nodes,
 }
 
 /*----< PNCIO_Calc_my_req() >------------------------------------------------*/
-/* PNCIO_Calc_my_req() calculates every portions of this rank's requests that
- * fall into each aggregator's file domain. When returned, it set the following
+/* This subroutine calculates every portions of this rank's requests that fall
+ * into each aggregator's file domain. When returned, it set the following
  * variables:
- * my_req_naggr - number of aggregators for which this rank has requests that
- *      fall into their file domains
- * count_per_aggr - count of requests for each aggregator, indexed by rank of
- *      the process
- * my_req[nprocs] - array of data structures describing the requests to be
- *      performed by each aggregator.
- * buf_idx[nprocs] - array of locations into which data in the user buffer that
- *      can be directly used to perform read/write; this is only valid when
- *      the user buffer is contiguous.
+ * my_req_naggr - number of aggregators for which this rank has a portion of
+ *      its request falling into their file domains
+ * count_per_aggr[nprocs] - number of contiguous offset-length pairs of this
+ *      rank's request that fall into the aggregators' file domains
+ * my_req[nprocs] - metadata describing this rank's requests to be carried out
+ *      by each I/O aggregator.
+ * buf_idx[nprocs] - indices into the user buffer that can be directly used to
+ *      perform file read/write. Note this is only relevant when the user
+ *      buffer is contiguous.
  */
 void PNCIO_Calc_my_req(PNCIO_File         *fh,
                        MPI_Offset          min_st_off,
                        const MPI_Offset   *fd_end,
                        MPI_Offset          fd_size,
                        MPI_Count          *my_req_naggr,   /* OUT: */
-                       MPI_Count         **count_per_aggr, /* OUT: */
-                       PNCIO_Access      **my_req,         /* OUT: */
-                       MPI_Aint          **buf_idx)        /* OUT: */
+                       MPI_Count          *count_per_aggr, /* OUT: [nprocs] */
+                       PNCIO_Access      **my_req,         /* OUT: [nprocs] */
+                       MPI_Aint          **buf_idx)        /* OUT: [nprocs] */
 {
     size_t memLen, alloc_sz;
     int i, nprocs, aggr;
@@ -180,7 +173,7 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
 
     *my_req_naggr = 0;
 
-    *count_per_aggr = NCI_Calloc(nprocs, sizeof(MPI_Count));
+    /* Contents of count_per_aggr[] should be initialized to all 0s */
 
     *my_req = (PNCIO_Access*) NCI_Calloc(nprocs, sizeof(PNCIO_Access));
 
@@ -224,7 +217,7 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
                                      fh->hints->cb_nodes, fh->hints->aggr_ranks,
                                      min_st_off, fd_size, fd_end, off,
                                      &fd_len);
-        (*count_per_aggr)[aggr]++;
+        count_per_aggr[aggr]++;
         memLen++;
 
         /* figure out how much data is remaining in the access (i.e. wasn't
@@ -241,7 +234,7 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
                                          fh->hints->aggr_ranks, min_st_off,
                                          fd_size, fd_end, off, &fd_len);
 
-            (*count_per_aggr)[aggr]++;
+            count_per_aggr[aggr]++;
             memLen++;
             rem_len -= fd_len;  /* reduce remaining length by amount from fd */
         }
@@ -260,11 +253,11 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
     off_ptr = (*my_req)[0].offsets;
     len_ptr = (*my_req)[0].lens;
     for (i=0; i<nprocs; i++) {
-        if ((*count_per_aggr)[i]) {
+        if (count_per_aggr[i]) {
             (*my_req)[i].offsets = off_ptr;
-            off_ptr += (*count_per_aggr)[i];
+            off_ptr += count_per_aggr[i];
             (*my_req)[i].lens = len_ptr;
-            len_ptr += (*count_per_aggr)[i];
+            len_ptr += count_per_aggr[i];
             (*my_req_naggr)++;
         }
         (*my_req)[i].count = 0; /* will be incremented in loop j below */
@@ -320,38 +313,26 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
     }
 }
 
-void PNCIO_Free_my_req(MPI_Count    *count_per_aggr,
-                       PNCIO_Access *my_req,
-                       MPI_Aint     *buf_idx)
-{
-    NCI_Free(count_per_aggr);
-    NCI_Free(my_req[0].offsets);
-    NCI_Free(my_req);
-    NCI_Free(buf_idx);
-}
-
 /*----< PNCIO_Calc_others_req() >--------------------------------------------*/
-/* PNCIO_Calc_others_req() is only relevant to the I/O aggregators. Based
- * on everyone's my_req, PNCIO_Calc_others_req() calculates what requests
- * of all processes fall into this aggregator's file domain. This
- * subroutine sets the following variables:
- * count_others_req_procs - number of processes whose requests fall into
- *      this aggregator's file domain (including this rank itself)
- * count_others_req_per_proc[i] - how many non-contiguous requests of rank
- *      i fall into this aggregator's file domain.
+/* This subroutine produces results that are only relevant to the I/O
+ * aggregators. Based on every rank's my_req, it calculates through MPI
+ * communication for what portions of requests from all processes that fall
+ * into this aggregator's file domain. It sets the following variable:
+ * others_req[nprocs] - metadata describing all processes' requests to be
+ *      carried out by this aggregator.
  */
-void PNCIO_Calc_others_req(PNCIO_File    *fh,
-                           MPI_Count      my_req_naggr,
-                           MPI_Count     *count_per_aggr,
-                           PNCIO_Access  *my_req,
-                           MPI_Count     *count_others_req_procs,    /* OUT: */
-                           MPI_Count    **count_others_req_per_proc, /* OUT: */
-                           PNCIO_Access **others_req)                /* OUT: */
+void
+PNCIO_Calc_others_req(PNCIO_File          *fh,
+                      MPI_Count            my_req_naggr,
+                      const MPI_Count     *count_per_aggr,/* IN: [nprocs] */
+                      const PNCIO_Access  *my_req,        /* IN: [nprocs] */
+                      PNCIO_Access       **others_req)    /* OUT: [nprocs] */
 {
     size_t alloc_sz, memLen;
     int i, j, nprocs, myrank;
     MPI_Request *reqs;
     MPI_Offset *off_ptr;
+    MPI_Count others_nprocs, *others_npairs;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Offset *len_ptr;
     MPI_Count *mem_ptr;
@@ -363,17 +344,20 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
     MPI_Comm_size(fh->comm, &nprocs);
     MPI_Comm_rank(fh->comm, &myrank);
 
-    /* first find out how much to send/recv and from/to whom */
-    *count_others_req_per_proc = NCI_Malloc(sizeof(MPI_Count) * nprocs);
+    /* First find out how much to send/recv and from/to whom.
+     * others_npairs[nprocs] is the number of contiguous offset-length pairs of
+     * each process that fall into this aggregator's file domain.
+     */
+    others_npairs = NCI_Malloc(sizeof(MPI_Count) * nprocs);
 
-    MPI_Alltoall(count_per_aggr, 1, MPI_COUNT, *count_others_req_per_proc,
+    MPI_Alltoall(count_per_aggr, 1, MPI_COUNT, others_npairs,
                                  1, MPI_COUNT, fh->comm);
 
     *others_req = (PNCIO_Access*) NCI_Malloc(sizeof(PNCIO_Access) * nprocs);
 
     memLen = 0;
     for (i=0; i<nprocs; i++)
-        memLen += (*count_others_req_per_proc)[i];
+        memLen += others_npairs[i];
 
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(MPI_Offset) * 2 + sizeof(MPI_Count);
@@ -390,24 +374,27 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
     len_ptr = (*others_req)[0].lens;
     mem_ptr = (*others_req)[0].mem_ptrs;
 
-    *count_others_req_procs = 0;
+    /* others_nprocs is number of processes whose portions of requests fall
+     * into this aggregator's file domain (including self rank)
+     */
+    others_nprocs = 0;
     for (i=0; i<nprocs; i++) {
-        if ((*count_others_req_per_proc)[i]) {
-            (*others_req)[i].count = (*count_others_req_per_proc)[i];
+        if (others_npairs[i]) {
+            (*others_req)[i].count = others_npairs[i];
             (*others_req)[i].offsets = off_ptr;
-            off_ptr += (*count_others_req_per_proc)[i];
+            off_ptr += others_npairs[i];
             (*others_req)[i].lens = len_ptr;
-            len_ptr += (*count_others_req_per_proc)[i];
+            len_ptr += others_npairs[i];
             (*others_req)[i].mem_ptrs = mem_ptr;
-            mem_ptr += (*count_others_req_per_proc)[i];
-            (*count_others_req_procs)++;
+            mem_ptr += others_npairs[i];
+            others_nprocs++;
         } else
             (*others_req)[i].count = 0;
     }
 
     /* now send the calculated offsets and lengths to respective processes */
     reqs = (MPI_Request*) NCI_Malloc(sizeof(MPI_Request) *
-           (my_req_naggr + *count_others_req_procs) * 2);
+           (my_req_naggr + others_nprocs) * 2);
 
     j = 0;
     for (i=0; i<nprocs; i++) {
@@ -472,14 +459,7 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
 #endif
     }
 
+    NCI_Free(others_npairs);
     NCI_Free(reqs);
-}
-
-void PNCIO_Free_others_req(MPI_Count    *count_others_req_per_proc,
-                           PNCIO_Access *others_req)
-{
-    NCI_Free(count_others_req_per_proc);
-    NCI_Free(others_req[0].offsets);
-    NCI_Free(others_req);
 }
 

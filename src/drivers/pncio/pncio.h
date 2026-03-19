@@ -266,26 +266,15 @@ void PNCIO_Calc_file_domains(int cb_nodes, int striping_unit,
                 MPI_Offset **fd_end, MPI_Offset *fd_size);
 
 extern
-void PNCIO_Calc_my_req(PNCIO_File *fh, MPI_Offset min_st_offset,
+void PNCIO_Calc_my_req(PNCIO_File *fh, MPI_Offset min_st_off,
                 const MPI_Offset *fd_end, MPI_Offset fd_size,
-                MPI_Count *count_my_req_procs_ptr,
-                MPI_Count **count_my_req_per_proc_ptr,
-                PNCIO_Access **my_req_ptr, MPI_Aint **buf_idx_ptr);
+                MPI_Count *my_req_naggr, MPI_Count *count_per_aggr,
+                PNCIO_Access **my_req, MPI_Aint **buf_idx);
 
 extern
-void PNCIO_Calc_others_req(PNCIO_File *fh, MPI_Count count_my_req_procs,
-                MPI_Count *count_my_req_per_proc, PNCIO_Access *my_req,
-                MPI_Count *count_others_req_procs_ptr,
-                MPI_Count **count_others_req_per_proc_ptr,
-                PNCIO_Access **others_req_ptr);
-
-extern
-void PNCIO_Free_my_req(MPI_Count *count_my_req_per_proc,
-                PNCIO_Access *my_req, MPI_Aint *buf_idx);
-
-extern
-void PNCIO_Free_others_req(MPI_Count *count_others_req_per_proc,
-                PNCIO_Access *others_req);
+void PNCIO_Calc_others_req(PNCIO_File *fh, MPI_Count my_req_naggr,
+                const MPI_Count *count_per_aggr, const PNCIO_Access *my_req,
+                PNCIO_Access **others_req);
 
 extern
 int PNCIO_Calc_aggregator(int striping_unit, int cb_nodes,
