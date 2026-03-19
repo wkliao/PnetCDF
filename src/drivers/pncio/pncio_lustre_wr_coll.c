@@ -11,30 +11,6 @@
 
 static int use_alltoallw;
 
-#ifdef HAVE_MPI_LARGE_COUNT
-#define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
-    int _k;                                                      \
-    char *_ptr = (inbuf);                                        \
-    MPI_Count   *mem_ptrs = others_req[x].mem_ptrs + (start);    \
-    MPI_Offset *mem_lens = others_req[x].lens     + (start);    \
-    for (_k=0; _k<count; _k++) {                                 \
-        memcpy((outbuf) + mem_ptrs[_k], _ptr, mem_lens[_k]);     \
-        _ptr += mem_lens[_k];                                    \
-    }                                                            \
-}
-#else
-#define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
-    int _k;                                                      \
-    char *_ptr = (inbuf);                                        \
-    MPI_Aint *mem_ptrs = others_req[x].mem_ptrs + (start);       \
-    int      *mem_lens = others_req[x].lens     + (start);       \
-    for (_k=0; _k<count; _k++) {                                 \
-        memcpy((outbuf) + mem_ptrs[_k], _ptr, mem_lens[_k]);     \
-        _ptr += mem_lens[_k];                                    \
-    }                                                            \
-}
-#endif
-
 typedef struct {
     MPI_Count    num; /* number of elements in the above off-len list */
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -57,58 +33,14 @@ typedef struct {
 #endif
 } disp_len_list;
 
-/* prototypes of functions used for collective writes only. */
-static MPI_Offset LUSTRE_Exch_and_write(PNCIO_File *fh,
-                                        const void *buf,
-                                        PNCIO_View  buf_view,
-                                        PNCIO_Access *others_req,
-                                        PNCIO_Access *my_req,
-                                        MPI_Offset min_st_off,
-                                        MPI_Offset max_end_off,
-                                        MPI_Offset **buf_idx);
-
-static void LUSTRE_Fill_send_buffer(PNCIO_File *fh, const void *buf,
-                                    PNCIO_View *buf_view,
-                                    char **send_buf,
-                                    size_t send_total_size,
-                                    const MPI_Count *send_size,
-                                    char **self_buf,
-                                    disp_len_list *send_list);
-
-static int Exchange_data_recv(PNCIO_File           *fh,
-                              const void           *buf,
-                                    char           *write_buf,
-                                    char          **recv_buf,
-                              const PNCIO_View     *buf_view,
-                              const MPI_Count      *recv_size,
-                                    MPI_Offset      range_off,
-                                    MPI_Count       range_size,
-                              const MPI_Count      *recv_count,
-                              const MPI_Count      *start_pos,
-                              const PNCIO_Access   *others_req,
-                              const MPI_Offset     *buf_idx,
-                                    off_len_list   *srt_off_len,
-                                    disp_len_list  *recv_list);
-
-static void Exchange_data_send(      PNCIO_File     *fh,
-                               const void           *buf,
-                                     char           *write_buf,
-                                     char          **send_buf_ptr,
-                                     PNCIO_View     *buf_view,
-                               const MPI_Count      *send_size,
-                                     MPI_Count       self_count,
-                                     MPI_Count       start_pos,
-                               const PNCIO_Access   *others_req,
-                               const MPI_Offset     *buf_idx,
-                                     disp_len_list  *send_list);
-
-static
-int LUSTRE_Calc_aggregator(PNCIO_File *fh,
-                           MPI_Offset off,
+/*----< LUSTRE_Calc_aggregator() >-------------------------------------------*/
+static int
+LUSTRE_Calc_aggregator(PNCIO_File *fh,
+                       MPI_Offset off,
 #ifdef HAVE_MPI_LARGE_COUNT
-                           MPI_Offset *len
+                       MPI_Offset *len
 #else
-                           int        *len
+                       int        *len
 #endif
 )
 {
@@ -126,6 +58,691 @@ int LUSTRE_Calc_aggregator(PNCIO_File *fh,
     return (stripe_id % fh->hints->cb_nodes);
 }
 
+#define CACHE_REQ(list, nelems, buf) {   \
+    MPI_Aint buf_addr;                   \
+    list.len[list.count] = nelems;       \
+    MPI_Get_address(buf, &buf_addr);     \
+    list.disp[list.count] = buf_addr;    \
+    list.count++;                        \
+}
+
+/*----< LUSTRE_Fill_send_buffer() >------------------------------------------*/
+static void
+LUSTRE_Fill_send_buffer(PNCIO_File       *fh,
+                        const void       *buf,
+                        PNCIO_View       *buf_view, /* IN/OUT */
+                        char            **send_buf,
+                        size_t            send_total_size,
+                        const MPI_Count  *send_size,
+                        char            **self_buf,
+                        disp_len_list    *send_list)
+{
+    /* this function is only called if buftype is not contiguous */
+    int q, first_q=-1, isUserBuf=0;
+    MPI_Count send_size_rem=0, size, copy_size=0;
+    char *user_buf_ptr=NULL, *send_buf_ptr=NULL, *same_buf_ptr=NULL;
+    MPI_Offset off, user_buf_idx;
+#ifdef HAVE_MPI_LARGE_COUNT
+    MPI_Offset len, rem_len;
+#else
+    int len, rem_len;
+#endif
+
+#ifdef WKL_DEBUG
+int num_memcpy=0;
+#endif
+
+    *self_buf = NULL;
+
+    /* user_buf_idx is to the index offset to buf, indicating the starting
+     * location to be copied.
+     *
+     * buf_view stores the offset-length pairs of the flattened user buffer
+     *     data type. Note this stores offset-length pairs of the data type,
+     *     and write amount can be a multiple of the data type.
+     * buf_view.count: the number of pairs
+     * buf_view.off[i]: the ith pair's byte offset to buf. Note the
+     *     flattened offsets of user buffer type may not be sorted in an
+     *     increasing order, unlike fileview which is required by MPI to be
+     *     sorted in a monotonically non-decreasing order.
+     * buf_view.len[i]: length of the ith pair
+     * buf_view.idx: index to the offset-length pair currently being
+     *     processed, incremented each round.
+     * buf_view.rem: amount of data in the pair that has not been copied
+     *     over, changed each round.
+     */
+    user_buf_idx = buf_view->off[buf_view->idx]
+                 + buf_view->len[buf_view->idx]
+                 - buf_view->rem;
+                 /* in case data left to be copied from previous round */
+
+    /* fh->file_view.count has been checked and adjusted to a possitive number
+     * at the beginning of PNCIO_Lustre_write_coll().
+     */
+    assert(fh->file_view.count > 0);
+
+    /* fh->file_view.count: the number of noncontiguous file segments this
+     *     rank writes to. Each segment i is described by fh->file_view.offs[i]
+     *     and fh->file_view.len[i].
+     * fh->file_view.idx: the index to the fh->file_view.offs[],
+     *     fh->file_view.len[] that have been processed in the previous round.
+     * The while loop below packs write data into send buffers, send_buf[],
+     * based on this rank's off-len pairs in its file view,
+     */
+    off     = fh->file_view.off[fh->file_view.idx]
+            + fh->file_view.len[fh->file_view.idx]
+            - fh->file_view.rem;
+    rem_len = fh->file_view.rem;
+
+// int rank; MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    while (send_total_size > 0) {
+        /* this off-len request may span to more than one I/O aggregator */
+// if (rank == 0) printf("rank 0 %s at %d send_total_size=%zd rem_len=%lld\n",__func__,__LINE__,send_total_size,rem_len);
+        while (rem_len != 0) {
+            len = rem_len;
+            q = LUSTRE_Calc_aggregator(fh, off, &len);
+            /* NOTE: len will be modified by LUSTRE_Calc_aggregator() to be no
+             * more than a file stripe unit size that aggregator "q" is
+             * responsible for. Note q is not the MPI rank ID, It is the array
+             * index to fh->hints->aggr_ranks[].
+             *
+             * Now len is the amount of data in ith off-len pair that should be
+             * sent to aggregator q. Note q can also be self. In this case,
+             * data is also packed into send_buf[q] or pointed to a segment of
+             * buf when the data to be packed is contiguous. send_buf[q] will
+             * later be copied to write buffer in MEMCPY_UNPACK, instead of
+             * calling MPI_Issend to send.
+             *
+             * send_size[q]: data amount of this rank needs to send to
+             * aggregator q in this round.
+             *
+             * len and send_size[q] are all always <= striping_unit
+             */
+
+// if (rank == 0) printf("rank 0 %s at %d rem_len=%lld len=%lld first_q=%d q=%d idx=%lld\n",__func__,__LINE__,rem_len,len,first_q,q,buf_view->idx);
+
+            if (first_q != q) {
+                assert(send_size_rem == 0);
+                first_q = q;
+                isUserBuf = 1;
+                send_size_rem = send_size[q];
+                copy_size = 0;
+                same_buf_ptr = (char*)buf + user_buf_idx; /* no increment */
+                user_buf_ptr = same_buf_ptr; /* increment after each memcpy */
+                if (send_buf != NULL)
+                    send_buf_ptr = send_buf[q]; /* increment after each memcpy */
+            }
+
+            /* copy len amount of data from buf to send_buf[q] */
+            size = len;
+
+            while (size) {
+                MPI_Count size_in_buf = MIN(size, buf_view->rem);
+                copy_size += size_in_buf;
+                user_buf_idx += size_in_buf;
+                send_size_rem -= size_in_buf;
+                buf_view->rem -= size_in_buf;
+// if (rank == 0) printf("rank 0 %s at %d size=%lld size_in_buf=%lld copy_size=%lld rem=%ld\n",__func__,__LINE__, size, size_in_buf, copy_size,buf_view->rem);
+                if (buf_view->rem == 0) { /* move on to next off-len pair */
+                    if (buf_view->count > 1) {
+                        /* user buffer type is not contiguous */
+                        if (send_size_rem) {
+                            /* after this copy send_buf[q] is still not full */
+                            isUserBuf = 0;
+// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 1 size=%lld user_buf_ptr=%p\n",copy_size,user_buf_ptr);
+                            memcpy(send_buf_ptr, user_buf_ptr, copy_size);
+user_buf_ptr += copy_size;
+                            send_buf_ptr += copy_size;
+                            copy_size = 0;
+                        } else if (isUserBuf == 0) {
+                            /* send_buf[q] is full and not using user buf,
+                             * copy the remaining delayed data */
+// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 2 size=%lld\n",copy_size);
+                            memcpy(send_buf_ptr, user_buf_ptr, copy_size);
+user_buf_ptr += copy_size;
+                        }
+#ifdef WKL_DEBUG
+num_memcpy++;
+#endif
+                    }
+                    /* update buf_view->idx, buf_view->rem,
+                     * and user_buf_idx
+                     */
+                        buf_view->idx++;
+assert(buf_view->idx <= buf_view->count);
+
+if (buf_view->idx < buf_view->count) {
+                    user_buf_idx = buf_view->off[buf_view->idx];
+                    buf_view->rem = buf_view->len[buf_view->idx];
+                    user_buf_ptr = (char*) buf + user_buf_idx;
+}
+else assert(size - size_in_buf == 0);
+
+                }
+                else if (send_size_rem == 0 && isUserBuf == 0) {
+                    /* buf_view->rem > 0, send_buf[q] is full, and not using
+                     * user buf to send, copy the remaining delayed data
+                     */
+// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 3 size=%lld\n",copy_size);
+                    memcpy(send_buf_ptr, user_buf_ptr, copy_size);
+#ifdef WKL_DEBUG
+num_memcpy++;
+#endif
+                    user_buf_ptr += copy_size;
+                }
+                size -= size_in_buf;
+            }
+
+            if (send_size_rem == 0) { /* data to q is fully packed */
+                first_q = -1;
+
+                if (q != fh->my_cb_nodes_index) { /* send only if not self rank */
+                    if (isUserBuf)
+                        CACHE_REQ(send_list[q], send_size[q], same_buf_ptr)
+                    else
+                        CACHE_REQ(send_list[q], send_size[q], send_buf[q])
+                }
+                else if (isUserBuf) {
+                    /* send buffer is also (part of) user's buf. Return the
+                     * buffer pointer, so the self send data can be directly
+                     * unpack from user buf to write buffer.
+                     */
+                    *self_buf = same_buf_ptr;
+                }
+            }
+            /* len is the amount of data copied */
+            off += len;
+            rem_len -= len;
+            fh->file_view.rem -= len;
+            send_total_size -= len;
+            if (send_total_size == 0) break;
+        }
+        if (send_total_size == 0) break;
+
+        /* done with this off-len pair, move on to the next */
+        if (fh->file_view.rem == 0) {
+            fh->file_view.idx++;
+            fh->file_view.rem = fh->file_view.len[fh->file_view.idx];
+        }
+        off = fh->file_view.off[fh->file_view.idx];
+        rem_len = fh->file_view.rem;
+    }
+
+#ifdef WKL_DEBUG
+if (num_memcpy> 0) printf("---- fh->file_view.count=%lld fh->file_view.idx=%lld buf_view->count=%lld num_memcpy=%d\n",fh->file_view.count,fh->file_view.idx,buf_view->count,num_memcpy);
+#endif
+}
+
+#ifdef HAVE_MPI_LARGE_COUNT
+#define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
+    int _k;                                                      \
+    char *_ptr = (inbuf);                                        \
+    MPI_Count  *mem_ptrs = others_req[x].mem_ptrs + (start);     \
+    MPI_Offset *mem_lens = others_req[x].lens     + (start);     \
+    for (_k=0; _k<count; _k++) {                                 \
+        memcpy((outbuf) + mem_ptrs[_k], _ptr, mem_lens[_k]);     \
+        _ptr += mem_lens[_k];                                    \
+    }                                                            \
+}
+#else
+#define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
+    int _k;                                                      \
+    char *_ptr = (inbuf);                                        \
+    MPI_Aint *mem_ptrs = others_req[x].mem_ptrs + (start);       \
+    int      *mem_lens = others_req[x].lens     + (start);       \
+    for (_k=0; _k<count; _k++) {                                 \
+        memcpy((outbuf) + mem_ptrs[_k], _ptr, mem_lens[_k]);     \
+        _ptr += mem_lens[_k];                                    \
+    }                                                            \
+}
+#endif
+
+/*----< Exchange_data_send() >-----------------------------------------------*/
+static void
+Exchange_data_send(
+          PNCIO_File     *fh,
+    const void           *buf,          /* user buffer */
+          char           *write_buf,    /* OUT: internal buffer used to write
+                                         * to file, only matter when send to
+                                         * self */
+          char          **send_buf_ptr, /* OUT: [cb_nodes] point to internal
+                                         * send buffer */
+          PNCIO_View     *buf_view,     /* IN/OUT: flattened buffer
+                                         * offset-length pairs */
+    const MPI_Count      *send_size,    /* [cb_nodes] send_size[i] is amount of
+                                         * this rank sent to aggregator i */
+          MPI_Count       self_count,   /* No. offset-length pairs sent to self
+                                         * rank */
+          MPI_Count       start_pos,    /* others_req[myrank].curr */
+    const PNCIO_Access   *others_req,   /* [nprocs] only used when send to self,
+                                         * others_req[myrank] */
+    const MPI_Offset     *buf_idx,      /* [cb_nodes] indices to user buffer
+                                         * for sending this rank's write data
+                                         * to aggregator i */
+          disp_len_list  *send_list)    /* OUT: displacement-length pairs of
+                                         * send buffer */
+{
+    int i, myrank, cb_nodes;
+
+    *send_buf_ptr = NULL;
+
+    MPI_Comm_rank(fh->comm, &myrank);
+
+    cb_nodes = fh->hints->cb_nodes;
+// if (myrank==0) printf("%s at %d: cb_nodes=%d\n",__func__,__LINE__, cb_nodes);
+    if (buf_view->count <= 1) {
+        /* If buftype is contiguous, data can be directly sent from user buf
+         * at location given by buf_idx.
+         */
+        for (i = 0; i < cb_nodes; i++) {
+// if (myrank==0 && send_size[i]) printf("%s at %d: cb_nodes=%d send_size[%d]=%lld my_cb_nodes_index=%d\n",__func__,__LINE__, cb_nodes,i,send_size[i],fh->my_cb_nodes_index);
+            if (send_size[i] && i != fh->my_cb_nodes_index)
+                CACHE_REQ(send_list[i], send_size[i], (char*)buf + buf_idx[i]);
+        }
+    } else {
+        char **send_buf, *self_buf;
+
+        /* total send size of this round */
+        size_t send_total_size = 0;
+        for (i = 0; i < cb_nodes; i++)
+            send_total_size += send_size[i];
+
+        if (send_total_size == 0) return;
+
+        /* The user buffer to be used to send in this round is not contiguous,
+         * allocate send_buf[], a contiguous space, copy data to send_buf,
+         * including ones to be sent to self, and then use send_buf to send.
+         */
+        send_buf = (char **) NCI_Malloc(sizeof(char*) * cb_nodes);
+        send_buf[0] = (char *) NCI_Malloc(send_total_size);
+        for (i = 1; i < cb_nodes; i++)
+            send_buf[i] = send_buf[i - 1] + send_size[i - 1];
+
+        LUSTRE_Fill_send_buffer(fh, buf, buf_view, send_buf,
+                                send_total_size, send_size, &self_buf,
+                                send_list);
+        /* Send buffers must not be touched before MPI_Waitall() is completed,
+         * and thus send_buf will be freed in LUSTRE_Exch_and_write()
+         */
+
+        if (fh->my_cb_nodes_index >= 0 && send_size[fh->my_cb_nodes_index] > 0) {
+            /* contents of user buf that must be sent to self has been copied
+             * into send_buf[fh->my_cb_nodes_index]. Now unpack it into
+             * write_buf.
+             */
+            if (self_buf == NULL) self_buf = send_buf[fh->my_cb_nodes_index];
+            MEMCPY_UNPACK(myrank, self_buf, start_pos, self_count, write_buf);
+        }
+
+        *send_buf_ptr = send_buf[0];
+        NCI_Free(send_buf);
+    }
+}
+
+/*----< heap_merge() >-------------------------------------------------------*/
+/* This heap-merge sort also coalesces sorted offset-length pairs whenever
+ * possible.
+ *
+ * Heapify(a, i, heapsize); Algorithm from Cormen et al. pg. 143 modified for a
+ * heap with smallest element at root. The recursion has been removed so that
+ * there are no function calls. Function calls are too expensive.
+ */
+static void
+heap_merge(const PNCIO_Access *others_req,
+           const MPI_Count    *count,
+#ifdef HAVE_MPI_LARGE_COUNT
+           MPI_Count          *srt_off,
+           MPI_Count          *srt_len,
+#else
+           MPI_Offset         *srt_off,
+           int                *srt_len,
+#endif
+           const MPI_Count    *start_pos,
+           int                 nprocs,
+           int                 nprocs_recv,
+           MPI_Count          *total_elements)
+{
+    typedef struct {
+        MPI_Offset *off_list;
+#ifdef HAVE_MPI_LARGE_COUNT
+        MPI_Offset *len_list;
+#else
+        int *len_list;
+#endif
+        MPI_Count nelem;
+    } heap_struct;
+
+    heap_struct *a, tmp;
+    int i, j, heapsize, l, r, k, smallest;
+
+    a = (heap_struct *) NCI_Malloc(sizeof(heap_struct) * (nprocs_recv + 1));
+
+    j = 0;
+    for (i = 0; i < nprocs; i++) {
+        if (count[i]) {
+            a[j].off_list = others_req[i].offsets + start_pos[i];
+            a[j].len_list = others_req[i].lens + start_pos[i];
+            a[j].nelem = count[i];
+            j++;
+        }
+    }
+
+#define SWAP(x, y, tmp) { tmp = x ; x = y ; y = tmp ; }
+
+    heapsize = nprocs_recv;
+
+    /* Build a heap out of the first element from each list, with the smallest
+     * element of the heap at the root. The first for loop is to find and move
+     * the smallest a[*].off_list[0] to a[0].
+     */
+    for (i = heapsize / 2 - 1; i >= 0; i--) {
+        k = i;
+        for (;;) {
+            r = 2 * (k + 1);
+            l = r - 1;
+            if ((l < heapsize) && (*(a[l].off_list) < *(a[k].off_list)))
+                smallest = l;
+            else
+                smallest = k;
+
+            if ((r < heapsize) && (*(a[r].off_list) < *(a[smallest].off_list)))
+                smallest = r;
+
+            if (smallest != k) {
+                SWAP(a[k], a[smallest], tmp);
+                k = smallest;
+            } else
+                break;
+        }
+    }
+
+    /* The heap keeps the smallest element in its first element, i.e.
+     * a[0].off_list[0].
+     */
+    j = 0;
+    for (i = 0; i < *total_elements; i++) {
+        /* extract smallest element from heap, i.e. the root */
+        if (j == 0 || srt_off[j - 1] + srt_len[j - 1] < *(a[0].off_list)) {
+            srt_off[j] = *(a[0].off_list);
+            srt_len[j] = *(a[0].len_list);
+            j++;
+        } else {
+            /* this offset-length pair can be coalesced into the previous one */
+            srt_len[j - 1] = *(a[0].off_list) + *(a[0].len_list) - srt_off[j - 1];
+        }
+        (a[0].nelem)--;
+
+        if (a[0].nelem) {
+            (a[0].off_list)++;
+            (a[0].len_list)++;
+        } else {
+            a[0] = a[heapsize - 1];
+            heapsize--;
+        }
+
+        /* Heapify(a, 0, heapsize); */
+        k = 0;
+        for (;;) {
+            r = 2 * (k + 1);
+            l = r - 1;
+            if ((l < heapsize) && (*(a[l].off_list) < *(a[k].off_list)))
+                smallest = l;
+            else
+                smallest = k;
+
+            if ((r < heapsize) && (*(a[r].off_list) < *(a[smallest].off_list)))
+                smallest = r;
+
+            if (smallest != k) {
+                SWAP(a[k], a[smallest], tmp);
+                k = smallest;
+            } else
+                break;
+        }
+    }
+    NCI_Free(a);
+    *total_elements = j;
+}
+
+/*----< Exchange_data_recv() >-----------------------------------------------*/
+static int
+Exchange_data_recv(
+          PNCIO_File     *fh,
+    const void           *buf,         /* user buffer */
+          char           *write_buf,   /* OUT: internal buffer used to write
+                                        * to file */
+          char          **recv_buf,    /* OUT: [nbufs] internal buffer used to
+                                        * receive from other processes */
+    const PNCIO_View     *buf_view,    /* IN: flattened buffer
+                                        * offset-length pairs */
+    const MPI_Count      *recv_size,   /* [nprocs] recv_size[i] is amount of
+                                        * this aggregator recv from rank i */
+          MPI_Offset      range_off,   /* starting file offset of this
+                                        * aggregator's write region */
+          MPI_Count       range_size,  /* amount of this aggregator's write
+                                        * region */
+    const MPI_Count      *recv_count,  /* [nprocs] recv_count[i] is the number
+                                        * of offset-length pairs received from
+                                        * rank i */
+    const MPI_Count      *start_pos,   /* [nprocs] start_pos[i] starting value
+                                        * of others_req[i].curr */
+    const PNCIO_Access   *others_req,  /* [nprocs] others_req[i] is rank i's
+                                        * write requests fall into this
+                                        * aggregator's file domain */
+    const MPI_Offset     *buf_idx,      /* [cb_nodes] indices to user buffer
+                                        * offsets for sending this rank's
+                                        * write data to aggregator i */
+          off_len_list   *srt_off_len, /* OUT: list of write offset-length
+                                        * pairs of this aggregator */
+          disp_len_list  *recv_list)   /* OUT: displacement-length pairs of
+                                        * recv buffer */
+{
+    char *buf_ptr, *contig_buf;
+    size_t alloc_sz;
+    int i, j, nprocs, myrank, nprocs_recv, hole, build_srt_off_len;
+    MPI_Count sum_recv;
+
+    MPI_Comm_size(fh->comm, &nprocs);
+    MPI_Comm_rank(fh->comm, &myrank);
+
+    /* srt_off_len contains the file offset-length pairs to be written by this
+     * aggregator at this round. The file region starts from range_off with
+     * size of range_size.
+     */
+
+    srt_off_len->num = 0;
+    srt_off_len->off = NULL;
+    sum_recv = 0;
+    nprocs_recv = 0;
+
+    /* calculate receive metadata */
+    j = -1;
+    for (i = 0; i < nprocs; i++) {
+        srt_off_len->num += recv_count[i];
+        if (j == -1 && recv_count[i] > 0) j = i;
+        sum_recv += recv_size[i];
+        if (recv_size[i])
+            nprocs_recv++;
+    }
+
+    if (nprocs_recv == 0) return NC_NOERR;
+
+// MPI_Count numx = srt_off_len->num; printf("nprocs_recv=%d PNCIO_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld PNCIO_DS_WR_NPAIRS_LB=%d\n",nprocs_recv,PNCIO_DS_WR_NAGGRS_LB,srt_off_len->num,PNCIO_DS_WR_NPAIRS_LB);
+
+    /* determine whether checking holes is necessary */
+    if (srt_off_len->num == 0) {
+        /* this process has nothing to receive and hence no hole */
+        build_srt_off_len = 0;
+        hole = 0;
+    } else if (srt_off_len->num == 1) {
+        build_srt_off_len = 0;
+        hole = 0;
+#ifdef HAVE_MPI_LARGE_COUNT
+        alloc_sz = sizeof(MPI_Offset) + sizeof(MPI_Count);
+        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
+        srt_off_len->len = (MPI_Count*) (srt_off_len->off + 1);
+#else
+        alloc_sz = sizeof(MPI_Offset) + sizeof(int);
+        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
+        srt_off_len->len = (int*) (srt_off_len->off + 1);
+#endif
+        srt_off_len->off[0] = others_req[j].offsets[start_pos[j]];
+        srt_off_len->len[0] = others_req[j].lens[start_pos[j]];
+    } else if (fh->hints->romio_ds_write == PNCIO_HINT_ENABLE) {
+        /* skip building of srt_off_len and proceed to read-modify-write */
+        build_srt_off_len = 0;
+        /* assuming there are holes */
+        hole = 1;
+    } else if (fh->hints->romio_ds_write == PNCIO_HINT_AUTO) {
+        if (DO_HEAP_MERGE(nprocs_recv, srt_off_len->num)) {
+            /* When the number of sorted offset-length lists or the total
+             * number of offset-length pairs are too large, the heap-merge sort
+             * below for building srt_off_len can become very expensive. Such
+             * sorting is also used to check holes to determine whether
+             * read-modify-write is necessary.
+             */
+            build_srt_off_len = 0;
+            /* assuming there are holes */
+            hole = 1;
+        }
+        else /* heap-merge is less expensive, proceed to build srt_off_len */
+            build_srt_off_len = 1;
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+        if (build_srt_off_len) {
+            fh->write_counter[1]++;
+            fh->write_counter[2] = MAX(fh->write_counter[2], srt_off_len->num);
+            fh->write_counter[3] = MAX(fh->write_counter[3], nprocs_recv);
+        } else {
+            fh->write_counter[4]++;
+            fh->write_counter[5] = MAX(fh->write_counter[5], srt_off_len->num);
+            fh->write_counter[6] = MAX(fh->write_counter[6], nprocs_recv);
+        }
+#endif
+    } else { /* if (fh->hints->romio_ds_write == PNCIO_HINT_DISABLE) */
+        /* User explicitly disable data sieving to skip read-modify-write.
+         * Whether or not there is a hole is not important. However,
+         * srt_off_len must be constructed to merge all others_req[] into a
+         * single sorted list. This step is necessary because after this
+         * subroutine returns, write data from all non-aggregators will be
+         * packed into the write_buf, with a possibility of overlaps, and
+         * as srt_off_len stores the coalesced offset-length pairs of
+         * individual non-contiguous write requests, it is used to write them
+         * to the file.
+         */
+        build_srt_off_len = 1;
+    }
+
+    if (build_srt_off_len) {
+        /* merge all the offset-length pairs from others_req[] (already sorted
+         * individually) into a single list of offset-length pairs.
+         */
+#ifdef HAVE_MPI_LARGE_COUNT
+        alloc_sz = sizeof(MPI_Offset) + sizeof(MPI_Count);
+        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz * srt_off_len->num);
+        srt_off_len->len = (MPI_Count*) (srt_off_len->off + srt_off_len->num);
+#else
+        alloc_sz = sizeof(MPI_Offset) + sizeof(int);
+        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz * srt_off_len->num);
+        srt_off_len->len = (int*) (srt_off_len->off + srt_off_len->num);
+#endif
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+        double curT = MPI_Wtime();
+#endif
+        heap_merge(others_req, recv_count, srt_off_len->off, srt_off_len->len,
+                   start_pos, nprocs, nprocs_recv, &srt_off_len->num);
+
+        /* Now, (srt_off_len->off and srt_off_len->len) are in an increasing
+         * order of file offsets. In addition, they are coalesced.
+         */
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+        fh->write_timing[5] += MPI_Wtime() - curT;
+#endif
+        /* whether or not there are holes */
+        hole = (srt_off_len->num > 1);
+    }
+
+// printf("%s at %d: romio_ds_write=%s build_srt_off_len=%d hole=%d skip_read=%d srt_off_len->num=%lld\n",__func__,__LINE__, (fh->hints->romio_ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fh->hints->romio_ds_write == PNCIO_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,fh->skip_read,srt_off_len->num);
+// printf("%s at %d: romio_ds_write=%s build_srt_off_len=%d hole=%d nprocs_recv=%d(PNCIO_DS_WR_NAGGRS_LB=%d) numx=%lld(PNCIO_DS_WR_NPAIRS_LB=%d)\n",__func__,__LINE__, (fh->hints->romio_ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fh->hints->romio_ds_write == PNCIO_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,nprocs_recv,PNCIO_DS_WR_NAGGRS_LB,numx,PNCIO_DS_WR_NPAIRS_LB);
+
+    /* data sieving */
+    if (fh->hints->romio_ds_write != PNCIO_HINT_DISABLE && hole) {
+        if (fh->skip_read)
+            memset(write_buf, 0, range_size);
+        else {
+            MPI_Offset r_len;
+            r_len = PNCIO_UFS_read_contig(fh, write_buf, range_size, range_off);
+            if (r_len < 0) return (int)r_len;
+        }
+
+        /* Once read, holes have been filled and thus the number of
+         * offset-length pairs, srt_off_len->num, becomes one.
+         */
+        srt_off_len->num = 1;
+        if (srt_off_len->off == NULL) { /* if has not been malloc-ed yet */
+#ifdef HAVE_MPI_LARGE_COUNT
+            alloc_sz = sizeof(MPI_Offset) + sizeof(MPI_Count);
+            srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
+            srt_off_len->len = (MPI_Count*) (srt_off_len->off + 1);
+#else
+            alloc_sz = sizeof(MPI_Offset) + sizeof(int);
+            srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
+            srt_off_len->len = (int*) (srt_off_len->off + 1);
+#endif
+        }
+        srt_off_len->off[0] = range_off;
+        srt_off_len->len[0] = range_size;
+    }
+
+    /* It is possible sum_recv (sum of message sizes to be received) is larger
+     * than the size of collective buffer, write_buf, if writes from multiple
+     * remote processes overlap. Receiving messages into overlapped regions of
+     * the same write_buffer may cause a problem. To avoid it, we allocate a
+     * temporary buffer big enough to receive all messages into disjointed
+     * regions. Earlier in LUSTRE_Exch_and_write(), write_buf is already
+     * allocated with twice amount of the file stripe size, with the second
+     * half to be used to receive messages. If sum_recv is smaller than file
+     * stripe size, we can reuse that space. But if sum_recv is bigger (an
+     * overlap case, which is rare), we allocate a separate buffer of size
+     * sum_recv.
+     */
+    sum_recv -= recv_size[myrank];
+    if (sum_recv > fh->hints->striping_unit)
+        *recv_buf = (char *) NCI_Realloc(*recv_buf, sum_recv);
+    contig_buf = *recv_buf;
+
+    /* cache displacement-length pairs of receive buffer */
+    buf_ptr = contig_buf;
+    for (i = 0; i < nprocs; i++) {
+        if (recv_size[i] == 0)
+            continue;
+        if (i != myrank) {
+            if (recv_count[i] > 1) {
+                CACHE_REQ(recv_list[i], recv_size[i], buf_ptr)
+                buf_ptr += recv_size[i];
+            } else {
+                /* recv_count[i] is the number of noncontiguous offset-length
+                 * pairs describing the write requests of rank i that fall
+                 * into this aggregator's file domain. When recv_count[i] is 1,
+                 * there is only one such pair, meaning the receive message is
+                 * to be stored contiguously. Such message can be received
+                 * directly into write_buf.
+                 */
+                CACHE_REQ(recv_list[i], recv_size[i],
+                          write_buf + others_req[i].mem_ptrs[start_pos[i]])
+            }
+        } else if (buf_view->count <= 1 && recv_count[i] > 0) {
+            /* send/recv to/from self uses memcpy(). The case when buftype is
+             * not contiguous will be handled later in Exchange_data_send().
+             */
+            char *fromBuf = (char *) buf + buf_idx[fh->my_cb_nodes_index];
+            MEMCPY_UNPACK(i, fromBuf, start_pos[i], recv_count[i], write_buf);
+        }
+    }
+    return NC_NOERR;
+}
+
 /*----< LUSTRE_Calc_my_req() >-----------------------------------------------*/
 /* calculates what portions of the read/write requests of this process fall
  * into the file domains of all I/O aggregators.
@@ -141,11 +758,11 @@ int LUSTRE_Calc_aggregator(PNCIO_File *fh,
  *   OUT: buf_idx_ptr[cb_nodes] index pointing to the starting location in
  *        user_buf for data to be sent to each aggregator.
  */
-static
-void LUSTRE_Calc_my_req(PNCIO_File    *fh,
-                        int            buf_is_contig,
-                        PNCIO_Access **my_req_ptr,
-                        MPI_Offset   **buf_idx)
+static void
+LUSTRE_Calc_my_req(PNCIO_File    *fh,
+                   int            buf_is_contig,
+                   PNCIO_Access **my_req_ptr,
+                   MPI_Offset   **buf_idx)
 {
     int aggr, *aggr_ranks, cb_nodes;
     MPI_Count i, l;
@@ -336,6 +953,7 @@ Alternative: especially for when fh->file_view.count is large
     NCI_Free(aggr_ranks);
 }
 
+/*----< LUSTRE_Calc_others_req() >-------------------------------------------*/
 /* LUSTRE_Calc_others_req() calculates what requests from each of other
  * processes fall in this aggregator's file domain.
  *   IN: my_req[cb_nodes]: offset-length pairs of this rank's requests fall
@@ -345,10 +963,10 @@ Alternative: especially for when fh->file_view.count is large
  *   OUT: others_req_ptr[nprocs]: requests of each of other ranks fall into
  *        this aggregator's file domain.
  */
-static
-void LUSTRE_Calc_others_req(PNCIO_File          *fh,
-                            const PNCIO_Access  *my_req,
-                            PNCIO_Access       **others_req_ptr)
+static void
+LUSTRE_Calc_others_req(PNCIO_File          *fh,
+                       const PNCIO_Access  *my_req,
+                       PNCIO_Access       **others_req_ptr)
 {
     int i, myrank, nprocs, do_alltoallv, nreqs;
     MPI_Count *count_my_req_per_proc, *count_others_req_per_proc;
@@ -589,369 +1207,11 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
     }
 }
 
-MPI_Offset PNCIO_Lustre_write_coll(PNCIO_File *fh,
-                                   const void *buf,
-                                   PNCIO_View  buf_view)
-{
-    /* Uses a generalized version of the extended two-phase method described in
-     * "An Extended Two-Phase Method for Accessing Sections of Out-of-Core
-     * Arrays", Rajeev Thakur and Alok Choudhary, Scientific Programming,
-     * (5)4:301--317, Winter 1996.
-     * http://www.mcs.anl.gov/home/thakur/ext2ph.ps
-     */
-
-    int i, nprocs, myrank;
-    int do_collect = 1, do_ex_wr;
-    MPI_Offset st_off, end_off;
-    MPI_Offset min_st_off = -1, max_end_off = -1;
-    MPI_Offset w_len=0;
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-MPI_Barrier(fh->comm);
-double curT = MPI_Wtime();
-#endif
-
-    MPI_Comm_size(fh->comm, &nprocs);
-    MPI_Comm_rank(fh->comm, &myrank);
-
-    /* PnetCDF never reuses a fileview across two or more PNCIO calls. As this
-     * subroutine may modify the contents of fh->file_view, we save its
-     * contents and restore it before leaving this sibroutine.
-     */
-    PNCIO_View saved_file_view = fh->file_view;
-
-    /* fh->file_view contains a list of starting file offsets and lengths of
-     * write requests made by this rank. Similarly, buf_view contains a list of
-     * offset-length pairs describing the write buffer layout. Note PnetCDF
-     * never re-uses a fileview or buffer view.
-     *
-     * Note that MPI standard (MPI 3.1 Chapter 13.1.1 and MPI 4.0 Chapter
-     * 14.1.1) requires that the typemap displacements of etype and filetype
-     * set by the user are non-negative and monotonically non-decreasing. This
-     * makes fh->file_view.off[] to be monotonically non-decreasing.
-     *
-     * This rank's aggregate file access region is from st_off to end_off.
-     * Note end_off points to the last byte-offset to be accessed. E.g., if
-     * st_off=0 and end_off=99, then the aggregate file access region is of
-     * size 100 bytes. If this rank has no data to write, set both st_off and
-     * end_off to -1.
-     */
-    if (fh->file_view.size == 0) /* zero-sized request */
-        st_off = end_off = -1;
-    else {
-        /* Note file_view.off[] is always relative to beginning of file */
-        st_off  = fh->file_view.off[0];
-        end_off = fh->file_view.off[fh->file_view.count-1]
-                + fh->file_view.len[fh->file_view.count-1] - 1;
-    }
-// if (myrank==0) printf("%s %d: fh->file_view size=%lld count=%lld offset=%lld st_off=%lld end_off=%lld\n",__func__,__LINE__, fh->file_view.size, fh->file_view.count,fh->file_view.off[0],st_off,end_off);
-
-    buf_view.idx = 0;
-    buf_view.rem = buf_view.size;
-    if (buf_view.size > 0 && buf_view.count > 1)
-        buf_view.rem = buf_view.len[0];
-
-    if (fh->hints->romio_cb_write == PNCIO_HINT_DISABLE) {
-        /* collective write is explicitly disabled by user */
-        do_collect = 0;
-    }
-    else {
-        /* Calculate the aggregate access region of all ranks and check if
-         * write requests are interleaved among all ranks.
-         */
-        int is_interleaved, large_indv_req = 1;
-        MPI_Offset striping_range, *st_end_all = NULL;
-
-        /* Gather starting and ending file offsets of write requests from all
-         * ranks into st_end_all[]. Even indices of st_end_all[] are starting
-         * offsets, and odd indices are ending offsets.
-         */
-#ifdef TRY_ALLREDUCE
-        st_end_all = (MPI_Offset*) NCI_Calloc(nprocs * 2, sizeof(MPI_Offset));
-        st_end_all[myrank*2]  = st_off;
-        st_end_all[myrank*2+1] = end_off;
-        MPI_Allreduce(MPI_IN_PLACE, st_end_all, nprocs*2, MPI_OFFSET, MPI_MAX, fh->comm);
-#else
-        MPI_Offset st_end[2];
-        st_end[0] = st_off;
-        st_end[1] = end_off;
-        st_end_all = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * nprocs * 2);
-        MPI_Allgather(st_end, 2, MPI_OFFSET, st_end_all, 2, MPI_OFFSET, fh->comm);
-#endif
-
-        /* The loop below does the followings.
-         * 1. Calculate this rank's aggregate access region.
-         * 2. Check whether or not the requests are interleaved among all ranks.
-         * 3. Check whether there are LARGE individual requests. Here, "large"
-         *    means a write range is > (striping_factor * striping_unit). In
-         *    this case, independent write will perform faster than collective.
-         */
-        striping_range = fh->hints->striping_unit * fh->hints->striping_factor;
-        is_interleaved = 0;
-
-        for (i=0; i<2*nprocs; i+=2) { /* find the 1st non-zero sized */
-            if (st_end_all[i] >= 0) {
-                min_st_off  = st_end_all[i];
-                max_end_off = st_end_all[i+1];
-                if (st_end_all[i+1] - st_end_all[i] < striping_range)
-                    large_indv_req = 0;
-                break;
-            }
-        }
-        for (i+=2; i<2*nprocs; i+=2) {
-            if (st_end_all[i] == -1) /* zero-sized request */
-                continue;
-            if (st_end_all[i] <  st_end_all[i-1] &&
-                st_end_all[i] <= st_end_all[i+1])
-                is_interleaved = 1;
-            min_st_off  = MIN(min_st_off,  st_end_all[i]);
-            max_end_off = MAX(max_end_off, st_end_all[i+1]);
-            if (st_end_all[i+1] - st_end_all[i] < striping_range)
-                large_indv_req = 0;
-        }
-        NCI_Free(st_end_all);
-
-        if (fh->hints->romio_cb_write == PNCIO_HINT_ENABLE) {
-            /* explicitly enabled by user */
-            do_collect = 1;
-        }
-        else if (fh->hints->romio_cb_write == PNCIO_HINT_AUTO) {
-// if (myrank==0) printf("%s %d: large_indv_req=%d cb_nodes=%d striping_factor=%d\n",__func__,__LINE__, large_indv_req,fh->hints->cb_nodes , fh->hints->striping_factor);
-            /* Check if collective write is actually necessary, only when
-             * romio_cb_write hint is set to PNCIO_HINT_AUTO.
-             *
-             * Two typical access patterns can benefit from collective write.
-             *   1) access file regions of all processes are interleaved, and
-             *   2) the individual request sizes are not too big, i.e. no
-             *      bigger than striping_range. Large individual requests may
-             *      result in a high communication cost in order to
-             *      redistribute requests from non-aggregators to I/O
-             *      aggregators.
-             */
-            if (nprocs == 1)
-                do_collect = 0;
-            else if (!is_interleaved && large_indv_req &&
-                     fh->hints->cb_nodes <= fh->hints->striping_factor) {
-                /* do independent write, if every rank's write range >
-                 * striping_range and writes are not interleaved in file
-                 * space
-                 */
-                do_collect = 0;
-            }
-        }
-    }
-
-    /* If collective I/O is determined not necessary, use independent I/O */
-    if (!do_collect) {
-
-        /* restore flattend file view before leaving this sibroutine */
-        fh->file_view = saved_file_view;
-
-        if (buf_view.size == 0) /* zero-sized request */
-            return 0;
-
-        if (fh->file_view.count <= 1 && buf_view.count <= 1) {
-            /* Both buffer and fileview are contiguous. */
-#ifdef WKL_DEBUG
-            printf("%s %d: SWITCH to PNCIO_UFS_write_contig !!!\n",__func__,__LINE__);
-#endif
-            return PNCIO_UFS_write_contig(fh, buf, buf_view.size, fh->file_view.off[0], 0);
-        }
-
-#ifdef WKL_DEBUG
-        printf("%s %d: SWITCH to PNCIO_UFS_write_indep !!!\n",
-                   __func__,__LINE__);
-#endif
-        return PNCIO_UFS_write_indep(fh, buf, buf_view);
-    }
-
-    /* Now we are using collective I/O (two-phase I/O strategy) */
-
-#ifdef ADJUST_STRIPING_UNIT
-    /* adjust striping_unit when striping_factor is twice or more than the
-     * number of compute nodes. Note cb_node is set to at least
-     * striping_factor, if nprocs >= striping_factor. Adjustment below is to
-     * let each aggregator to write to two or more consecutive OSTs, which can
-     * most likely improve the performance. This will still yield an effect of
-     * any one OST receiving write requests from aggregators running on only
-     * one compute node.
-     */
-    int orig_striping_unit = fh->hints->striping_unit;
-
-    if (fh->hints->striping_factor >= fh->num_nodes * 2) {
-        fh->hints->striping_unit *= (fh->hints->striping_factor / fh->num_nodes);
-
-        if (fh->hints->cb_buffer_size < fh->hints->striping_unit) {
-            char value[MPI_MAX_INFO_VAL + 1];
-
-            fh->hints->cb_buffer_size = fh->hints->striping_unit;
-            sprintf(value, "%d", fh->hints->cb_buffer_size);
-            MPI_Info_set(fh->info, "cb_buffer_size", value);
-            if (fh->is_agg) {
-                NCI_Free(fh->io_buf);
-                fh->io_buf = (void*) NCI_Calloc(1, fh->hints->cb_buffer_size);
-            }
-        }
-#ifdef WKL_DEBUG
-        if (myrank == 0)
-            printf("Warning: %s line %d: Change striping_unit from %d to %d\n",
-                   __func__, __LINE__, orig_striping_unit, fh->hints->striping_unit);
-#endif
-    }
-#endif
-
-    /* my_req[cb_nodes] is an array of access info, one for each I/O aggregator
-     * whose file domain has this rank's request.
-     */
-    PNCIO_Access *my_req;
-
-    /* others_req[nprocs] is an array of access info, one for each ranks, both
-     * aggregators and non-aggregators, whose write requests fall into this
-     * aggregator's file domain. others_req[] matters only for aggregators.
-     */
-    PNCIO_Access *others_req;
-    MPI_Offset **buf_idx = NULL;
-
-    if (buf_view.count <= 1)
-        buf_idx = (MPI_Offset**) NCI_Malloc(sizeof(MPI_Offset*) *
-                                            fh->hints->cb_nodes);
-
-    /* Calculate the portions of this rank's write requests that fall into the
-     * file domains of each I/O aggregator. No inter-process communication is
-     * performed in LUSTRE_Calc_my_req().
-     */
-    LUSTRE_Calc_my_req(fh, (buf_view.count <= 1), &my_req, buf_idx);
-
-    if (fh->hints->romio_ds_write != PNCIO_HINT_DISABLE) {
-        /* When data sieving is considered, below check the current file size
-         * first. If the aggregate access region of this collective write is
-         * beyond the current file size, then we can safely skip the read of
-         * the read-modify-write of data sieving.
-         */
-        if (fh->is_agg) {
-            /* Obtain the current file size. Note an MPI_Allgather() has been
-             * called above to calculate the aggregate access region. Thus all
-             * prior independent I/O should have completed by now, so it is
-             * safe to call lseek() to query the file size.
-             */
-            MPI_Offset cur_off, fsize;
-
-            cur_off = lseek(fh->fd_sys, 0, SEEK_CUR);
-            fsize   = lseek(fh->fd_sys, 0, SEEK_END);
-            /* Ignore the error, and proceed as if file size is very large. */
-#ifdef PNETCDF_DEBUG
-            if (fsize == -1)
-                fprintf(stderr, "%s at %d: lseek SEEK_END failed on file %s (%s)\n",
-                        __func__,__LINE__, fh->filename, strerror(errno));
-#endif
-            fh->skip_read = (fsize >=0 && min_st_off >= fsize);
-
-            /* restore file pointer */
-            lseek(fh->fd_sys, cur_off, SEEK_SET);
-        }
-    }
-    else
-        fh->skip_read = 1;
-
-// if (fh->is_agg && !fh->skip_read) { MPI_Offset fsize = lseek(fh->fd_sys, 0, SEEK_END); printf("%d: %s at %d: skip_read=%d min_st_off=%lld fsize=%lld\n",myrank,__func__,__LINE__,fh->skip_read,min_st_off,fsize); }
-
-    /* For aggregators, calculate the portions of all other ranks' requests
-     * fall into this aggregator's file domain (note only I/O aggregators are
-     * assigned file domains).
-     *
-     * Inter-process communication is required to construct others_req[],
-     * including MPI_Alltoall, MPI_Issend, MPI_Irecv, and MPI_Waitall.
-     */
-    LUSTRE_Calc_others_req(fh, my_req, &others_req);
-
-    /* Two-phase I/O: first communication phase to exchange write data from all
-     * ranks to the I/O aggregators, followed by the write phase where only I/O
-     * aggregators write to the file.
-     *
-     * Unless MPI_Alltoallw() is used (when use_alltoallw is set to 1), there
-     * is no collective MPI communication beyond this point, as
-     * LUSTRE_Exch_and_write() calls only MPI_Issend, MPI_Irecv, and
-     * MPI_Waitall. Thus it is safe for those non-aggregators making zero-sized
-     * request to skip the call.
-     */
-
-    /* if this rank has data to write, then participate exchange-and-write */
-    do_ex_wr = (buf_view.size == 0) ? 0 : 1;
-    use_alltoallw = 0;
-
-#ifdef USE_MPI_ALLTOALLW
-    {
-        /* When num_nodes < striping_factor, using MPI_Alltoallw in
-         * commit_comm_phase() is faster than MPI_Issend/MPI_Irecv ... ?
-         */
-        char *env_str;
-        if ((env_str = getenv("PNETCDF_USE_ALLTOALLW")) != NULL)
-            use_alltoallw = (strcasecmp(env_str, "true") == 0) ? 1: 0;
-    }
-#endif
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->write_timing[1] += MPI_Wtime() - curT;
-#endif
-
-    if (do_ex_wr || fh->is_agg)
-        /* This rank participates exchange and write only when it has non-zero
-         * data to write or is an I/O aggregator
-         */
-        w_len = LUSTRE_Exch_and_write(fh, buf, buf_view, others_req, my_req,
-                                      min_st_off, max_end_off, buf_idx);
-
-    /* free all memory allocated */
-    NCI_Free(others_req[0].offsets);
-    NCI_Free(others_req);
-
-    if (buf_idx != NULL) {
-        NCI_Free(buf_idx[0]);
-        NCI_Free(buf_idx);
-    }
-    NCI_Free(my_req[0].offsets);
-    NCI_Free(my_req);
-
-#ifdef ADJUST_STRIPING_UNIT
-    /* restore the original striping_unit */
-    fh->hints->striping_unit = orig_striping_unit;
-#endif
-
-    /* If this collective write is followed by an independent write, it's
-     * possible to have those subsequent writes on other processes race ahead
-     * and sneak in before the read-modify-write completes.  We carry out a
-     * collective communication at the end here so no one can start independent
-     * I/O before collective I/O completes.
-     *
-     * need to do some gymnastics with the error codes so that if something
-     * went wrong, all processes report error, but if a process has a more
-     * specific error code, we can still have that process report the
-     * additional information
-     */
-    /* optimization: if only one process performing I/O, we can perform
-     * a less-expensive Bcast. */
-    if (fh->hints->cb_nodes == 1)
-        MPI_Bcast(&w_len, 1, MPI_OFFSET, fh->hints->aggr_ranks[0], fh->comm);
-    else
-        MPI_Allreduce(MPI_IN_PLACE, &w_len, 1, MPI_OFFSET, MPI_MIN, fh->comm);
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->write_timing[0] += MPI_Wtime() - curT;
-#endif
-
-    /* restore flattend file view before leaving this sibroutine */
-    fh->file_view = saved_file_view;
-
-    /* w_len may not be the same as buf_view.size, because data sieving may
-     * write more than requested.
-     */
-    return buf_view.size;
-}
-
-static
-void comm_phase_alltoallw(PNCIO_File    *fh,
-                          disp_len_list *send_list,  /* [cb_nodes] */
-                          disp_len_list *recv_list)  /* [nprocs] */
+/*----< comm_phase_alltoallw() >---------------------------------------------*/
+static void
+comm_phase_alltoallw(PNCIO_File    *fh,
+                     disp_len_list *send_list,  /* [cb_nodes] */
+                     disp_len_list *recv_list)  /* [nprocs] */
 {
     /* This subroutine performs the sam communication tasks as the below
      * commit_comm_phase(), but using MPI_Alltoallw() instead of MPI_Issend and
@@ -1063,10 +1323,11 @@ void comm_phase_alltoallw(PNCIO_File    *fh,
             recv_list[i].count = 0;
 }
 
-static
-void commit_comm_phase(PNCIO_File    *fh,
-                       disp_len_list *send_list,  /* [cb_nodes] */
-                       disp_len_list *recv_list)  /* [nprocs] */
+/*----< commit_comm_phase() >------------------------------------------------*/
+static void
+commit_comm_phase(PNCIO_File    *fh,
+                  disp_len_list *send_list,  /* [cb_nodes] */
+                  disp_len_list *recv_list)  /* [nprocs] */
 {
     /* This subroutine creates a datatype combining all displacement-length
      * pairs in each element of send_list[]. The datatype is used when calling
@@ -1224,15 +1485,15 @@ void commit_comm_phase(PNCIO_File    *fh,
  * for Collective I/O Based on Underlying Parallel File System Locking
  * Protocols", in The Supercomputing Conference, 2008.
  */
-static
-MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
-                                 const void    *buf,
-                                 PNCIO_View     buf_view,
-                                 PNCIO_Access  *others_req,
-                                 PNCIO_Access  *my_req,
-                                 MPI_Offset     min_st_off,
-                                 MPI_Offset     max_end_off,
-                                 MPI_Offset   **buf_idx)
+static MPI_Offset
+LUSTRE_Exch_and_write(PNCIO_File    *fh,
+                      const void    *buf,
+                      PNCIO_View     buf_view,
+                      PNCIO_Access  *others_req,
+                      PNCIO_Access  *my_req,
+                      MPI_Offset     min_st_off,
+                      MPI_Offset     max_end_off,
+                      MPI_Offset   **buf_idx)
 {
     char **write_buf = NULL, **recv_buf = NULL, **send_buf = NULL;
     size_t alloc_sz;
@@ -1751,659 +2012,363 @@ MPI_Offset LUSTRE_Exch_and_write(PNCIO_File    *fh,
     return total_w_len;
 }
 
-/* This heap-merge sort also coalesces sorted offset-length pairs whenever
- * possible.
- *
- * Heapify(a, i, heapsize); Algorithm from Cormen et al. pg. 143 modified for a
- * heap with smallest element at root. The recursion has been removed so that
- * there are no function calls. Function calls are too expensive.
- */
-static
-void heap_merge(const PNCIO_Access *others_req,
-                const MPI_Count    *count,
-#ifdef HAVE_MPI_LARGE_COUNT
-                MPI_Count          *srt_off,
-                MPI_Count          *srt_len,
-#else
-                MPI_Offset         *srt_off,
-                int                *srt_len,
-#endif
-                const MPI_Count    *start_pos,
-                int                 nprocs,
-                int                 nprocs_recv,
-                MPI_Count          *total_elements)
+/*----< PNCIO_Lustre_write_coll() >------------------------------------------*/
+MPI_Offset PNCIO_Lustre_write_coll(PNCIO_File *fh,
+                                   const void *buf,
+                                   PNCIO_View  buf_view)
 {
-    typedef struct {
-        MPI_Offset *off_list;
-#ifdef HAVE_MPI_LARGE_COUNT
-        MPI_Offset *len_list;
-#else
-        int *len_list;
+    /* Uses a generalized version of the extended two-phase method described in
+     * "An Extended Two-Phase Method for Accessing Sections of Out-of-Core
+     * Arrays", Rajeev Thakur and Alok Choudhary, Scientific Programming,
+     * (5)4:301--317, Winter 1996.
+     * http://www.mcs.anl.gov/home/thakur/ext2ph.ps
+     */
+
+    int i, nprocs, myrank;
+    int do_collect = 1, do_ex_wr;
+    MPI_Offset st_off, end_off;
+    MPI_Offset min_st_off = -1, max_end_off = -1;
+    MPI_Offset w_len=0;
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+MPI_Barrier(fh->comm);
+double curT = MPI_Wtime();
 #endif
-        MPI_Count nelem;
-    } heap_struct;
-
-    heap_struct *a, tmp;
-    int i, j, heapsize, l, r, k, smallest;
-
-    a = (heap_struct *) NCI_Malloc(sizeof(heap_struct) * (nprocs_recv + 1));
-
-    j = 0;
-    for (i = 0; i < nprocs; i++) {
-        if (count[i]) {
-            a[j].off_list = others_req[i].offsets + start_pos[i];
-            a[j].len_list = others_req[i].lens + start_pos[i];
-            a[j].nelem = count[i];
-            j++;
-        }
-    }
-
-#define SWAP(x, y, tmp) { tmp = x ; x = y ; y = tmp ; }
-
-    heapsize = nprocs_recv;
-
-    /* Build a heap out of the first element from each list, with the smallest
-     * element of the heap at the root. The first for loop is to find and move
-     * the smallest a[*].off_list[0] to a[0].
-     */
-    for (i = heapsize / 2 - 1; i >= 0; i--) {
-        k = i;
-        for (;;) {
-            r = 2 * (k + 1);
-            l = r - 1;
-            if ((l < heapsize) && (*(a[l].off_list) < *(a[k].off_list)))
-                smallest = l;
-            else
-                smallest = k;
-
-            if ((r < heapsize) && (*(a[r].off_list) < *(a[smallest].off_list)))
-                smallest = r;
-
-            if (smallest != k) {
-                SWAP(a[k], a[smallest], tmp);
-                k = smallest;
-            } else
-                break;
-        }
-    }
-
-    /* The heap keeps the smallest element in its first element, i.e.
-     * a[0].off_list[0].
-     */
-    j = 0;
-    for (i = 0; i < *total_elements; i++) {
-        /* extract smallest element from heap, i.e. the root */
-        if (j == 0 || srt_off[j - 1] + srt_len[j - 1] < *(a[0].off_list)) {
-            srt_off[j] = *(a[0].off_list);
-            srt_len[j] = *(a[0].len_list);
-            j++;
-        } else {
-            /* this offset-length pair can be coalesced into the previous one */
-            srt_len[j - 1] = *(a[0].off_list) + *(a[0].len_list) - srt_off[j - 1];
-        }
-        (a[0].nelem)--;
-
-        if (a[0].nelem) {
-            (a[0].off_list)++;
-            (a[0].len_list)++;
-        } else {
-            a[0] = a[heapsize - 1];
-            heapsize--;
-        }
-
-        /* Heapify(a, 0, heapsize); */
-        k = 0;
-        for (;;) {
-            r = 2 * (k + 1);
-            l = r - 1;
-            if ((l < heapsize) && (*(a[l].off_list) < *(a[k].off_list)))
-                smallest = l;
-            else
-                smallest = k;
-
-            if ((r < heapsize) && (*(a[r].off_list) < *(a[smallest].off_list)))
-                smallest = r;
-
-            if (smallest != k) {
-                SWAP(a[k], a[smallest], tmp);
-                k = smallest;
-            } else
-                break;
-        }
-    }
-    NCI_Free(a);
-    *total_elements = j;
-}
-
-#define CACHE_REQ(list, nelems, buf) {   \
-    MPI_Aint buf_addr;                   \
-    list.len[list.count] = nelems;       \
-    MPI_Get_address(buf, &buf_addr);     \
-    list.disp[list.count] = buf_addr;    \
-    list.count++;                        \
-}
-
-static
-int Exchange_data_recv(
-          PNCIO_File     *fh,
-    const void           *buf,         /* user buffer */
-          char           *write_buf,   /* OUT: internal buffer used to write
-                                        * to file */
-          char          **recv_buf,    /* OUT: [nbufs] internal buffer used to
-                                        * receive from other processes */
-    const PNCIO_View     *buf_view,    /* IN: flattened buffer
-                                        * offset-length pairs */
-    const MPI_Count      *recv_size,   /* [nprocs] recv_size[i] is amount of
-                                        * this aggregator recv from rank i */
-          MPI_Offset      range_off,   /* starting file offset of this
-                                        * aggregator's write region */
-          MPI_Count       range_size,  /* amount of this aggregator's write
-                                        * region */
-    const MPI_Count      *recv_count,  /* [nprocs] recv_count[i] is the number
-                                        * of offset-length pairs received from
-                                        * rank i */
-    const MPI_Count      *start_pos,   /* [nprocs] start_pos[i] starting value
-                                        * of others_req[i].curr */
-    const PNCIO_Access   *others_req,  /* [nprocs] others_req[i] is rank i's
-                                        * write requests fall into this
-                                        * aggregator's file domain */
-    const MPI_Offset     *buf_idx,      /* [cb_nodes] indices to user buffer
-                                        * offsets for sending this rank's
-                                        * write data to aggregator i */
-          off_len_list   *srt_off_len, /* OUT: list of write offset-length
-                                        * pairs of this aggregator */
-          disp_len_list  *recv_list)   /* OUT: displacement-length pairs of
-                                        * recv buffer */
-{
-    char *buf_ptr, *contig_buf;
-    size_t alloc_sz;
-    int i, j, nprocs, myrank, nprocs_recv, hole, build_srt_off_len;
-    MPI_Count sum_recv;
 
     MPI_Comm_size(fh->comm, &nprocs);
     MPI_Comm_rank(fh->comm, &myrank);
 
-    /* srt_off_len contains the file offset-length pairs to be written by this
-     * aggregator at this round. The file region starts from range_off with
-     * size of range_size.
+    /* PnetCDF never reuses a fileview across two or more PNCIO calls. As this
+     * subroutine may modify the contents of fh->file_view, we save its
+     * contents and restore it before leaving this sibroutine.
      */
+    PNCIO_View saved_file_view = fh->file_view;
 
-    srt_off_len->num = 0;
-    srt_off_len->off = NULL;
-    sum_recv = 0;
-    nprocs_recv = 0;
-
-    /* calculate receive metadata */
-    j = -1;
-    for (i = 0; i < nprocs; i++) {
-        srt_off_len->num += recv_count[i];
-        if (j == -1 && recv_count[i] > 0) j = i;
-        sum_recv += recv_size[i];
-        if (recv_size[i])
-            nprocs_recv++;
-    }
-
-    if (nprocs_recv == 0) return NC_NOERR;
-
-// MPI_Count numx = srt_off_len->num; printf("nprocs_recv=%d PNCIO_DS_WR_NAGGRS_LB=%d srt_off_len->num=%lld PNCIO_DS_WR_NPAIRS_LB=%d\n",nprocs_recv,PNCIO_DS_WR_NAGGRS_LB,srt_off_len->num,PNCIO_DS_WR_NPAIRS_LB);
-
-    /* determine whether checking holes is necessary */
-    if (srt_off_len->num == 0) {
-        /* this process has nothing to receive and hence no hole */
-        build_srt_off_len = 0;
-        hole = 0;
-    } else if (srt_off_len->num == 1) {
-        build_srt_off_len = 0;
-        hole = 0;
-#ifdef HAVE_MPI_LARGE_COUNT
-        alloc_sz = sizeof(MPI_Offset) + sizeof(MPI_Count);
-        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
-        srt_off_len->len = (MPI_Count*) (srt_off_len->off + 1);
-#else
-        alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
-        srt_off_len->len = (int*) (srt_off_len->off + 1);
-#endif
-        srt_off_len->off[0] = others_req[j].offsets[start_pos[j]];
-        srt_off_len->len[0] = others_req[j].lens[start_pos[j]];
-    } else if (fh->hints->romio_ds_write == PNCIO_HINT_ENABLE) {
-        /* skip building of srt_off_len and proceed to read-modify-write */
-        build_srt_off_len = 0;
-        /* assuming there are holes */
-        hole = 1;
-    } else if (fh->hints->romio_ds_write == PNCIO_HINT_AUTO) {
-        if (DO_HEAP_MERGE(nprocs_recv, srt_off_len->num)) {
-            /* When the number of sorted offset-length lists or the total
-             * number of offset-length pairs are too large, the heap-merge sort
-             * below for building srt_off_len can become very expensive. Such
-             * sorting is also used to check holes to determine whether
-             * read-modify-write is necessary.
-             */
-            build_srt_off_len = 0;
-            /* assuming there are holes */
-            hole = 1;
-        }
-        else /* heap-merge is less expensive, proceed to build srt_off_len */
-            build_srt_off_len = 1;
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        if (build_srt_off_len) {
-            fh->write_counter[1]++;
-            fh->write_counter[2] = MAX(fh->write_counter[2], srt_off_len->num);
-            fh->write_counter[3] = MAX(fh->write_counter[3], nprocs_recv);
-        } else {
-            fh->write_counter[4]++;
-            fh->write_counter[5] = MAX(fh->write_counter[5], srt_off_len->num);
-            fh->write_counter[6] = MAX(fh->write_counter[6], nprocs_recv);
-        }
-#endif
-    } else { /* if (fh->hints->romio_ds_write == PNCIO_HINT_DISABLE) */
-        /* User explicitly disable data sieving to skip read-modify-write.
-         * Whether or not there is a hole is not important. However,
-         * srt_off_len must be constructed to merge all others_req[] into a
-         * single sorted list. This step is necessary because after this
-         * subroutine returns, write data from all non-aggregators will be
-         * packed into the write_buf, with a possibility of overlaps, and
-         * as srt_off_len stores the coalesced offset-length pairs of
-         * individual non-contiguous write requests, it is used to write them
-         * to the file.
-         */
-        build_srt_off_len = 1;
-    }
-
-    if (build_srt_off_len) {
-        /* merge all the offset-length pairs from others_req[] (already sorted
-         * individually) into a single list of offset-length pairs.
-         */
-#ifdef HAVE_MPI_LARGE_COUNT
-        alloc_sz = sizeof(MPI_Offset) + sizeof(MPI_Count);
-        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz * srt_off_len->num);
-        srt_off_len->len = (MPI_Count*) (srt_off_len->off + srt_off_len->num);
-#else
-        alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-        srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz * srt_off_len->num);
-        srt_off_len->len = (int*) (srt_off_len->off + srt_off_len->num);
-#endif
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        double curT = MPI_Wtime();
-#endif
-        heap_merge(others_req, recv_count, srt_off_len->off, srt_off_len->len,
-                   start_pos, nprocs, nprocs_recv, &srt_off_len->num);
-
-        /* Now, (srt_off_len->off and srt_off_len->len) are in an increasing
-         * order of file offsets. In addition, they are coalesced.
-         */
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        fh->write_timing[5] += MPI_Wtime() - curT;
-#endif
-        /* whether or not there are holes */
-        hole = (srt_off_len->num > 1);
-    }
-
-// printf("%s at %d: romio_ds_write=%s build_srt_off_len=%d hole=%d skip_read=%d srt_off_len->num=%lld\n",__func__,__LINE__, (fh->hints->romio_ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fh->hints->romio_ds_write == PNCIO_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,fh->skip_read,srt_off_len->num);
-// printf("%s at %d: romio_ds_write=%s build_srt_off_len=%d hole=%d nprocs_recv=%d(PNCIO_DS_WR_NAGGRS_LB=%d) numx=%lld(PNCIO_DS_WR_NPAIRS_LB=%d)\n",__func__,__LINE__, (fh->hints->romio_ds_write == PNCIO_HINT_ENABLE)?"ENABLE": (fh->hints->romio_ds_write == PNCIO_HINT_DISABLE)?"DISABLE":"AUTO", build_srt_off_len,hole,nprocs_recv,PNCIO_DS_WR_NAGGRS_LB,numx,PNCIO_DS_WR_NPAIRS_LB);
-
-    /* data sieving */
-    if (fh->hints->romio_ds_write != PNCIO_HINT_DISABLE && hole) {
-        if (fh->skip_read)
-            memset(write_buf, 0, range_size);
-        else {
-            MPI_Offset r_len;
-            r_len = PNCIO_UFS_read_contig(fh, write_buf, range_size, range_off);
-            if (r_len < 0) return (int)r_len;
-        }
-
-        /* Once read, holes have been filled and thus the number of
-         * offset-length pairs, srt_off_len->num, becomes one.
-         */
-        srt_off_len->num = 1;
-        if (srt_off_len->off == NULL) { /* if has not been malloc-ed yet */
-#ifdef HAVE_MPI_LARGE_COUNT
-            alloc_sz = sizeof(MPI_Offset) + sizeof(MPI_Count);
-            srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
-            srt_off_len->len = (MPI_Count*) (srt_off_len->off + 1);
-#else
-            alloc_sz = sizeof(MPI_Offset) + sizeof(int);
-            srt_off_len->off = (MPI_Offset*) NCI_Malloc(alloc_sz);
-            srt_off_len->len = (int*) (srt_off_len->off + 1);
-#endif
-        }
-        srt_off_len->off[0] = range_off;
-        srt_off_len->len[0] = range_size;
-    }
-
-    /* It is possible sum_recv (sum of message sizes to be received) is larger
-     * than the size of collective buffer, write_buf, if writes from multiple
-     * remote processes overlap. Receiving messages into overlapped regions of
-     * the same write_buffer may cause a problem. To avoid it, we allocate a
-     * temporary buffer big enough to receive all messages into disjointed
-     * regions. Earlier in LUSTRE_Exch_and_write(), write_buf is already
-     * allocated with twice amount of the file stripe size, with the second
-     * half to be used to receive messages. If sum_recv is smaller than file
-     * stripe size, we can reuse that space. But if sum_recv is bigger (an
-     * overlap case, which is rare), we allocate a separate buffer of size
-     * sum_recv.
-     */
-    sum_recv -= recv_size[myrank];
-    if (sum_recv > fh->hints->striping_unit)
-        *recv_buf = (char *) NCI_Realloc(*recv_buf, sum_recv);
-    contig_buf = *recv_buf;
-
-    /* cache displacement-length pairs of receive buffer */
-    buf_ptr = contig_buf;
-    for (i = 0; i < nprocs; i++) {
-        if (recv_size[i] == 0)
-            continue;
-        if (i != myrank) {
-            if (recv_count[i] > 1) {
-                CACHE_REQ(recv_list[i], recv_size[i], buf_ptr)
-                buf_ptr += recv_size[i];
-            } else {
-                /* recv_count[i] is the number of noncontiguous offset-length
-                 * pairs describing the write requests of rank i that fall
-                 * into this aggregator's file domain. When recv_count[i] is 1,
-                 * there is only one such pair, meaning the receive message is
-                 * to be stored contiguously. Such message can be received
-                 * directly into write_buf.
-                 */
-                CACHE_REQ(recv_list[i], recv_size[i],
-                          write_buf + others_req[i].mem_ptrs[start_pos[i]])
-            }
-        } else if (buf_view->count <= 1 && recv_count[i] > 0) {
-            /* send/recv to/from self uses memcpy(). The case when buftype is
-             * not contiguous will be handled later in Exchange_data_send().
-             */
-            char *fromBuf = (char *) buf + buf_idx[fh->my_cb_nodes_index];
-            MEMCPY_UNPACK(i, fromBuf, start_pos[i], recv_count[i], write_buf);
-        }
-    }
-    return NC_NOERR;
-}
-
-static
-void Exchange_data_send(
-          PNCIO_File     *fh,
-    const void           *buf,          /* user buffer */
-          char           *write_buf,    /* OUT: internal buffer used to write
-                                         * to file, only matter when send to
-                                         * self */
-          char          **send_buf_ptr, /* OUT: [cb_nodes] point to internal
-                                         * send buffer */
-          PNCIO_View     *buf_view,     /* IN/OUT: flattened buffer
-                                         * offset-length pairs */
-    const MPI_Count      *send_size,    /* [cb_nodes] send_size[i] is amount of
-                                         * this rank sent to aggregator i */
-          MPI_Count       self_count,   /* No. offset-length pairs sent to self
-                                         * rank */
-          MPI_Count       start_pos,    /* others_req[myrank].curr */
-    const PNCIO_Access   *others_req,   /* [nprocs] only used when send to self,
-                                         * others_req[myrank] */
-    const MPI_Offset     *buf_idx,      /* [cb_nodes] indices to user buffer
-                                         * for sending this rank's write data
-                                         * to aggregator i */
-          disp_len_list  *send_list)    /* OUT: displacement-length pairs of
-                                         * send buffer */
-{
-    int i, myrank, cb_nodes;
-
-    *send_buf_ptr = NULL;
-
-    MPI_Comm_rank(fh->comm, &myrank);
-
-    cb_nodes = fh->hints->cb_nodes;
-// if (myrank==0) printf("%s at %d: cb_nodes=%d\n",__func__,__LINE__, cb_nodes);
-    if (buf_view->count <= 1) {
-        /* If buftype is contiguous, data can be directly sent from user buf
-         * at location given by buf_idx.
-         */
-        for (i = 0; i < cb_nodes; i++) {
-// if (myrank==0 && send_size[i]) printf("%s at %d: cb_nodes=%d send_size[%d]=%lld my_cb_nodes_index=%d\n",__func__,__LINE__, cb_nodes,i,send_size[i],fh->my_cb_nodes_index);
-            if (send_size[i] && i != fh->my_cb_nodes_index)
-                CACHE_REQ(send_list[i], send_size[i], (char*)buf + buf_idx[i]);
-        }
-    } else {
-        char **send_buf, *self_buf;
-
-        /* total send size of this round */
-        size_t send_total_size = 0;
-        for (i = 0; i < cb_nodes; i++)
-            send_total_size += send_size[i];
-
-        if (send_total_size == 0) return;
-
-        /* The user buffer to be used to send in this round is not contiguous,
-         * allocate send_buf[], a contiguous space, copy data to send_buf,
-         * including ones to be sent to self, and then use send_buf to send.
-         */
-        send_buf = (char **) NCI_Malloc(sizeof(char*) * cb_nodes);
-        send_buf[0] = (char *) NCI_Malloc(send_total_size);
-        for (i = 1; i < cb_nodes; i++)
-            send_buf[i] = send_buf[i - 1] + send_size[i - 1];
-
-        LUSTRE_Fill_send_buffer(fh, buf, buf_view, send_buf,
-                                send_total_size, send_size, &self_buf,
-                                send_list);
-        /* Send buffers must not be touched before MPI_Waitall() is completed,
-         * and thus send_buf will be freed in LUSTRE_Exch_and_write()
-         */
-
-        if (fh->my_cb_nodes_index >= 0 && send_size[fh->my_cb_nodes_index] > 0) {
-            /* contents of user buf that must be sent to self has been copied
-             * into send_buf[fh->my_cb_nodes_index]. Now unpack it into
-             * write_buf.
-             */
-            if (self_buf == NULL) self_buf = send_buf[fh->my_cb_nodes_index];
-            MEMCPY_UNPACK(myrank, self_buf, start_pos, self_count, write_buf);
-        }
-
-        *send_buf_ptr = send_buf[0];
-        NCI_Free(send_buf);
-    }
-}
-
-static void LUSTRE_Fill_send_buffer(PNCIO_File       *fh,
-                                    const void       *buf,
-                                    PNCIO_View       *buf_view, /* IN/OUT */
-                                    char            **send_buf,
-                                    size_t            send_total_size,
-                                    const MPI_Count  *send_size,
-                                    char            **self_buf,
-                                    disp_len_list    *send_list)
-{
-    /* this function is only called if buftype is not contiguous */
-    int q, first_q=-1, isUserBuf=0;
-    MPI_Count send_size_rem=0, size, copy_size=0;
-    char *user_buf_ptr=NULL, *send_buf_ptr=NULL, *same_buf_ptr=NULL;
-    MPI_Offset off, user_buf_idx;
-#ifdef HAVE_MPI_LARGE_COUNT
-    MPI_Offset len, rem_len;
-#else
-    int len, rem_len;
-#endif
-
-#ifdef WKL_DEBUG
-int num_memcpy=0;
-#endif
-
-    *self_buf = NULL;
-
-    /* user_buf_idx is to the index offset to buf, indicating the starting
-     * location to be copied.
+    /* fh->file_view contains a list of starting file offsets and lengths of
+     * write requests made by this rank. Similarly, buf_view contains a list of
+     * offset-length pairs describing the write buffer layout. Note PnetCDF
+     * never re-uses a fileview or buffer view.
      *
-     * buf_view stores the offset-length pairs of the flattened user buffer
-     *     data type. Note this stores offset-length pairs of the data type,
-     *     and write amount can be a multiple of the data type.
-     * buf_view.count: the number of pairs
-     * buf_view.off[i]: the ith pair's byte offset to buf. Note the
-     *     flattened offsets of user buffer type may not be sorted in an
-     *     increasing order, unlike fileview which is required by MPI to be
-     *     sorted in a monotonically non-decreasing order.
-     * buf_view.len[i]: length of the ith pair
-     * buf_view.idx: index to the offset-length pair currently being
-     *     processed, incremented each round.
-     * buf_view.rem: amount of data in the pair that has not been copied
-     *     over, changed each round.
+     * Note that MPI standard (MPI 3.1 Chapter 13.1.1 and MPI 4.0 Chapter
+     * 14.1.1) requires that the typemap displacements of etype and filetype
+     * set by the user are non-negative and monotonically non-decreasing. This
+     * makes fh->file_view.off[] to be monotonically non-decreasing.
+     *
+     * This rank's aggregate file access region is from st_off to end_off.
+     * Note end_off points to the last byte-offset to be accessed. E.g., if
+     * st_off=0 and end_off=99, then the aggregate file access region is of
+     * size 100 bytes. If this rank has no data to write, set both st_off and
+     * end_off to -1.
      */
-    user_buf_idx = buf_view->off[buf_view->idx]
-                 + buf_view->len[buf_view->idx]
-                 - buf_view->rem;
-                 /* in case data left to be copied from previous round */
+    if (fh->file_view.size == 0) /* zero-sized request */
+        st_off = end_off = -1;
+    else {
+        /* Note file_view.off[] is always relative to beginning of file */
+        st_off  = fh->file_view.off[0];
+        end_off = fh->file_view.off[fh->file_view.count-1]
+                + fh->file_view.len[fh->file_view.count-1] - 1;
+    }
+// if (myrank==0) printf("%s %d: fh->file_view size=%lld count=%lld offset=%lld st_off=%lld end_off=%lld\n",__func__,__LINE__, fh->file_view.size, fh->file_view.count,fh->file_view.off[0],st_off,end_off);
 
-    /* fh->file_view.count has been checked and adjusted to a possitive number
-     * at the beginning of PNCIO_Lustre_write_coll().
-     */
-    assert(fh->file_view.count > 0);
+    buf_view.idx = 0;
+    buf_view.rem = buf_view.size;
+    if (buf_view.size > 0 && buf_view.count > 1)
+        buf_view.rem = buf_view.len[0];
 
-    /* fh->file_view.count: the number of noncontiguous file segments this
-     *     rank writes to. Each segment i is described by fh->file_view.offs[i]
-     *     and fh->file_view.len[i].
-     * fh->file_view.idx: the index to the fh->file_view.offs[],
-     *     fh->file_view.len[] that have been processed in the previous round.
-     * The while loop below packs write data into send buffers, send_buf[],
-     * based on this rank's off-len pairs in its file view,
-     */
-    off     = fh->file_view.off[fh->file_view.idx]
-            + fh->file_view.len[fh->file_view.idx]
-            - fh->file_view.rem;
-    rem_len = fh->file_view.rem;
+    if (fh->hints->romio_cb_write == PNCIO_HINT_DISABLE) {
+        /* collective write is explicitly disabled by user */
+        do_collect = 0;
+    }
+    else {
+        /* Calculate the aggregate access region of all ranks and check if
+         * write requests are interleaved among all ranks.
+         */
+        int is_interleaved, large_indv_req = 1;
+        MPI_Offset striping_range, *st_end_all = NULL;
 
-// int rank; MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    while (send_total_size > 0) {
-        /* this off-len request may span to more than one I/O aggregator */
-// if (rank == 0) printf("rank 0 %s at %d send_total_size=%zd rem_len=%lld\n",__func__,__LINE__,send_total_size,rem_len);
-        while (rem_len != 0) {
-            len = rem_len;
-            q = LUSTRE_Calc_aggregator(fh, off, &len);
-            /* NOTE: len will be modified by LUSTRE_Calc_aggregator() to be no
-             * more than a file stripe unit size that aggregator "q" is
-             * responsible for. Note q is not the MPI rank ID, It is the array
-             * index to fh->hints->aggr_ranks[].
+        /* Gather starting and ending file offsets of write requests from all
+         * ranks into st_end_all[]. Even indices of st_end_all[] are starting
+         * offsets, and odd indices are ending offsets.
+         */
+#ifdef TRY_ALLREDUCE
+        st_end_all = (MPI_Offset*) NCI_Calloc(nprocs * 2, sizeof(MPI_Offset));
+        st_end_all[myrank*2]  = st_off;
+        st_end_all[myrank*2+1] = end_off;
+        MPI_Allreduce(MPI_IN_PLACE, st_end_all, nprocs*2, MPI_OFFSET, MPI_MAX, fh->comm);
+#else
+        MPI_Offset st_end[2];
+        st_end[0] = st_off;
+        st_end[1] = end_off;
+        st_end_all = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * nprocs * 2);
+        MPI_Allgather(st_end, 2, MPI_OFFSET, st_end_all, 2, MPI_OFFSET, fh->comm);
+#endif
+
+        /* The loop below does the followings.
+         * 1. Calculate this rank's aggregate access region.
+         * 2. Check whether or not the requests are interleaved among all ranks.
+         * 3. Check whether there are LARGE individual requests. Here, "large"
+         *    means a write range is > (striping_factor * striping_unit). In
+         *    this case, independent write will perform faster than collective.
+         */
+        striping_range = fh->hints->striping_unit * fh->hints->striping_factor;
+        is_interleaved = 0;
+
+        for (i=0; i<2*nprocs; i+=2) { /* find the 1st non-zero sized */
+            if (st_end_all[i] >= 0) {
+                min_st_off  = st_end_all[i];
+                max_end_off = st_end_all[i+1];
+                if (st_end_all[i+1] - st_end_all[i] < striping_range)
+                    large_indv_req = 0;
+                break;
+            }
+        }
+        for (i+=2; i<2*nprocs; i+=2) {
+            if (st_end_all[i] == -1) /* zero-sized request */
+                continue;
+            if (st_end_all[i] <  st_end_all[i-1] &&
+                st_end_all[i] <= st_end_all[i+1])
+                is_interleaved = 1;
+            min_st_off  = MIN(min_st_off,  st_end_all[i]);
+            max_end_off = MAX(max_end_off, st_end_all[i+1]);
+            if (st_end_all[i+1] - st_end_all[i] < striping_range)
+                large_indv_req = 0;
+        }
+        NCI_Free(st_end_all);
+
+        if (fh->hints->romio_cb_write == PNCIO_HINT_ENABLE) {
+            /* explicitly enabled by user */
+            do_collect = 1;
+        }
+        else if (fh->hints->romio_cb_write == PNCIO_HINT_AUTO) {
+// if (myrank==0) printf("%s %d: large_indv_req=%d cb_nodes=%d striping_factor=%d\n",__func__,__LINE__, large_indv_req,fh->hints->cb_nodes , fh->hints->striping_factor);
+            /* Check if collective write is actually necessary, only when
+             * romio_cb_write hint is set to PNCIO_HINT_AUTO.
              *
-             * Now len is the amount of data in ith off-len pair that should be
-             * sent to aggregator q. Note q can also be self. In this case,
-             * data is also packed into send_buf[q] or pointed to a segment of
-             * buf when the data to be packed is contiguous. send_buf[q] will
-             * later be copied to write buffer in MEMCPY_UNPACK, instead of
-             * calling MPI_Issend to send.
-             *
-             * send_size[q]: data amount of this rank needs to send to
-             * aggregator q in this round.
-             *
-             * len and send_size[q] are all always <= striping_unit
+             * Two typical access patterns can benefit from collective write.
+             *   1) access file regions of all processes are interleaved, and
+             *   2) the individual request sizes are not too big, i.e. no
+             *      bigger than striping_range. Large individual requests may
+             *      result in a high communication cost in order to
+             *      redistribute requests from non-aggregators to I/O
+             *      aggregators.
              */
-
-// if (rank == 0) printf("rank 0 %s at %d rem_len=%lld len=%lld first_q=%d q=%d idx=%lld\n",__func__,__LINE__,rem_len,len,first_q,q,buf_view->idx);
-
-            if (first_q != q) {
-                assert(send_size_rem == 0);
-                first_q = q;
-                isUserBuf = 1;
-                send_size_rem = send_size[q];
-                copy_size = 0;
-                same_buf_ptr = (char*)buf + user_buf_idx; /* no increment */
-                user_buf_ptr = same_buf_ptr; /* increment after each memcpy */
-                if (send_buf != NULL)
-                    send_buf_ptr = send_buf[q]; /* increment after each memcpy */
+            if (nprocs == 1)
+                do_collect = 0;
+            else if (!is_interleaved && large_indv_req &&
+                     fh->hints->cb_nodes <= fh->hints->striping_factor) {
+                /* do independent write, if every rank's write range >
+                 * striping_range and writes are not interleaved in file
+                 * space
+                 */
+                do_collect = 0;
             }
-
-            /* copy len amount of data from buf to send_buf[q] */
-            size = len;
-
-            while (size) {
-                MPI_Count size_in_buf = MIN(size, buf_view->rem);
-                copy_size += size_in_buf;
-                user_buf_idx += size_in_buf;
-                send_size_rem -= size_in_buf;
-                buf_view->rem -= size_in_buf;
-// if (rank == 0) printf("rank 0 %s at %d size=%lld size_in_buf=%lld copy_size=%lld rem=%ld\n",__func__,__LINE__, size, size_in_buf, copy_size,buf_view->rem);
-                if (buf_view->rem == 0) { /* move on to next off-len pair */
-                    if (buf_view->count > 1) {
-                        /* user buffer type is not contiguous */
-                        if (send_size_rem) {
-                            /* after this copy send_buf[q] is still not full */
-                            isUserBuf = 0;
-// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 1 size=%lld user_buf_ptr=%p\n",copy_size,user_buf_ptr);
-                            memcpy(send_buf_ptr, user_buf_ptr, copy_size);
-user_buf_ptr += copy_size;
-                            send_buf_ptr += copy_size;
-                            copy_size = 0;
-                        } else if (isUserBuf == 0) {
-                            /* send_buf[q] is full and not using user buf,
-                             * copy the remaining delayed data */
-// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 2 size=%lld\n",copy_size);
-                            memcpy(send_buf_ptr, user_buf_ptr, copy_size);
-user_buf_ptr += copy_size;
-                        }
-#ifdef WKL_DEBUG
-num_memcpy++;
-#endif
-                    }
-                    /* update buf_view->idx, buf_view->rem,
-                     * and user_buf_idx
-                     */
-                        buf_view->idx++;
-assert(buf_view->idx <= buf_view->count);
-
-if (buf_view->idx < buf_view->count) {
-                    user_buf_idx = buf_view->off[buf_view->idx];
-                    buf_view->rem = buf_view->len[buf_view->idx];
-                    user_buf_ptr = (char*) buf + user_buf_idx;
-}
-else assert(size - size_in_buf == 0);
-
-                }
-                else if (send_size_rem == 0 && isUserBuf == 0) {
-                    /* buf_view->rem > 0, send_buf[q] is full, and not using
-                     * user buf to send, copy the remaining delayed data
-                     */
-// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 3 size=%lld\n",copy_size);
-                    memcpy(send_buf_ptr, user_buf_ptr, copy_size);
-#ifdef WKL_DEBUG
-num_memcpy++;
-#endif
-                    user_buf_ptr += copy_size;
-                }
-                size -= size_in_buf;
-            }
-
-            if (send_size_rem == 0) { /* data to q is fully packed */
-                first_q = -1;
-
-                if (q != fh->my_cb_nodes_index) { /* send only if not self rank */
-                    if (isUserBuf)
-                        CACHE_REQ(send_list[q], send_size[q], same_buf_ptr)
-                    else
-                        CACHE_REQ(send_list[q], send_size[q], send_buf[q])
-                }
-                else if (isUserBuf) {
-                    /* send buffer is also (part of) user's buf. Return the
-                     * buffer pointer, so the self send data can be directly
-                     * unpack from user buf to write buffer.
-                     */
-                    *self_buf = same_buf_ptr;
-                }
-            }
-            /* len is the amount of data copied */
-            off += len;
-            rem_len -= len;
-            fh->file_view.rem -= len;
-            send_total_size -= len;
-            if (send_total_size == 0) break;
         }
-        if (send_total_size == 0) break;
-
-        /* done with this off-len pair, move on to the next */
-        if (fh->file_view.rem == 0) {
-            fh->file_view.idx++;
-            fh->file_view.rem = fh->file_view.len[fh->file_view.idx];
-        }
-        off = fh->file_view.off[fh->file_view.idx];
-        rem_len = fh->file_view.rem;
     }
 
+    /* If collective I/O is determined not necessary, use independent I/O */
+    if (!do_collect) {
+
+        /* restore flattend file view before leaving this sibroutine */
+        fh->file_view = saved_file_view;
+
+        if (buf_view.size == 0) /* zero-sized request */
+            return 0;
+
+        if (fh->file_view.count <= 1 && buf_view.count <= 1) {
+            /* Both buffer and fileview are contiguous. */
 #ifdef WKL_DEBUG
-if (num_memcpy> 0) printf("---- fh->file_view.count=%lld fh->file_view.idx=%lld buf_view->count=%lld num_memcpy=%d\n",fh->file_view.count,fh->file_view.idx,buf_view->count,num_memcpy);
+            printf("%s %d: SWITCH to PNCIO_UFS_write_contig !!!\n",__func__,__LINE__);
 #endif
+            return PNCIO_UFS_write_contig(fh, buf, buf_view.size, fh->file_view.off[0], 0);
+        }
+
+#ifdef WKL_DEBUG
+        printf("%s %d: SWITCH to PNCIO_UFS_write_indep !!!\n",
+                   __func__,__LINE__);
+#endif
+        return PNCIO_UFS_write_indep(fh, buf, buf_view);
+    }
+
+    /* Now we are using collective I/O (two-phase I/O strategy) */
+
+#ifdef ADJUST_STRIPING_UNIT
+    /* adjust striping_unit when striping_factor is twice or more than the
+     * number of compute nodes. Note cb_node is set to at least
+     * striping_factor, if nprocs >= striping_factor. Adjustment below is to
+     * let each aggregator to write to two or more consecutive OSTs, which can
+     * most likely improve the performance. This will still yield an effect of
+     * any one OST receiving write requests from aggregators running on only
+     * one compute node.
+     */
+    int orig_striping_unit = fh->hints->striping_unit;
+
+    if (fh->hints->striping_factor >= fh->num_nodes * 2) {
+        fh->hints->striping_unit *= (fh->hints->striping_factor / fh->num_nodes);
+
+        if (fh->hints->cb_buffer_size < fh->hints->striping_unit) {
+            char value[MPI_MAX_INFO_VAL + 1];
+
+            fh->hints->cb_buffer_size = fh->hints->striping_unit;
+            sprintf(value, "%d", fh->hints->cb_buffer_size);
+            MPI_Info_set(fh->info, "cb_buffer_size", value);
+            if (fh->is_agg) {
+                NCI_Free(fh->io_buf);
+                fh->io_buf = (void*) NCI_Calloc(1, fh->hints->cb_buffer_size);
+            }
+        }
+#ifdef WKL_DEBUG
+        if (myrank == 0)
+            printf("Warning: %s line %d: Change striping_unit from %d to %d\n",
+                   __func__, __LINE__, orig_striping_unit, fh->hints->striping_unit);
+#endif
+    }
+#endif
+
+    /* my_req[cb_nodes] is an array of access info, one for each I/O aggregator
+     * whose file domain has this rank's request.
+     */
+    PNCIO_Access *my_req;
+
+    /* others_req[nprocs] is an array of access info, one for each ranks, both
+     * aggregators and non-aggregators, whose write requests fall into this
+     * aggregator's file domain. others_req[] matters only for aggregators.
+     */
+    PNCIO_Access *others_req;
+    MPI_Offset **buf_idx = NULL;
+
+    if (buf_view.count <= 1)
+        buf_idx = (MPI_Offset**) NCI_Malloc(sizeof(MPI_Offset*) *
+                                            fh->hints->cb_nodes);
+
+    /* Calculate the portions of this rank's write requests that fall into the
+     * file domains of each I/O aggregator. No inter-process communication is
+     * performed in LUSTRE_Calc_my_req().
+     */
+    LUSTRE_Calc_my_req(fh, (buf_view.count <= 1), &my_req, buf_idx);
+
+    if (fh->hints->romio_ds_write != PNCIO_HINT_DISABLE) {
+        /* When data sieving is considered, below check the current file size
+         * first. If the aggregate access region of this collective write is
+         * beyond the current file size, then we can safely skip the read of
+         * the read-modify-write of data sieving.
+         */
+        if (fh->is_agg) {
+            /* Obtain the current file size. Note an MPI_Allgather() has been
+             * called above to calculate the aggregate access region. Thus all
+             * prior independent I/O should have completed by now, so it is
+             * safe to call lseek() to query the file size.
+             */
+            MPI_Offset cur_off, fsize;
+
+            cur_off = lseek(fh->fd_sys, 0, SEEK_CUR);
+            fsize   = lseek(fh->fd_sys, 0, SEEK_END);
+            /* Ignore the error, and proceed as if file size is very large. */
+#ifdef PNETCDF_DEBUG
+            if (fsize == -1)
+                fprintf(stderr, "%s at %d: lseek SEEK_END failed on file %s (%s)\n",
+                        __func__,__LINE__, fh->filename, strerror(errno));
+#endif
+            fh->skip_read = (fsize >=0 && min_st_off >= fsize);
+
+            /* restore file pointer */
+            lseek(fh->fd_sys, cur_off, SEEK_SET);
+        }
+    }
+    else
+        fh->skip_read = 1;
+
+// if (fh->is_agg && !fh->skip_read) { MPI_Offset fsize = lseek(fh->fd_sys, 0, SEEK_END); printf("%d: %s at %d: skip_read=%d min_st_off=%lld fsize=%lld\n",myrank,__func__,__LINE__,fh->skip_read,min_st_off,fsize); }
+
+    /* For aggregators, calculate the portions of all other ranks' requests
+     * fall into this aggregator's file domain (note only I/O aggregators are
+     * assigned file domains).
+     *
+     * Inter-process communication is required to construct others_req[],
+     * including MPI_Alltoall, MPI_Issend, MPI_Irecv, and MPI_Waitall.
+     */
+    LUSTRE_Calc_others_req(fh, my_req, &others_req);
+
+    /* Two-phase I/O: first communication phase to exchange write data from all
+     * ranks to the I/O aggregators, followed by the write phase where only I/O
+     * aggregators write to the file.
+     *
+     * Unless MPI_Alltoallw() is used (when use_alltoallw is set to 1), there
+     * is no collective MPI communication beyond this point, as
+     * LUSTRE_Exch_and_write() calls only MPI_Issend, MPI_Irecv, and
+     * MPI_Waitall. Thus it is safe for those non-aggregators making zero-sized
+     * request to skip the call.
+     */
+
+    /* if this rank has data to write, then participate exchange-and-write */
+    do_ex_wr = (buf_view.size == 0) ? 0 : 1;
+    use_alltoallw = 0;
+
+#ifdef USE_MPI_ALLTOALLW
+    {
+        /* When num_nodes < striping_factor, using MPI_Alltoallw in
+         * commit_comm_phase() is faster than MPI_Issend/MPI_Irecv ... ?
+         */
+        char *env_str;
+        if ((env_str = getenv("PNETCDF_USE_ALLTOALLW")) != NULL)
+            use_alltoallw = (strcasecmp(env_str, "true") == 0) ? 1: 0;
+    }
+#endif
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fh->is_agg) fh->write_timing[1] += MPI_Wtime() - curT;
+#endif
+
+    if (do_ex_wr || fh->is_agg)
+        /* This rank participates exchange and write only when it has non-zero
+         * data to write or is an I/O aggregator
+         */
+        w_len = LUSTRE_Exch_and_write(fh, buf, buf_view, others_req, my_req,
+                                      min_st_off, max_end_off, buf_idx);
+
+    /* free all memory allocated */
+    NCI_Free(others_req[0].offsets);
+    NCI_Free(others_req);
+
+    if (buf_idx != NULL) {
+        NCI_Free(buf_idx[0]);
+        NCI_Free(buf_idx);
+    }
+    NCI_Free(my_req[0].offsets);
+    NCI_Free(my_req);
+
+#ifdef ADJUST_STRIPING_UNIT
+    /* restore the original striping_unit */
+    fh->hints->striping_unit = orig_striping_unit;
+#endif
+
+    /* If this collective write is followed by an independent write, it's
+     * possible to have those subsequent writes on other processes race ahead
+     * and sneak in before the read-modify-write completes.  We carry out a
+     * collective communication at the end here so no one can start independent
+     * I/O before collective I/O completes.
+     *
+     * need to do some gymnastics with the error codes so that if something
+     * went wrong, all processes report error, but if a process has a more
+     * specific error code, we can still have that process report the
+     * additional information
+     */
+    /* optimization: if only one process performing I/O, we can perform
+     * a less-expensive Bcast. */
+    if (fh->hints->cb_nodes == 1)
+        MPI_Bcast(&w_len, 1, MPI_OFFSET, fh->hints->aggr_ranks[0], fh->comm);
+    else
+        MPI_Allreduce(MPI_IN_PLACE, &w_len, 1, MPI_OFFSET, MPI_MIN, fh->comm);
+
+#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    if (fh->is_agg) fh->write_timing[0] += MPI_Wtime() - curT;
+#endif
+
+    /* restore flattend file view before leaving this sibroutine */
+    fh->file_view = saved_file_view;
+
+    /* w_len may not be the same as buf_view.size, because data sieving may
+     * write more than requested.
+     */
+    return buf_view.size;
 }
 
