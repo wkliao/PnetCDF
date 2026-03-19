@@ -26,8 +26,8 @@ int PNCIO_File_close(PNCIO_File *fh)
             err = ncmpii_error_posix2nc("close");
     }
 
-    if (fh->hints->ranklist != NULL)
-        NCI_Free(fh->hints->ranklist);
+    if (fh->hints->aggr_ranks != NULL)
+        NCI_Free(fh->hints->aggr_ranks);
     if (fh->hints != NULL)
         NCI_Free(fh->hints);
     if (fh->info != MPI_INFO_NULL)

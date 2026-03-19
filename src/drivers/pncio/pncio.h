@@ -123,7 +123,7 @@ typedef struct {
 
     /* Hints set by PnetCDF internally */
     int lustre_num_osts;
-    int *ranklist;
+    int *aggr_ranks; /* [cb_nodes] rank IDs of I/O aggregators */
 
 } PNCIO_Hints;
 
@@ -175,7 +175,8 @@ typedef struct {
     int atomicity;          /* true or false */
     char *io_buf;           /* internal buffer allocated for two-phase I/O */
     int is_agg;             /* whether this process is an aggregator */
-    int my_cb_nodes_index;  /* my index into fh->hints->ranklist[]. -1 if N/A */
+    int my_cb_nodes_index;  /* my index into fh->hints->aggr_ranks[].
+                             * -1 if N/A */
 
     PNCIO_Hints *hints;     /* hints used by PnetCDF */
     MPI_Info info;          /* contains all MPI-IO and PnetCDF hints */
@@ -260,9 +261,9 @@ extern
 int PNCIO_FileSysType(const char *filename);
 
 extern
-void PNCIO_Calc_file_domains(MPI_Offset min_st_off, MPI_Offset max_end_off,
-                int cb_nodes, MPI_Offset **fd_start, MPI_Offset **fd_end,
-                MPI_Offset *fd_size, int striping_unit);
+void PNCIO_Calc_file_domains(int cb_nodes, int striping_unit,
+                MPI_Offset min_st_off, MPI_Offset max_end_off,
+                MPI_Offset **fd_end, MPI_Offset *fd_size);
 
 extern
 void PNCIO_Calc_my_req(PNCIO_File *fh, MPI_Offset min_st_offset,
@@ -287,14 +288,16 @@ void PNCIO_Free_others_req(MPI_Count *count_others_req_per_proc,
                 PNCIO_Access *others_req);
 
 extern
-int PNCIO_Calc_aggregator(const PNCIO_File *fh, MPI_Offset off,
-                MPI_Offset min_off, MPI_Offset *len, MPI_Offset fd_size,
-                const MPI_Offset *fd_end);
+int PNCIO_Calc_aggregator(int striping_unit, int cb_nodes,
+                const int *cb_node_list, MPI_Offset min_st_off,
+                MPI_Offset fd_size, const MPI_Offset *fd_end, MPI_Offset off,
+                MPI_Offset *len);
 
 extern
-void PNCIO_Heap_merge(PNCIO_Access *others_req, MPI_Count *count,
-                MPI_Offset *srt_off, MPI_Count *srt_len, MPI_Count *start_pos,
-                int nprocs, int nprocs_recv, MPI_Count total_elements);
+void PNCIO_Heap_merge(PNCIO_Access *others_req, const MPI_Count *count,
+                MPI_Offset *srt_off, MPI_Count *srt_len,
+                const MPI_Count *start_pos, int nprocs, int nprocs_recv,
+                MPI_Count total_elements);
 
 /* File lock APIs */
 extern
