@@ -502,9 +502,9 @@ err_out:
 /*----< Lustre_set_cb_node_list() >------------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
  *   fh->hints->cb_nodes and set file info for hint cb_nodes.
- *   fh->hints->ranklist[], an int array of size fh->hints->cb_nodes.
+ *   fh->hints->aggr_ranks[], an int array of size fh->hints->cb_nodes.
  *   fh->is_agg: indicating whether this rank is an I/O aggregator
- *   fh->my_cb_nodes_index: index into fh->hints->ranklist[]. -1 if N/A
+ *   fh->my_cb_nodes_index: index into fh->hints->aggr_ranks[]. -1 if N/A
  */
 static
 int Lustre_set_cb_node_list(PNCIO_File *fh)
@@ -669,11 +669,11 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
      */
 
     /* Next step is to determine the MPI rank IDs of I/O aggregators and add
-     * them into ranklist[]. Note fh->hints->ranklist will be freed in
+     * them into aggr_ranks[]. Note fh->hints->aggr_ranks will be freed in
      * PNCIO_File_close().
      */
-    fh->hints->ranklist = (int *) NCI_Malloc(sizeof(int) * num_aggr);
-    if (fh->hints->ranklist == NULL)
+    fh->hints->aggr_ranks = (int *) NCI_Malloc(sizeof(int) * num_aggr);
+    if (fh->hints->aggr_ranks == NULL)
         return NC_ENOMEM;
 
     int block_assignment=0;
@@ -714,7 +714,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
                 int rank_stride = nprocs_per_node[j] / nranks_per_node;
                 for (k=0; k<nranks_per_node; k++) {
                     /* Selecting rank IDs within node j with a stride */
-                    fh->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
+                    fh->hints->aggr_ranks[n] = ranks_per_node[j][k*rank_stride];
                     if (++n == num_aggr) {
                         j = fh->comm_attr.num_nodes; /* break loop j */
                         break; /* loop k */
@@ -733,7 +733,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
                 j = (i % striping_factor) * stride;
                 k = (i / striping_factor) * (nprocs_per_node[j] / avg);
                 assert(k < nprocs_per_node[j]);
-                fh->hints->ranklist[i] = ranks_per_node[j][k];
+                fh->hints->aggr_ranks[i] = ranks_per_node[j][k];
             }
         }
     }
@@ -766,7 +766,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
                 int rank_stride = nprocs_per_node[j] / naggr_per_node[j];
                 /* try stride==1 seems no effect, rank_stride = 1; */
                 for (k=0; k<naggr_per_node[j]; k++) {
-                    fh->hints->ranklist[n] = ranks_per_node[j][k*rank_stride];
+                    fh->hints->aggr_ranks[n] = ranks_per_node[j][k*rank_stride];
                     if (++n == num_aggr) {
                         j = fh->comm_attr.num_nodes; /* break loop j */
                         break; /* loop k */
@@ -783,7 +783,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
                 /* try stride==1 seems no effect, k = idx_per_node[j]; */
                 idx_per_node[j]++;
                 assert(k < nprocs_per_node[j]);
-                fh->hints->ranklist[i] = ranks_per_node[j][k];
+                fh->hints->aggr_ranks[i] = ranks_per_node[j][k];
             }
         }
         NCI_Free(naggr_per_node);
@@ -791,7 +791,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
     }
 
     /* TODO: we can keep these two arrays in case for dynamic construction
-     * of fh->hints->ranklist[], such as in group-cyclic file domain
+     * of fh->hints->aggr_ranks[], such as in group-cyclic file domain
      * assignment method, used in each collective write call.
      */
     NCI_Free(nprocs_per_node);
@@ -805,7 +805,7 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
     fh->is_agg = 0;
     fh->my_cb_nodes_index = -1;
     for (i = 0; i < num_aggr; i++) {
-        if (rank == fh->hints->ranklist[i]) {
+        if (rank == fh->hints->aggr_ranks[i]) {
             fh->is_agg = 1;
             fh->my_cb_nodes_index = i;
             break;
@@ -859,7 +859,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
 
     /* For Lustre, we need to obtain file striping info (striping_factor,
      * striping_unit, and num_osts) in order to select the I/O aggregators
-     * in fh->hints->ranklist, no matter its is open or create mode.
+     * in fh->hints->aggr_ranks, no matter its is open or create mode.
      */
 
 // printf("fh->hints->nc_striping %s\n", (fh->hints->nc_striping == PNCIO_STRIPING_AUTO)?"AUTO":"INHERIT");

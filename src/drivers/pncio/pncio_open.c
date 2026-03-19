@@ -105,9 +105,9 @@ int PNCIO_File_open(MPI_Comm    comm,
     MPI_Info_set(fh->info, "cb_nodes", int_str);
 
     /* add hint "cb_node_list", list of aggregators' rank IDs */
-    snprintf(value, 16, "%d", fh->hints->ranklist[0]);
+    snprintf(value, 16, "%d", fh->hints->aggr_ranks[0]);
     for (i=1; i<fh->hints->cb_nodes; i++) {
-        snprintf(int_str, 16, " %d", fh->hints->ranklist[i]);
+        snprintf(int_str, 16, " %d", fh->hints->aggr_ranks[i]);
         if (strlen(value) + strlen(int_str) >= MPI_MAX_INFO_VAL-5) {
             strcat(value, " ...");
             break;

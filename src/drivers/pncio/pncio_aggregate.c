@@ -7,6 +7,8 @@
 # include <config.h>
 #endif
 
+#include <limits.h> /* INT_MAX */
+
 #include <pncio.h>
 
 /* This file contains four functions:
@@ -24,20 +26,22 @@
  * request represented by (off, *len).  The "len" parameter may be modified to
  * indicate the amount of data actually available in this file domain.
  */
-int PNCIO_Calc_aggregator(const PNCIO_File *fh,
-                          MPI_Offset        off,
-                          MPI_Offset        min_off,
-                          MPI_Offset       *len, /* IN/OUT: */
+int PNCIO_Calc_aggregator(int               striping_unit,
+                          int               cb_nodes,
+                          const int        *cb_node_list, /* IN: [cb_nodes] */
+                          MPI_Offset        min_st_off,
                           MPI_Offset        fd_size,
-                          const MPI_Offset *fd_end)
+                          const MPI_Offset *fd_end,       /* IN: [cb_nodes] */
+                          MPI_Offset        off,
+                          MPI_Offset       *len)          /* IN/OUT: */
 {
     int rank_index, rank;
     MPI_Offset avail_bytes;
 
     /* get an index into array of aggregators */
-    rank_index = (int) ((off - min_off + fd_size) / fd_size - 1);
+    rank_index = (int) ((off - min_st_off + fd_size) / fd_size - 1);
 
-    if (fh->hints->striping_unit > 0) {
+    if (striping_unit > 0) {
         /* Implementation for file domain alignment. Note fd_end[] have been
          * aligned with file system lock boundaries when it was produced by
          * PNCIO_Calc_file_domains().
@@ -48,12 +52,12 @@ int PNCIO_Calc_aggregator(const PNCIO_File *fh,
     }
 
     /* we index into fd_end with rank_index, and fd_end was allocated to be no
-     * bigger than fh->hins->cb_nodes.   If we ever violate that, we're
+     * bigger than cb_nodes.   If we ever violate that, we're
      * overrunning arrays.  Obviously, we should never ever hit this abort */
-    if (rank_index >= fh->hints->cb_nodes || rank_index < 0) {
+    if (rank_index >= cb_nodes || rank_index < 0) {
         fprintf(stderr,
-                "Error in PNCIO_Calc_aggregator(): rank_index(%d) >= fh->hints->cb_nodes (%d) fd_size="OFFFMT" off="OFFFMT"\n",
-                rank_index, fh->hints->cb_nodes, fd_size, off);
+                "Error %s(): rank_index(%d) >= cb_nodes(%d) fd_size="OFFFMT" off="OFFFMT"\n",
+                __func__,rank_index, cb_nodes, fd_size, off);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
@@ -67,7 +71,7 @@ int PNCIO_Calc_aggregator(const PNCIO_File *fh,
     }
 
     /* map our index to a rank */
-    rank = fh->hints->ranklist[rank_index];
+    rank = cb_node_list[rank_index];
 
     return rank;
 }
@@ -75,72 +79,57 @@ int PNCIO_Calc_aggregator(const PNCIO_File *fh,
 /*----<PNCIO_Calc_file_domains() >-------------------------------------------*/
 /* Divide the aggregate access region of a collective read/write call into a
  * set of contiguous but disjoined file regions, called file domain (denoted as
- * 'fd'). Each of them is assigned to an I/O aggregator. Each aggregator is
- * responsible for file access from other processes that fall into its file
- * domain.
+ * 'fd'). Each of them is assigned to an I/O aggregator. An aggregator is
+ * responsible for carrying out the file I/O for other processes whose requests
+ * fall into its file domain.
  *
- * fd_start[cb_nodes] - starting location of "file domain"; region that a given
- *      aggregator will perform aggregation for (i.e. actually do I/O)
- * fd_end[cb_nodes] - start + size - 1 roughly, but it can be less, or 0, in
- *      the case of uneven distributions
+ * fd_end[cb_nodes]   - end location of file domains, inclusive offsets.
+ * fd_size - average size (ceiling) of file domain among cb_nodes.
  */
-void PNCIO_Calc_file_domains(MPI_Offset   min_st_off,
+void PNCIO_Calc_file_domains(int          cb_nodes,
+                             int          striping_unit,
+                             MPI_Offset   min_st_off,
                              MPI_Offset   max_end_off,
-                             int          cb_nodes,
-                             MPI_Offset **fd_start,  /* OUT: [cb_nodes] */
                              MPI_Offset **fd_end,    /* OUT: [cb_nodes] */
-                             MPI_Offset  *fd_size,   /* OUT: */
-                             int          striping_unit)
+                             MPI_Offset  *fd_size)   /* OUT: */
 {
-    int i;
+    int i, rem_front, rem_back;
+    MPI_Offset end_off;
+
+    *fd_end = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * cb_nodes);
 
     /* partition the aggregate access region equally among I/O aggregators */
-    *fd_size = (max_end_off - min_st_off + 1 + cb_nodes - 1) / cb_nodes;
+    *fd_size  = (max_end_off - min_st_off + 1 + cb_nodes - 1) / cb_nodes;
 
-    *fd_start = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * cb_nodes * 2);
-    *fd_end = *fd_start + cb_nodes;
-
-    /* Wei-keng Liao: implementation for file domain alignment to nearest file
-     * lock boundary (as specified by striping_unit hint). TODO: Could also
-     * experiment with other alignment strategies here.
+    /* Align file domain to the nearest file lock boundary (as specified by
+     * striping_unit hint).
      */
-    if (striping_unit > 0) {
-        MPI_Offset end_off;
-        int rem_front, rem_back;
+#ifdef PNETCDF_DEBUG
+    assert(striping_unit > 0);
+#endif
 
-        /* align fd_end[0] to the nearest file lock boundary */
-        (*fd_start)[0] = min_st_off;
-        end_off = (*fd_start)[0] + *fd_size;
+    /* align fd_end[0] to the nearest file lock boundary */
+    end_off = min_st_off + *fd_size;
+    rem_front = end_off % striping_unit;
+    rem_back = striping_unit - rem_front;
+    if (rem_front < rem_back)
+        end_off -= rem_front;
+    else
+        end_off += rem_back;
+    (*fd_end)[0] = end_off - 1;
+
+    /* align (*fd_end)[i] to the nearest file lock boundary */
+    for (i=1; i<cb_nodes; i++) {
+        end_off = min_st_off + *fd_size * (i + 1);
         rem_front = end_off % striping_unit;
         rem_back = striping_unit - rem_front;
         if (rem_front < rem_back)
             end_off -= rem_front;
         else
             end_off += rem_back;
-        (*fd_end)[0] = end_off - 1;
-
-        /* align (*fd_end)[i] to the nearest file lock boundary */
-        for (i = 1; i < cb_nodes; i++) {
-            (*fd_start)[i] = (*fd_end)[i - 1] + 1;
-            end_off = min_st_off + *fd_size * (i + 1);
-            rem_front = end_off % striping_unit;
-            rem_back = striping_unit - rem_front;
-            if (rem_front < rem_back)
-                end_off -= rem_front;
-            else
-                end_off += rem_back;
-            (*fd_end)[i] = end_off - 1;
-        }
-        (*fd_end)[cb_nodes - 1] = max_end_off;
-    } else {    /* no hints set: do things the 'old' way */
-        (*fd_start)[0] = min_st_off;
-        (*fd_end)[0] = min_st_off + *fd_size - 1;
-
-        for (i = 1; i < cb_nodes; i++) {
-            (*fd_start)[i] = (*fd_end)[i - 1] + 1;
-            (*fd_end)[i] = (*fd_start)[i] + *fd_size - 1;
-        }
+        (*fd_end)[i] = end_off - 1;
     }
+    (*fd_end)[cb_nodes - 1] = max_end_off;
 
     /* Take care of cases in which the aggregate access region is not divisible
      * by the number of aggregators. In such cases, the last process, or the
@@ -149,21 +138,19 @@ void PNCIO_Calc_file_domains(MPI_Offset   min_st_off,
      * division.
      */
     for (i=0; i<cb_nodes; i++) {
-        if ((*fd_start)[i] > max_end_off)
-            (*fd_start)[i] = (*fd_end)[i] = -1;
         if ((*fd_end)[i] > max_end_off)
             (*fd_end)[i] = max_end_off;
     }
 }
 
 /*----< PNCIO_Calc_my_req() >------------------------------------------------*/
-/* PNCIO_Calc_my_req() calculates every portions of this rank's requests fall
- * into each aggregator's file domain. When returned, it set the following
+/* PNCIO_Calc_my_req() calculates every portions of this rank's requests that
+ * fall into each aggregator's file domain. When returned, it set the following
  * variables:
- * count_my_req_procs - number of aggregators for which this rank has requests
+ * my_req_naggr - number of aggregators for which this rank has requests that
  *      fall into their file domains
- * count_my_req_per_proc - count of requests for each aggregator, indexed by
- *      rank of the process
+ * count_per_aggr - count of requests for each aggregator, indexed by rank of
+ *      the process
  * my_req[nprocs] - array of data structures describing the requests to be
  *      performed by each aggregator.
  * buf_idx[nprocs] - array of locations into which data in the user buffer that
@@ -174,10 +161,10 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
                        MPI_Offset          min_st_off,
                        const MPI_Offset   *fd_end,
                        MPI_Offset          fd_size,
-                       MPI_Count          *count_my_req_procs,    /* OUT: */
-                       MPI_Count         **count_my_req_per_proc, /* OUT: */
-                       PNCIO_Access      **my_req,                /* OUT: */
-                       MPI_Aint          **buf_idx)               /* OUT: */
+                       MPI_Count          *my_req_naggr,   /* OUT: */
+                       MPI_Count         **count_per_aggr, /* OUT: */
+                       PNCIO_Access      **my_req,         /* OUT: */
+                       MPI_Aint          **buf_idx)        /* OUT: */
 {
     size_t memLen, alloc_sz;
     int i, nprocs, aggr;
@@ -191,21 +178,19 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
 
     MPI_Comm_size(fh->comm, &nprocs);
 
-    *count_my_req_procs = 0;
+    *my_req_naggr = 0;
 
-    *count_my_req_per_proc = NCI_Calloc(nprocs, sizeof(MPI_Count));
+    *count_per_aggr = NCI_Calloc(nprocs, sizeof(MPI_Count));
 
     *my_req = (PNCIO_Access*) NCI_Calloc(nprocs, sizeof(PNCIO_Access));
 
-    *buf_idx = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nprocs);
     /* buf_idx is relevant only if the user buffer is contiguous. buf_idx[i]
-     * gives the index into user_buf where data received from rank i should be
+     * stores the index into user_buf where data received from rank i should be
      * placed. This allows receives to be done without extra buffer. This can't
      * be done if buftype is not contiguous.
      */
-
-    /* initialize buf_idx to -1 */
-    for (i=0; i<nprocs; i++)
+    *buf_idx = (MPI_Aint*) NCI_Malloc(sizeof(MPI_Aint) * nprocs);
+    for (i=0; i<nprocs; i++) /* initialize buf_idx to -1 */
         (*buf_idx)[i] = -1;
 
     if (fh->file_view.size == 0) /* zero-sized request */
@@ -226,17 +211,21 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
 #endif
 
     /* one pass just to calculate how much space to allocate for my_req */
+    memLen = 0;
     for (i=0; i<fh->file_view.count; i++) {
         off = fh->file_view.off[i];
         fd_len = fh->file_view.len[i];
-        /* note: we set fd_len to be the total size of the access.  then
+        /* Note: we set fd_len to be the total size of the access, then
          * PNCIO_Calc_aggregator() will modify the value to return the
          * amount that was available from the file domain that holds the
          * first part of the access.
          */
-        aggr = PNCIO_Calc_aggregator(fh, off, min_st_off, &fd_len, fd_size,
-                                     fd_end);
-        (*count_my_req_per_proc)[aggr]++;
+        aggr = PNCIO_Calc_aggregator(fh->hints->striping_unit,
+                                     fh->hints->cb_nodes, fh->hints->aggr_ranks,
+                                     min_st_off, fd_size, fd_end, off,
+                                     &fd_len);
+        (*count_per_aggr)[aggr]++;
+        memLen++;
 
         /* figure out how much data is remaining in the access (i.e. wasn't
          * part of the file domain that had the starting byte); we'll take
@@ -247,21 +236,16 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
         while (rem_len != 0) {
             off += fd_len;      /* point to first remaining byte */
             fd_len = rem_len;   /* save remaining size, pass to calc */
-            aggr = PNCIO_Calc_aggregator(fh, off, min_st_off, &fd_len, fd_size,
-                                         fd_end);
+            aggr = PNCIO_Calc_aggregator(fh->hints->striping_unit,
+                                         fh->hints->cb_nodes,
+                                         fh->hints->aggr_ranks, min_st_off,
+                                         fd_size, fd_end, off, &fd_len);
 
-            (*count_my_req_per_proc)[aggr]++;
+            (*count_per_aggr)[aggr]++;
+            memLen++;
             rem_len -= fd_len;  /* reduce remaining length by amount from fd */
         }
     }
-
-    /* combine offsets and lens into a single regions so we can make one
-     * exchange instead of two later on. Over-allocate the 'offsets' array and
-     * make 'lens' point to the over-allocated part
-     */
-    memLen = 0;
-    for (i=0; i<nprocs; i++)
-        memLen += (*count_my_req_per_proc)[i];
 
 #ifdef HAVE_MPI_LARGE_COUNT
     alloc_sz = sizeof(MPI_Offset) * 2;
@@ -276,14 +260,14 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
     off_ptr = (*my_req)[0].offsets;
     len_ptr = (*my_req)[0].lens;
     for (i=0; i<nprocs; i++) {
-        if ((*count_my_req_per_proc)[i]) {
+        if ((*count_per_aggr)[i]) {
             (*my_req)[i].offsets = off_ptr;
-            off_ptr += (*count_my_req_per_proc)[i];
+            off_ptr += (*count_per_aggr)[i];
             (*my_req)[i].lens = len_ptr;
-            len_ptr += (*count_my_req_per_proc)[i];
-            (*count_my_req_procs)++;
+            len_ptr += (*count_per_aggr)[i];
+            (*my_req_naggr)++;
         }
-        (*my_req)[i].count = 0; /* will be incremented where needed later */
+        (*my_req)[i].count = 0; /* will be incremented in loop j below */
     }
 
     /* now fill in my_req */
@@ -292,8 +276,10 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
         off = fh->file_view.off[j];
         fd_len = fh->file_view.len[j];
 
-        aggr = PNCIO_Calc_aggregator(fh, off, min_st_off, &fd_len, fd_size,
-                                     fd_end);
+        aggr = PNCIO_Calc_aggregator(fh->hints->striping_unit,
+                                     fh->hints->cb_nodes, fh->hints->aggr_ranks,
+                                     min_st_off, fd_size, fd_end, off,
+                                     &fd_len);
 
         /* for each separate contiguous access from this process */
         if ((*buf_idx)[aggr] == -1)
@@ -315,8 +301,10 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
         while (rem_len != 0) {
             off += fd_len;
             fd_len = rem_len;
-            aggr = PNCIO_Calc_aggregator(fh, off, min_st_off, &fd_len, fd_size,
-                                         fd_end);
+            aggr = PNCIO_Calc_aggregator(fh->hints->striping_unit,
+                                         fh->hints->cb_nodes,
+                                         fh->hints->aggr_ranks, min_st_off,
+                                         fd_size, fd_end, off, &fd_len);
 
             if ((*buf_idx)[aggr] == -1)
                 (*buf_idx)[aggr] = (MPI_Aint) curr_idx;
@@ -332,11 +320,11 @@ void PNCIO_Calc_my_req(PNCIO_File         *fh,
     }
 }
 
-void PNCIO_Free_my_req(MPI_Count    *count_my_req_per_proc,
+void PNCIO_Free_my_req(MPI_Count    *count_per_aggr,
                        PNCIO_Access *my_req,
                        MPI_Aint     *buf_idx)
 {
-    NCI_Free(count_my_req_per_proc);
+    NCI_Free(count_per_aggr);
     NCI_Free(my_req[0].offsets);
     NCI_Free(my_req);
     NCI_Free(buf_idx);
@@ -353,8 +341,8 @@ void PNCIO_Free_my_req(MPI_Count    *count_my_req_per_proc,
  *      i fall into this aggregator's file domain.
  */
 void PNCIO_Calc_others_req(PNCIO_File    *fh,
-                           MPI_Count      count_my_req_procs,
-                           MPI_Count     *count_my_req_per_proc,
+                           MPI_Count      my_req_naggr,
+                           MPI_Count     *count_per_aggr,
                            PNCIO_Access  *my_req,
                            MPI_Count     *count_others_req_procs,    /* OUT: */
                            MPI_Count    **count_others_req_per_proc, /* OUT: */
@@ -378,13 +366,13 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
     /* first find out how much to send/recv and from/to whom */
     *count_others_req_per_proc = NCI_Malloc(sizeof(MPI_Count) * nprocs);
 
-    MPI_Alltoall(count_my_req_per_proc, 1, MPI_COUNT,
-                 *count_others_req_per_proc, 1, MPI_COUNT, fh->comm);
+    MPI_Alltoall(count_per_aggr, 1, MPI_COUNT, *count_others_req_per_proc,
+                                 1, MPI_COUNT, fh->comm);
 
     *others_req = (PNCIO_Access*) NCI_Malloc(sizeof(PNCIO_Access) * nprocs);
 
     memLen = 0;
-    for (i = 0; i < nprocs; i++)
+    for (i=0; i<nprocs; i++)
         memLen += (*count_others_req_per_proc)[i];
 
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -403,7 +391,7 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
     mem_ptr = (*others_req)[0].mem_ptrs;
 
     *count_others_req_procs = 0;
-    for (i = 0; i < nprocs; i++) {
+    for (i=0; i<nprocs; i++) {
         if ((*count_others_req_per_proc)[i]) {
             (*others_req)[i].count = (*count_others_req_per_proc)[i];
             (*others_req)[i].offsets = off_ptr;
@@ -419,15 +407,15 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
 
     /* now send the calculated offsets and lengths to respective processes */
     reqs = (MPI_Request*) NCI_Malloc(sizeof(MPI_Request) *
-           (count_my_req_procs + *count_others_req_procs) * 2);
+           (my_req_naggr + *count_others_req_procs) * 2);
 
     j = 0;
-    for (i = 0; i < nprocs; i++) {
+    for (i=0; i<nprocs; i++) {
         if ((*others_req)[i].count == 0)
             continue;
         if (i == myrank) {
-            /* send to self by using memcpy()C, here
-             * (*others_req)[i].count == my_req[i].count
+            /* send to self by using memcpy().
+             * Note (*others_req)[i].count == my_req[i].count
              */
             memcpy((*others_req)[i].offsets, my_req[i].offsets,
                    my_req[i].count * sizeof(MPI_Offset));
@@ -457,7 +445,7 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
         }
     }
 
-    for (i = 0; i < nprocs; i++) {
+    for (i=0; i<nprocs; i++) {
         if (my_req[i].count && i != myrank) {
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Isend_c(my_req[i].offsets, my_req[i].count,
@@ -465,7 +453,7 @@ void PNCIO_Calc_others_req(PNCIO_File    *fh,
             MPI_Isend_c(my_req[i].lens, my_req[i].count,
                         MPI_OFFSET, i, i + myrank, fh->comm, &reqs[j++]);
 #else
-            assert(my_req[i].count <= 2147483647); /* overflow 4-byte int */
+            assert(my_req[i].count <= INT_MAX); /* overflow 4-byte int */
             MPI_Isend(my_req[i].offsets, (int)my_req[i].count,
                       MPI_OFFSET, i, i + myrank, fh->comm, &reqs[j++]);
             MPI_Isend(my_req[i].lens, (int)my_req[i].count,
