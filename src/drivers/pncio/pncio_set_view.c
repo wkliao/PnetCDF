@@ -37,6 +37,17 @@ int PNCIO_File_set_view(PNCIO_File   *fh,
     for (i=0; i<npairs; i++) assert(lengths[i] > 0);
 #endif
 
+    if (npairs == 0 && offsets == NULL && lengths == NULL) {
+        /* This is called to reset fileview to be entire file visible */
+        fh->file_view.count = 0;
+        fh->file_view.size = -1;
+        fh->file_view.off   = NULL;
+        fh->file_view.len   = NULL;
+        fh->file_view.idx   = 0;
+        fh->file_view.rem   = 0;
+        return NC_NOERR;
+    }
+
     fh->file_view.count = npairs;
     fh->file_view.off   = offsets;
     fh->file_view.len   = lengths;
