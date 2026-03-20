@@ -67,6 +67,7 @@ LUSTRE_Calc_aggregator(PNCIO_File *fh,
 }
 
 /*----< LUSTRE_Fill_send_buffer() >------------------------------------------*/
+/* This subroutine is called only when buf_view is not contiguous */
 static void
 LUSTRE_Fill_send_buffer(PNCIO_File       *fh,
                         const void       *buf,
@@ -77,15 +78,18 @@ LUSTRE_Fill_send_buffer(PNCIO_File       *fh,
                         char            **self_buf,
                         disp_len_list    *send_list)
 {
-    /* this function is only called if buftype is not contiguous */
-    int q, first_q=-1, isUserBuf=0;
-    MPI_Count send_size_rem=0, size, copy_size=0;
     char *user_buf_ptr=NULL, *send_buf_ptr=NULL, *same_buf_ptr=NULL;
-    MPI_Offset off, user_buf_idx;
+    int aggr, first_aggr, isUserBuf;
+    MPI_Count send_size_rem=0, size, copy_size=0;
+    MPI_Offset rem_off, user_buf_idx;
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Offset len, rem_len;
 #else
     int len, rem_len;
+#endif
+
+#ifdef PNETCDF_DEBUG
+    char *orig_ptr;
 #endif
 
 #ifdef WKL_DEBUG
@@ -94,167 +98,191 @@ int num_memcpy=0;
 
     *self_buf = NULL;
 
-    /* user_buf_idx is to the index offset to buf, indicating the starting
+    /* user_buf_idx is the index offset to buf, indicating the starting
      * location to be copied.
      *
-     * buf_view stores the offset-length pairs of the flattened user buffer
-     *     data type. Note this stores offset-length pairs of the data type,
-     *     and write amount can be a multiple of the data type.
-     * buf_view.count: the number of pairs
-     * buf_view.off[i]: the ith pair's byte offset to buf. Note the
-     *     flattened offsets of user buffer type may not be sorted in an
-     *     increasing order, unlike fileview which is required by MPI to be
-     *     sorted in a monotonically non-decreasing order.
+     * buf_view stores the flattened offset-length pairs of the user buffer.
+     * buf_view.count: the number of offset-length pairs
+     * buf_view.off[i]: the ith pair's byte offset to buf. Note buf_view.off[]
+     *     may not be sorted in an increasing order, unlike fileview which is
+     *     required by MPI standard to be sorted in a monotonically
+     *     non-decreasing order.
      * buf_view.len[i]: length of the ith pair
-     * buf_view.idx: index to the offset-length pair currently being
-     *     processed, incremented each round.
+     * buf_view.idx: index to the offset-length pair currently being processed,
+     *      incremented each round, ranging from 0 to (buf_view.count-1).
      * buf_view.rem: amount of data in the pair that has not been copied
-     *     over, changed each round.
+     *     over, changed each round, only relevant to the pair pointed by
+     *     buf_view.idx.
      */
     user_buf_idx = buf_view->off[buf_view->idx]
                  + buf_view->len[buf_view->idx]
                  - buf_view->rem;
                  /* in case data left to be copied from previous round */
 
-    /* fh->file_view.count has been checked and adjusted to a possitive number
-     * at the beginning of PNCIO_Lustre_write_coll().
+#ifdef PNETCDF_DEBUG
+    /* If this request is not zero-sized, fh->file_view.count has been adjusted
+     * to be a positive number at the call to PNCIO_File_write_at_all().
      */
     assert(fh->file_view.count > 0);
+#endif
 
-    /* fh->file_view.count: the number of noncontiguous file segments this
-     *     rank writes to. Each segment i is described by fh->file_view.offs[i]
-     *     and fh->file_view.len[i].
-     * fh->file_view.idx: the index to the fh->file_view.offs[],
+    /* fh->file_view.count: the number of file offset-length pairs this rank
+     *     writes to.
+     * fh->file_view.idx: the index to the pair of fh->file_view.offs[], and
      *     fh->file_view.len[] that have been processed in the previous round.
      * The while loop below packs write data into send buffers, send_buf[],
      * based on this rank's off-len pairs in its file view,
      */
-    off     = fh->file_view.off[fh->file_view.idx]
+    rem_off = fh->file_view.off[fh->file_view.idx]
             + fh->file_view.len[fh->file_view.idx]
             - fh->file_view.rem;
     rem_len = fh->file_view.rem;
 
-// int rank; MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    first_aggr = -1;
+    isUserBuf = 0;
     while (send_total_size > 0) {
         /* this off-len request may span to more than one I/O aggregator */
-// if (rank == 0) printf("rank 0 %s at %d send_total_size=%zd rem_len=%lld\n",__func__,__LINE__,send_total_size,rem_len);
         while (rem_len != 0) {
             len = rem_len;
-            q = LUSTRE_Calc_aggregator(fh, off, &len);
-            /* NOTE: len will be modified by LUSTRE_Calc_aggregator() to be no
-             * more than a file stripe unit size that aggregator "q" is
-             * responsible for. Note q is not the MPI rank ID, It is the array
-             * index to fh->hints->aggr_ranks[].
+            aggr = LUSTRE_Calc_aggregator(fh, rem_off, &len);
+            /* NOTE: len may be modified by LUSTRE_Calc_aggregator() to be no
+             * more than a file stripe unit size that aggregator "aggr" is
+             * responsible for. Note aggr is not the MPI rank ID in fh->comm,
+             * It is the index to array fh->hints->aggr_ranks[].
              *
              * Now len is the amount of data in ith off-len pair that should be
-             * sent to aggregator q. Note q can also be self. In this case,
-             * data is also packed into send_buf[q] or pointed to a segment of
-             * buf when the data to be packed is contiguous. send_buf[q] will
-             * later be copied to write buffer in MEMCPY_UNPACK, instead of
-             * calling MPI_Issend to send.
+             * sent to aggregator aggr. Note aggr can also be self. In this
+             * case, data is also packed into send_buf[aggr] or pointed to a
+             * segment of buf when the data to be packed is contiguous, and
+             * then data in send_buf[aggr] will later be copied over to write
+             * buffer in MEMCPY_UNPACK, instead of calling MPI_Issend to send.
              *
-             * send_size[q]: data amount of this rank needs to send to
-             * aggregator q in this round.
+             * send_size[aggr] is the data amount of this rank needs to send to
+             * aggregator aggr in this round.
              *
-             * len and send_size[q] are all always <= striping_unit
+             * len and send_size[aggr] are both always <= striping_unit
              */
 
-// if (rank == 0) printf("rank 0 %s at %d rem_len=%lld len=%lld first_q=%d q=%d idx=%lld\n",__func__,__LINE__,rem_len,len,first_q,q,buf_view->idx);
-
-            if (first_q != q) {
+            if (first_aggr != aggr) {
                 assert(send_size_rem == 0);
-                first_q = q;
+                first_aggr = aggr;
                 isUserBuf = 1;
-                send_size_rem = send_size[q];
+                send_size_rem = send_size[aggr];
                 copy_size = 0;
                 same_buf_ptr = (char*)buf + user_buf_idx; /* no increment */
-                user_buf_ptr = same_buf_ptr; /* increment after each memcpy */
+
+                /* user_buf_ptr and send_buf_ptr increment after each memcpy */
+                user_buf_ptr = same_buf_ptr;
                 if (send_buf != NULL)
-                    send_buf_ptr = send_buf[q]; /* increment after each memcpy */
+                    send_buf_ptr = send_buf[aggr];
+#ifdef PNETCDF_DEBUG
+                /* orig_ptr is for checking whether user_buf_ptr is reused */
+                orig_ptr = user_buf_ptr;
+#endif
             }
 
-            /* copy len amount of data from buf to send_buf[q] */
+            /* copy len amount of data from buf to send_buf[aggr] */
             size = len;
 
-            while (size) {
+            while (size > 0) {
                 MPI_Count size_in_buf = MIN(size, buf_view->rem);
-                copy_size += size_in_buf;
-                user_buf_idx += size_in_buf;
+                copy_size     += size_in_buf;
+                user_buf_idx  += size_in_buf;
                 send_size_rem -= size_in_buf;
                 buf_view->rem -= size_in_buf;
-// if (rank == 0) printf("rank 0 %s at %d size=%lld size_in_buf=%lld copy_size=%lld rem=%ld\n",__func__,__LINE__, size, size_in_buf, copy_size,buf_view->rem);
                 if (buf_view->rem == 0) { /* move on to next off-len pair */
                     if (buf_view->count > 1) {
                         /* user buffer type is not contiguous */
                         if (send_size_rem) {
-                            /* after this copy send_buf[q] is still not full */
+                            /* after this round of memcpy, send_buf[aggr] is
+                             * still not full
+                             */
                             isUserBuf = 0;
-// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 1 size=%lld user_buf_ptr=%p\n",copy_size,user_buf_ptr);
                             memcpy(send_buf_ptr, user_buf_ptr, copy_size);
-user_buf_ptr += copy_size;
-                            send_buf_ptr += copy_size;
-                            copy_size = 0;
-                        } else if (isUserBuf == 0) {
-                            /* send_buf[q] is full and not using user buf,
-                             * copy the remaining delayed data */
-// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 2 size=%lld\n",copy_size);
-                            memcpy(send_buf_ptr, user_buf_ptr, copy_size);
-user_buf_ptr += copy_size;
-                        }
 #ifdef WKL_DEBUG
 num_memcpy++;
 #endif
+#ifdef PNETCDF_DEBUG
+                            assert(orig_ptr == user_buf_ptr);
+                            user_buf_ptr += copy_size;
+#endif
+                            send_buf_ptr += copy_size;
+                            copy_size = 0;
+                        } else if (isUserBuf == 0) {
+                            /* send_buf[aggr] is full and not using user buf to
+                             * send, copy over the remaining delayed data
+                             */
+                            memcpy(send_buf_ptr, user_buf_ptr, copy_size);
+#ifdef WKL_DEBUG
+num_memcpy++;
+#endif
+#ifdef PNETCDF_DEBUG
+                            assert(orig_ptr == user_buf_ptr);
+                            user_buf_ptr += copy_size;
+#endif
+                        }
                     }
-                    /* update buf_view->idx, buf_view->rem,
-                     * and user_buf_idx
-                     */
-                        buf_view->idx++;
-assert(buf_view->idx <= buf_view->count);
 
-if (buf_view->idx < buf_view->count) {
+                    /* update buf_view->idx, buf_view->rem, and user_buf_idx */
+                    buf_view->idx++;
+                    if (buf_view->idx == buf_view->count) {
+                        /* Done with all the copying */
+#ifdef PNETCDF_DEBUG
+                        assert(size == size_in_buf);
+                        assert(rem_len == len);
+                        assert(send_total_size == len);
+#endif
+                        break;
+                    }
                     user_buf_idx = buf_view->off[buf_view->idx];
                     buf_view->rem = buf_view->len[buf_view->idx];
                     user_buf_ptr = (char*) buf + user_buf_idx;
-}
-else assert(size - size_in_buf == 0);
-
+#ifdef PNETCDF_DEBUG
+                    /* reset orig_ptr for checking if user_buf_ptr is reused */
+                    orig_ptr = user_buf_ptr;
+#endif
                 }
                 else if (send_size_rem == 0 && isUserBuf == 0) {
-                    /* buf_view->rem > 0, send_buf[q] is full, and not using
-                     * user buf to send, copy the remaining delayed data
+                    /* buf_view->rem > 0, send_buf[aggr] is full, and not using
+                     * user buf to send, copy over the remaining delayed data
                      */
-// if (rank == 0 && (char*)buf == (char*)user_buf_ptr) printf("rank 0 copy original buf 3 size=%lld\n",copy_size);
                     memcpy(send_buf_ptr, user_buf_ptr, copy_size);
 #ifdef WKL_DEBUG
 num_memcpy++;
 #endif
+#ifdef PNETCDF_DEBUG
+                    assert(orig_ptr == user_buf_ptr);
                     user_buf_ptr += copy_size;
+#endif
                 }
                 size -= size_in_buf;
             }
 
-            if (send_size_rem == 0) { /* data to q is fully packed */
-                first_q = -1;
+            if (send_size_rem == 0) { /* data for aggr is fully packed */
+                first_aggr = -1;
 
-                if (q != fh->my_cb_nodes_index) { /* send only if not self rank */
+                if (aggr != fh->my_cb_nodes_index) {
+                    /* send only if not self rank */
                     if (isUserBuf)
-                        CACHE_REQ(send_list[q], send_size[q], same_buf_ptr)
+                        CACHE_REQ(send_list[aggr], send_size[aggr],
+                                  same_buf_ptr)
                     else
-                        CACHE_REQ(send_list[q], send_size[q], send_buf[q])
+                        CACHE_REQ(send_list[aggr], send_size[aggr],
+                                  send_buf[aggr])
                 }
                 else if (isUserBuf) {
                     /* send buffer is also (part of) user's buf. Return the
-                     * buffer pointer, so the self send data can be directly
-                     * unpack from user buf to write buffer.
+                     * buffer pointer, so data for self can be directly
+                     * unpacked from user buf to write buffer.
                      */
                     *self_buf = same_buf_ptr;
                 }
             }
             /* len is the amount of data copied */
-            off += len;
-            rem_len -= len;
+            rem_off           += len;
+            rem_len           -= len;
             fh->file_view.rem -= len;
-            send_total_size -= len;
+            send_total_size   -= len;
             if (send_total_size == 0) break;
         }
         if (send_total_size == 0) break;
@@ -264,7 +292,7 @@ num_memcpy++;
             fh->file_view.idx++;
             fh->file_view.rem = fh->file_view.len[fh->file_view.idx];
         }
-        off = fh->file_view.off[fh->file_view.idx];
+        rem_off = fh->file_view.off[fh->file_view.idx];
         rem_len = fh->file_view.rem;
     }
 
@@ -272,6 +300,7 @@ num_memcpy++;
 if (num_memcpy> 0) printf("---- fh->file_view.count=%lld fh->file_view.idx=%lld buf_view->count=%lld num_memcpy=%d\n",fh->file_view.count,fh->file_view.idx,buf_view->count,num_memcpy);
 #endif
 }
+
 
 #ifdef HAVE_MPI_LARGE_COUNT
 #define MEMCPY_UNPACK(x, inbuf, start, count, outbuf) {          \
