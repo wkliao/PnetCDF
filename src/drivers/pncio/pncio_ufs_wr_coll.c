@@ -701,6 +701,16 @@ err_out:
     return total_w_len;
 }
 
+/*----< offset_compare() >---------------------------------------------------*/
+/* This subroutine is used to sort st_end_all[nprocs] */
+static int
+offset_compare(const void *a, const void *b)
+{
+    if (*(MPI_Offset*)a > *(MPI_Offset*)b) return (1);
+    if (*(MPI_Offset*)a < *(MPI_Offset*)b) return (-1);
+    return (0);
+}
+
 /*----< PNCIO_UFS_write_coll() >---------------------------------------------*/
 MPI_Offset PNCIO_UFS_write_coll(PNCIO_File *fh,
                                 const void *buf,
@@ -786,6 +796,8 @@ double curT = MPI_Wtime();
          * min_st_off  - starting file offset of the aggregate access region
          * max_end_off - last byte offset of the aggregate access region
          */
+        qsort(st_end_all, nprocs, sizeof(MPI_Offset)*2, offset_compare);
+
         for (i=0; i<2*nprocs; i+=2) { /* find the 1st non-zero sized */
             if (st_end_all[i] >= 0) {
                 min_st_off  = st_end_all[i];
@@ -803,6 +815,11 @@ double curT = MPI_Wtime();
             max_end_off = MAX(max_end_off, st_end_all[i+1]);
         }
         NCI_Free(st_end_all);
+
+#ifdef PNETCDF_DEBUG
+        /* A zero-sized collective write should never happen. */
+        assert(!(min_st_off == -1 && max_end_off == -1));
+#endif
     }
 
     if (fh->hints->romio_cb_write == PNCIO_HINT_DISABLE ||
