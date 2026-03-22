@@ -206,8 +206,8 @@ AC_DEFUN([LT_MPI_CHECK_SHLIB],[
    if test "x$RM" = xrm || test "x$RM" = "x/bin/rm" ; then
       RM="$RM -f"
    fi
-   ac_ltcompile='./libtool --mode=compile $MPICC -c $CFLAGS $CPPFLAGS conftest.$ac_ext -o conftest.lo >&AS_MESSAGE_LOG_FD'
-   ac_ltlink_la='./libtool --mode=link $MPICC -rpath `pwd` $CFLAGS $LDFLAGS -o libconftest.la conftest.lo $LIBS >&AS_MESSAGE_LOG_FD'
+   ac_ltcompile='./libtool --tag=CC --mode=compile $MPICC -c $CFLAGS $CPPFLAGS conftest.$ac_ext -o conftest.lo >&AS_MESSAGE_LOG_FD'
+   ac_ltlink_la='./libtool --tag=CC --mode=link $MPICC -rpath `pwd` $CFLAGS $LDFLAGS -o libconftest.la conftest.lo $LIBS >&AS_MESSAGE_LOG_FD'
    AS_IF([AC_TRY_EVAL([ac_ltcompile]) &&
        AC_TRY_EVAL([ac_ltlink_la]) &&
        AC_TRY_COMMAND([test -s libconftest.la])],
