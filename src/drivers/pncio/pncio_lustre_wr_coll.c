@@ -2041,6 +2041,16 @@ LUSTRE_Exch_and_write(PNCIO_File    *fh,
     return total_w_len;
 }
 
+/*----< offset_compare() >---------------------------------------------------*/
+/* This subroutine is used to sort st_end_all[nprocs] */
+static int
+offset_compare(const void *a, const void *b)
+{
+    if (*(MPI_Offset*)a > *(MPI_Offset*)b) return (1);
+    if (*(MPI_Offset*)a < *(MPI_Offset*)b) return (-1);
+    return (0);
+}
+
 /*----< PNCIO_Lustre_write_coll() >------------------------------------------*/
 MPI_Offset PNCIO_Lustre_write_coll(PNCIO_File *fh,
                                    const void *buf,
@@ -2097,7 +2107,6 @@ double curT = MPI_Wtime();
         end_off = fh->file_view.off[fh->file_view.count-1]
                 + fh->file_view.len[fh->file_view.count-1] - 1;
     }
-// if (myrank==0) printf("%s %d: fh->file_view size=%lld count=%lld offset=%lld st_off=%lld end_off=%lld\n",__func__,__LINE__, fh->file_view.size, fh->file_view.count,fh->file_view.off[0],st_off,end_off);
 
     buf_view.idx = 0;
     buf_view.rem = buf_view.size;
@@ -2142,6 +2151,7 @@ double curT = MPI_Wtime();
         striping_range = fh->hints->striping_unit * fh->hints->striping_factor;
         is_interleaved = 0;
 
+        qsort(st_end_all, nprocs, sizeof(MPI_Offset)*2, offset_compare);
         for (i=0; i<2*nprocs; i+=2) { /* find the 1st non-zero sized */
             if (st_end_all[i] >= 0) {
                 min_st_off  = st_end_all[i];
@@ -2164,12 +2174,16 @@ double curT = MPI_Wtime();
         }
         NCI_Free(st_end_all);
 
+#ifdef PNETCDF_DEBUG
+        /* A zero-sized collective write should never happen. */
+        assert(!(min_st_off == -1 && max_end_off == -1));
+#endif
+
         if (fh->hints->romio_cb_write == PNCIO_HINT_ENABLE) {
             /* explicitly enabled by user */
             do_collect = 1;
         }
         else if (fh->hints->romio_cb_write == PNCIO_HINT_AUTO) {
-// if (myrank==0) printf("%s %d: large_indv_req=%d cb_nodes=%d striping_factor=%d\n",__func__,__LINE__, large_indv_req,fh->hints->cb_nodes , fh->hints->striping_factor);
             /* Check if collective write is actually necessary, only when
              * romio_cb_write hint is set to PNCIO_HINT_AUTO.
              *
