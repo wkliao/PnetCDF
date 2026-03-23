@@ -816,10 +816,15 @@ double curT = MPI_Wtime();
         }
         NCI_Free(st_end_all);
 
+        if (min_st_off == -1 && max_end_off == -1) {
 #ifdef PNETCDF_DEBUG
-        /* A zero-sized collective write should never happen. */
-        assert(!(min_st_off == -1 && max_end_off == -1));
+            /* Warn a zero-sized collective write */
+            if (rank == 0)
+                printf("%s at %d: zero--sized collective write!\n",
+                       __func__,__LINE__);
+            return 0;
 #endif
+        }
     }
 
     if (fh->hints->romio_cb_write == PNCIO_HINT_DISABLE ||
