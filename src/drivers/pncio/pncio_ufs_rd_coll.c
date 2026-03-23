@@ -751,15 +751,11 @@ double curT = MPI_Wtime();
         (!interleave_count && fh->hints->romio_cb_read == PNCIO_HINT_AUTO)) {
         /* switch to perform independent read */
 
-        if (buf_view.size == 0) /* zero-size request */
-            return 0;
-
-        if (buf_view.count <= 1 && fh->file_view.count <= 1)
-            /* Both buf_view and file_view are contiguous. */
-            return PNCIO_UFS_read_contig(fh, buf, buf_view.size,
-                                         fh->file_view.off[0]);
-        else
-            return PNCIO_UFS_read_indep(fh, buf, buf_view);
+#ifdef WKL_DEBUG
+        printf("%s %d: SWITCH to PNCIO_UFS_read_indep !!!\n",
+                   __func__,__LINE__);
+#endif
+        return PNCIO_UFS_read_indep(fh, buf, buf_view);
     }
 
     /* We now proceed to perform two-phase I/O. At first, a call to
