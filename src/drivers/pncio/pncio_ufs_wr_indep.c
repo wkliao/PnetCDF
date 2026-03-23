@@ -317,6 +317,12 @@ MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fh,
             len = PNCIO_UFS_read_contig(fh, tmp_buf, req_len, file_off);
             if (len < 0) return len;
 
+            /* In case read's len is shorter than requested, zero-out the
+             * remaining contents of tmp_buf.
+             */
+            if (len < req_len)
+                memset(tmp_buf + len, 0, req_len - len);
+
             /* Copy data from buf to tmp_buf. Skip 'disp' bytes at the front
              * for both buffers.
              */
