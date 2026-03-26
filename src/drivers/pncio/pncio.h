@@ -132,7 +132,8 @@ typedef struct {
                              * buf_view within ncmpio driver, but not in pncio
                              */
     MPI_Offset   size;      /* total size in bytes, i.e. sum of len[*],
-                             * 0 means zero-sized request
+                             * 0 means zero-sized request. -1 means view has
+                             * been reset (in this case count should be 0).
                              */
     MPI_Count    count;     /* number of off-len pairs. 0 means the entire file
                              * is visible. 0 or 1 means buf_view/file_view is
