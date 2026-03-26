@@ -26,10 +26,11 @@ int PNCIO_File_close(PNCIO_File *fh)
             err = ncmpii_error_posix2nc("close");
     }
 
-    if (fh->hints->aggr_ranks != NULL)
-        NCI_Free(fh->hints->aggr_ranks);
-    if (fh->hints != NULL)
+    if (fh->hints != NULL) {
+        if (fh->hints->aggr_ranks != NULL)
+            NCI_Free(fh->hints->aggr_ranks);
         NCI_Free(fh->hints);
+    }
     if (fh->info != MPI_INFO_NULL)
         MPI_Info_free(&(fh->info));
     if (fh->io_buf != NULL)
