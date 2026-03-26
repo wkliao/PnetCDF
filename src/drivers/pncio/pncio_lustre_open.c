@@ -31,6 +31,35 @@
 
 #include "pncio.h"
 
+#define SET_INFO(fh) {                                                      \
+    char int_str[16];                                                       \
+                                                                            \
+    /* set file hints with values only available after file is opened */    \
+    MPI_Info_set(fh->info, "file_system_type", "LUSTRE:");                  \
+                                                                            \
+    snprintf(int_str, 16, "%d", fh->hints->striping_unit);                  \
+    MPI_Info_set(fh->info, "striping_unit", int_str);                       \
+                                                                            \
+    snprintf(int_str, 16, "%d", fh->hints->striping_factor);                \
+    MPI_Info_set(fh->info, "striping_factor", int_str);                     \
+                                                                            \
+    snprintf(int_str, 16, "%d", fh->hints->start_iodevice);                 \
+    MPI_Info_set(fh->info, "start_iodevice", int_str);                      \
+                                                                            \
+    snprintf(int_str, 16, "%d", fh->hints->lustre_num_osts);                \
+    MPI_Info_set(fh->info, "lustre_num_osts", int_str);                     \
+                                                                            \
+    snprintf(int_str, 16, "%d", fh->hints->lustre_overstriping_ratio);      \
+    MPI_Info_set(fh->info, "lustre_overstriping_ratio", int_str);           \
+                                                                            \
+    /* collective buffer size must be at least file striping size */        \
+    if (fh->hints->cb_buffer_size < fh->hints->striping_unit) {             \
+        fh->hints->cb_buffer_size = fh->hints->striping_unit;               \
+        snprintf(int_str, 16, " %d", fh->hints->cb_buffer_size);            \
+        MPI_Info_set(fh->info, "cb_buffer_size", int_str);                  \
+    }                                                                       \
+}
+
 #ifdef MIMIC_LUSTRE
 #define xstr(s) str(s)
 #define str(s) #s
@@ -131,7 +160,7 @@ int get_total_avail_osts(const char *filename)
     dd = open(dname, O_RDONLY, 0600);
     if (dd < 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-        printf("Error at %s (%d) fails to open folder %s (%s)\n",
+        printf("Error at %s (%d) failed to open folder %s (%s)\n",
                __FILE__,__LINE__, dname, strerror(errno));
 #endif
         goto err_out;
@@ -141,7 +170,7 @@ int get_total_avail_osts(const char *filename)
     layout = llapi_layout_get_by_fd(dd, LLAPI_LAYOUT_GET_COPY);
     if (layout == NULL) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-        printf("Error at %s (%d) llapi_layout_get_by_fd() fails (%s)\n",
+        printf("Error at %s (%d) llapi_layout_get_by_fd() failed (%s)\n",
                __FILE__, __LINE__,strerror(errno));
 #endif
         goto err_out;
@@ -151,7 +180,7 @@ int get_total_avail_osts(const char *filename)
     err = llapi_layout_pool_name_get(layout, pool_name, sizeof(pool_name)-1);
     if (err < 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-        printf("Error at %s (%d) llapi_layout_pool_name_get() fails (%s)\n",
+        printf("Error at %s (%d) llapi_layout_pool_name_get() failed (%s)\n",
                __FILE__, __LINE__,strerror(errno));
 #endif
         goto err_out;
@@ -175,7 +204,7 @@ int get_total_avail_osts(const char *filename)
     err = llapi_getname(dname, fsname, 63);
     if (err < 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-        printf("Error at %s (%d) llapi_getname() fails (%s)\n",
+        printf("Error at %s (%d) llapi_getname() failed (%s)\n",
                __FILE__, __LINE__,strerror(errno));
 #endif
         goto err_out;
@@ -301,7 +330,7 @@ uint64_t get_striping(int         fh,
     layout = llapi_layout_get_by_fd(fh, LLAPI_LAYOUT_GET_COPY);
     if (layout == NULL) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-        printf("Error at %s (%d) llapi_layout_get_by_fd() fails\n",
+        printf("Error at %s (%d) llapi_layout_get_by_fd() failed\n",
                 __FILE__, __LINE__);
 #endif
         goto err_out;
@@ -311,7 +340,7 @@ uint64_t get_striping(int         fh,
     if (err != 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
         snprintf(int_str, 32, "%lu", *pattern);
-        printf("Error at %s (%d) llapi_layout_pattern_get() fails to get pattern %s\n",
+        printf("Error at %s (%d) llapi_layout_pattern_get() failed to get pattern %s\n",
                 __FILE__, __LINE__, PATTERN_STR(*pattern, int_str));
 #endif
         goto err_out;
@@ -322,7 +351,7 @@ uint64_t get_striping(int         fh,
     if (err != 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
         snprintf(int_str, 32, "%lu", *stripe_count);
-        printf("Error at %s (%d) llapi_layout_stripe_count_get() fails to get stripe count %s\n",
+        printf("Error at %s (%d) llapi_layout_stripe_count_get() failed to get stripe count %s\n",
             __FILE__, __LINE__, PATTERN_STR(*stripe_count, int_str));
 #endif
         goto err_out;
@@ -333,7 +362,7 @@ uint64_t get_striping(int         fh,
     if (err != 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
         snprintf(int_str, 32, "%lu", *stripe_size);
-        printf("Error at %s (%d) llapi_layout_stripe_size_get() fails to get stripe size %s\n",
+        printf("Error at %s (%d) llapi_layout_stripe_size_get() failed to get stripe size %s\n",
             __FILE__,__LINE__, PATTERN_STR(*stripe_size, int_str));
 #endif
         goto err_out;
@@ -406,7 +435,7 @@ int set_striping(const char *path,
     struct llapi_layout *layout = llapi_layout_alloc();
     if (layout == NULL) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-        printf("Error at %s (%d) llapi_layout_alloc() fails (%s)\n",
+        printf("Error at %s (%d) llapi_layout_alloc() failed (%s)\n",
                __FILE__, __LINE__, strerror(errno));
 #endif
         goto err_out;
@@ -419,7 +448,7 @@ int set_striping(const char *path,
     err = llapi_layout_stripe_count_set(layout, stripe_count);
     if (err != 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-        printf("Error at %s (%d) llapi_layout_stripe_count_set() fails set stripe count %lu (%s)\n",
+        printf("Error at %s (%d) llapi_layout_stripe_count_set() failed set stripe count %lu (%s)\n",
                __FILE__, __LINE__, stripe_count, strerror(errno));
 #endif
         goto err_out;
@@ -428,7 +457,7 @@ int set_striping(const char *path,
     err = llapi_layout_stripe_size_set(layout, stripe_size);
     if (err != 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-        printf("Error at %s (%d) llapi_layout_stripe_size_set() fails to set stripe size %lu (%s)\n",
+        printf("Error at %s (%d) llapi_layout_stripe_size_set() failed to set stripe size %lu (%s)\n",
                __FILE__, __LINE__, stripe_size, strerror(errno));
 #endif
         goto err_out;
@@ -443,7 +472,7 @@ int set_striping(const char *path,
             err = llapi_layout_ost_index_set(layout, i, ost_id);
             if (err != 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-                printf("Error at %s (%d) llapi_layout_ost_index_set() fails to set OST index %lu to %lu (%s)\n",
+                printf("Error at %s (%d) llapi_layout_ost_index_set() failed to set OST index %lu to %lu (%s)\n",
                        __FILE__, __LINE__, i, ost_id, strerror(errno));
 #endif
                 goto err_out;
@@ -458,7 +487,7 @@ int set_striping(const char *path,
         err = llapi_layout_ost_index_set(layout, 0, start_iodevice);
         if (err != 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-            printf("Error at %s (%d) llapi_layout_ost_index_set() fails to set start iodevice %lu (%s)\n",
+            printf("Error at %s (%d) llapi_layout_ost_index_set() failed to set start iodevice %lu (%s)\n",
                    __FILE__, __LINE__, start_iodevice, strerror(errno));
 #endif
             goto err_out;
@@ -470,7 +499,7 @@ int set_striping(const char *path,
 #ifdef PNETCDF_LUSTRE_DEBUG
         char int_str[32];
         snprintf(int_str, 32, "%lu", pattern);
-        printf("Error at %s (%d) llapi_layout_pattern_set() fails to set pattern %s (%s)\n",
+        printf("Error at %s (%d) llapi_layout_pattern_set() failed to set pattern %s (%s)\n",
                __FILE__, __LINE__, PATTERN_STR(pattern, int_str), strerror(errno));
 #endif
         goto err_out;
@@ -480,7 +509,7 @@ int set_striping(const char *path,
     fd = llapi_layout_file_create(path, O_CREAT|O_RDWR, PNCIO_PERM, layout);
     if (fd < 0) {
 #ifdef PNETCDF_LUSTRE_DEBUG
-        printf("Error at %s (%d) llapi_layout_file_create() fails (%s)\n",
+        printf("Error at %s (%d) llapi_layout_file_create() failed (%s)\n",
                __FILE__, __LINE__, strerror(errno));
 #endif
         goto err_out;
@@ -491,7 +520,7 @@ err_out:
 
 #ifdef PNETCDF_LUSTRE_DEBUG
     if (fd < 0)
-        printf("Error at %s (%d) fails to create file %s with desired file striping. PnetCDF now tries to inherit it from the parent folder.\n",
+        printf("Error at %s (%d) failed to create file %s with desired file striping. PnetCDF now tries to inherit it from the parent folder.\n",
                 __FILE__,__LINE__, path);
 #endif
 
@@ -509,6 +538,7 @@ err_out:
 static
 int Lustre_set_cb_node_list(PNCIO_File *fh)
 {
+    char value[MPI_MAX_INFO_VAL + 1], int_str[16];
     int i, j, k, rank, nprocs, num_aggr, striping_factor;
     int *nprocs_per_node, **ranks_per_node;
 
@@ -812,7 +842,25 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
         }
     }
 
-    return 0;
+    /* Set file hints with values only available after cb_nodes and
+     * aggr_ranks[] have been established.
+     */
+    snprintf(int_str, 16, "%d", fh->hints->cb_nodes);
+    MPI_Info_set(fh->info, "cb_nodes", int_str);
+
+    /* add hint "cb_node_list", list of aggregators' rank IDs */
+    snprintf(value, 16, "%d", fh->hints->aggr_ranks[0]);
+    for (i=1; i<fh->hints->cb_nodes; i++) {
+        snprintf(int_str, 16, " %d", fh->hints->aggr_ranks[i]);
+        if (strlen(value) + strlen(int_str) >= MPI_MAX_INFO_VAL-5) {
+            strcat(value, " ...");
+            break;
+        }
+        strcat(value, int_str);
+    }
+    MPI_Info_set(fh->info, "cb_node_list", value);
+
+    return NC_NOERR;
 }
 
 /*----< PNCIO_Lustre_create() >----------------------------------------------*/
@@ -825,12 +873,12 @@ int Lustre_set_cb_node_list(PNCIO_File *fh)
 int
 PNCIO_Lustre_create(PNCIO_File *fh)
 {
-    char int_str[16];
     int err=NC_NOERR, rank, perm, old_mask;
-    int stripin_info[4] = {-1, -1, -1, -1};
+    int stripin_info[5] = {NC_NOERR, -1, -1, -1, -1};
+    uint64_t numOSTs, stripe_count, stripe_size, start_iodevice;
 #ifdef HAVE_LUSTRE
     int total_num_OSTs;
-    uint64_t numOSTs, pattern, stripe_count, stripe_size, start_iodevice;
+    uint64_t pattern;
 #endif
 
 #ifdef WKL_DEBUG
@@ -840,9 +888,13 @@ first_ost_id = -1;
 
     MPI_Comm_rank(fh->comm, &rank);
 
+#ifdef PNETCDF_DEBUG
+    assert(fh->fstype == PNCIO_FS_LUSTRE);
+#endif
+
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fh->fstype == PNCIO_FS_LUSTRE)?"PNCIO_FS_LUSTRE":"PNCIO_FS_UFS",fh->filename); wkl++; fflush(stdout);}
+static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh->filename); wkl++; fflush(stdout);}
 #endif
 
     /* Note ncmpi_create() always creates a file with readable and writable
@@ -1015,7 +1067,7 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
         fh->fd_sys = open(fh->filename, fh->amode, perm);
 
     if (fh->fd_sys < 0) {
-        fprintf(stderr,"Error at %s (%d) fails to create file %s (%s)\n",
+        fprintf(stderr,"Error at %s (%d) failed to create file %s (%s)\n",
                 __FILE__,__LINE__, fh->filename, strerror(errno));
         err = ncmpii_error_posix2nc("Lustre set striping");
         goto err_out;
@@ -1027,87 +1079,90 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
                                        &stripe_count,
                                        &stripe_size,
                                        &start_iodevice);
-
-    stripin_info[0] = stripe_size;
-    stripin_info[1] = stripe_count;
-    stripin_info[2] = start_iodevice;
-    stripin_info[3] = numOSTs;
-
 #elif defined(MIMIC_LUSTRE)
     fh->fd_sys = open(fh->filename, fh->amode, perm);
     if (fh->fd_sys == -1) {
-        printf("%s line %d: rank %d fails to create file %s (%s)\n",
+        printf("%s line %d: rank %d failed to create file %s (%s)\n",
                __FILE__,__LINE__, rank, fh->filename, strerror(errno));
         err = ncmpii_error_posix2nc("open");
         goto err_out;
     }
     fh->is_open = 1;
 
-    char *env_str = getenv("MIMIC_STRIPE_SIZE");
-    if (env_str != NULL)
-        stripin_info[0] = atoi(env_str);
-    else
-        stripin_info[0] = STRIPE_SIZE;
-    stripin_info[1] = STRIPE_COUNT;
-    stripin_info[2] = 0;
-    stripin_info[3] = STRIPE_COUNT;
+    char *env_str  = getenv("MIMIC_STRIPE_SIZE");
+    stripe_size    = (env_str != NULL) ? atoi(env_str) : STRIPE_SIZE;
+    stripe_count   = STRIPE_COUNT;
+    start_iodevice = 0;
+    numOSTs        = STRIPE_COUNT;
 #endif
 
 err_out:
-    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fh->comm);
-    if (fh->fstype == PNCIO_FS_LUSTRE &&
-        (stripin_info[0] == -1 || stripin_info[3] == 0)) {
-        fprintf(stderr, "%s line %d: failed to create Lustre file %s\n",
+    stripin_info[0] = err;
+    stripin_info[1] = stripe_size;
+    stripin_info[2] = stripe_count;
+    stripin_info[3] = start_iodevice;
+    stripin_info[4] = numOSTs;
+
+    MPI_Bcast(stripin_info, 5, MPI_INT, 0, fh->comm);
+
+    if (stripin_info[0] != NC_NOERR || stripin_info[1] == -1 ||
+        stripin_info[4] == 0) { /* root failed to open the file */
+        fprintf(stderr, "%s line %d: root failed to create Lustre file %s\n",
                 __FILE__, __LINE__, fh->filename);
         return err;
     }
 
-    fh->hints->striping_unit   = stripin_info[0];
-    fh->hints->striping_factor = stripin_info[1];
-    fh->hints->start_iodevice  = stripin_info[2];
-    if (fh->fstype == PNCIO_FS_LUSTRE) {
-        fh->hints->lustre_num_osts = stripin_info[3];
-        fh->hints->lustre_overstriping_ratio = stripin_info[1] / stripin_info[3];
-    }
+    fh->hints->striping_unit   = stripin_info[1];
+    fh->hints->striping_factor = stripin_info[2];
+    fh->hints->start_iodevice  = stripin_info[3];
+    fh->hints->lustre_num_osts = stripin_info[4];
+    fh->hints->lustre_overstriping_ratio = stripin_info[2] / stripin_info[4];
 
-    if (rank > 0) { /* non-root processes open the file */
+    SET_INFO(fh);
+
+    /* Construct cb_nodes rank list, which requires fh->hints->striping_factor
+     * to be known on all processes.
+     */
+    Lustre_set_cb_node_list(fh);
+
+    if (rank > 0 && fh->is_agg) { /* Only I/O aggregators open the file. */
         fh->fd_sys = open(fh->filename, O_RDWR, perm);
         if (fh->fd_sys == -1) {
-            fprintf(stderr,"%s line %d: rank %d failure to open file %s (%s)\n",
+            fprintf(stderr,"%s line %d: rank %d failed to open file %s (%s)\n",
                     __FILE__,__LINE__, rank, fh->filename, strerror(errno));
             return ncmpii_error_posix2nc("ioctl");
         }
         fh->is_open = 1;
     }
 
-    /* construct cb_nodes rank list */
-    Lustre_set_cb_node_list(fh);
-
-    MPI_Info_set(fh->info, "file_system_type", "LUSTRE:");
-
-    snprintf(int_str, 16, "%d", fh->hints->lustre_num_osts);
-    MPI_Info_set(fh->info, "lustre_num_osts", int_str);
-
-    snprintf(int_str, 16, "%d", fh->hints->lustre_overstriping_ratio);
-    MPI_Info_set(fh->info, "lustre_overstriping_ratio", int_str);
-
     return err;
 }
 
 /*----< PNCIO_Lustre_open() >------------------------------------------------*/
-/*   1. all processes open the file.
- *   2. root obtains striping info and broadcasts to all others
+/* 1. Root process opens the file, obtains file striping information,
+ *    broadcasts it to all processes.
+ * 2. All processes uses file striping information to determine the I/O
+ *    aggregators.
+ * 3. Only I/O aggregators open the file.
  */
 int
 PNCIO_Lustre_open(PNCIO_File *fh)
 {
-    char int_str[16];
     int err=NC_NOERR, rank, perm, old_mask;
-    int stripin_info[4] = {1048576, -1, -1, -1};
+    int stripin_info[5] = {NC_NOERR, 1048576, -1, -1, -1};
+    uint64_t numOSTs, stripe_count, stripe_size, start_iodevice;
+#ifdef HAVE_LUSTRE
+    int total_num_OSTs;
+    uint64_t pattern;
+#endif
 
 #ifdef WKL_DEBUG
 extern int first_ost_id;
 first_ost_id = -1;
+#endif
+
+#ifdef PNETCDF_DEBUG
+    assert(fh->fstype == PNCIO_FS_LUSTRE);
 #endif
 
     MPI_Comm_rank(fh->comm, &rank);
@@ -1121,10 +1176,15 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
 
-    /* All processes open the file. */
+    /* root process opens the file first, followed by all processes open the
+     * file.
+     */
+    if (rank > 0) goto err_out;
+
+    /* Root process opens the file. */
     fh->fd_sys = open(fh->filename, fh->amode, perm);
     if (fh->fd_sys == -1) {
-        fprintf(stderr,"%s line %d: rank %d fails to open file %s (%s)\n",
+        fprintf(stderr,"%s line %d: rank %d failed to open file %s (%s)\n",
                 __FILE__,__LINE__, rank, fh->filename, strerror(errno));
         err = ncmpii_error_posix2nc("open");
         goto err_out;
@@ -1134,54 +1194,63 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
     /* Only root obtains the striping information and bcast to all other
      * processes.
      */
-    if (rank == 0) {
 #ifdef HAVE_LUSTRE
-        uint64_t numOSTs=0;
-        uint64_t pattern = LLAPI_LAYOUT_DEFAULT;
-        uint64_t stripe_count = LLAPI_LAYOUT_DEFAULT;
-        uint64_t stripe_size = LLAPI_LAYOUT_DEFAULT;
-        uint64_t start_iodevice = LLAPI_LAYOUT_DEFAULT;
+    numOSTs=0;
+    pattern = LLAPI_LAYOUT_DEFAULT;
+    stripe_count = LLAPI_LAYOUT_DEFAULT;
+    stripe_size = LLAPI_LAYOUT_DEFAULT;
+    start_iodevice = LLAPI_LAYOUT_DEFAULT;
 
-        numOSTs = get_striping(fh->fd_sys, fh->filename, &pattern,
-                                           &stripe_count,
-                                           &stripe_size,
-                                           &start_iodevice);
-
-        stripin_info[0] = stripe_size;
-        stripin_info[1] = stripe_count;
-        stripin_info[2] = start_iodevice;
-        stripin_info[3] = numOSTs;
-
+    numOSTs = get_striping(fh->fd_sys, fh->filename, &pattern,
+                                       &stripe_count,
+                                       &stripe_size,
+                                       &start_iodevice);
 #elif defined(MIMIC_LUSTRE)
-        char *env_str = getenv("MIMIC_STRIPE_SIZE");
-        if (env_str != NULL)
-            stripin_info[0] = atoi(env_str);
-        else
-            stripin_info[0] = STRIPE_SIZE;
-        stripin_info[1] = STRIPE_COUNT;
-        stripin_info[2] = 0;
-        stripin_info[3] = STRIPE_COUNT;
+    char *env_str  = getenv("MIMIC_STRIPE_SIZE");
+    stripe_size    = (env_str != NULL) ? atoi(env_str) : STRIPE_SIZE;
+    stripe_count   = STRIPE_COUNT;
+    start_iodevice = 0;
+    numOSTs        = STRIPE_COUNT;
 #endif
-    }
 
 err_out:
-    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fh->comm);
-    fh->hints->striping_unit   = stripin_info[0];
-    fh->hints->striping_factor = stripin_info[1];
-    fh->hints->start_iodevice  = stripin_info[2];
-    fh->hints->lustre_num_osts = stripin_info[3];
-    fh->hints->lustre_overstriping_ratio = stripin_info[1] / stripin_info[3];
+    stripin_info[0] = err;
+    stripin_info[1] = stripe_size;
+    stripin_info[2] = stripe_count;
+    stripin_info[3] = start_iodevice;
+    stripin_info[4] = numOSTs;
 
-    /* construct cb_nodes rank list */
+    MPI_Bcast(stripin_info, 5, MPI_INT, 0, fh->comm);
+
+    if (stripin_info[0] != NC_NOERR) { /* root failed to open the file */
+        fprintf(stderr, "%s line %d: root failed to open Lustre file %s\n",
+                __FILE__, __LINE__, fh->filename);
+        return err;
+    }
+
+    fh->hints->striping_unit   = stripin_info[1];
+    fh->hints->striping_factor = stripin_info[2];
+    fh->hints->start_iodevice  = stripin_info[3];
+    fh->hints->lustre_num_osts = stripin_info[4];
+    fh->hints->lustre_overstriping_ratio = stripin_info[2] / stripin_info[4];
+
+    SET_INFO(fh);
+
+    /* Construct cb_nodes rank list, which requires fh->hints->striping_factor
+     * to be known on all processes.
+     */
     Lustre_set_cb_node_list(fh);
 
-    MPI_Info_set(fh->info, "file_system_type", "LUSTRE:");
-
-    snprintf(int_str, 16, "%d", fh->hints->lustre_num_osts);
-    MPI_Info_set(fh->info, "lustre_num_osts", int_str);
-
-    snprintf(int_str, 16, "%d", fh->hints->lustre_overstriping_ratio);
-    MPI_Info_set(fh->info, "lustre_overstriping_ratio", int_str);
+    /* Now non-root I/O aggregators and only aggregators open the file. */
+    if (rank > 0 && fh->is_agg) {
+        fh->fd_sys = open(fh->filename, fh->amode, perm);
+        if (fh->fd_sys == -1) {
+            fprintf(stderr,"%s line %d: rank %d failed to open file %s (%s)\n",
+                    __FILE__,__LINE__, rank, fh->filename, strerror(errno));
+            err = ncmpii_error_posix2nc("open");
+        }
+        fh->is_open = 1;
+    }
 
     return err;
 }

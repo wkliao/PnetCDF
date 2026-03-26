@@ -25,6 +25,24 @@
 #include "pncio.h"
 
 /*----< PNCIO_File_open() >--------------------------------------------------*/
+/* This is a collective call.
+ * This subroutine is called as part of ncmpi_create() or ncmpi_open().
+ *
+ * There are two cases that reach to this subroutine.
+ * 1. When PnetCDF INA is disabled, all processes participate to call this
+ *    subroutine which returns a non-NULL file handle.
+ * 2. When PnetCDF INA is enabled, only the INA aggregators call this
+ *    subroutine. Non-INA aggregators will have to set the contents of its file
+ *    handler separately/independently, such as setting up the I/O hints.
+ *
+ * Note this subroutine will not be called as part of ncmpi_begin_indep_data().
+ * When PNCIO driver is used, ncmpi_begin_indep_data() actually does nothing.
+ * When an independent I/O is performed by a process, including non-INA
+ * aggregators, PNCIO driver will first check fh->is_open, which indicates
+ * whether this process has opened the file and get its fd->fs_sys set to >=0.
+ * Check such file-open-on-demand implementation in PNCIO_UFS_write_indep() and
+ * PNCIO_UFS_read_indep(), which does not call this subroutine.
+ */
 int PNCIO_File_open(MPI_Comm    comm,
                     const char *filename,
                     int         amode, /* O_CREAT|O_RDWR, O_RDWR, or O_RDONLY */
@@ -34,13 +52,14 @@ int PNCIO_File_open(MPI_Comm    comm,
     /* Before arriving at this subroutine, PNCIO_FileSysType() should have been
      * called to check the file system type.
      */
-    char value[MPI_MAX_INFO_VAL + 1], int_str[16];
-    int i, err, min_err, status=NC_NOERR;
+    int err, min_err, status=NC_NOERR;
 
     fh->comm      = comm;
-    fh->filename  = filename;  /* without file system type name prefix */
+    fh->filename  = filename; /* without file system type name prefix */
+    fh->fd_sys    = -1;       /* file has not yet been opened */
     fh->atomicity = 0;
-    fh->is_open   = 0;
+    fh->is_open   = 0;    /* this rank has opened the file */
+    fh->is_agg    = 0;    /* whether this rank is an I/O aggregator */
     fh->amode     = amode;
     fh->io_buf    = NULL; /* collective buffer used by aggregators only */
 
@@ -49,7 +68,7 @@ int PNCIO_File_open(MPI_Comm    comm,
     fh->file_view.off = NULL;
     fh->file_view.len = NULL;
 
-    /* create and initialize info object */
+    /* allocate and initialize info object */
     fh->hints = (PNCIO_Hints*) NCI_Calloc(1, sizeof(PNCIO_Hints));
     status = PNCIO_File_set_info(fh, info);
     if (status != NC_NOERR && status != NC_EMULTIDEFINE_HINTS) {
@@ -88,39 +107,6 @@ int PNCIO_File_open(MPI_Comm    comm,
     if (err != NC_NOERR) { /* fatal error */
         status = err;
         goto err_out;
-    }
-
-    /* set file striping hints */
-    snprintf(int_str, 16, "%d", fh->hints->striping_unit);
-    MPI_Info_set(fh->info, "striping_unit", int_str);
-
-    snprintf(int_str, 16, "%d", fh->hints->striping_factor);
-    MPI_Info_set(fh->info, "striping_factor", int_str);
-
-    snprintf(int_str, 16, "%d", fh->hints->start_iodevice);
-    MPI_Info_set(fh->info, "start_iodevice", int_str);
-
-    /* set file striping hints */
-    snprintf(int_str, 16, "%d", fh->hints->cb_nodes);
-    MPI_Info_set(fh->info, "cb_nodes", int_str);
-
-    /* add hint "cb_node_list", list of aggregators' rank IDs */
-    snprintf(value, 16, "%d", fh->hints->aggr_ranks[0]);
-    for (i=1; i<fh->hints->cb_nodes; i++) {
-        snprintf(int_str, 16, " %d", fh->hints->aggr_ranks[i]);
-        if (strlen(value) + strlen(int_str) >= MPI_MAX_INFO_VAL-5) {
-            strcat(value, " ...");
-            break;
-        }
-        strcat(value, int_str);
-    }
-    MPI_Info_set(fh->info, "cb_node_list", value);
-
-    /* collective buffer size must be at least file striping size */
-    if (fh->hints->cb_buffer_size < fh->hints->striping_unit) {
-        fh->hints->cb_buffer_size = fh->hints->striping_unit;
-        snprintf(int_str, 16, " %d", fh->hints->cb_buffer_size);
-        MPI_Info_set(fh->info, "cb_buffer_size", int_str);
     }
 
     /* collective buffer is used only by I/O aggregators only */

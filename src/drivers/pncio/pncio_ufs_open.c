@@ -24,6 +24,23 @@
 
 #include "pncio.h"
 
+#define SET_INFO(fh) {                                                      \
+    char int_str[16];                                                       \
+                                                                            \
+    /* set file hints with values only available after file is opened */    \
+    MPI_Info_set(fh->info, "file_system_type", "UFS:");                     \
+                                                                            \
+    snprintf(int_str, 16, "%d", fh->hints->striping_unit);                  \
+    MPI_Info_set(fh->info, "striping_unit", int_str);                       \
+                                                                            \
+    /* collective buffer size must be at least file striping size */        \
+    if (fh->hints->cb_buffer_size < fh->hints->striping_unit) {             \
+        fh->hints->cb_buffer_size = fh->hints->striping_unit;               \
+        snprintf(int_str, 16, " %d", fh->hints->cb_buffer_size);            \
+        MPI_Info_set(fh->info, "cb_buffer_size", int_str);                  \
+    }                                                                       \
+}
+
 /*----< UFS_set_cb_node_list() >---------------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
  *   fh->hints->aggr_ranks[].
@@ -34,6 +51,7 @@
 static
 int UFS_set_cb_node_list(PNCIO_File *fh)
 {
+    char value[MPI_MAX_INFO_VAL + 1], int_str[16];
     int i, j, k, nprocs, rank, *nprocs_per_node, **ranks_per_node;
 
     MPI_Comm_size(fh->comm, &nprocs);
@@ -101,7 +119,25 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
     NCI_Free(ranks_per_node);
     NCI_Free(nprocs_per_node);
 
-    return 0;
+    /* Set file hints with values only available after cb_nodes and
+     * aggr_ranks[] have been established.
+     */
+    snprintf(int_str, 16, "%d", fh->hints->cb_nodes);
+    MPI_Info_set(fh->info, "cb_nodes", int_str);
+
+    /* add hint "cb_node_list", list of aggregators' rank IDs */
+    snprintf(value, 16, "%d", fh->hints->aggr_ranks[0]);
+    for (i=1; i<fh->hints->cb_nodes; i++) {
+        snprintf(int_str, 16, " %d", fh->hints->aggr_ranks[i]);
+        if (strlen(value) + strlen(int_str) >= MPI_MAX_INFO_VAL-5) {
+            strcat(value, " ...");
+            break;
+        }
+        strcat(value, int_str);
+    }
+    MPI_Info_set(fh->info, "cb_node_list", value);
+
+    return NC_NOERR;
 }
 
 /*----< UFS_create() >-------------------------------------------------------*/
@@ -115,7 +151,7 @@ int
 PNCIO_UFS_create(PNCIO_File *fh)
 {
     int err=NC_NOERR, rank, perm, old_mask;
-    int stripin_info[4] = {-1, -1, -1, -1};
+    int stripe_size, stripin_info[2] = {NC_NOERR, -1};
 
     MPI_Comm_rank(fh->comm, &rank);
 
@@ -128,20 +164,20 @@ if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh-
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
 
-    /* root process creates the file first, followed by all processes open the
-     * file.
+    /* root process creates the file first, obtains statbuf.st_blksize,
+     * broadcasts it, and followed by the rest of processes open the file.
      */
     if (rank > 0) goto err_out;
 
     fh->fd_sys = open(fh->filename, fh->amode, perm);
     if (fh->fd_sys == -1) {
-        fprintf(stderr, "%s line %d: rank %d fails to create file %s (%s)\n",
+        fprintf(stderr, "%s line %d: rank %d failed to create file %s (%s)\n",
                 __func__,__LINE__, rank, fh->filename, strerror(errno));
         err = ncmpii_error_posix2nc("create");
         goto err_out;
     }
     fh->is_open = 1;
-    stripin_info[0] = 1048576; /* default to 1 MiB */
+    stripe_size = 1048576; /* default to 1 MiB */
 
     /* Only root obtains the striping information and bcast to all other
      * processes. For UFS, file striping is the file system block size.
@@ -151,17 +187,32 @@ if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh-
     err = fstat(fh->fd_sys, &statbuf);
     if (err >= 0)
         /* file system block size usually < MAX_INT */
-        stripin_info[0] = (int)statbuf.st_blksize;
+        stripe_size = (int)statbuf.st_blksize;
 #endif
 
 err_out:
-    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fh->comm);
+    stripin_info[0] = err;
+    stripin_info[1] = stripe_size;
 
-    fh->hints->striping_unit   = stripin_info[0];
-    fh->hints->striping_factor = stripin_info[1];
-    fh->hints->start_iodevice  = stripin_info[2];
+    MPI_Bcast(stripin_info, 2, MPI_INT, 0, fh->comm);
 
-    if (rank > 0) { /* non-root processes */
+    fh->hints->striping_unit = stripin_info[1];
+
+    if (stripin_info[0] != NC_NOERR) { /* root failed to open the file */
+        fprintf(stderr, "%s line %d: root failed to open UFS file %s\n",
+                __FILE__, __LINE__, fh->filename);
+        return err;
+    }
+
+    SET_INFO(fh)
+
+    /* Construct cb_nodes rank list, which requires fh->comm_attr.num_nodes
+     * to be known on all processes.
+     */
+    UFS_set_cb_node_list(fh);
+
+    /* Now non-root I/O aggregators and only aggregators open the file. */
+    if (rank > 0 && fh->is_agg) {
         fh->fd_sys = open(fh->filename, O_RDWR, perm);
         if (fh->fd_sys == -1) {
             fprintf(stderr,"%s line %d: rank %d failure to open file %s (%s)\n",
@@ -170,10 +221,6 @@ err_out:
         }
         fh->is_open = 1;
     }
-
-    /* construct cb_nodes rank list */
-    UFS_set_cb_node_list(fh);
-    MPI_Info_set(fh->info, "file_system_type", "UFS:");
 
     return err;
 }
@@ -186,7 +233,7 @@ int
 PNCIO_UFS_open(PNCIO_File *fh)
 {
     int err=NC_NOERR, rank, perm, old_mask;
-    int stripin_info[4] = {1048576, -1, -1, -1};
+    int stripe_size, stripin_info[2] = {NC_NOERR, 1048576};
 
     MPI_Comm_rank(fh->comm, &rank);
 
@@ -199,40 +246,65 @@ if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh-
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
 
-    /* All processes open the file. */
+    /* root process opens the file first, obtains statbuf.st_blksize,
+     * broadcasts it, and followed by the rest of processes open the file.
+     */
+    if (rank > 0) goto err_out;
+
+    /* Root first opens the file and obtains st_blksize */
     fh->fd_sys = open(fh->filename, fh->amode, perm);
     if (fh->fd_sys == -1) {
-        fprintf(stderr, "%s line %d: rank %d fails to open file %s (%s)\n",
+        fprintf(stderr, "%s line %d: rank %d failed to open file %s (%s)\n",
                 __func__,__LINE__, rank, fh->filename, strerror(errno));
         err = ncmpii_error_posix2nc("open");
         goto err_out;
     }
     fh->is_open = 1;
-    stripin_info[0] = 1048576; /* default to 1 MiB */
+    stripe_size = 1048576; /* default to 1 MiB */
 
     /* Only root obtains the striping information and bcast to all other
      * processes. For UFS, file striping is the file system block size.
      */
 #if defined(HAVE_SYS_STAT_H) && HAVE_SYS_STAT_H == 1
-    if (rank == 0) {
-        /* Get the underlying file system block size as file striping_unit */
-        struct stat statbuf;
-        err = fstat(fh->fd_sys, &statbuf);
-        if (err >= 0)
-            /* file system block size usually < MAX_INT */
-            stripin_info[0] = (int)statbuf.st_blksize;
-    }
+    /* Get the underlying file system block size as file striping_unit */
+    struct stat statbuf;
+    err = fstat(fh->fd_sys, &statbuf);
+    if (err >= 0)
+        /* file system block size usually < MAX_INT */
+        stripe_size = (int)statbuf.st_blksize;
 #endif
 
 err_out:
-    MPI_Bcast(stripin_info, 4, MPI_INT, 0, fh->comm);
-    fh->hints->striping_unit   = stripin_info[0];
-    fh->hints->striping_factor = stripin_info[1];
-    fh->hints->start_iodevice  = stripin_info[2];
+    stripin_info[0] = err;
+    stripin_info[1] = stripe_size;
 
-    /* construct cb_nodes rank list */
+    MPI_Bcast(stripin_info, 2, MPI_INT, 0, fh->comm);
+
+    fh->hints->striping_unit = stripin_info[1];
+
+    if (stripin_info[0] != NC_NOERR) { /* root failed to open the file */
+        fprintf(stderr, "%s line %d: root failed to open UFS file %s\n",
+                __FILE__, __LINE__, fh->filename);
+        return err;
+    }
+
+    SET_INFO(fh)
+
+    /* Construct cb_nodes rank list, which requires fh->comm_attr.num_nodes
+     * to be known on all processes.
+     */
     UFS_set_cb_node_list(fh);
-    MPI_Info_set(fh->info, "file_system_type", "UFS:");
+
+    /* Now non-root I/O aggregators and only aggregators open the file. */
+    if (rank > 0 && fh->is_agg) {
+        fh->fd_sys = open(fh->filename, fh->amode, perm);
+        if (fh->fd_sys == -1) {
+            fprintf(stderr, "%s line %d: rank %d failed to open file %s (%s)\n",
+                    __func__,__LINE__, rank, fh->filename, strerror(errno));
+            err = ncmpii_error_posix2nc("open");
+        }
+        fh->is_open = 1;
+    }
 
     return err;
 }
