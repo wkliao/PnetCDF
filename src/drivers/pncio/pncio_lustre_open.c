@@ -15,6 +15,7 @@
 #include <fcntl.h>      /* open(), O_CREAT */
 #include <sys/types.h>  /* open() */
 #include <libgen.h>     /* dirname() */
+#include <stdint.h>     /* uint64_t */
 
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
