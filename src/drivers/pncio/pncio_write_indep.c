@@ -57,10 +57,7 @@ MPI_Offset PNCIO_File_write_at(PNCIO_File *fh,
         fh->file_view.len   = &one_len;
     }
 
-    if (buf_view.count <= 1 && fh->file_view.count <= 1)
-        w_len = PNCIO_UFS_write_contig(fh, buf, buf_view.size,
-                                       fh->file_view.off[0], 0);
-    else if (fh->fstype == PNCIO_FS_UFS)
+    if (fh->fstype == PNCIO_FS_UFS)
         w_len = PNCIO_UFS_write_indep(fh, buf, buf_view);
     else if (fh->fstype == PNCIO_FS_LUSTRE)
         w_len = PNCIO_UFS_write_indep(fh, buf, buf_view);
