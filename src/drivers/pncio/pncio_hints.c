@@ -248,7 +248,8 @@ PNCIO_File_set_info(PNCIO_File *fh,
 
     /* Check hint consistency among all processes */
 err_out:
-    err = hint_consistency_check(fh);
+    if (nprocs > 1)
+        err = hint_consistency_check(fh);
 
     /* PnetCDF ignores the following hints.
      *    cb_config_list
