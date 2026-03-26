@@ -9,9 +9,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>      /* open() */
+#include <sys/types.h>  /* open(), umask() */
+#include <sys/stat.h>   /* umask() */
+
 #include <assert.h>
 #include <sys/errno.h>
-#include <unistd.h>   /* pread() */
+#include <unistd.h>     /* pread() */
 
 #include <mpi.h>
 
@@ -27,6 +31,13 @@ MPI_Offset PNCIO_UFS_read_contig(PNCIO_File *fh,
     ssize_t err = 0;
     size_t r_count;
     MPI_Offset bytes_xfered = 0;
+
+    if (r_size == 0) return NC_NOERR;
+
+#ifdef PNETCDF_DEBUG
+    assert(fh->is_open == 1);
+    assert(fh->fd_sys >= 0);
+#endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     double timing = MPI_Wtime();
@@ -93,7 +104,32 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fh,
 
     /* In PnetCDF, fh->file_view.size always == buf_view.size. */
     assert(fh->file_view.size == buf_view.size);
+
+    /* I/O hints should have been set already, even if this rank is not an INA
+     * aggregator.
+     */
+    assert(fh->hints->ind_wr_buffer_size > 0);
 #endif
+
+    if (!fh->is_open) {
+        /* Open the file to obtain fh->fd_sys if this process has not opened
+         * the file yet. This happens to the processes that are neither I/O
+         * aggregators nor INA aggregators.
+         */
+        int perm, old_mask = umask(022);
+        umask(old_mask);
+        perm = old_mask ^ PNCIO_PERM;
+
+        fh->fd_sys = open(fh->filename, fh->amode, perm);
+        if (fh->fd_sys == -1) {
+            int rank;
+            MPI_Comm_rank(fh->comm, &rank);
+            fprintf(stderr, "%s line %d: rank %d failed to open file %s (%s)\n",
+                    __func__,__LINE__, rank, fh->filename, strerror(errno));
+            return ncmpii_error_posix2nc("open");
+        }
+        fh->is_open = 1;
+    }
 
     if (fh->file_view.count <= 1 && buf_view.count <= 1) {
         /* Both buffer and fileview are contiguous. */
