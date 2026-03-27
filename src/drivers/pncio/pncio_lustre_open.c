@@ -889,6 +889,11 @@ first_ost_id = -1;
 
     MPI_Comm_rank(fh->comm, &rank);
 
+    stripe_size = 0;
+    stripe_count = 0;
+    start_iodevice = 0;
+    numOSTs = 0;
+
 #ifdef PNETCDF_DEBUG
     assert(fh->fstype == PNCIO_FS_LUSTRE);
 #endif
@@ -1081,6 +1086,12 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: --
                                        &stripe_size,
                                        &start_iodevice);
 #elif defined(MIMIC_LUSTRE)
+    char *env_str  = getenv("MIMIC_STRIPE_SIZE");
+    stripe_size    = (env_str != NULL) ? atoi(env_str) : STRIPE_SIZE;
+    stripe_count   = STRIPE_COUNT;
+    start_iodevice = 0;
+    numOSTs        = STRIPE_COUNT;
+
     fh->fd_sys = open(fh->filename, fh->amode, perm);
     if (fh->fd_sys == -1) {
         printf("%s line %d: rank %d failed to create file %s (%s)\n",
@@ -1089,20 +1100,14 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: --
         goto err_out;
     }
     fh->is_open = 1;
-
-    char *env_str  = getenv("MIMIC_STRIPE_SIZE");
-    stripe_size    = (env_str != NULL) ? atoi(env_str) : STRIPE_SIZE;
-    stripe_count   = STRIPE_COUNT;
-    start_iodevice = 0;
-    numOSTs        = STRIPE_COUNT;
 #endif
 
 err_out:
     stripin_info[0] = err;
-    stripin_info[1] = stripe_size;
-    stripin_info[2] = stripe_count;
-    stripin_info[3] = start_iodevice;
-    stripin_info[4] = numOSTs;
+    stripin_info[1] = (int)stripe_size;
+    stripin_info[2] = (int)stripe_count;
+    stripin_info[3] = (int)start_iodevice;
+    stripin_info[4] = (int)numOSTs;
 
     MPI_Bcast(stripin_info, 5, MPI_INT, 0, fh->comm);
 
@@ -1168,6 +1173,11 @@ first_ost_id = -1;
 
     MPI_Comm_rank(fh->comm, &rank);
 
+    stripe_size = 0;
+    stripe_count = 0;
+    start_iodevice = 0;
+    numOSTs = 0;
+
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fh->fstype == PNCIO_FS_LUSTRE)?"PNCIO_FS_LUSTRE":"PNCIO_FS_UFS",fh->filename); wkl++; fflush(stdout);}
@@ -1216,10 +1226,10 @@ static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s
 
 err_out:
     stripin_info[0] = err;
-    stripin_info[1] = stripe_size;
-    stripin_info[2] = stripe_count;
-    stripin_info[3] = start_iodevice;
-    stripin_info[4] = numOSTs;
+    stripin_info[1] = (int)stripe_size;
+    stripin_info[2] = (int)stripe_count;
+    stripin_info[3] = (int)start_iodevice;
+    stripin_info[4] = (int)numOSTs;
 
     MPI_Bcast(stripin_info, 5, MPI_INT, 0, fh->comm);
 
