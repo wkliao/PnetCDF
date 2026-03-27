@@ -160,6 +160,8 @@ int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh->filename); fflush(stdout);}
 #endif
 
+    stripe_size = 1048576; /* default to 1 MiB */
+
     old_mask = umask(022);
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
@@ -177,7 +179,6 @@ if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh-
         goto err_out;
     }
     fh->is_open = 1;
-    stripe_size = 1048576; /* default to 1 MiB */
 
     /* Only root obtains the striping information and bcast to all other
      * processes. For UFS, file striping is the file system block size.
@@ -237,6 +238,8 @@ PNCIO_UFS_open(PNCIO_File *fh)
 
     MPI_Comm_rank(fh->comm, &rank);
 
+    stripe_size = 1048576; /* default to 1 MiB */
+
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh->filename); fflush(stdout);}
@@ -260,7 +263,6 @@ if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh-
         goto err_out;
     }
     fh->is_open = 1;
-    stripe_size = 1048576; /* default to 1 MiB */
 
     /* Only root obtains the striping information and bcast to all other
      * processes. For UFS, file striping is the file system block size.
