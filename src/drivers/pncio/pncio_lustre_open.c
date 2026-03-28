@@ -1131,7 +1131,8 @@ err_out:
      */
     Lustre_set_cb_node_list(fh);
 
-    if (rank > 0 && fh->is_agg) { /* Only I/O aggregators open the file. */
+    /* Now non-root I/O aggregators and only aggregators open the file. */
+    if (rank > 0 && fh->is_agg) {
         fh->fd_sys = open(fh->filename, O_RDWR, perm);
         if (fh->fd_sys == -1) {
             fprintf(stderr,"%s line %d: rank %d failed to open file %s (%s)\n",
@@ -1158,7 +1159,6 @@ PNCIO_Lustre_open(PNCIO_File *fh)
     int stripin_info[5] = {NC_NOERR, 1048576, -1, -1, -1};
     uint64_t numOSTs, stripe_count, stripe_size, start_iodevice;
 #ifdef HAVE_LUSTRE
-    int total_num_OSTs;
     uint64_t pattern;
 #endif
 
