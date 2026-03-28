@@ -79,6 +79,7 @@ int PNCIO_File_open(MPI_Comm    comm,
     }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
+    int i;
     for (i=0; i<NMEASURES; i++) {
         fh->write_timing[i]  = fh->read_timing[i]  = 0;
         fh->write_counter[i] = fh->read_counter[i] = 0;
