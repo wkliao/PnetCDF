@@ -300,9 +300,6 @@ int PNCIO_GEN_SetLock64(PNCIO_File *fh, int cmd, int type, MPI_Offset offset,
 
 /* UFS driver APIs */
 extern
-int PNCIO_UFS_create(PNCIO_File *fh);
-
-extern
 int PNCIO_UFS_open(PNCIO_File *fh);
 
 extern

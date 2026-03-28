@@ -64,9 +64,9 @@ int PNCIO_File_open(MPI_Comm    comm,
     fh->io_buf    = NULL; /* collective buffer used by aggregators only */
 
     fh->file_view.count = 0; /* flattened fileview in offset-length pairs */
-    fh->file_view.size = -1;
-    fh->file_view.off = NULL;
-    fh->file_view.len = NULL;
+    fh->file_view.size  = -1;
+    fh->file_view.off   = NULL;
+    fh->file_view.len   = NULL;
 
     /* allocate and initialize info object */
     fh->hints = (PNCIO_Hints*) NCI_Calloc(1, sizeof(PNCIO_Hints));
@@ -97,10 +97,8 @@ int PNCIO_File_open(MPI_Comm    comm,
             err = PNCIO_Lustre_open(fh);
     }
     else if (fh->fstype == PNCIO_FS_UFS) {
-        if (amode & O_CREAT)
-            err = PNCIO_UFS_create(fh);
-        else
-            err = PNCIO_UFS_open(fh);
+        /* PNCIO_UFS_open uses fh->amode to tell if create or open */
+        err = PNCIO_UFS_open(fh);
     }
     else
         err = NC_EFSTYPE;
