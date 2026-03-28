@@ -140,126 +140,45 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
     return NC_NOERR;
 }
 
-/*----< UFS_create() >-------------------------------------------------------*/
-/*   1. root creates the file
- *   2. root sets and obtains striping info
+/*----< UFS_open() >-------------------------------------------------------*/
+/*   1. root creates/opens the file first
+ *   2. root obtains file striping info, i.e. statbuf.st_blksize
  *   3. root broadcasts striping info
  *   4. non-root processes receive striping info from root
  *   5. non-root processes opens the file
  */
 int
-PNCIO_UFS_create(PNCIO_File *fh)
-{
-    int err=NC_NOERR, rank, perm, old_mask;
-    int stripe_size, stripin_info[2] = {NC_NOERR, -1};
-
-    MPI_Comm_rank(fh->comm, &rank);
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh->filename); fflush(stdout);}
-#endif
-
-    stripe_size = 1048576; /* default to 1 MiB */
-
-    old_mask = umask(022);
-    umask(old_mask);
-    perm = old_mask ^ PNCIO_PERM;
-
-    /* root process creates the file first, obtains statbuf.st_blksize,
-     * broadcasts it, and followed by the rest of processes open the file.
-     */
-    if (rank > 0) goto err_out;
-
-    fh->fd_sys = open(fh->filename, fh->amode, perm);
-    if (fh->fd_sys == -1) {
-        fprintf(stderr, "%s line %d: rank %d failed to create file %s (%s)\n",
-                __func__,__LINE__, rank, fh->filename, strerror(errno));
-        err = ncmpii_error_posix2nc("create");
-        goto err_out;
-    }
-    fh->is_open = 1;
-
-    /* Only root obtains the striping information and bcast to all other
-     * processes. For UFS, file striping is the file system block size.
-     */
-#if defined(HAVE_SYS_STAT_H) && HAVE_SYS_STAT_H == 1
-    struct stat statbuf;
-    err = fstat(fh->fd_sys, &statbuf);
-    if (err >= 0)
-        /* file system block size usually < MAX_INT */
-        stripe_size = (int)statbuf.st_blksize;
-#endif
-
-err_out:
-    stripin_info[0] = err;
-    stripin_info[1] = stripe_size;
-
-    MPI_Bcast(stripin_info, 2, MPI_INT, 0, fh->comm);
-
-    fh->hints->striping_unit = stripin_info[1];
-
-    if (stripin_info[0] != NC_NOERR) { /* root failed to open the file */
-        fprintf(stderr, "%s line %d: root failed to open UFS file %s\n",
-                __FILE__, __LINE__, fh->filename);
-        return err;
-    }
-
-    SET_INFO(fh)
-
-    /* Construct cb_nodes rank list, which requires fh->comm_attr.num_nodes
-     * to be known on all processes.
-     */
-    UFS_set_cb_node_list(fh);
-
-    /* Now non-root I/O aggregators and only aggregators open the file. */
-    if (rank > 0 && fh->is_agg) {
-        fh->fd_sys = open(fh->filename, O_RDWR, perm);
-        if (fh->fd_sys == -1) {
-            fprintf(stderr,"%s line %d: rank %d failure to open file %s (%s)\n",
-                    __func__,__LINE__, rank, fh->filename, strerror(errno));
-            return ncmpii_error_posix2nc("ioctl");
-        }
-        fh->is_open = 1;
-    }
-
-    return err;
-}
-
-/*----< UFS_open() >---------------------------------------------------------*/
-/*   1. all processes open the file.
- *   2. root obtains striping info and broadcasts to all others
- */
-int
 PNCIO_UFS_open(PNCIO_File *fh)
 {
+    char *mode_str = (fh->amode & O_CREAT) ? "creat" : "open";
     int err=NC_NOERR, rank, perm, old_mask;
     int stripe_size, stripin_info[2] = {NC_NOERR, 1048576};
 
     MPI_Comm_rank(fh->comm, &rank);
 
-    stripe_size = 1048576; /* default to 1 MiB */
-
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh->filename); fflush(stdout);}
+if (world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,mode_str,fh->filename); fflush(stdout);}
 #endif
+
+    stripe_size = 1048576; /* default to 1 MiB */
 
     old_mask = umask(022);
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
 
-    /* root process opens the file first, obtains statbuf.st_blksize,
+    /* Root process creates/opens the file first, obtains statbuf.st_blksize,
      * broadcasts it, and followed by the rest of processes open the file.
      */
     if (rank > 0) goto err_out;
 
-    /* Root first opens the file and obtains st_blksize */
+    /* Root first creates/opens the file and obtains st_blksize */
     fh->fd_sys = open(fh->filename, fh->amode, perm);
     if (fh->fd_sys == -1) {
-        fprintf(stderr, "%s line %d: rank %d failed to open file %s (%s)\n",
-                __func__,__LINE__, rank, fh->filename, strerror(errno));
-        err = ncmpii_error_posix2nc("open");
+        fprintf(stderr, "%s line %d: rank %d failed to %s file %s (%s)\n",
+                __func__,__LINE__, rank, mode_str, fh->filename,
+                strerror(errno));
+        err = ncmpii_error_posix2nc(mode_str);
         goto err_out;
     }
     fh->is_open = 1;
@@ -284,9 +203,10 @@ err_out:
 
     fh->hints->striping_unit = stripin_info[1];
 
-    if (stripin_info[0] != NC_NOERR) { /* root failed to open the file */
-        fprintf(stderr, "%s line %d: root failed to open UFS file %s\n",
-                __FILE__, __LINE__, fh->filename);
+    if (stripin_info[0] != NC_NOERR) {
+        /* root failed to create/open the file */
+        fprintf(stderr, "%s line %d: root failed to %s UFS file %s\n",
+                __FILE__, __LINE__, mode_str, fh->filename);
         return err;
     }
 
@@ -310,4 +230,3 @@ err_out:
 
     return err;
 }
-
