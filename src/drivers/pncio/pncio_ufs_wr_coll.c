@@ -7,6 +7,8 @@
 # include <config.h>
 #endif
 
+#include <limits.h>  /* LLONG_MAX */
+
 #include "pncio.h"
 
 #define BUF_INCR {                                      \
@@ -675,6 +677,7 @@ Exch_and_write(PNCIO_File       *fh,
         count[i] = recv_size[i] = 0;
     for (m=ntimes; m<max_ntimes; m++) {
         /* nothing to recv, but check for send. */
+        rem_size = 0;
         w_len = W_Exchange_data(fh, buf, write_buf, buf_view, recv_size,
                                 rem_off, rem_size, count, start_pos,
                                 partial_recv, sent_to_proc, min_st_off,
@@ -737,7 +740,7 @@ MPI_Offset PNCIO_UFS_write_coll(PNCIO_File *fh,
     int i, nprocs, rank, interleave_count=0;
     MPI_Aint *buf_idx = NULL;
     MPI_Count *count_per_aggr, my_req_naggr;
-    MPI_Offset fd_size, min_st_off, max_end_off;
+    MPI_Offset fd_size, min_st_off=0, max_end_off=LLONG_MAX;
     MPI_Offset *fd_end=NULL, w_len=0;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
