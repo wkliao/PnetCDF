@@ -8,6 +8,7 @@
 #endif
 
 #include <stdbool.h> /* type bool */
+#include <limits.h>  /* LLONG_MAX */
 
 #include <pncio.h>
 
@@ -656,7 +657,7 @@ MPI_Offset PNCIO_UFS_read_coll(PNCIO_File *fh,
     int i, nprocs, rank, interleave_count = 0;
     MPI_Aint *buf_idx = NULL;
     MPI_Count *count_per_aggr, my_req_naggr;
-    MPI_Offset fd_size, min_st_off, max_end_off;
+    MPI_Offset fd_size, min_st_off=0, max_end_off=LLONG_MAX;
     MPI_Offset *fd_end=NULL, r_len, total_r_len=0;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
