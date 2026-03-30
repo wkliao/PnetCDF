@@ -489,10 +489,12 @@ Read_and_exch(PNCIO_File         *fh,
                         goto err_out;
                     }
                     rem_size = r_len;
-                    break;
+                    goto done_read;
                 }
             }
         }
+
+done_read:
         real_off = rem_off - for_curr_round;
         real_size = rem_size + for_curr_round;
         for_next_round = 0;
