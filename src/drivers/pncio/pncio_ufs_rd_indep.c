@@ -146,7 +146,7 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fh,
         lock_len = fh->file_view.size;
 
     /* if atomicity is true, lock (exclusive) the whole region */
-    if (fh->atomicity)
+    if (fh->atomicity && fh->amode != O_RDONLY)
         PNCIO_WRITE_LOCK(fh, lock_off, SEEK_SET, lock_len);
 
     if (buf_view.count == 0) {
@@ -312,7 +312,7 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fh,
             /* read a chunk from the file into tmp_buf */
             req_len = MIN(tmp_buf_size, lock_rem);
 
-            if (!fh->atomicity) /* lock the read-copy region */
+            if (!fh->atomicity && fh->amode != O_RDONLY) /* lock the read-copy region */
                 PNCIO_WRITE_LOCK(fh, file_off, SEEK_SET, req_len);
 
             len = PNCIO_UFS_read_contig(fh, tmp_buf, req_len, file_off);
@@ -393,7 +393,7 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fh,
                 }
             }
 
-            if (!fh->atomicity) /* unlock the read-copy region */
+            if (!fh->atomicity && fh->amode != O_RDONLY) /* unlock the read-copy region */
                 PNCIO_UNLOCK(fh, file_off, SEEK_SET, req_len);
 
             /* reduce remaining size to be locked */
@@ -408,7 +408,7 @@ MPI_Offset PNCIO_UFS_read_indep(PNCIO_File *fh,
     }
 
     /* if atomicity is true, unlock (exclusive) the whole region */
-    if (fh->atomicity)
+    if (fh->atomicity && fh->amode != O_RDONLY)
         PNCIO_UNLOCK(fh, lock_off, SEEK_SET, lock_len);
 
 #ifdef PNETCDF_DEBUG
