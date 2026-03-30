@@ -92,8 +92,10 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
         nprocs_per_node[k]++;
     }
 
-    /* select process ranks from nodes in a round-robin fashion to be I/O
-     * aggregators
+#ifdef ROUND_ROBIN_POLICY
+    /* Round-robin assignment policy selects aggregators in the round-robin
+     * fashion across compute nodes, i.e. consecutive aggregators are selected
+     * from different, consecutive nodes.
      */
     k = j = 0;
     for (i=0; i<fh->hints->cb_nodes; i++) {
@@ -115,6 +117,30 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
             j++;
         }
     }
+#else
+    /* Block assignment policy selects aggregators from compute nodes in the
+     * block fashion, i.e. consecutive aggregators are selected from the same
+     * node.
+     *
+     * Performance evaluation on Perlmutter Lustre using WRF-IO does not show a
+     * noticeable difference between the round-robin and block policies.
+     */
+    int avg = fh->hints->cb_nodes / fh->comm_attr.num_nodes;
+    int rem = fh->hints->cb_nodes % fh->comm_attr.num_nodes;
+    k = 0;
+    for (i=0; i<fh->comm_attr.num_nodes; i++) {
+        int num_aggr = (i < rem) ? avg + 1 : avg;
+        /* pick num_aggr processes as I/O aggregators in this node i */
+        for (j=0; j<num_aggr; j++) {
+            fh->hints->aggr_ranks[k] = ranks_per_node[i][j];
+            if (rank == fh->hints->aggr_ranks[k]) {
+                fh->is_agg = 1;
+                fh->my_cb_nodes_index = k;
+            }
+            k++;
+        }
+    }
+#endif
     NCI_Free(ranks_per_node[0]);
     NCI_Free(ranks_per_node);
     NCI_Free(nprocs_per_node);
