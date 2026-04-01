@@ -281,10 +281,10 @@ MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fh,
     }
     else {
         /* file_view is noncontiguous and data sieving is not disabled */
-        MPI_Offset lock_rem, disp, cpy_len;
+        MPI_Offset lock_rem, disp, cpy_len, first_stripe, last_stripe;
 
         /* allocate read-modify-write buffer */
-        tmp_buf_size = MIN(lock_len, fh->hints->ind_wr_buffer_size);
+        tmp_buf_size = MIN(lock_len, fh->hints->striping_unit);
         tmp_buf = (char*) NCI_Malloc(tmp_buf_size);
 
         /* lock_rem is the amount remained to be locked for the entire
@@ -293,9 +293,9 @@ MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fh,
         lock_rem = lock_len;
 
         /* perform ntimes rounds of read-modify-write */
-        ntimes = lock_len / tmp_buf_size;
-        if (lock_len % tmp_buf_size)
-            ntimes++;
+        first_stripe = lock_off / fh->hints->striping_unit;
+        last_stripe = (lock_off + lock_len - 1) / fh->hints->striping_unit;
+        ntimes = (last_stripe - first_stripe) + 1;
 
 #ifdef PNETCDF_DEBUG
         /* file_view's offsets should have already sorted into a monotonically
@@ -321,11 +321,17 @@ MPI_Offset PNCIO_UFS_write_indep(PNCIO_File *fh,
         /* pointer to buf, starting location to copy over to tmp_buf */
         cpy_ptr = (char*)buf;
 
-        disp=0;
+        disp = 0;
         k = 0; /* index pointed to buf_view's  offset-length pairs */
         j = 0; /* index pointed to file_view's offset-length pairs */
         for (i=0; i<ntimes; i++) { /* perform write in ntimes rounds */
             MPI_Offset req_len, tmp_buf_rem, gap;
+
+            /* adjust tmp_buf_size to achieve striping_unit aligned file
+             * access
+             */
+            tmp_buf_size = fh->hints->striping_unit
+                         - (file_off % fh->hints->striping_unit);
 
             if (disp >= tmp_buf_size) {
                 /* This displacement at the beginning of read-modify-write
