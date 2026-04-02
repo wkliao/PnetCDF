@@ -182,11 +182,6 @@ PNCIO_UFS_open(PNCIO_File *fh)
 
     MPI_Comm_rank(fh->comm, &rank);
 
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-if (world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,mode_str,fh->filename); fflush(stdout);}
-#endif
-
     stripe_size = 1048576; /* default to 1 MiB */
 
     old_mask = umask(022);

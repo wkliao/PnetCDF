@@ -28,10 +28,6 @@
 #include <dispatch.h>
 #include <common.h>
 
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-#define NMEASURES 8
-#endif
-
 #if defined(F_SETLKW64)
 #define PNCIO_UNLOCK(fh, offset, whence, len) \
         PNCIO_GEN_SetLock64(fh, F_SETLK, F_UNLCK, offset, whence, len)
@@ -181,13 +177,6 @@ typedef struct {
 
     PNCIO_Hints *hints;     /* hints used by PnetCDF */
     MPI_Info info;          /* contains all MPI-IO and PnetCDF hints */
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    double write_timing[NMEASURES];
-    double read_timing[NMEASURES];
-    MPI_Count write_counter[NMEASURES];
-    MPI_Count read_counter[NMEASURES];
-#endif
 } PNCIO_File;
 
 typedef struct {
