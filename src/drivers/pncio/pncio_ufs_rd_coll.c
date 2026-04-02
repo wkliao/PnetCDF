@@ -264,7 +264,7 @@ R_Exchange_data(PNCIO_File         *fh,
         }
     }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->read_timing[4] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_rd_t[4] += MPI_Wtime() - curT;
 #endif
 
     sts = (MPI_Status*) NCI_Malloc(sizeof(MPI_Status) * (nsends + nrecvs));
@@ -276,7 +276,7 @@ R_Exchange_data(PNCIO_File         *fh,
 #endif
         MPI_Waitall(nrecvs, reqs, sts);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        if (fh->is_agg) fh->read_timing[3] += MPI_Wtime() - curT;
+        if (fh->is_agg) pnc_drv_rd_t[3] += MPI_Wtime() - curT;
 #endif
 
         for (i=0; i<nrecvs; i++) {
@@ -306,7 +306,7 @@ R_Exchange_data(PNCIO_File         *fh,
     MPI_Waitall(nsends, reqs + nrecvs, sts + nrecvs);
 #endif
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->read_timing[3] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_rd_t[3] += MPI_Wtime() - curT;
 #endif
 
     NCI_Free(sts);
@@ -387,7 +387,7 @@ Read_and_exch(PNCIO_File         *fh,
     MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fh->comm);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fh->read_counter[0] = MAX(fh->read_counter[0], max_ntimes);
+    pnc_rd_count[0] = MAX(pnc_rd_count[0], max_ntimes);
 #endif
 
     /* curr_offlen_ptr[] is the current off-len pair in others_req[] being
@@ -809,7 +809,7 @@ double curT = MPI_Wtime();
     NCI_Free(count_per_aggr);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->read_timing[1] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_rd_t[1] += MPI_Wtime() - curT;
 #endif
 
     /* read data in sizes of no more than collective buffer size, communicate
@@ -828,7 +828,7 @@ double curT = MPI_Wtime();
     NCI_Free(others_req);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->read_timing[0] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_rd_t[0] += MPI_Wtime() - curT;
 #endif
 
     return (r_len < 0) ? r_len : total_r_len;
