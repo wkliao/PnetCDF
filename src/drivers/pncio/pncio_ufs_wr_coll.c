@@ -255,7 +255,7 @@ W_Exchange_data(PNCIO_File       *fh,
         PNCIO_Heap_merge(others_req, count, srt_off, srt_len, start_pos,
                          nprocs, nrecvs, sum);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        if (fh->is_agg) fh->write_timing[5] += MPI_Wtime() - timing;
+        if (fh->is_agg) pnc_drv_wr_t[5] += MPI_Wtime() - timing;
 #endif
     }
 
@@ -426,7 +426,7 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
         MPI_Type_free(&self_recv_type);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->write_timing[4] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_wr_t[4] += MPI_Wtime() - curT;
     curT = MPI_Wtime();
 #endif
 
@@ -439,7 +439,7 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
 #endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->write_timing[3] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_wr_t[3] += MPI_Wtime() - curT;
 #endif
 
     NCI_Free(reqs);
@@ -519,7 +519,7 @@ Exch_and_write(PNCIO_File       *fh,
     MPI_Allreduce(&ntimes, &max_ntimes, 1, MPI_INT, MPI_MAX, fh->comm);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fh->write_counter[0] = MAX(fh->write_counter[0], max_ntimes);
+    pnc_wr_count[0] = MAX(pnc_wr_count[0], max_ntimes);
 #endif
 
     /* curr_offlen_ptr[] is the current off-len pair in others_req[] being
@@ -889,7 +889,7 @@ double curT = MPI_Wtime();
     NCI_Free(count_per_aggr);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->write_timing[1] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_wr_t[1] += MPI_Wtime() - curT;
 #endif
 
     /* exchange data and write in sizes of no more than cb_buffer_size. */
@@ -924,7 +924,7 @@ double curT = MPI_Wtime();
     NCI_Free(others_req);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->write_timing[0] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_wr_t[0] += MPI_Wtime() - curT;
 #endif
 
     /* w_len may not be the same as buf_view.size, because data sieving may
