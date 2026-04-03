@@ -167,7 +167,7 @@ R_Exchange_data(PNCIO_File         *fh,
     MPI_Status *sts;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    double curT = MPI_Wtime();
+    double endT, startT = MPI_Wtime();
 #endif
 
     MPI_Comm_size(fh->comm, &nprocs);
@@ -264,20 +264,16 @@ R_Exchange_data(PNCIO_File         *fh,
         }
     }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) pnc_drv_rd_t[4] += MPI_Wtime() - curT;
+    endT = MPI_Wtime();
+    if (fh->is_agg) pnc_drv_rd_t[3] += endT - startT;
+    startT = endT;
 #endif
 
     sts = (MPI_Status*) NCI_Malloc(sizeof(MPI_Status) * (nsends + nrecvs));
 
     /* wait on the receives */
     if (nrecvs) {
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        curT = MPI_Wtime();
-#endif
         MPI_Waitall(nrecvs, reqs, sts);
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        if (fh->is_agg) pnc_drv_rd_t[3] += MPI_Wtime() - curT;
-#endif
 
         for (i=0; i<nrecvs; i++) {
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -297,16 +293,15 @@ R_Exchange_data(PNCIO_File         *fh,
     }
 
     /* wait on the sends */
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    curT = MPI_Wtime();
-#endif
 #ifdef HAVE_MPI_STATUSES_IGNORE
     MPI_Waitall(nsends, reqs + nrecvs, MPI_STATUSES_IGNORE);
 #else
     MPI_Waitall(nsends, reqs + nrecvs, sts + nrecvs);
 #endif
+
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) pnc_drv_rd_t[3] += MPI_Wtime() - curT;
+    endT = MPI_Wtime();
+    if (fh->is_agg) pnc_drv_rd_t[4] += endT - startT;
 #endif
 
     NCI_Free(sts);
