@@ -112,7 +112,6 @@ typedef struct {
     int romio_cb_write;
     int romio_ds_read;
     int romio_ds_write;
-    int romio_no_indep_rw;
 
     /* Hints for Lustre file system */
     int lustre_overstriping_ratio;
