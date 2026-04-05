@@ -104,7 +104,6 @@ int hint_consistency_check(PNCIO_File *fh)
         CHECK_HINT(romio_cb_write);
         CHECK_HINT(romio_ds_read);
         CHECK_HINT(romio_ds_write);
-        CHECK_HINT(romio_no_indep_rw);
 
         CHECK_HINT(lustre_overstriping_ratio);
 
@@ -155,10 +154,6 @@ PNCIO_File_set_info(PNCIO_File *fh,
     /* cb_nodes may be set later right after file open call */
     fh->hints->cb_nodes = 0;
 
-    /* hint indicating that no indep. I/O will be performed on this file */
-    MPI_Info_set(fh->info, "romio_no_indep_rw", "false");
-    fh->hints->romio_no_indep_rw = 0;
-
     /* buffer size for data sieving in independent reads */
     MPI_Info_set(fh->info, "ind_rd_buffer_size", PNCIO_IND_RD_BUFFER_SIZE_DFLT);
     fh->hints->ind_rd_buffer_size = atoi(PNCIO_IND_RD_BUFFER_SIZE_DFLT);
@@ -196,27 +191,8 @@ PNCIO_File_set_info(PNCIO_File *fh,
 
     /* enable/disable collective buffering */
     GET_INFO_STR(romio_cb_read);
-    if (fh->hints->romio_cb_read == PNCIO_HINT_DISABLE) {
-        /* romio_cb_read overrides romio_no_indep_rw */
-        MPI_Info_set(fh->info, "romio_no_indep_rw", "false");
-        fh->hints->romio_no_indep_rw = PNCIO_HINT_DISABLE;
-    }
 
     GET_INFO_STR(romio_cb_write);
-    if (fh->hints->romio_cb_write == PNCIO_HINT_DISABLE) {
-        /* romio_cb_write overrides romio_no_indep_rw */
-        MPI_Info_set(fh->info, "romio_no_indep_rw", "false");
-        fh->hints->romio_no_indep_rw = PNCIO_HINT_DISABLE;
-    }
-
-    /* user intends to call collective I/O APIs only */
-    GET_INFO_STR(romio_no_indep_rw);
-    if (fh->hints->romio_no_indep_rw == PNCIO_HINT_ENABLE) {
-        MPI_Info_set(fh->info, "romio_cb_write", "enable");
-        MPI_Info_set(fh->info, "romio_cb_read", "enable");
-        fh->hints->romio_cb_read = PNCIO_HINT_ENABLE;
-        fh->hints->romio_cb_write = PNCIO_HINT_ENABLE;
-    }
 
     /* enable/disable data sieving */
     GET_INFO_STR(romio_ds_read);
