@@ -61,7 +61,7 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
         /* If hint cb_nodes is not set by user, select one rank per node to be
          * an I/O aggregator
          */
-        fh->hints->cb_nodes = fh->comm_attr.num_nodes;
+        fh->hints->cb_nodes = fh->comm_attr.num_NUMAs;
     else if (fh->hints->cb_nodes > nprocs)
         /* cb_nodes must be <= nprocs */
         fh->hints->cb_nodes = nprocs;
@@ -71,23 +71,23 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
         return NC_ENOMEM;
 
     /* number of MPI processes running on each node */
-    nprocs_per_node = (int*) NCI_Calloc(fh->comm_attr.num_nodes, sizeof(int));
+    nprocs_per_node = (int*) NCI_Calloc(fh->comm_attr.num_NUMAs, sizeof(int));
 
-    for (i=0; i<nprocs; i++) nprocs_per_node[fh->comm_attr.ids[i]]++;
+    for (i=0; i<nprocs; i++) nprocs_per_node[fh->comm_attr.NUMA_IDs[i]]++;
 
     /* construct rank IDs of MPI processes running on each node */
-    ranks_per_node = (int**) NCI_Malloc(sizeof(int*) * fh->comm_attr.num_nodes);
+    ranks_per_node = (int**) NCI_Malloc(sizeof(int*) * fh->comm_attr.num_NUMAs);
     ranks_per_node[0] = (int*) NCI_Malloc(sizeof(int) * nprocs);
-    for (i=1; i<fh->comm_attr.num_nodes; i++)
+    for (i=1; i<fh->comm_attr.num_NUMAs; i++)
         ranks_per_node[i] = ranks_per_node[i - 1] + nprocs_per_node[i - 1];
 
-    for (i=0; i<fh->comm_attr.num_nodes; i++) nprocs_per_node[i] = 0;
+    for (i=0; i<fh->comm_attr.num_NUMAs; i++) nprocs_per_node[i] = 0;
 
     /* Populate ranks_per_node[], list of MPI ranks running on each node.
      * Populate nprocs_per_node[], number of MPI processes on each node.
      */
     for (i=0; i<nprocs; i++) {
-        k = fh->comm_attr.ids[i];
+        k = fh->comm_attr.NUMA_IDs[i];
         ranks_per_node[k][nprocs_per_node[k]] = i;
         nprocs_per_node[k]++;
     }
@@ -101,7 +101,7 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
     for (i=0; i<fh->hints->cb_nodes; i++) {
         if (j >= nprocs_per_node[k]) { /* if run out of ranks in this node k */
             k++;
-            if (k == fh->comm_attr.num_nodes) { /* round-robin to first node */
+            if (k == fh->comm_attr.num_NUMAs) { /* round-robin to first node */
                 k = 0;
                 j++;
             }
@@ -112,7 +112,7 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
             fh->is_agg = 1;
             fh->my_cb_nodes_index = i;
         }
-        if (k == fh->comm_attr.num_nodes) { /* round-robin to first node */
+        if (k == fh->comm_attr.num_NUMAs) { /* round-robin to first node */
             k = 0;
             j++;
         }
@@ -125,10 +125,10 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
      * Performance evaluation on Perlmutter Lustre using WRF-IO does not show a
      * noticeable difference between the round-robin and block policies.
      */
-    int avg = fh->hints->cb_nodes / fh->comm_attr.num_nodes;
-    int rem = fh->hints->cb_nodes % fh->comm_attr.num_nodes;
+    int avg = fh->hints->cb_nodes / fh->comm_attr.num_NUMAs;
+    int rem = fh->hints->cb_nodes % fh->comm_attr.num_NUMAs;
     k = 0;
-    for (i=0; i<fh->comm_attr.num_nodes; i++) {
+    for (i=0; i<fh->comm_attr.num_NUMAs; i++) {
         int num_aggr = (i < rem) ? avg + 1 : avg;
         /* pick num_aggr processes as I/O aggregators in this node i */
         for (j=0; j<num_aggr; j++) {
@@ -233,7 +233,7 @@ err_out:
 
     SET_INFO(fh)
 
-    /* Construct cb_nodes rank list, which requires fh->comm_attr.num_nodes
+    /* Construct cb_nodes rank list, which requires fh->comm_attr.num_NUMAs
      * to be known on all processes.
      */
     UFS_set_cb_node_list(fh);
