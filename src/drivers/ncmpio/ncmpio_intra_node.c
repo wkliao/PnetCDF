@@ -320,8 +320,8 @@ flatten_subarray(int               ndim,       /* number of dimensions */
                  MPI_Offset       *lengths)    /* OUT: array of lengths */
 {
     int i, j;
-    MPI_Offset length, nstride, array_len, off, subarray_len;
     size_t idx=0, idx0;
+    MPI_Offset length, nstride, array_len, off, subarray_len;
 
     *npairs = 0;
     if (ndim < 0) return NC_NOERR;
@@ -391,7 +391,7 @@ flatten_subarray(int               ndim,       /* number of dimensions */
         subarray_len *= count[ndim];
     }
 
-    /* offsets[] and lengths[] may be coalescable, but this will be delayed
+    /* offsets[] and lengths[] may be coalesceable, but this will be delayed
      * until this subroutine callers, flatten_req() and flatten_nreqs(), where
      * both fix-sized and record variables have been flattened.
      */
@@ -413,8 +413,7 @@ flatten_req(const NC         *ncp,
             PNCIO_View       *file_view) /* OUT: flattened file view */
 {
     int i, j, err=NC_NOERR, ndims;
-    MPI_Offset num, idx, var_begin, prev_end_off;
-    MPI_Offset *shape, count0, *ones=NULL;
+    MPI_Offset num, idx, var_begin, prev_end_off, *shape, count0, *ones=NULL;
 
     file_view->count = 0;   /* number of offset-length pairs */
     file_view->off = NULL;  /* array of offsets */
@@ -707,7 +706,7 @@ flat_buf_type(const NC      *ncp,
               int            reqMode,  /* IN: NC_REQ_RD or NC_REQ_WR */
               int            num_reqs, /* IN: number of requests */
               const NC_req  *reqs,     /* IN: [num_reqs] requests */
-              PNCIO_View    *buf_view, /* OUT: flattened buftype */
+              PNCIO_View    *buf_view, /* OUT: flattened buffer view */
               void         **buf)      /* OUT: pointer to I/O buffer */
 {
     int i, j, err=NC_NOERR;
@@ -719,8 +718,7 @@ flat_buf_type(const NC      *ncp,
     buf_view->off = NULL;
     buf_view->len = NULL;
 
-    if (num_reqs == 0)
-        return NC_NOERR;
+    if (num_reqs == 0) return NC_NOERR;
 
     buf_view->off = (MPI_Offset*) NCI_Malloc(sizeof(MPI_Offset) * num_reqs);
     if (buf_view->off == NULL) return NC_ENOMEM;
