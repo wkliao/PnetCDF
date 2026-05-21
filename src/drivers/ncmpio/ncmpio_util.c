@@ -273,7 +273,7 @@ void ncmpio_hint_extract(NC       *ncp,
      * let PnetCDF to decide.
      */
     ncp->file_striping = PNCIO_STRIPING_AUTO;
-    MPI_Info_get(info, "file_striping", MPI_MAX_INFO_VAL-1, value, &flag);
+    MPI_Info_get(info, "nc_file_striping", MPI_MAX_INFO_VAL-1, value, &flag);
     if (flag && strcasecmp(value, "inherit") == 0)
         ncp->file_striping = PNCIO_STRIPING_INHERIT;
 
@@ -407,9 +407,9 @@ void ncmpio_hint_set(NC       *ncp,
      * let PnetCDF to decide.
      */
     if (ncp->file_striping == PNCIO_STRIPING_AUTO)
-        MPI_Info_set(info, "file_striping", "auto");
+        MPI_Info_set(info, "nc_file_striping", "auto");
     else
-        MPI_Info_set(info, "file_striping", "inherit");
+        MPI_Info_set(info, "nc_file_striping", "inherit");
 
     if (ncp->NUMA_ID >= 0) {
         /* This rank's NUMA_ID, will be used by GIO. */

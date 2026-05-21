@@ -550,9 +550,9 @@ ncmpio_create(MPI_Comm         comm,
 
     /* create file collectively -------------------------------------------- */
     if (ncp->driver == PNC_DRIVER_MPIIO) {
-        /* If hint file_striping is set to "auto" and hint striping_factor is
-         * not set by the user, then set hint striping_factor to
-         * ncp->comm_attr.num_nodes.
+        /* If hint nc_file_striping is set to "auto" and hint striping_factor
+         * is not set by the user, then set hint striping_factor to
+         * ncp->comm_attr.num_NUMAs.
          */
         if (ncp->file_striping == PNCIO_STRIPING_AUTO) {
             int striping_factor=0;
