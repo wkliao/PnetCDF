@@ -112,10 +112,9 @@ int UFS_set_cb_node_list(PNCIO_File *fd)
  *   5. non-root processes opens the file
  */
 int
-PNCIO_UFS_create(PNCIO_File *fd,
-                 int         mpi_io_mode)
+PNCIO_UFS_create(PNCIO_File *fd)
 {
-    int err=NC_NOERR, rank, amode, perm, old_mask;
+    int err=NC_NOERR, rank, perm, old_mask;
     int stripin_info[4] = {-1, -1, -1, -1};
 
     MPI_Comm_rank(fd->comm, &rank);
@@ -124,9 +123,6 @@ PNCIO_UFS_create(PNCIO_File *fd,
 int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd->filename); fflush(stdout);}
 #endif
-
-    amode = O_CREAT;
-    if (mpi_io_mode & MPI_MODE_RDWR) amode |= O_RDWR;
 
     old_mask = umask(022);
     umask(old_mask);
@@ -137,11 +133,11 @@ if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd-
      */
     if (rank > 0) goto err_out;
 
-    fd->fd_sys = open(fd->filename, amode, perm);
+    fd->fd_sys = open(fd->filename, fd->amode, perm);
     if (fd->fd_sys == -1) {
-        fprintf(stderr,"%s line %d: rank %d fails to create file %s (%s)\n",
+        fprintf(stderr, "%s line %d: rank %d fails to create file %s (%s)\n",
                 __func__,__LINE__, rank, fd->filename, strerror(errno));
-        err = ncmpii_error_posix2nc("open");
+        err = ncmpii_error_posix2nc("create");
         goto err_out;
     }
     fd->is_open = 1;
@@ -189,7 +185,7 @@ err_out:
 int
 PNCIO_UFS_open(PNCIO_File *fd)
 {
-    int err=NC_NOERR, rank, perm, old_mask, omode;
+    int err=NC_NOERR, rank, perm, old_mask;
     int stripin_info[4] = {1048576, -1, -1, -1};
 
     MPI_Comm_rank(fd->comm, &rank);
@@ -203,15 +199,10 @@ if (world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fd-
     umask(old_mask);
     perm = old_mask ^ PNCIO_PERM;
 
-    if (fIsSet(fd->access_mode, MPI_MODE_RDWR))
-        omode = O_RDWR;
-    else
-        omode = O_RDONLY;
-
     /* All processes open the file. */
-    fd->fd_sys = open(fd->filename, omode, perm);
+    fd->fd_sys = open(fd->filename, fd->amode, perm);
     if (fd->fd_sys == -1) {
-        fprintf(stderr, "%s line %d: rank %d failure to open file %s (%s)\n",
+        fprintf(stderr, "%s line %d: rank %d fails to open file %s (%s)\n",
                 __func__,__LINE__, rank, fd->filename, strerror(errno));
         err = ncmpii_error_posix2nc("open");
         goto err_out;
