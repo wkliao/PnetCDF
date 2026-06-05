@@ -36,7 +36,8 @@ assert(fd->filetype == MPI_BYTE);
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-        off = fd->disp + offset;
+/* In PnetCDF, when fileview is contiguous, offset may be > 0 */
+        off = offset;
 
         start_off = off;
         end_offset = off + bufsize - 1;
@@ -78,11 +79,11 @@ assert(fd->filetype == MPI_BYTE);
          *               into writing this block of the filetype
          */
 
-        disp = fd->disp;
+        disp = 0;
 
 /* noncontiguous in fileview, disp and offset should be 0 for PnetCDF */
-assert(fd->disp == 0);
 assert(offset == 0);
+/* In PnetCDF, when fileview is non-contiguous, offset is always 0 */
 
         size_in_filetype = offset;
 

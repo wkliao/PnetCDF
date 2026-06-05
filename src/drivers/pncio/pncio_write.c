@@ -46,7 +46,7 @@ MPI_Offset ost_id = (offset / fd->hints->striping_unit) % fd->hints->striping_fa
     else if (ost_id != first_ost_id)
         printf("%2d Error: %s pwrite offset=%lld w_size=%lld ost_id=%lld not same 1st ost %d\n",rank,__func__,offset,w_size,ost_id,first_ost_id);
 
-printf("%s line %d: disp=%lld offset=%lld count=%ld bufType_size=%d w_size=%lld\n",__func__,__LINE__,fd->disp,offset,count,bufType_size,w_size);
+printf("%s line %d: offset=%lld count=%ld bufType_size=%d w_size=%lld\n",__func__,__LINE__,offset,count,bufType_size,w_size);
 
     printf("%2d %s line %d pwrite offset=%lld w_size=%lld\n",rank,__func__,__LINE__,offset,w_size);
 #endif
