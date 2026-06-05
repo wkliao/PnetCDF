@@ -2077,11 +2077,7 @@ double curT = MPI_Wtime();
     MPI_Comm_size(fh->comm, &nprocs);
     MPI_Comm_rank(fh->comm, &myrank);
 
-    /* PnetCDF never reuses a fileview across two or more PNCIO calls. As this
-     * subroutine may modify the contents of fh->file_view, we save its
-     * contents and restore it before leaving this sibroutine.
-     */
-    PNCIO_View saved_file_view = fh->file_view;
+    /* PnetCDF never reuses a fileview across two or more PNCIO calls. */
 
     /* fh->file_view contains a list of starting file offsets and lengths of
      * write requests made by this rank. Similarly, buf_view contains a list of
@@ -2213,22 +2209,8 @@ double curT = MPI_Wtime();
         }
     }
 
-    /* If collective I/O is determined not necessary, use independent I/O */
     if (!do_collect) {
-
-        /* restore flattend file view before leaving this sibroutine */
-        fh->file_view = saved_file_view;
-
-        if (buf_view.size == 0) /* zero-sized request */
-            return 0;
-
-        if (fh->file_view.count <= 1 && buf_view.count <= 1) {
-            /* Both buffer and fileview are contiguous. */
-#ifdef WKL_DEBUG
-            printf("%s %d: SWITCH to PNCIO_UFS_write_contig !!!\n",__func__,__LINE__);
-#endif
-            return PNCIO_UFS_write_contig(fh, buf, buf_view.size, fh->file_view.off[0], 0);
-        }
+        /* switch to perform independent write */
 
 #ifdef WKL_DEBUG
         printf("%s %d: SWITCH to PNCIO_UFS_write_indep !!!\n",
@@ -2410,9 +2392,6 @@ double curT = MPI_Wtime();
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
     if (fh->is_agg) fh->write_timing[0] += MPI_Wtime() - curT;
 #endif
-
-    /* restore flattend file view before leaving this sibroutine */
-    fh->file_view = saved_file_view;
 
     /* w_len may not be the same as buf_view.size, because data sieving may
      * write more than requested.
