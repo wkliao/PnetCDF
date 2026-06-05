@@ -78,9 +78,8 @@ int PNCIO_File_open(MPI_Comm    comm,
         goto err_out;
     }
 
-    /* When hint romio_no_indep_rw hint is set to true, only aggregators open
-     * the file. Note fh->is_agg will be set at the end of create/open calls
-     * below.
+    /* Now, create/open the file. Note fh->is_agg, indicating whether this rank
+     * is an I/O aggregator,  will be set at the end of create/open calls.
      */
     if (fh->fstype == PNCIO_FS_LUSTRE) {
         if (amode & O_CREAT)
@@ -95,7 +94,7 @@ int PNCIO_File_open(MPI_Comm    comm,
     else
         err = NC_EFSTYPE;
 
-    if (err != NC_NOERR) { /* fatal error */
+    if (err != NC_NOERR) { /* Failer to open the file is a fatal error */
         status = err;
         goto err_out;
     }
