@@ -26,10 +26,10 @@
 
 /*----< UFS_set_cb_node_list() >---------------------------------------------*/
 /* Construct the list of I/O aggregators. It sets the followings.
- *   fh->hints->ranklist[].
+ *   fh->hints->aggr_ranks[].
  *   fh->hints->cb_nodes and set file info for hint cb_nodes.
  *   fh->is_agg: indicating whether this rank is an I/O aggregator
- *   fh->my_cb_nodes_index: index into fh->hints->ranklist[]. -1 if N/A
+ *   fh->my_cb_nodes_index: index into fh->hints->aggr_ranks[]. -1 if N/A
  */
 static
 int UFS_set_cb_node_list(PNCIO_File *fh)
@@ -48,8 +48,8 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
         /* cb_nodes must be <= nprocs */
         fh->hints->cb_nodes = nprocs;
 
-    fh->hints->ranklist = (int*) NCI_Malloc(sizeof(int) * fh->hints->cb_nodes);
-    if (fh->hints->ranklist == NULL)
+    fh->hints->aggr_ranks = (int*) NCI_Malloc(sizeof(int) * fh->hints->cb_nodes);
+    if (fh->hints->aggr_ranks == NULL)
         return NC_ENOMEM;
 
     /* number of MPI processes running on each node */
@@ -87,8 +87,8 @@ int UFS_set_cb_node_list(PNCIO_File *fh)
             }
         }
         /* select the jth rank of node k as an I/O aggregator */
-        fh->hints->ranklist[i] = ranks_per_node[k++][j];
-        if (rank == fh->hints->ranklist[i]) {
+        fh->hints->aggr_ranks[i] = ranks_per_node[k++][j];
+        if (rank == fh->hints->aggr_ranks[i]) {
             fh->is_agg = 1;
             fh->my_cb_nodes_index = i;
         }

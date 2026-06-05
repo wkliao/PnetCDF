@@ -122,7 +122,7 @@ int LUSTRE_Calc_aggregator(PNCIO_File *fh,
          * falling into aggregator's file domain */
         *len = avail_bytes;
     }
-    /* return the index to ranklist[] */
+    /* return the index to aggr_ranks[] */
     return (stripe_id % fh->hints->cb_nodes);
 }
 
@@ -219,8 +219,8 @@ Alternative: especially for when fh->file_view.count is large
          * values of 'aggr' and 'avail_len' in aggr_ranks[] and avail_lens[] to
          * be used in the next for loop (not next iteration).
          *
-         * Note the returned value in 'aggr' is the index to ranklist[], i.e.
-         * the 'aggr'th element of array ranklist[], rather than the
+         * Note the returned value in 'aggr' is the index to aggr_ranks[], i.e.
+         * the 'aggr'th element of array aggr_ranks[], rather than the
          * aggregator's MPI rank ID in fh->comm.
          */
         aggr = LUSTRE_Calc_aggregator(fh, off, &avail_len);
@@ -375,7 +375,7 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
     count_my_req_per_proc = (MPI_Count *) NCI_Calloc(nprocs * 2, sizeof(MPI_Count));
     count_others_req_per_proc = count_my_req_per_proc + nprocs;
     for (i=0; i<fh->hints->cb_nodes; i++)
-        count_my_req_per_proc[fh->hints->ranklist[i]] = my_req[i].count;
+        count_my_req_per_proc[fh->hints->aggr_ranks[i]] = my_req[i].count;
 
 #if 1
     reqs = NCI_Malloc(sizeof(MPI_Request) * (nprocs + fh->hints->cb_nodes));
@@ -385,7 +385,7 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
             MPI_Irecv(count_others_req_per_proc+i, 1, MPI_COUNT, i, 0, fh->comm, &reqs[nreqs++]);
     }
     for (i=0; i<fh->hints->cb_nodes; i++) {
-        int dest = fh->hints->ranklist[i];
+        int dest = fh->hints->aggr_ranks[i];
         MPI_Issend(&my_req[i].count, 1, MPI_COUNT, dest, 0, fh->comm, &reqs[nreqs++]);
     }
     if (nreqs) {
@@ -498,7 +498,7 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
         /* prepare send side */
         s_off_buf = my_req[0].offsets;
         for (i=0; i<fh->hints->cb_nodes; i++) {
-            int dest = fh->hints->ranklist[i];
+            int dest = fh->hints->aggr_ranks[i];
             sendCounts[dest] = my_req[i].count * pair_sz;
             /* Note all my_req[*].offsets are allocated in a single malloc(). */
             sdispls[dest] = (char*)my_req[i].offsets - (char*)s_off_buf;
@@ -568,10 +568,10 @@ void LUSTRE_Calc_others_req(PNCIO_File          *fh,
              */
 #ifdef HAVE_MPI_LARGE_COUNT
             MPI_Issend_c(my_req[i].offsets, my_req[i].count * pair_sz, MPI_BYTE,
-                       fh->hints->ranklist[i], 0, fh->comm, &reqs[nreqs++]);
+                       fh->hints->aggr_ranks[i], 0, fh->comm, &reqs[nreqs++]);
 #else
             MPI_Issend(my_req[i].offsets, my_req[i].count * pair_sz, MPI_BYTE,
-                       fh->hints->ranklist[i], 0, fh->comm, &reqs[nreqs++]);
+                       fh->hints->aggr_ranks[i], 0, fh->comm, &reqs[nreqs++]);
 #endif
         }
 
@@ -931,7 +931,7 @@ double curT = MPI_Wtime();
     /* optimization: if only one process performing I/O, we can perform
      * a less-expensive Bcast. */
     if (fh->hints->cb_nodes == 1)
-        MPI_Bcast(&w_len, 1, MPI_OFFSET, fh->hints->ranklist[0], fh->comm);
+        MPI_Bcast(&w_len, 1, MPI_OFFSET, fh->hints->aggr_ranks[0], fh->comm);
     else
         MPI_Allreduce(MPI_IN_PLACE, &w_len, 1, MPI_OFFSET, MPI_MIN, fh->comm);
 
@@ -1021,7 +1021,7 @@ void comm_phase_alltoallw(PNCIO_File    *fh,
         /* check if nothing to send or if self */
         if (send_list[i].count == 0 || i == fh->my_cb_nodes_index) continue;
 
-        int dest = fh->hints->ranklist[i];
+        int dest = fh->hints->aggr_ranks[i];
         sendCounts[dest] = 1;
 
         /* combine reqs using new datatype */
@@ -1168,7 +1168,7 @@ void commit_comm_phase(PNCIO_File    *fh,
 #endif
         MPI_Type_commit(&sendType);
 
-        MPI_Issend(MPI_BOTTOM, 1, sendType, fh->hints->ranklist[i], 0,
+        MPI_Issend(MPI_BOTTOM, 1, sendType, fh->hints->aggr_ranks[i], 0,
                    fh->comm, &reqs[nreqs++]);
         MPI_Type_free(&sendType);
     }
@@ -2275,10 +2275,10 @@ int num_memcpy=0;
         while (rem_len != 0) {
             len = rem_len;
             q = LUSTRE_Calc_aggregator(fh, off, &len);
-            /* NOTE: len will be modified by PNCIO_Calc_aggregator() to be no
+            /* NOTE: len will be modified by LUSTRE_Calc_aggregator() to be no
              * more than a file stripe unit size that aggregator "q" is
              * responsible for. Note q is not the MPI rank ID, It is the array
-             * index to fh->hints->ranklist[].
+             * index to fh->hints->aggr_ranks[].
              *
              * Now len is the amount of data in ith off-len pair that should be
              * sent to aggregator q. Note q can also be self. In this case,
