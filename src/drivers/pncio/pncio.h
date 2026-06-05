@@ -45,8 +45,6 @@
 
 #define PNCIO_FS_UFS        152    /* Unix file system */
 #define PNCIO_FS_LUSTRE     163    /* Lustre file system */
-#define PNC_DRIVER_MPIIO    -1     /* Use MPI-IO */
-#define PNC_DRIVER_PNCIO    0      /* Use PnetCDF PNCIO drivers */
 
 #define PNCIO_LUSTRE_MAX_OSTS 256  /* Maximum number of Lustre OSTs if hint
                                     * striping_factor is not set by user.
