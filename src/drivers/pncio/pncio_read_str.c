@@ -40,31 +40,26 @@
 
 MPI_Offset PNCIO_GEN_ReadStrided(PNCIO_File *fd,
                                  void       *buf,
-                                 PNCIO_View  buf_view,
-                                 MPI_Offset  offset)
+                                 PNCIO_View  buf_view)
 {
     char *readbuf, *tmp_buf, *value;
     int i, j, k, st_index=0, info_flag;
 
     MPI_Aint max_bufsize, readbuf_len;
-    MPI_Offset i_offset, new_brd_size, brd_size, size, abs_off_in_filetype=0;
+    MPI_Offset i_offset, new_brd_size, brd_size, size;
     MPI_Offset new_frd_size, frd_size=0, st_frd_size, userbuf_off, req_len;
-    MPI_Offset sum, off, req_off, disp, end_offset=0, readbuf_off, start_off;
+    MPI_Offset off, req_off, end_offset=0, readbuf_off, start_off;
     MPI_Offset r_len, total_r_len=0;
     MPI_Count num, bufsize, partial_read;
 
-// printf("%s at %d:\n",__func__,__LINE__);
+    /* This subroutine is entered with file_view being non-contiguous only */
 
     if (fd->hints->romio_ds_read == PNCIO_HINT_DISABLE) {
         /* if user has disabled data sieving on reads, use naive
          * approach instead.
          */
-        return PNCIO_GEN_ReadStrided_naive(fd, buf, buf_view, offset);
+        return PNCIO_GEN_ReadStrided_naive(fd, buf, buf_view);
     }
-
-/* This subroutine is entered with filetype being non-contiguous only */
-assert(fd->filetype == MPI_BYTE);
-if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
     bufsize = buf_view.size;
 
@@ -77,11 +72,11 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in memory, contiguous in file. */
 
-        off = offset;
+        off = fd->flat_file.off[0];
 
         start_off = off;
-        end_offset = off + bufsize - 1;
-        readbuf_off = off;
+        end_offset = start_off + bufsize - 1;
+        readbuf_off = start_off;
         readbuf = (char *) NCI_Malloc(max_bufsize);
         readbuf_len = MIN(max_bufsize, end_offset - readbuf_off + 1);
 
@@ -106,25 +101,20 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         NCI_Free(readbuf);
     }
 
-    else {      /* noncontiguous in file */
-        MPI_Offset size_in_filetype = offset;
+    else { /* noncontiguous in file */
+        MPI_Offset offset=0;
+        MPI_Offset sum=0;
 
-        disp = 0;
-
-        sum = 0;
         for (i = 0; i < fd->flat_file.count; i++) {
             sum += fd->flat_file.len[i];
-            if (sum > size_in_filetype) {
+            if (sum > 0) {
                 st_index = i;
-                frd_size = sum - size_in_filetype;
-                abs_off_in_filetype = fd->flat_file.off[i] +
-                    size_in_filetype - (sum - fd->flat_file.len[i]);
+                frd_size = sum;
+                /* abs. offset in bytes in the file */
+                offset = fd->flat_file.off[i] - (sum - fd->flat_file.len[i]);
                 break;
             }
         }
-
-        /* abs. offset in bytes in the file */
-        offset = disp + abs_off_in_filetype;
 
         start_off = offset;
 
@@ -153,7 +143,7 @@ assert(buf_view.size == r_len);
 
 if (i_offset >= bufsize) break;
             j++;
-            off = disp + fd->flat_file.off[j];
+            off = fd->flat_file.off[j];
             frd_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
         }
 
@@ -184,13 +174,12 @@ if (i_offset >= bufsize) break;
                 i_offset += frd_size;
                 if (i_offset >= bufsize) break;
 
-                if (off + frd_size < disp + fd->flat_file.off[j] +
-                    fd->flat_file.len[j])
+                if (off + frd_size < fd->flat_file.off[j] + fd->flat_file.len[j])
                     off += frd_size; /* off is incremented by frd_size */
                 else {
                     j++;
 assert(j < fd->flat_file.count);
-                    off = disp + fd->flat_file.off[j];
+                    off = fd->flat_file.off[j];
                     frd_size = MIN(fd->flat_file.len[j],
                                        bufsize - i_offset);
                 }
@@ -223,7 +212,7 @@ assert(j < fd->flat_file.count);
                     /* reached end of contiguous block in file */
                     j++;
 assert(j < fd->flat_file.count);
-                    off = disp + fd->flat_file.off[j];
+                    off = fd->flat_file.off[j];
                     new_frd_size = fd->flat_file.len[j];
                     if (size != brd_size) {
                         i_offset += size;

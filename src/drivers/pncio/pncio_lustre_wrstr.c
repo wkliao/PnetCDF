@@ -68,8 +68,8 @@
     }                                                                         \
 }
 
-/* this macro is used when filetype is contig and buftype is not contig.
- * it does not do a read-modify-write and does not lock
+/* This macro is used when file_view is contiguous and buf_view is not
+ * contiguous. It does not do a read-modify-write and does not lock.
  */
 #define BUFFERED_WRITE_WITHOUT_READ {                                         \
     if (req_off >= writebuf_off + writebuf_len) {                             \
@@ -109,19 +109,17 @@
 
 MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
                                      const void *buf,
-                                     PNCIO_View  buf_view,
-                                     MPI_Offset  offset)
+                                     PNCIO_View  buf_view)
 {
     char *writebuf;
     int i, j, k, st_index=0, stripe_size;
-    /* offset is in units of etype relative to the filetype. */
-    MPI_Offset i_offset, sum, num, size, abs_off_in_filetype=0, off, disp;
+    MPI_Offset i_offset, num, size, off;
     MPI_Offset userbuf_off, req_off, end_offset=0, writebuf_off, start_off;
     MPI_Offset new_bwr_size, new_fwr_size, st_fwr_size, fwr_size=0, bwr_size;
     MPI_Offset req_len, r_len, w_len, total_w_len=0;
     MPI_Count bufsize, writebuf_len, write_sz;
 
-    /* The case of both buftype and filetype being contiguous has gone to
+    /* The case of both buf_view and file_view being contiguous has gone to
      * PNCIO_WriteContig().
      */
 
@@ -131,14 +129,12 @@ MPI_Offset PNCIO_LUSTRE_WriteStrided(PNCIO_File *fd,
         /* if user has disabled data sieving on writes, use naive
          * approach instead.
          */
-        return PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view, offset);
+        return PNCIO_GEN_WriteStrided_naive(fd, buf, buf_view);
     }
 
 
 /* PnetCDF always sets these 3 conditions */
-assert(fd->filetype == MPI_BYTE);
 assert(fd->flat_file.size == buf_view.size);
-if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
 
     bufsize = buf_view.size;
 
@@ -148,8 +144,7 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
     if (!buf_view.is_contig && fd->flat_file.is_contig) {
         /* noncontiguous in write buffer, contiguous in file. */
 
-        off = offset;
-        if (fd->flat_file.count > 0) off += fd->flat_file.off[0];
+        off = fd->flat_file.off[0];
 
         start_off = off;
         end_offset = start_off + bufsize - 1;
@@ -185,25 +180,20 @@ if (fd->flat_file.count > 0) assert(offset == 0); /* not whole file visible */
         total_w_len += w_len;
 
     } else { /* contiguous buffer and non-contiguous in file */
-        disp = 0;
-/* for non-contiguous in file, PnetCDF always uses disp == 0 */
-assert(disp == 0);
-
         /* find the starting index in fd->flat_file offset-length pairs */
-        sum = 0;
+        MPI_Offset offset = 0;
+        MPI_Offset sum = 0;
+
         for (i = 0; i < fd->flat_file.count; i++) {
             sum += fd->flat_file.len[i];
-            if (sum > offset) {
+            if (sum > 0) {
                 st_index = i;
-                fwr_size = sum - offset;
-                abs_off_in_filetype = fd->flat_file.off[i] +
-                    offset - (sum - fd->flat_file.len[i]);
+                fwr_size = sum;
+                /* abs. offset in bytes in the file */
+                offset = fd->flat_file.off[i] - (sum - fd->flat_file.len[i]);
                 break;
             }
         }
-
-        /* abs. offset in bytes in the file */
-        offset = disp + abs_off_in_filetype;
 
         start_off = offset;
 
@@ -247,7 +237,7 @@ assert(disp == 0);
         while (i_offset < bufsize) {
             j++;
 assert(j < fd->flat_file.count);
-            off = disp + fd->flat_file.off[j];
+            off = fd->flat_file.off[j];
             fwr_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
             i_offset += fwr_size;
             end_offset = off + fwr_size - 1;
@@ -281,16 +271,14 @@ assert(j < fd->flat_file.count);
                 i_offset += fwr_size;
                 if (i_offset >= bufsize) break;
 
-                if (off + fwr_size < disp + fd->flat_file.off[j] +
-                    fd->flat_file.len[j])
+                if (off + fwr_size < fd->flat_file.off[j] + fd->flat_file.len[j])
                     off += fwr_size;
                     /* no more I/O needed. off is incremented by fwr_size. */
                 else {
                     j++;
 assert(j < fd->flat_file.count);
-                    off = disp + fd->flat_file.off[j];
-                    fwr_size = MIN(fd->flat_file.len[j],
-                                       bufsize - i_offset);
+                    off = fd->flat_file.off[j];
+                    fwr_size = MIN(fd->flat_file.len[j], bufsize - i_offset);
                 }
             }
         } else {
@@ -320,7 +308,7 @@ assert(j < fd->flat_file.count);
                     /* reached end of contiguous block in file */
                     j++;
 assert(j < fd->flat_file.count);
-                    off = disp + fd->flat_file.off[j];
+                    off = fd->flat_file.off[j];
 
                     new_fwr_size = fd->flat_file.len[j];
                     if (size != bwr_size) {
