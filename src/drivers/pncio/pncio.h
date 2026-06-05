@@ -131,12 +131,16 @@ typedef struct {
 } PNCIO_Hints;
 
 typedef struct {
-    MPI_Datatype type;      /* MPI derived datatype, not used in PNCIO driver */
+    MPI_Datatype type;      /* MPI derived datatype, only buf_view's is used in
+                             * PNCIO driver, but not file_view's */
     MPI_Offset   size;      /* total size in bytes, i.e. sum of len[*],
                              * 0 means zero-sized request
                              */
     MPI_Count    count;     /* number of off-len pairs. 0 means the entire file
-                               is visible. 0 or 1 means a contiguous request
+                             * is visible. 0 or 1 means buf_view/file_view is
+                             * contiguous. Only when noncontiguous, off and len
+                             * are malloc-ed. Note 0 does not necessarily means
+                             * zero-sized request.
                              */
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Offset  *off;       /* [count] byte offsets */
@@ -147,11 +151,6 @@ typedef struct {
 #endif
     MPI_Count    idx;       /* index of off-len pairs consumed so far */
     MPI_Aint     rem;       /* remaining amount in the pair to be consumed */
-
-/* TODO: remove is_contig. Use if count <= 1 to indicate is_contig */
-    int          is_contig; /* whether or not fileview/buffer is contiguous,
-                             * only when noncontiguous, off and len are malloc-ed
-                             */
 } PNCIO_View;
 
 typedef struct {

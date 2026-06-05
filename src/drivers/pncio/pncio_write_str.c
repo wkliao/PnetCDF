@@ -65,7 +65,7 @@ MPI_Offset PNCIO_GEN_WriteStrided(PNCIO_File *fd,
      * call to PNCIO_WriteContig() earlier.
      */
 #ifdef PNETCDF_DEBUG
-    assert(!(buf_view.is_contig && fd->file_view.is_contig));
+    assert(!(buf_view.count <= 1 && fd->file_view.count <= 1));
 #endif
 
     if (fd->hints->romio_ds_write == PNCIO_HINT_DISABLE) {
@@ -84,7 +84,7 @@ assert(fd->file_view.size == buf_view.size);
     /* get max_bufsize from the info object. */
     max_bufsize = fd->hints->ind_wr_buffer_size;
 
-    if (!buf_view.is_contig && fd->file_view.is_contig) {
+    if (buf_view.count > 1 && fd->file_view.count <= 1) {
         /* noncontiguous in memory, contiguous in file. */
 
         off = fd->file_view.off[0];
@@ -170,7 +170,7 @@ assert(fd->file_view.size == buf_view.size);
          * happen, for example, with subarray types that are actually fairly
          * contiguous.
          */
-        if (buf_view.is_contig && bufsize <= fwr_size) {
+        if (buf_view.count <= 1 && bufsize <= fwr_size) {
             /* though MPI api has an integer 'count' parameter, derived
              * datatypes might describe more bytes than can fit into an integer.
              * if we've made it this far, we can pass a count of original
@@ -210,7 +210,7 @@ assert(fd->file_view.size == buf_view.size);
         writebuf = (char *) NCI_Malloc(max_bufsize);
         memset(writebuf, -1, max_bufsize);
 
-        if (buf_view.is_contig && !fd->file_view.is_contig) {
+        if (buf_view.count <= 1 && fd->file_view.count > 1) {
             /* contiguous in memory, noncontiguous in file should be the most
              * common case.
              */

@@ -74,8 +74,6 @@ MPI_Offset PNCIO_GEN_WriteStridedColl(PNCIO_File *fd,
     int one_len = (int)buf_view.size;
 #endif
 
-// printf("%s at %d: offset=%lld buf_view.size=%lld file_view.count %lld size %lld is_contig %d\n",__func__,__LINE__, fd->file_view.off[0],buf_view.size,fd->file_view.count, fd->file_view.size, fd->file_view.is_contig);
-
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
 double curT = MPI_Wtime();
 #endif
@@ -94,7 +92,6 @@ double curT = MPI_Wtime();
         fd->file_view.len       = &one_len;
         fd->file_view.size      = one_len;
         fd->file_view.count     = 1;
-        fd->file_view.is_contig = 1;
         start_offset = fd->file_view.off[0];
         end_offset = start_offset + buf_view.size - 1;
     }
@@ -153,12 +150,8 @@ double curT = MPI_Wtime();
         if (buf_view.size == 0) /* zero_sized request */
             return 0;
 
-        if (buf_view.is_contig && fd->file_view.is_contig)
-            /* When fd->file_view.is_contig, it is still possible
-             * fd->file_view.count > 0 and when this happens
-             * fd->file_view.count should be 1, which comes from PnetCDF wait
-             * when the number of nonblocking requests is 1.
-             */
+        if (buf_view.count <= 1 && fd->file_view.count <= 1)
+            /* Both buf_view and file_view are contiguous */
             w_len = PNCIO_WriteContig(fd, buf, buf_view.size, fd->file_view.off[0]);
         else
             w_len = PNCIO_GEN_WriteStrided(fd, buf, buf_view);
@@ -656,7 +649,7 @@ double curT = MPI_Wtime();
                 MPI_Irecv(MPI_BOTTOM, 1, recv_types[j], i, 0,
                           fd->comm, requests + j);
                 j++;
-            } else if (buf_view.is_contig) {
+            } else if (buf_view.count <= 1) {
                 /* sen/recv to/from self uses MPI_Unpack() */
 assert(self_recv_type != MPI_DATATYPE_NULL);
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -675,10 +668,11 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
         send_req = requests + j;
     }
 
-/* post sends. if buf_view.is_contig, data can be directly sent from
-   user buf at location given by buf_idx. else use send_buf. */
+    /* Post sends. If buf_view is contiguous, data can be directly sent from
+     * user buf at location given by buf_idx. Otherwise, use send_buf to send.
+     */
 
-    if (buf_view.is_contig) {
+    if (buf_view.count <= 1) {
         j = 0;
         for (i = 0; i < nprocs; i++)
             if (send_size[i] && i != myrank) {
@@ -724,7 +718,7 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
                          fd->comm, &status);
             } else {
                 /* sen/recv to/from self uses MPI_Unpack() */
-                char *ptr = (buf_view.is_contig) ? (char *) buf + buf_idx[i] : send_buf[i];
+                char *ptr = (buf_view.count <= 1) ? (char*)buf + buf_idx[i] : send_buf[i];
 assert(self_recv_type != MPI_DATATYPE_NULL);
 #ifdef HAVE_MPI_LARGE_COUNT
                 MPI_Count position=0;
@@ -739,7 +733,7 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
                 buf_idx[i] += recv_size[i];
             }
         }
-    } else if (!buf_view.is_contig && recv_size[myrank]) {
+    } else if (buf_view.count > 1 && recv_size[myrank]) {
 assert(self_recv_type != MPI_DATATYPE_NULL);
 #ifdef HAVE_MPI_LARGE_COUNT
         MPI_Count position=0;
@@ -779,7 +773,7 @@ assert(self_recv_type != MPI_DATATYPE_NULL);
     NCI_Free(statuses);
 #endif
     NCI_Free(requests);
-    if (!buf_view.is_contig && nprocs_send) {
+    if (buf_view.count > 1 && nprocs_send) {
         NCI_Free(send_buf[0]);
         NCI_Free(send_buf);
     }

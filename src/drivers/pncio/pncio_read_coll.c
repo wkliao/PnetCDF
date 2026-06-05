@@ -70,8 +70,6 @@ MPI_Offset PNCIO_GEN_ReadStridedColl(PNCIO_File *fd,
     MPI_Aint *buf_idx = NULL;
     MPI_Offset r_len, total_r_len=0;
 
-// printf("%s at %d: offset %lld buf_view size %lld file_view.count %lld size %lld is_contig %d\n",__func__,__LINE__,fd->file_view.off[0],buf_view.size,fd->file_view.count, fd->file_view.size, fd->file_view.is_contig);
-
 #ifdef HAVE_MPI_LARGE_COUNT
     MPI_Offset one_len = (MPI_Offset)buf_view.size;
 #else
@@ -87,7 +85,7 @@ double curT = MPI_Wtime();
 
     /* PnetCDF never reuses a fileview across two or more PNCIO calls. As this
      * subroutine may modify the contents of fd->file_view, we save its
-     * contents and restore it before leaving this sibroutine.
+     * contents and restore it before leaving this subroutine.
      */
     PNCIO_View saved_file_view = fd->file_view;
 
@@ -96,7 +94,6 @@ double curT = MPI_Wtime();
         fd->file_view.len       = &one_len;
         fd->file_view.size      = one_len;
         fd->file_view.count     = 1;
-        fd->file_view.is_contig = 1;
         start_offset = fd->file_view.off[0];
         end_offset = start_offset + buf_view.size - 1;
     }
@@ -143,18 +140,14 @@ double curT = MPI_Wtime();
 
         if (st_offsets != NULL) NCI_Free(st_offsets);
 
-        /* restore flattend file view before leaving this sibroutine */
+        /* restore flattened file view before leaving this subroutine */
         fd->file_view = saved_file_view;
 
         if (buf_view.size == 0) /* zero-size request */
             return 0;
 
-        if (buf_view.is_contig && fd->file_view.is_contig) {
-            /* When fd->file_view.is_contig, it is still possible
-             * fd->file_view.count > 0 and when this happens
-             * fd->file_view.count should be 1, which comes from PnetCDF wait
-             * when the number of nonblocking requests is 1.
-             */
+        if (buf_view.count <= 1 && fd->file_view.count <= 1) {
+            /* Both buf_view and file_view are contiguous. */
             return PNCIO_ReadContig(fd, buf, buf_view.size, fd->file_view.off[0]);
         }
         else
@@ -226,7 +219,7 @@ double curT = MPI_Wtime();
     NCI_Free(st_offsets);
     NCI_Free(fd_start);
 
-    /* restore flattend file view before leaving this sibroutine */
+    /* restore flattened file view before leaving this subroutine */
     fd->file_view = saved_file_view;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
@@ -548,11 +541,12 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
         NCI_Malloc((nprocs_send + nprocs_recv + 1) * sizeof(MPI_Request));
 /* +1 to avoid a 0-size malloc */
 
-/* post recvs. if buf_view.is_contig, data can be directly recd. into
-   user buf at location given by buf_idx. else use recv_buf. */
-
+    /* Post recvs. If buf_view is contiguous, data can be directly received
+     * into user buf at location given by buf_idx. Otherwise, use recv_buf to
+     * receive.
+     */
     MPI_Count j = 0; // think of this as a counter of non-zero sends/recs
-    if (buf_view.is_contig) {
+    if (buf_view.count <= 1) {
         for (i = 0; i < nprocs; i++) {
             if (recv_size[i]) {
 #ifdef HAVE_MPI_LARGE_COUNT
@@ -657,7 +651,7 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
         }
 
         /* if noncontiguous, to the copies from the recv buffers */
-        if (!buf_view.is_contig)
+        if (buf_view.count > 1)
             Fill_user_buffer(fd, buf, buf_view, recv_buf, recv_size,
                              recd_from_proc, nprocs, min_st_offset,
                              fd_size, fd_start, fd_end);
@@ -679,7 +673,7 @@ static void R_Exchange_data(PNCIO_File *fd, void *buf,
     NCI_Free(statuses);
     NCI_Free(requests);
 
-    if (!buf_view.is_contig) {
+    if (buf_view.count > 1) {
         NCI_Free(recv_buf[0]);
         NCI_Free(recv_buf);
     }
