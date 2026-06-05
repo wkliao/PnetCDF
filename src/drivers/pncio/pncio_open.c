@@ -78,14 +78,6 @@ int PNCIO_File_open(MPI_Comm    comm,
         goto err_out;
     }
 
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    int i;
-    for (i=0; i<NMEASURES; i++) {
-        fh->write_timing[i]  = fh->read_timing[i]  = 0;
-        fh->write_counter[i] = fh->read_counter[i] = 0;
-    }
-#endif
-
     /* When hint romio_no_indep_rw hint is set to true, only aggregators open
      * the file. Note fh->is_agg will be set at the end of create/open calls
      * below.

@@ -639,13 +639,13 @@ Exchange_data_recv(
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
         if (build_srt_off_len) {
-            fh->write_counter[1]++;
-            fh->write_counter[2] = MAX(fh->write_counter[2], srt_off_len->num);
-            fh->write_counter[3] = MAX(fh->write_counter[3], nprocs_recv);
+            pnc_wr_count[1]++;
+            pnc_wr_count[2] = MAX(pnc_wr_count[2], srt_off_len->num);
+            pnc_wr_count[3] = MAX(pnc_wr_count[3], nprocs_recv);
         } else {
-            fh->write_counter[4]++;
-            fh->write_counter[5] = MAX(fh->write_counter[5], srt_off_len->num);
-            fh->write_counter[6] = MAX(fh->write_counter[6], nprocs_recv);
+            pnc_wr_count[4]++;
+            pnc_wr_count[5] = MAX(pnc_wr_count[5], srt_off_len->num);
+            pnc_wr_count[6] = MAX(pnc_wr_count[6], nprocs_recv);
         }
 #endif
     } else { /* if (fh->hints->romio_ds_write == PNCIO_HINT_DISABLE) */
@@ -686,7 +686,7 @@ Exchange_data_recv(
          * order of file offsets. In addition, they are coalesced.
          */
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-        fh->write_timing[5] += MPI_Wtime() - curT;
+        pnc_drv_wr_t[5] += MPI_Wtime() - curT;
 #endif
         /* whether or not there are holes */
         hole = (srt_off_len->num > 1);
@@ -1464,15 +1464,15 @@ commit_comm_phase(PNCIO_File    *fh,
     }
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fh->write_timing[4] += MPI_Wtime() - dtype_time;
+    pnc_drv_wr_t[4] += MPI_Wtime() - dtype_time;
 
 /*
-    fh->write_counter[2] = MAX(fh->write_counter[2], nsends);
-    fh->write_counter[3] = MAX(fh->write_counter[3], nrecvs);
-    fh->write_counter[4] = MAX(fh->write_counter[4], max_r_amnt);
-    fh->write_counter[5] = MAX(fh->write_counter[5], max_s_amnt);
-    fh->write_counter[6] = MAX(fh->write_counter[6], max_r_count);
-    fh->write_counter[7] = MAX(fh->write_counter[7], max_s_count);
+    pnc_wr_count[2] = MAX(pnc_wr_count[2], nsends);
+    pnc_wr_count[3] = MAX(pnc_wr_count[3], nrecvs);
+    pnc_wr_count[4] = MAX(pnc_wr_count[4], max_r_amnt);
+    pnc_wr_count[5] = MAX(pnc_wr_count[5], max_s_amnt);
+    pnc_wr_count[6] = MAX(pnc_wr_count[6], max_r_count);
+    pnc_wr_count[7] = MAX(pnc_wr_count[7], max_s_count);
 */
 #endif
 
@@ -1565,7 +1565,7 @@ LUSTRE_Exch_and_write(PNCIO_File    *fh,
         ntimes++;
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fh->write_counter[0] = MAX(fh->write_counter[0], ntimes);
+    pnc_wr_count[0] = MAX(pnc_wr_count[0], ntimes);
 #endif
 
     /* collective buffer is divided into 'nbufs' sub-buffers. Each sub-buffer
@@ -1909,7 +1909,7 @@ LUSTRE_Exch_and_write(PNCIO_File    *fh,
             /* communication phase */
             commit_comm_phase(fh, send_list, recv_list);
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-            if (fh->is_agg) fh->write_timing[3] += MPI_Wtime() - curT;
+            if (fh->is_agg) pnc_drv_wr_t[3] += MPI_Wtime() - curT;
 #endif
 
             /* free send_buf allocated in LUSTRE_W_Exchange_data() */
@@ -2345,7 +2345,7 @@ double curT = MPI_Wtime();
 #endif
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->write_timing[1] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_wr_t[1] += MPI_Wtime() - curT;
 #endif
 
     if (do_ex_wr || fh->is_agg)
@@ -2390,7 +2390,7 @@ double curT = MPI_Wtime();
         MPI_Allreduce(MPI_IN_PLACE, &w_len, 1, MPI_OFFSET, MPI_MIN, fh->comm);
 
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    if (fh->is_agg) fh->write_timing[0] += MPI_Wtime() - curT;
+    if (fh->is_agg) pnc_drv_wr_t[0] += MPI_Wtime() - curT;
 #endif
 
     /* w_len may not be the same as buf_view.size, because data sieving may

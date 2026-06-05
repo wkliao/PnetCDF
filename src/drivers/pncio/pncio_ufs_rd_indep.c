@@ -54,7 +54,7 @@ MPI_Offset PNCIO_UFS_read_contig(PNCIO_File *fh,
         p += err;
     }
 #if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-    fh->read_timing[2] += MPI_Wtime() - timing;
+    pnc_drv_rd_t[2] += MPI_Wtime() - timing;
 #endif
 
 err_out:

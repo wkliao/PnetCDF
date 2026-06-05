@@ -898,11 +898,6 @@ first_ost_id = -1;
     assert(fh->fstype == PNCIO_FS_LUSTRE);
 #endif
 
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: ---- %s\n",__func__,__LINE__,fh->filename); wkl++; fflush(stdout);}
-#endif
-
     /* Note ncmpi_create() always creates a file with readable and writable
      * permission.
      */
@@ -1177,11 +1172,6 @@ first_ost_id = -1;
     stripe_count = 0;
     start_iodevice = 0;
     numOSTs = 0;
-
-#if defined(PNETCDF_PROFILING) && (PNETCDF_PROFILING == 1)
-int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-static int wkl=0; if (wkl == 0 && world_rank == 0) { printf("\nxxxx %s at %d: %s ---- %s\n",__func__,__LINE__,(fh->fstype == PNCIO_FS_LUSTRE)?"PNCIO_FS_LUSTRE":"PNCIO_FS_UFS",fh->filename); wkl++; fflush(stdout);}
-#endif
 
     old_mask = umask(022);
     umask(old_mask);
