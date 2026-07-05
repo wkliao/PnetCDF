@@ -16,7 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../ncmpio/ncmpio_NC.h"
+#include "ncmpio_NC.h"
 #include "ncchkio_internal.h"
 
 int ncchkioi_init (NC_chk *ncchkp, int isnew) {

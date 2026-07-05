@@ -26,7 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../ncmpio/ncmpio_NC.h"
+#include "ncmpio_NC.h"
 #include "ncchkio_internal.h"
 
 int ncchkioi_load_var (NC_chk *ncchkp, NC_chk_var *varp, int nchunk, int *cids) {

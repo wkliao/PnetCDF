@@ -45,11 +45,15 @@
 #include <stdlib.h>
 #include <string.h> /* strlen() */
 
-#include "../ncmpio/ncmpio_NC.h"
+#include "ncmpio_NC.h"
 #include "ncchkio_internal.h"
 
-int ncchkio_create (
-	MPI_Comm comm, const char *path, int cmode, int ncid, MPI_Info info, void **ncpp) /* OUT */
+int ncchkio_create(MPI_Comm         comm,
+                   const char      *path,
+                   int              cmode,
+                   int              ncid,
+                   MPI_Info         info,
+                   void           **ncpp)     /* OUT */
 {
 	int err=NC_NOERR;
 	int one	  = 1;
@@ -61,11 +65,11 @@ int ncchkio_create (
 	t0 = MPI_Wtime ();
 #endif
 
-	/* TODO: use comde to determine the true driver */
+	/* TODO: use cmode to determine the true driver */
 	driver = ncmpio_inq_driver ();
 	if (driver == NULL) return NC_ENOTNC;
 
-	err = driver->create (comm, path, cmode | NC_64BIT_DATA, ncid, info, &ncp);
+	err = driver->create(comm, path, cmode | NC_64BIT_DATA, ncid, info, &ncp);
 	if (err != NC_NOERR) return err;
 
 	/* Create a NC_chk object and save its driver pointer */
@@ -107,8 +111,13 @@ int ncchkio_create (
 	return NC_NOERR;
 }
 
-int ncchkio_open (
-	MPI_Comm comm, const char *path, int omode, int ncid, MPI_Info info, void **ncpp) {
+int ncchkio_open(MPI_Comm         comm,
+                 const char      *path,
+                 int              omode,
+                 int              ncid,
+                 MPI_Info         info,
+                 void           **ncpp)     /* OUT */
+{
 	int err=NC_NOERR;
 	int one			   = 0;
 	void *ncp		   = NULL;
@@ -120,14 +129,14 @@ int ncchkio_open (
 	t0 = MPI_Wtime ();
 #endif
 
-	/* TODO: use comde to determine the true driver */
+	/* TODO: use omode to determine the true driver */
 	driver = ncmpio_inq_driver ();
 	if (driver == NULL) {
 		DEBUG_ASSIGN_ERROR (err, NC_ENOTNC)
 		goto errout;
 	}
 
-	err = driver->open (comm, path, omode, ncid, info, &ncp);
+	err = driver->open(comm, path, omode, ncid, info, &ncp);
 	if (err != NC_NOERR) goto errout;
 
 	/* Create a NC_chk object and save its driver pointer */
