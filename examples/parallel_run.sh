@@ -67,6 +67,7 @@ else
       IO_MODES="gio"
    fi
 fi
+INA_MODES="0 1"
 
 # prevent user environment setting of PNETCDF_HINTS to interfere
 unset PNETCDF_HINTS
@@ -93,6 +94,12 @@ for i in ${check_PROGRAMS} ; do
     fi
     OUT_PREFIX="${TESTOUTDIR}/$i"
 
+    if [[ $i == "chunk_"* ]]; then
+       IO_MODES=mpiio           # chunking uses MPI-IO driver only
+       INA_MODES=0              # chunking does not support INA aggregation
+       ENABLE_BURST_BUFFER=0    # chunking does not support burst buffering
+    fi
+
     for io_mode in $IO_MODES ; do
         if test "x$io_mode" = xmpiio ; then
            USEMPIO_HINTS="nc_driver=mpiio"
@@ -104,7 +111,7 @@ for i in ${check_PROGRAMS} ; do
            driver_hint="GIO"
         fi
 
-    for intra_aggr in 0 1 ; do
+    for intra_aggr in $INA_MODES ; do
         if test "$intra_aggr" = 1 ; then
            INA_HINTS="nc_num_aggrs_per_node=2"
            INA_OUT_FILE="${DRIVER_OUT_FILE}.ina"
