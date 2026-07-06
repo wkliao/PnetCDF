@@ -48,14 +48,16 @@
 #include "ncmpio_NC.h"
 #include "ncchkio_internal.h"
 
-int ncchkio_create(MPI_Comm         comm,
-                   const char      *path,
-                   int              cmode,
-                   int              ncid,
-                   MPI_Info         info,
-                   void           **ncpp)     /* OUT */
+int ncchkio_create(MPI_Comm        comm,
+                   const char     *path,
+                   int             cmode,
+                   int             ncid,
+                   int             env_mode,
+                   MPI_Info        user_info, /* user's and env info combined */
+                   PNC_comm_attr   comm_attr, /* node IDs and INA metadata */
+                   void          **ncpp)      /* OUT */
 {
-	int err=NC_NOERR;
+	int err=NC_NOERR, free_info=0;
 	int one	  = 1;
 	void *ncp = NULL;
 	NC_chk *ncchkp;
@@ -69,7 +71,16 @@ int ncchkio_create(MPI_Comm         comm,
 	driver = ncmpio_inq_driver ();
 	if (driver == NULL) return NC_ENOTNC;
 
-	err = driver->create(comm, path, cmode | NC_64BIT_DATA, ncid, info, &ncp);
+    if (user_info == MPI_INFO_NULL) {
+        free_info = 1;
+        MPI_Info_create(&user_info);
+    }
+
+    /* chunking driver can only use MPI-IO driver */
+    MPI_Info_set(user_info, "nc_driver", "mpiio");
+
+	err = driver->create(comm, path, cmode | NC_64BIT_DATA, ncid, env_mode,
+                         user_info, comm_attr, &ncp);
 	if (err != NC_NOERR) return err;
 
 	/* Create a NC_chk object and save its driver pointer */
@@ -92,7 +103,7 @@ int ncchkio_create(MPI_Comm         comm,
 
 	ncchkioi_init (ncchkp, 1);
 
-	err = ncchkioi_extract_hint (ncchkp, info);
+	err = ncchkioi_extract_hint (ncchkp, user_info);
 	if (err != NC_NOERR) return err;
 
 	err = driver->put_att (ncchkp->ncp, NC_GLOBAL, "_comressed", NC_INT, 1, &one,
@@ -108,17 +119,21 @@ int ncchkio_create(MPI_Comm         comm,
 	ncchkp->profile.tt[NC_CHK_TIMER_TOTAL] += t0;
 #endif
 
+    if (free_info) MPI_Info_free(&user_info);
+
 	return NC_NOERR;
 }
 
-int ncchkio_open(MPI_Comm         comm,
-                 const char      *path,
-                 int              omode,
-                 int              ncid,
-                 MPI_Info         info,
-                 void           **ncpp)     /* OUT */
+int ncchkio_open(MPI_Comm        comm,
+                 const char     *path,
+                 int             omode,
+                 int             ncid,
+                 int             env_mode,
+                 MPI_Info        user_info, /* user's and env info combined */
+                 PNC_comm_attr   comm_attr, /* node IDs and INA metadata */
+                 void          **ncpp)      /* OUT */
 {
-	int err=NC_NOERR;
+	int err=NC_NOERR, free_info=0;
 	int one			   = 0;
 	void *ncp		   = NULL;
 	NC_chk *ncchkp	   = NULL;
@@ -136,7 +151,16 @@ int ncchkio_open(MPI_Comm         comm,
 		goto errout;
 	}
 
-	err = driver->open(comm, path, omode, ncid, info, &ncp);
+    if (user_info == MPI_INFO_NULL) {
+        free_info = 1;
+        MPI_Info_create(&user_info);
+    }
+
+    /* chunking driver can only use MPI-IO driver */
+    MPI_Info_set(user_info, "nc_driver", "mpiio");
+
+	err = driver->open(comm, path, omode, ncid, env_mode, user_info, comm_attr,
+                       &ncp);
 	if (err != NC_NOERR) goto errout;
 
 	/* Create a NC_chk object and save its driver pointer */
@@ -167,7 +191,7 @@ int ncchkio_open(MPI_Comm         comm,
 
 	ncchkioi_init (ncchkp, 0);
 
-	err = ncchkioi_extract_hint (ncchkp, info);
+	err = ncchkioi_extract_hint (ncchkp, user_info);
 	if (err != NC_NOERR) goto errout;
 
 	err = driver->get_att (ncchkp->ncp, NC_GLOBAL, "_comressed", &one,
@@ -206,6 +230,8 @@ errout:
 		if (ncchkp->path != NULL) { NCI_Free (ncchkp->path); }
 		NCI_Free (ncchkp);
 	}
+
+    if (free_info) MPI_Info_free(&user_info);
 
 	return err;
 }
@@ -416,16 +442,16 @@ int ncchkio_enddef (void *ncdp) {
 			CHK_ERR_TYPE_COMMIT (&mtype);
 
 			// Set file view
-			CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh,
+			CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll,
 							  ((NC *)(ncchkp->ncp))->begin_var, MPI_BYTE, ftype, "native",
 							  MPI_INFO_NULL);
 
 			// Read data
-			CHK_ERR_READ_AT_ALL (((NC *)(ncchkp->ncp))->collective_fh, 0, MPI_BOTTOM, 1, mtype,
+			CHK_ERR_READ_AT_ALL (((NC *)(ncchkp->ncp))->mpio_fh_coll, 0, MPI_BOTTOM, 1, mtype,
 								 &status);
 
 			// Restore file view
-			CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native",
+			CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native",
 							  MPI_INFO_NULL);
 
 #ifdef WORDS_BIGENDIAN	// Switch back to big endian
@@ -548,16 +574,16 @@ int ncchkio__enddef (void *ncdp,
 			CHK_ERR_TYPE_COMMIT (&mtype);
 
 			// Set file view
-			CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh,
+			CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll,
 							  ((NC *)(ncchkp->ncp))->begin_var, MPI_BYTE, ftype, "native",
 							  MPI_INFO_NULL);
 
 			// Read data
-			CHK_ERR_READ_AT_ALL (((NC *)(ncchkp->ncp))->collective_fh, 0, MPI_BOTTOM, 1, mtype,
+			CHK_ERR_READ_AT_ALL (((NC *)(ncchkp->ncp))->mpio_fh_coll, 0, MPI_BOTTOM, 1, mtype,
 								 &status);
 
 			// Restore file view
-			CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native",
+			CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native",
 							  MPI_INFO_NULL);
 
 #ifdef WORDS_BIGENDIAN	// Switch back to big endian

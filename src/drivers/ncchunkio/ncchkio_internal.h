@@ -6,7 +6,7 @@
 #endif
 
 #include "ncchkio_driver.h"
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 #include <assert.h>
 #endif
 
@@ -18,7 +18,7 @@
 #define NC_CHK_DEFAULT_REC_ALLOC 1024
 #define NC_CHK_REC_MULTIPLIER	 2
 
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 #define DEBUG_ABORT                                             \
 	{                                                           \
 		char *_env_str = getenv ("PNETCDF_ABORT_ON_ERR");       \
@@ -77,40 +77,32 @@
 	err = MPI_Gather (V0, V1, V2, V3, V4, V5, V6, V7); \
 	CHK_MPIERR
 
-#ifdef PNETCDF_DEBUG
-#define CHK_ERR_PACK(V0, V1, V2, V3, V4, V5, V6)     \
-	{                                                \
-		assert ((V0) != NULL);                       \
-		assert ((V3) != NULL);                       \
-		err = MPI_Pack (V0, V1, V2, V3, V4, V5, V6); \
-		CHK_MPIERR                                   \
-	}
-#else
-#define CHK_ERR_PACK(V0, V1, V2, V3, V4, V5, V6) \
-	err = MPI_Pack (V0, V1, V2, V3, V4, V5, V6); \
-	CHK_MPIERR
-#endif
+#define CHK_ERR_PACK(inbuf, incount, datatype, outbuf, outsize, position, comm) { \
+    int tmp; \
+    assert((outsize) <= NC_MAX_INT); \
+    tmp = (int)(outsize); \
+    assert((inbuf) != NULL);         \
+    assert((outbuf) != NULL);        \
+    err = MPI_Pack(inbuf, incount, datatype, outbuf, tmp, position, comm); \
+    CHK_MPIERR \
+}
 
-#ifdef PNETCDF_DEBUG
 #define CHK_ERR_UNPACK(V0, V1, V2, V3, V4, V5, V6)          \
 	{                                                       \
-		int esize;                                          \
+		int esize, insize;                                  \
+        assert((V1) <= NC_MAX_INT);                         \
+        insize = (int)(V1);                                 \
 		MPI_Type_size (V5, &esize);                         \
-		if (V1 - *((int *)(V2)) < V4 * esize) { abort (); } \
-		err = MPI_Unpack (V0, V1, V2, V3, V4, V5, V6);      \
+		assert(insize - *((int *)(V2)) >= V4 * esize);      \
+		err = MPI_Unpack (V0, insize, V2, V3, V4, V5, V6);  \
 		CHK_MPIERR                                          \
 	}
-#else
-#define CHK_ERR_UNPACK(V0, V1, V2, V3, V4, V5, V6) \
-	err = MPI_Unpack (V0, V1, V2, V3, V4, V5, V6); \
-	CHK_MPIERR
-#endif
 
 #define CHK_ERR_TYPE_COMMIT(V0) \
 	err = MPI_Type_commit (V0); \
 	CHK_MPIERR
 
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 #define CHK_ERR_TYPE_CREATE_SUBARRAY(V0, V1, V2, V3, V4, V5, V6)                               \
 	{                                                                                          \
 		int d;                                                                                 \
@@ -151,7 +143,7 @@
 	err = MPI_Imrecv (V0, V1, V2, V3, V4); \
 	CHK_MPIERR
 
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 #define CHK_ERR_ISEND(V0, V1, V2, V3, V4, V5, V6) \
 	assert (V1 >= 0);                             \
 	err = MPI_Isend (V0, V1, V2, V3, V4, V5, V6); \
@@ -162,7 +154,7 @@
 	CHK_MPIERR
 #endif
 
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 #define CHK_ERR_IRECV(V0, V1, V2, V3, V4, V5, V6) \
 	assert (V1 >= 0);                             \
 	err = MPI_Irecv (V0, V1, V2, V3, V4, V5, V6); \
@@ -250,7 +242,7 @@ extern int ncchkioi_calc_chunk_owner (NC_chk *, NC_chk_var *, int, MPI_Offset **
 extern int ncchkioi_calc_chunk_owner_reduce (
 	NC_chk *ncchkp, NC_chk_var *varp, int nreq, MPI_Offset **starts, MPI_Offset **counts);
 extern int ncchkioi_calc_chunk_size (NC_chk *, NC_chk_var *, int, MPI_Offset **, MPI_Offset **);
-extern int ncchkioiconvert (void *, void *, MPI_Datatype, MPI_Datatype, int);
+extern int ncchkioiconvert (void *, void *, MPI_Datatype, MPI_Datatype, MPI_Offset);
 
 // Var
 extern int ncchkioi_var_init (NC_chk *, NC_chk_var *, int, MPI_Offset **, MPI_Offset **);

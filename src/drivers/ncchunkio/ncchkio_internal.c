@@ -190,16 +190,16 @@ int ncchkioi_parse_var_info (NC_chk *ncchkp) {
 				CHK_ERR_TYPE_COMMIT (&mtype);
 
 				// Set file view
-				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh,
+				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll,
 								  ((NC *)(ncchkp->ncp))->begin_var, MPI_BYTE, ftype, "native",
 								  MPI_INFO_NULL);
 
 				// Read data
-				CHK_ERR_READ_AT_ALL (((NC *)(ncchkp->ncp))->collective_fh, 0, MPI_BOTTOM, 1, mtype,
+				CHK_ERR_READ_AT_ALL (((NC *)(ncchkp->ncp))->mpio_fh_coll, 0, MPI_BOTTOM, 1, mtype,
 									 &status);
 
 				// Restore file view
-				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh, 0, MPI_BYTE, MPI_BYTE,
+				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE,
 								  "native", MPI_INFO_NULL);
 
 #ifdef WORDS_BIGENDIAN	// Switch back to little endian

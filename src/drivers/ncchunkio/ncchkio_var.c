@@ -243,12 +243,12 @@ int ncchkio_get_var (void *ncdp,
 				MPI_Status status;
 
 				// Set file view
-				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh,
+				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll,
 								  ((NC *)(ncchkp->ncp))->begin_var, MPI_BYTE, MPI_BYTE, "native",
 								  MPI_INFO_NULL);
 				// Read data
 				CHK_ERR_READ_AT_ALL (
-					((NC *)(ncchkp->ncp))->collective_fh, varp->metaoff, varp->chunk_index,
+					((NC *)(ncchkp->ncp))->mpio_fh_coll, varp->metaoff, varp->chunk_index,
 					sizeof (NC_chk_chunk_index_entry) * varp->nchunk, MPI_BYTE, &status);
 			} else {
 				varp->metaoff = -1;
@@ -357,12 +357,12 @@ int ncchkio_put_var (void *ncdp,
 				MPI_Status status;
 
 				// Set file view
-				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh,
+				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll,
 								  ((NC *)(ncchkp->ncp))->begin_var, MPI_BYTE, MPI_BYTE, "native",
 								  MPI_INFO_NULL);
 				// Read data
 				CHK_ERR_READ_AT_ALL (
-					((NC *)(ncchkp->ncp))->collective_fh, varp->metaoff, varp->chunk_index,
+					((NC *)(ncchkp->ncp))->mpio_fh_coll, varp->metaoff, varp->chunk_index,
 					sizeof (NC_chk_chunk_index_entry) * varp->nchunk, MPI_BYTE, &status);
 			} else {
 				varp->metaoff = -1;
@@ -738,12 +738,12 @@ int ncchkio_get_varn (void *ncdp,
 				MPI_Status status;
 
 				// Set file view
-				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh,
+				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll,
 								  ((NC *)(ncchkp->ncp))->begin_var, MPI_BYTE, MPI_BYTE, "native",
 								  MPI_INFO_NULL);
 				// Read data
 				CHK_ERR_READ_AT_ALL (
-					((NC *)(ncchkp->ncp))->collective_fh, varp->metaoff, varp->chunk_index,
+					((NC *)(ncchkp->ncp))->mpio_fh_coll, varp->metaoff, varp->chunk_index,
 					sizeof (NC_chk_chunk_index_entry) * varp->nchunk, MPI_BYTE, &status);
 			} else {
 				varp->metaoff = -1;
@@ -851,12 +851,12 @@ int ncchkio_put_varn (void *ncdp,
 				MPI_Status status;
 
 				// Set file view
-				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->collective_fh,
+				CHK_ERR_SET_VIEW (((NC *)(ncchkp->ncp))->mpio_fh_coll,
 								  ((NC *)(ncchkp->ncp))->begin_var, MPI_BYTE, MPI_BYTE, "native",
 								  MPI_INFO_NULL);
 				// Read data
 				CHK_ERR_READ_AT_ALL (
-					((NC *)(ncchkp->ncp))->collective_fh, varp->metaoff, varp->chunk_index,
+					((NC *)(ncchkp->ncp))->mpio_fh_coll, varp->metaoff, varp->chunk_index,
 					sizeof (NC_chk_chunk_index_entry) * varp->nchunk, MPI_BYTE, &status);
 			} else {
 				varp->metaoff = -1;
@@ -1088,6 +1088,7 @@ int ncchkio_bput_varn (void *ncdp,
 	return NC_NOERR;
 }
 
+#if 0
 int ncchkio_get_vard (void *ncdp,
 					  int varid,
 					  MPI_Datatype filetype,
@@ -1123,3 +1124,4 @@ int ncchkio_put_vard (void *ncdp,
 
 	return NC_NOERR;
 }
+#endif

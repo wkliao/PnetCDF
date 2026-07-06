@@ -416,7 +416,7 @@ ncchkioi_put_var_old(NC_chk        *ncchkp,
     MPI_Alltoallv(sbuf, sendcounts, sdispls, MPI_BYTE, rbuf, recvcounts, rdispls, MPI_BYTE, ncchkp->comm);
 
 /*
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
     if (ncchkp->rank == 0){
         printf("Rank %d: sendcount = {", ncchkp->rank);
         for(i = 0; i < ncchkp->np; i++){
@@ -495,7 +495,7 @@ ncchkioi_put_var_old(NC_chk        *ncchkp,
     }
 
 /*
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
     if (ncchkp->rank == 0){
         printf("Rank %d: xbuf = {", ncchkp->rank);
         for(i = 0; i < nmychunks * bsize; i++){
@@ -543,7 +543,7 @@ ncchkioi_put_var_old(NC_chk        *ncchkp,
     }
 
 /*
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
     if (ncchkp->rank == 0){
         printf("Rank %d: zipsize = {", ncchkp->rank);
         for(i = 0; i < nmychunks; i++){
@@ -597,7 +597,7 @@ ncchkioi_put_var_old(NC_chk        *ncchkp,
     }
 
 /*
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
     if (ncchkp->rank == 0){
         printf("Rank %d: zsize_all = {", ncchkp->rank);
         for(i = 0; i < varp->nchunk; i++){

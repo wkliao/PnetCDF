@@ -67,7 +67,7 @@ int ncchkioi_cache_alloc (NC_chk *ncchkp, MPI_Offset size, NC_chk_cache **ref) {
 	target->ref	   = ref;
 	target->serial = ncchkp->cache_serial;
 	target->buf	   = NCI_Malloc (size);
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 	memset (target->buf, 0, size);
 #endif
 

@@ -83,7 +83,7 @@ typedef struct NC_chk_var {
 
 	nc_type xtype;
 	MPI_Datatype etype;
-	int esize;
+	MPI_Offset esize;
 
 	int ndim;
 	MPI_Offset *dimsize;
@@ -181,11 +181,13 @@ struct NC_chk {
 #endif
 };
 
-extern int ncchkio_create (
-	MPI_Comm comm, const char *path, int cmode, int ncid, MPI_Info info, void **ncdp);
+extern int
+ncchkio_create(MPI_Comm comm, const char *path, int cmode, int ncid,
+        int env_mode, MPI_Info info, PNC_comm_attr comm_attr, void **ncdp);
 
-extern int ncchkio_open (
-	MPI_Comm comm, const char *path, int omode, int ncid, MPI_Info info, void **ncdp);
+extern int
+ncchkio_open(MPI_Comm comm, const char *path, int omode, int ncid,
+        int env_mode, MPI_Info info, PNC_comm_attr comm_attr, void **ncdp);
 
 extern int ncchkio_close (void *ncdp);
 
@@ -326,6 +328,7 @@ extern int ncchkio_put_varn (void *ncdp,
 							 MPI_Datatype buftype,
 							 int reqMode);
 
+/*
 extern int ncchkio_get_vard (void *ncdp,
 							 int varid,
 							 MPI_Datatype filetype,
@@ -341,6 +344,7 @@ extern int ncchkio_put_vard (void *ncdp,
 							 MPI_Offset bufcount,
 							 MPI_Datatype buftype,
 							 int reqMode);
+*/
 
 extern int ncchkio_iget_var (void *ncdp,
 							 int varid,

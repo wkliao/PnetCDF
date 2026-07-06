@@ -56,8 +56,10 @@ static PNC_driver ncchkio_driver = {
     ncchkio_put_var,
     ncchkio_get_varn,
     ncchkio_put_varn,
+/*
     ncchkio_get_vard,
     ncchkio_put_vard,
+*/
     ncchkio_iget_var,
     ncchkio_iput_var,
     ncchkio_bput_var,

@@ -97,11 +97,11 @@ int ncchkioi_load_var (NC_chk *ncchkp, NC_chk_var *varp, int nchunk, int *cids) 
 
 		// Perform MPI-IO
 		// Set file view
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
 		// Write data
-		CHK_ERR_READ_AT_ALL (ncp->collective_fh, 0, zbufs[0], 1, mtype, &status);
+		CHK_ERR_READ_AT_ALL (ncp->mpio_fh_coll, 0, zbufs[0], 1, mtype, &status);
 		// Restore file view
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 		NC_CHK_TIMER_SWAP (NC_CHK_TIMER_GET_IO_RD, NC_CHK_TIMER_GET_IO_INIT)
 
@@ -119,9 +119,9 @@ int ncchkioi_load_var (NC_chk *ncchkp, NC_chk_var *varp, int nchunk, int *cids) 
 		NC_CHK_TIMER_SWAP (NC_CHK_TIMER_GET_IO_INIT, NC_CHK_TIMER_GET_IO_RD)
 
 		// Follow coll I/O with dummy call
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
-		CHK_ERR_READ_AT_ALL (ncp->collective_fh, 0, &i, 0, MPI_BYTE, &status);
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_READ_AT_ALL (ncp->mpio_fh_coll, 0, &i, 0, MPI_BYTE, &status);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 		NC_CHK_TIMER_SWAP (NC_CHK_TIMER_GET_IO_RD, NC_CHK_TIMER_GET_IO_INIT)
 	}
@@ -265,11 +265,11 @@ int ncchkioi_load_nvar (NC_chk *ncchkp, int nvar, int *varids, int *lo, int *hi)
 
 		// Perform MPI-IO
 		// Set file view
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
 		// Write data
-		CHK_ERR_READ_AT_ALL (ncp->collective_fh, 0, zbufs[0], 1, mtype, &status);
+		CHK_ERR_READ_AT_ALL (ncp->mpio_fh_coll, 0, zbufs[0], 1, mtype, &status);
 		// Restore file view
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 #ifdef _USE_MPI_GET_COUNT
 		MPI_Get_count (&status, MPI_BYTE, &get_size);
@@ -372,9 +372,9 @@ int ncchkioi_load_nvar (NC_chk *ncchkp, int nvar, int *varids, int *lo, int *hi)
 		NC_CHK_TIMER_SWAP (NC_CHK_TIMER_GET_IO_CACHE, NC_CHK_TIMER_GET_IO_RD)
 
 		// Follow coll I/O with dummy call
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
-		CHK_ERR_READ_AT_ALL (ncp->collective_fh, 0, &i, 0, MPI_BYTE, &status);
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_READ_AT_ALL (ncp->mpio_fh_coll, 0, &i, 0, MPI_BYTE, &status);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 		NC_CHK_TIMER_STOP (NC_CHK_TIMER_GET_IO_RD)
 	}
@@ -461,11 +461,11 @@ int ncchkioi_load_var_bg (NC_chk *ncchkp, NC_chk_var *varp, int nchunk, int *cid
 
 		// Perform MPI-IO
 		// Set file view
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
 		// Write data
-		CHK_ERR_READ_AT_ALL (ncp->collective_fh, 0, zbufs[0], 1, mtype, &status);
+		CHK_ERR_READ_AT_ALL (ncp->mpio_fh_coll, 0, zbufs[0], 1, mtype, &status);
 		// Restore file view
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 		NC_CHK_TIMER_STOP (NC_CHK_TIMER_PUT_BG_RD)
 
@@ -484,9 +484,9 @@ int ncchkioi_load_var_bg (NC_chk *ncchkp, NC_chk_var *varp, int nchunk, int *cid
 		NC_CHK_TIMER_START (NC_CHK_TIMER_PUT_BG_RD)
 
 		// Follow coll I/O with dummy call
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
-		CHK_ERR_READ_AT_ALL (ncp->collective_fh, 0, &i, 0, MPI_BYTE, &status);
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_READ_AT_ALL (ncp->mpio_fh_coll, 0, &i, 0, MPI_BYTE, &status);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 		NC_CHK_TIMER_STOP (NC_CHK_TIMER_PUT_BG_RD)
 	}
@@ -629,11 +629,11 @@ int ncchkioi_load_nvar_bg (NC_chk *ncchkp, int nvar, int *varids, int *lo, int *
 
 		// Perform MPI-IO
 		// Set file view
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
 		// Write data
-		CHK_ERR_READ_AT_ALL (ncp->collective_fh, 0, zbufs[0], 1, mtype, &status);
+		CHK_ERR_READ_AT_ALL (ncp->mpio_fh_coll, 0, zbufs[0], 1, mtype, &status);
 		// Restore file view
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 #ifdef _USE_MPI_PUT_COUNT
 		MPI_Get_count (&status, MPI_BYTE, &get_size);
@@ -738,9 +738,9 @@ int ncchkioi_load_nvar_bg (NC_chk *ncchkp, int nvar, int *varids, int *lo, int *
 		NC_CHK_TIMER_SWAP (NC_CHK_TIMER_PUT_BG_CACHE, NC_CHK_TIMER_PUT_BG_RD)
 
 		// Follow coll I/O with dummy call
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
-		CHK_ERR_READ_AT_ALL (ncp->collective_fh, 0, &i, 0, MPI_BYTE, &status);
-		CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+		CHK_ERR_READ_AT_ALL (ncp->mpio_fh_coll, 0, &i, 0, MPI_BYTE, &status);
+		CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 		NC_CHK_TIMER_STOP (NC_CHK_TIMER_PUT_BG_RD)
 	}

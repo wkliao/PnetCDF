@@ -323,7 +323,7 @@ int ncchkioi_iget_cb_proc (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 	// Allocate buffer for send
 	for (i = 0; i < nsend; i++) {
 		ssize[i] += sizeof (int);
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 		assert (ssize[i] >= 0);
 #endif
 		sbuf[i] = sbufp[i] = (char *)NCI_Malloc (ssize[i]);
@@ -523,7 +523,7 @@ int ncchkioi_iget_cb_proc (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 		packoff		= 0;
 		ssize_re[j] = *((int *)rbufp[j]);
 		rbufp[j] += sizeof (int);
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 		assert (ssize_re[j] >= 0);
 #endif
 		sbuf_re[j] = (char *)NCI_Malloc (ssize_re[j]);

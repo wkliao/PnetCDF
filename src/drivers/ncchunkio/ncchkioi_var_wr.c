@@ -238,11 +238,11 @@ int ncchkioi_save_var (NC_chk *ncchkp, NC_chk_var *varp) {
 
 			// Perform MPI-IO
 			// Set file view
-			CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
+			CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
 			// Write data
-			CHK_ERR_WRITE_AT_ALL (ncp->collective_fh, 0, MPI_BOTTOM, 1, mtype, &status);
+			CHK_ERR_WRITE_AT_ALL (ncp->mpio_fh_coll, 0, MPI_BOTTOM, 1, mtype, &status);
 			// Restore file view
-			CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+			CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 #ifdef WORDS_BIGENDIAN	// Switch back to little endian
 			if (ncchkp->rank == varp->chunk_owner[0]) {
@@ -266,9 +266,9 @@ int ncchkioi_save_var (NC_chk *ncchkp, NC_chk_var *varp) {
 			NC_CHK_TIMER_SWAP (NC_CHK_TIMER_PUT_IO_INIT, NC_CHK_TIMER_PUT_IO_WR)
 
 			// Follow coll I/O with dummy call
-			CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
-			CHK_ERR_WRITE_AT_ALL (ncp->collective_fh, 0, MPI_BOTTOM, 0, MPI_BYTE, &status);
-			CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+			CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+			CHK_ERR_WRITE_AT_ALL (ncp->mpio_fh_coll, 0, MPI_BOTTOM, 0, MPI_BYTE, &status);
+			CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 			NC_CHK_TIMER_STOP (NC_CHK_TIMER_PUT_IO_WR)
 		}
@@ -575,11 +575,11 @@ int ncchkioi_save_nvar (NC_chk *ncchkp, int nvar, int *varids) {
 
 			// Perform MPI-IO
 			// Set file view
-			CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
+			CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, ftype, "native", MPI_INFO_NULL);
 			// Write data
-			CHK_ERR_WRITE_AT_ALL (ncp->collective_fh, 0, MPI_BOTTOM, 1, mtype, &status);
+			CHK_ERR_WRITE_AT_ALL (ncp->mpio_fh_coll, 0, MPI_BOTTOM, 1, mtype, &status);
 			// Restore file view
-			CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+			CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 #ifdef WORDS_BIGENDIAN	// Switch back to little endian
 			for (vid = 0; vid < nvar; vid++) {
@@ -604,9 +604,9 @@ int ncchkioi_save_nvar (NC_chk *ncchkp, int nvar, int *varids) {
 			MPI_Type_free (&mtype);
 		} else {
 			// Follow coll I/O with dummy call
-			CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
-			CHK_ERR_WRITE_AT_ALL (ncp->collective_fh, 0, MPI_BOTTOM, 0, MPI_BYTE, &status);
-			CHK_ERR_SET_VIEW (ncp->collective_fh, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+			CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+			CHK_ERR_WRITE_AT_ALL (ncp->mpio_fh_coll, 0, MPI_BOTTOM, 0, MPI_BYTE, &status);
+			CHK_ERR_SET_VIEW (ncp->mpio_fh_coll, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
 
 			NC_CHK_TIMER_STOP (NC_CHK_TIMER_PUT_IO_WR)
 		}

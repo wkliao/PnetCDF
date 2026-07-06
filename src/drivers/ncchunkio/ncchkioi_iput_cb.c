@@ -292,7 +292,7 @@ int ncchkioi_iput_cb_proc (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 					overlapsize = varp->esize;
 					for (i = 0; i < varp->ndim; i++) { overlapsize *= osize[i]; }
 					ssize[j] += overlapsize + sizeof (int) * (varp->ndim * 2 + 2);
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 					if (ssize[j] < 0) { RET_ERR (NC_EAINT_TOO_SMALL) }
 #endif
 				}
@@ -304,7 +304,7 @@ int ncchkioi_iput_cb_proc (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 	// Allocate buffer for send
 	totalsize = 0;
 	for (i = 0; i < nsend; i++) {
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 		assert (ssize[i] >= 0);
 #endif
 		totalsize += ssize[i];
@@ -359,7 +359,7 @@ int ncchkioi_iput_cb_proc (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 					if (err == 0) {
 						plen *= varp->esize;
 						pboff *= varp->esize;
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 						if (sbufp[j] - sbuf[j] + plen > ssize[j]) { RET_ERR (NC_EINTERNAL) }
 #endif
 						memcpy (sbufp[j], req->xbufs[r] + pboff, plen);
@@ -556,7 +556,7 @@ int ncchkioi_iput_cb_proc (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 			if (err == 0) {
 				plen *= varp->esize;
 				pboff *= varp->esize;
-#ifdef PNETCDF_DEBUG
+#ifdef PNETCDF_DEBUG_MODE
 				if (rbufp[j] - rbuf[j] + plen > rsize[j]) { RET_ERR (NC_EINTERNAL) }
 #endif
 				memcpy (varp->chunk_cache[cid]->buf + pboff, rbufp[j], plen);
