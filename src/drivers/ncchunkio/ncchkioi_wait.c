@@ -35,8 +35,8 @@ int ncchkioi_wait_put_reqs (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 	int err=NC_NOERR;
 	int i;
 	int nvar, nflag;
-	unsigned int *flag, *flag_all;
-	int *vids;
+	unsigned int *flag=NULL, *flag_all;
+	int *vids=NULL;
 	NC_chk_req *req;
 
 	NC_CHK_TIMER_START (NC_CHK_TIMER_WAIT_PUT)
@@ -86,8 +86,8 @@ int ncchkioi_wait_put_reqs (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 err_out:;
 
 	// Free buffers
-	NCI_Free (vids);
-	NCI_Free (flag);
+	if (vids != NULL) NCI_Free (vids);
+	if (flag != NULL) NCI_Free (flag);
 
 	NC_CHK_TIMER_STOP (NC_CHK_TIMER_WAIT_PUT)
 
@@ -101,8 +101,8 @@ int ncchkioi_wait_get_reqs (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 	int err=NC_NOERR;
 	int i;
 	int nvar, nflag;
-	unsigned int *flag, *flag_all;
-	int *vids;
+	unsigned int *flag=NULL, *flag_all;
+	int *vids=NULL;
 	NC_chk_req *req;
 
 	NC_CHK_TIMER_START (NC_CHK_TIMER_WAIT_GET)
@@ -161,8 +161,8 @@ int ncchkioi_wait_get_reqs (NC_chk *ncchkp, int nreq, int *reqids, int *stats) {
 err_out:;
 
 	// Free buffers
-	NCI_Free (vids);
-	NCI_Free (flag);
+	if (vids != NULL) NCI_Free (vids);
+	if (flag != NULL) NCI_Free (flag);
 
 	NC_CHK_TIMER_STOP (NC_CHK_TIMER_WAIT_GET)
 

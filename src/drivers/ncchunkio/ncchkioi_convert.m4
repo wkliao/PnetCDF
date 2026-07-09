@@ -27,7 +27,7 @@ dnl
 define(`SWIN',dnl
 `dnl
     if (intype == $1){
-        
+
 foreach(`dt', (`(`MPI_BYTE', `char')', dnl
     `(`MPI_CHAR', `char')', dnl
     `(`MPI_SIGNED_CHAR', `signed char')', dnl
@@ -57,8 +57,8 @@ dnl
 #include <common.h>
 #include <ncchkio_driver.h>
 
-int ncchkioiconvert(void *inbuf, void *outbuf, MPI_Datatype intype, MPI_Datatype outtype, int N) {
-    int i;
+int ncchkioiconvert(void *inbuf, void *outbuf, MPI_Datatype intype, MPI_Datatype outtype, MPI_Offset N) {
+    MPI_Offset i;
 
 foreach(`dt', (`(`MPI_BYTE', `char')', dnl
         `(`MPI_CHAR', `char')', dnl

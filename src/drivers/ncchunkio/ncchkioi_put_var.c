@@ -47,7 +47,7 @@ int ncchkioi_put_var_cb_chunk (NC_chk *ncchkp,
 	int nread;	// Chunks to read for background
 	int *rids;
 
-	int overlapsize;	  // Size of overlaping region of request and chunk
+	MPI_Offset overlapsize;	  // Size of overlaping region of request and chunk
 	int max_tbuf = 0;	  // Size of intermediate buffer
 	char *tbuf	 = NULL;  // Intermediate buffer
 
@@ -164,7 +164,7 @@ int ncchkioi_put_var_cb_chunk (NC_chk *ncchkp,
 			CHK_ERR_TYPE_COMMIT (&ptype);
 
 			// Pack data
-			CHK_ERR_PACK (buf, 1, ptype, sbufs[nsend], packoff + overlapsize, &packoff, MPI_COMM_SELF);
+			CHK_ERR_PACK (buf, 1, ptype, sbufs[nsend], overlapsize + packoff, &packoff, MPI_COMM_SELF);
 
 			MPI_Type_free (&ptype);
 
@@ -385,13 +385,13 @@ int ncchkioi_put_var_cb_proc (NC_chk *ncchkp,
 	int nread;	// Chunks to read for background
 	int *rids;
 
-	int overlapsize;	  // Size of overlaping region of request and chunk
+	MPI_Offset overlapsize;	  // Size of overlaping region of request and chunk
 	char *tbuf	 = NULL;  // Intermediate buffer
 
 	int packoff;		 // Pack offset
 	MPI_Datatype ptype;	 // Pack datatype
 
-	int nsend, nrecv;									  // Number of send and receive
+	int nsend=0, nrecv=0; // Number of send and receive
 	MPI_Request *sreq = NULL, *rreq = NULL;				  // Send and recv req
 	MPI_Status *sstat = NULL, rstat;					  // Send and recv status
 	char **sbuf = NULL, **sbufp, **rbuf = NULL, **rbufp;  // Send and recv buffer

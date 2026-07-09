@@ -241,7 +241,8 @@ int ncchkioi_export_hint (NC_chk *ncchkp, MPI_Info info) {
 int ncchkioi_print_buffer_int (char *prefix, int *buf, int len) {
 	int i;
 	int rank, np;
-	int plen, rlen;
+	int rlen;
+	size_t plen;
 	char *out, *outp;
 	char rankstr[16];
 
@@ -273,7 +274,8 @@ int ncchkioi_print_buffer_int (char *prefix, int *buf, int len) {
 int ncchkioi_print_buffer_int64 (char *prefix, long long *buf, int len) {
 	int i;
 	int rank, np;
-	int plen, rlen;
+	int rlen;
+	size_t plen;
 	char *out, *outp;
 	char rankstr[16];
 

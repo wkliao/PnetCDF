@@ -32,20 +32,21 @@ void ncchkioi_write_chunk_ocnt (NC_chk *ncchkp, NC_chk_var *varp, void *ocnt, si
 				MPI_Status stat;
 				FILE *pfile;
 				char fname[1024], ppath[1024];
+                size_t k;
 
 				ocnt_in = NCI_Malloc (ocnt_size * varp->nchunkrec);
 				cown	= NCI_Malloc (sizeof (int) * varp->nchunkrec);
 
 				strcpy (fname, ncchkp->path);
-				for (i = strlen (fname); i > 0; i--) {
-					if (fname[i] == '.') {
-						fname[i] = '\0';
-					} else if (fname[i] == '\\' || fname[i] == '/') {
-						i++;
+				for (k = strlen (fname); k > 0; k--) {
+					if (fname[k] == '.') {
+						fname[k] = '\0';
+					} else if (fname[k] == '\\' || fname[k] == '/') {
+						k++;
 						break;
 					}
 				}
-				sprintf (ppath, "%s%s_owner.csv", pprefix, fname + i);
+				sprintf (ppath, "%s%s_owner.csv", pprefix, fname + k);
 				pfile = fopen (ppath, "a");
 
 				fprintf (pfile, "Var:, %d\n", varp->varid);

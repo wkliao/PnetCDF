@@ -71,8 +71,8 @@ if ENABLE_SZ
    C_SRCS += ncchk_filter_sz.c
 endif
 
-$(M4_SRCS:.m4=.c): Makefile
 $(M4H_SRCS:.m4h=.h): Makefile
+$(M4_SRCS:.m4=.c): Makefile $(M4H_SRCS:.m4h=.h)
 
 .m4.c:
 	$(M4) $(AM_M4FLAGS) $(M4FLAGS) $< >$@

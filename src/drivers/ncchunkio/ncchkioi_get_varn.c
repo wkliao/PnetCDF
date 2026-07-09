@@ -43,7 +43,7 @@ int ncchkioi_get_varn_cb_chunk (NC_chk *ncchkp,
 	int *tsize, *tssize, *tstart, *tsizep, *tssizep, *tstartp;	// Size for sub-array type
 	MPI_Offset *citr;											// Chunk iterator
 
-	int *rcnt_local, *rcnt_all;	 // Number of processes that writes to each chunk
+	int *rcnt_local=NULL, *rcnt_all=NULL;	 // Number of processes that writes to each chunk
 
 	int overlapsize;  // Size of overlaping region of request and chunk
 	int overlapcnt;
@@ -53,13 +53,13 @@ int ncchkioi_get_varn_cb_chunk (NC_chk *ncchkp,
 	MPI_Datatype ptype;		 // Pack datatype
 
 	int nread;	// # chunks to read form file
-	int *rids;	// Id of chunks to read from file
+	int *rids=NULL;	// Id of chunks to read from file
 
-	int nsend, nrecv;			  // Number of send and receive
-	MPI_Request *sreqs, *rreqs;	  // Send and recv req
-	MPI_Status *sstats, *rstats;  // Send and recv status
-	char **sbufs, **rbufs;		  // Send and recv buffer
-	int *rsizes;				  // recv size of each message
+	int nsend=0, nrecv=0;			  // Number of send and receive
+	MPI_Request *sreqs=NULL, *rreqs=NULL;	  // Send and recv req
+	MPI_Status *sstats=NULL, *rstats=NULL;  // Send and recv status
+	char **sbufs=NULL, **rbufs=NULL;		  // Send and recv buffer
+	int *rsizes=NULL;				  // recv size of each message
 	MPI_Message rmsg;			  // Receive message
 
 	NC_CHK_TIMER_START (NC_CHK_TIMER_GET_CB)
@@ -441,27 +441,24 @@ int ncchkioi_get_varn_cb_chunk (NC_chk *ncchkp,
 err_out:;
 
 	// Free buffers
-	NCI_Free (rcnt_local);
-
-	NCI_Free (rids);
-
-	NCI_Free (tsize);
-
-	NCI_Free (ostart);
+	if (rcnt_local != NULL) NCI_Free(rcnt_local);
+	if (rids != NULL) NCI_Free(rids);
+	if (tsize != NULL) NCI_Free(tsize);
+	if (ostart != NULL) NCI_Free(ostart);
 
 	for (i = 0; i < nsend + nrecv; i++) {
 		NCI_Free (sbufs[i]);
 		NCI_Free (rbufs[i]);
 	}
-	NCI_Free (sreqs);
-	NCI_Free (sstats);
-	NCI_Free (sbufs);
-	NCI_Free (rreqs);
-	NCI_Free (rstats);
-	NCI_Free (rbufs);
-	NCI_Free (rsizes);
+	if (sreqs != NULL) NCI_Free(sreqs);
+	if (sstats != NULL) NCI_Free(sstats);
+	if (sbufs != NULL) NCI_Free(sbufs);
+	if (rreqs != NULL) NCI_Free(rreqs);
+	if (rstats != NULL) NCI_Free(rstats);
+	if (rbufs != NULL) NCI_Free(rbufs);
+	if (rsizes != NULL) NCI_Free(rsizes);
 
-	if (cbuf != NULL) { NCI_Free (cbuf); }
+	if (cbuf != NULL) NCI_Free(cbuf);
 
 	NC_CHK_TIMER_STOP (NC_CHK_TIMER_GET_CB)
 
@@ -494,13 +491,13 @@ int ncchkioi_get_varn_cb_proc (NC_chk *ncchkp,
 	MPI_Datatype ptype;	 // Pack datatype
 
 	int nread;	// # chunks to read form file
-	int *rids;	// Id of chunks to read from file
+	int *rids=NULL;	// Id of chunks to read from file
 
 	int nsend, nrecv;											  // Number of send and receive
-	MPI_Request *sreq, *rreq, *sreq_re, *rreq_re;				  // Send and recv req
-	MPI_Status *sstat, rstat, *sstat_re;						  // Send and recv status
+	MPI_Request *sreq=NULL, *rreq=NULL, *sreq_re=NULL, *rreq_re=NULL;				  // Send and recv req
+	MPI_Status *sstat=NULL, rstat, *sstat_re=NULL;						  // Send and recv status
 	char **sbuf, **rbuf, **sbufp, **rbufp, **sbuf_re, **rbuf_re;  // Send and recv buffer
-	int *rsize, *ssize, *rsize_re, *ssize_re;					  // recv size of each message
+	int *rsize=NULL, *ssize=NULL, *rsize_re=NULL, *ssize_re=NULL;					  // recv size of each message
 	int *sdst;													  // recv size of each message
 	int *smap;
 	MPI_Message rmsg;  // Receive message
@@ -877,30 +874,25 @@ int ncchkioi_get_varn_cb_proc (NC_chk *ncchkp,
 err_out:;
 
 	// Free buffers
-	NCI_Free (rcnt_local);
-
-	NCI_Free (rids);
-
-	NCI_Free (tsize);
-
-	NCI_Free (ostart);
-
-	NCI_Free (sreq);
-	NCI_Free (sstat);
-	NCI_Free (ssize);
-	for (i = 0; i < nsend; i++) { NCI_Free (reqs[i]); }
+	if (rcnt_local != NULL) NCI_Free(rcnt_local);
+	if (rids != NULL) NCI_Free(rids);
+	if (tsize != NULL) NCI_Free(tsize);
+	if (ostart != NULL) NCI_Free(ostart);
+	if (sreq != NULL) NCI_Free(sreq);
+	if (sstat != NULL) NCI_Free(sstat);
+	if (ssize != NULL) NCI_Free(ssize);
+	for (i = 0; i < nsend; i++) NCI_Free(reqs[i]);
 	for (i = 0; i < nsend + nrecv; i++) {
-		NCI_Free (sbuf[i]);
-		NCI_Free (rbuf[i]);
+		NCI_Free(sbuf[i]);
+		NCI_Free(rbuf[i]);
 	}
-	NCI_Free (sbuf);
-	NCI_Free (reqs);
+	if (sbuf != NULL) NCI_Free(sbuf);
+	if (reqs != NULL) NCI_Free(reqs);
+	if (rreq != NULL) NCI_Free(rreq);
+	if (rbuf != NULL) NCI_Free(rbuf);
+	if (rsize != NULL) NCI_Free(rsize);
 
-	NCI_Free (rreq);
-	NCI_Free (rbuf);
-	NCI_Free (rsize);
-
-	if (tbuf != NULL) { NCI_Free (tbuf); }
+	if (tbuf != NULL) NCI_Free (tbuf);
 
 	NC_CHK_TIMER_STOP (NC_CHK_TIMER_GET_CB)
 
