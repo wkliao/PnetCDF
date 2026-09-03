@@ -353,6 +353,16 @@ APINAME($1,$2,$3,$4)(int ncid,
 
     err = sanity_check(pncp, varid, IO_TYPE($1), ITYPE2MPI($3), IS_COLL($4));
 
+    ifelse(`$4',`_all',`ifelse(`$1',`put',`
+    /* If varid is invalid and this is collective put API, we must return now.
+     * This is because there is a call to MPI_Allreduce() at the end to update
+     * the number of records.  An invalid varid may result in only a subset of
+     * MPI processes calling MPI_Allreduce(). There is no way to tell the
+     * provide varid if for fix-sized or record variable.
+     */
+    if (allreduce_error(pncp, err) != NC_NOERR) return err;
+    ')')
+
     ifelse(`$2',`m',`if (imap == NULL && stride != NULL) api_kind = API_VARS;
     else if (imap == NULL && stride == NULL) api_kind = API_VARA;',
            `$2',`s',`if (stride == NULL) api_kind = API_VARA;')
@@ -469,7 +479,16 @@ NAPINAME($1,$2,$3)(int                ncid,
     if (err != NC_NOERR) return err;
 
     err = sanity_check(pncp, varid, IO_TYPE($1), ITYPE2MPI($2), IS_COLL($3));
-    if (err != NC_NOERR) goto err_check;
+
+    ifelse(`$3',`_all',`ifelse(`$1',`put',`
+    /* If varid is invalid and this is collective put API, we must return now.
+     * This is because there is a call to MPI_Allreduce() at the end to update
+     * the number of records.  An invalid varid may result in only a subset of
+     * MPI processes calling MPI_Allreduce(). There is no way to tell the
+     * provide varid if for fix-sized or record variable.
+     */
+    if (allreduce_error(pncp, err) != NC_NOERR) return err;
+    ')',`if (err != NC_NOERR) goto err_check;')
 
     if (num == 0) goto err_check;
 
