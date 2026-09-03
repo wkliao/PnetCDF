@@ -122,7 +122,7 @@ put_varm(NC               *ncp,
     MPI_Offset nelems=0, bnelems=0, nbytes=0;
     MPI_Datatype itype, imaptype;
 
-    if (varp == NULL) { /* zero-sized request */
+    if (buf == NULL) { /* zero-sized request */
         itype = MPI_BYTE;
         el_size = 0;
         bnelems = 0;
@@ -345,7 +345,7 @@ get_varm(NC               *ncp,
     MPI_Offset nelems=0, bnelems=0, nbytes=0;
     MPI_Datatype itype, imaptype=MPI_DATATYPE_NULL;
 
-    if (varp == NULL) { /* zero-sized request */
+    if (buf == NULL) { /* zero-sized request */
         itype = MPI_BYTE;
         el_size = 0;
         bnelems = 0;
@@ -523,21 +523,19 @@ ncmpio_$1_var(void             *ncdp,
             }
     }
 
-    /* sanity check has been done at dispatchers */
+    /* obtain NC_var object pointer, varp. Note sanity check for ncdp and
+     * varid has been done in dispatchers
+     */
+    varp = ncp->vars.value[varid];
 
     if (fIsSet(reqMode, NC_REQ_ZERO) && fIsSet(reqMode, NC_REQ_COLL)) {
         /* In case some processes in an aggregation group have nothing to
          * write, they still need to participate the communication part of the
          * intra-node aggregation operation.
          */
-        return $1_varm(ncp, NULL, NULL, NULL, NULL, imap, NULL, 0,
+        return $1_varm(ncp, varp, NULL, NULL, NULL, imap, NULL, 0,
                        buftype, reqMode);
     }
-
-    /* obtain NC_var object pointer, varp. Note sanity check for ncdp and
-     * varid has been done in dispatchers
-     */
-    varp = ncp->vars.value[varid];
 
 #if PNETCDF_SUBFILING == 1
     /* call a separate routine if variable is stored in subfiles */
