@@ -47,7 +47,8 @@
     git checkout v1.0.0
     cd ..
     git add gio
-    git commit -m "Update GIO submodule URL to tag 1.0.0 SHA".
+    git commit -m "Update GIO submodule URL to its tag 1.0.0 SHA"
+    git push upstream master
     ```
 
  7. Commit all changes to repo servers
