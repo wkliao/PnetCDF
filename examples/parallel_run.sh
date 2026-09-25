@@ -75,7 +75,7 @@ PNETCDF_DEBUG_MODE=`grep PNETCDF_DEBUG_MODE ${top_builddir}/src/include/pnetcdf.
 
 for i in ${check_PROGRAMS} ; do
     # Capture start time in seconds and nanoseconds
-    start_time=$(date +%s.%1N)
+    start_time=$(date +%s.%N)
 
     VERIFY_OUT_FILE=
     VERIFY_OUT_FILE_PTHREAD=
@@ -208,13 +208,13 @@ for i in ${check_PROGRAMS} ; do
 
     rm -f ${OUTDIR}/$i*nc*
 
-    end_time=$(date +%s.%1N)
+    end_time=$(date +%s.%N)
 
     # Calculate difference (requires bc for floating point math)
     elapsed_time=$(echo "$end_time - $start_time" | bc)
 
     fixed_length=48
-    printf "*** TESTING  %-${fixed_length}s   -- pass (%4ss)\n" "$i" "$elapsed_time"
+    printf "*** TESTING  %-${fixed_length}s   -- pass (%3.1fs)\n" "$i" "$elapsed_time"
 
 done # check_PROGRAMS
 
