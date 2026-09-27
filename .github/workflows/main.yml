@@ -137,6 +137,22 @@ jobs:
                 make -s LIBTOOLFLAGS=--silent V=1 -j 8 distclean >> qout 2>&1
             fi
 
+        - name: Configure UCX for GitHub-hosted runners
+          run: |
+            echo "UCX_TLS=tcp,sm,self" >> ${GITHUB_ENV}
+            echo "UCX_LOG_LEVEL=error" >> ${GITHUB_ENV}
+
+        - name: Set MPI env variables to run more processes than physical cores
+          run: |
+            if test "${{ matrix.mpi_vendor }}" = "MPICH" ; then
+              echo "MPIR_CVAR_CH4_PROGRESS_THROTTLE=1" >> ${GITHUB_ENV}
+              echo "MPIR_CVAR_CH4_PROGRESS_THROTTLE_NO_PROGRESS_COUNT=64" >> ${GITHUB_ENV}
+            else # openmpi
+              echo "OMPI_MCA_pml=ob1" >> ${GITHUB_ENV}
+              echo "OMPI_MCA_btl=self,sm" >> ${GITHUB_ENV}
+              echo "OMPI_MCA_mpi_yield_when_idle=1" >> ${GITHUB_ENV}
+            fi
+
         - name: Clean up git untracked files
           run: |
             git clean -fx
